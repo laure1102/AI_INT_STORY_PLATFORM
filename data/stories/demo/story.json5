@@ -1,0 +1,7 @@
+{
+  id: "demo",
+  title: "裂帛城的回声",
+  description: "用于跑通编辑器骨架的示例故事，暂时只保留最基础的事件字段。",
+  startEventId: "arrival",
+  tags: ["demo", "prototype"]
+}

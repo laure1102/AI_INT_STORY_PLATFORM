@@ -1,0 +1,8 @@
+node_modules/
+.nuxt/
+.output/
+dist/
+.turbo/
+coverage/
+*.log
+build/stories/

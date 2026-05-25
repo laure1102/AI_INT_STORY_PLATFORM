@@ -1,0 +1,124 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index a2cab569fe0ff825dcd5a5de3d563ae4b437e1cb..6b8b325b3cfde22ca8eb69f50a932165b164a075 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -229,11 +229,9 @@ function ViteNodePlugin(nuxt) {
+ 	const nitro = useNitro();
+ 	const runnerResolvedPath = resolveModulePath("#vite-node-runner", { from: import.meta.url });
+ 	const serverResolvedPath = resolveModulePath("#vite-node-entry", { from: import.meta.url });
+-	const fetchResolvedPath = resolveModulePath("#vite-node", { from: import.meta.url });
+ 	const vfs = {
+ 		"server.mjs": `export { default } from ${JSON.stringify(pathToFileURL(serverResolvedPath).href)}`,
+ 		"runner.mjs": `export { default } from ${JSON.stringify(pathToFileURL(runnerResolvedPath).href)}`,
+-		"client.manifest.mjs": `import { viteNodeFetch } from ${JSON.stringify(pathToFileURL(fetchResolvedPath))};export default () => viteNodeFetch.getManifest()`,
+ 		"client.precomputed.mjs": "export default undefined"
+ 	};
+ 	nitro.options.virtual ||= {};
+diff --git a/dist/vite-node.mjs b/dist/vite-node.mjs
+index 3bd4517663bc579cdfd7718e2976cc303668abe9..3b085991abea6fb260b9f0155256870e0cda9a76 100644
+--- a/dist/vite-node.mjs
++++ b/dist/vite-node.mjs
+@@ -11,30 +11,48 @@ function getViteNodeOptionsEnvVar() {
+ 		return {};
+ 	}
+ }
+-const viteNodeOptions = getViteNodeOptionsEnvVar();
++const viteNodeOptions = new Proxy({}, {
++	get(_target, property) {
++		return getViteNodeOptionsEnvVar()[property];
++	},
++	getOwnPropertyDescriptor(_target, property) {
++		const value = getViteNodeOptionsEnvVar()[property];
++		if (value === void 0) return void 0;
++		return {
++			configurable: true,
++			enumerable: true,
++			value
++		};
++	},
++	ownKeys() {
++		return Reflect.ownKeys(getViteNodeOptionsEnvVar());
++	}
++});
+ const pendingRequests = /* @__PURE__ */ new Map();
+ let requestIdCounter = 0;
+ let clientSocket;
+ let currentConnectPromise;
+-const MAX_RETRY_ATTEMPTS = viteNodeOptions.maxRetryAttempts ?? 5;
+-const BASE_RETRY_DELAY_MS = viteNodeOptions.baseRetryDelay ?? 100;
+-const MAX_RETRY_DELAY_MS = viteNodeOptions.maxRetryDelay ?? 2e3;
+-const REQUEST_TIMEOUT_MS = viteNodeOptions.requestTimeout ?? 6e4;
++function getViteNodeOption(key, fallbackValue) {
++	return viteNodeOptions[key] ?? fallbackValue;
++}
+ function calculateRetryDelay(attempt) {
+-	const exponentialDelay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt);
++	const baseRetryDelayMs = getViteNodeOption("baseRetryDelay", 100);
++	const maxRetryDelayMs = getViteNodeOption("maxRetryDelay", 2e3);
++	const exponentialDelay = baseRetryDelayMs * Math.pow(2, attempt);
+ 	const jitter = Math.random() * .1 * exponentialDelay;
+-	return Math.min(exponentialDelay + jitter, MAX_RETRY_DELAY_MS);
++	return Math.min(exponentialDelay + jitter, maxRetryDelayMs);
+ }
+ function connectSocket() {
+ 	if (clientSocket && !clientSocket.destroyed) return Promise.resolve(clientSocket);
+ 	if (currentConnectPromise) return currentConnectPromise;
+ 	const thisPromise = new Promise((resolve, reject) => {
+-		if (!viteNodeOptions.socketPath) {
++		const socketPath = getViteNodeOption("socketPath");
++		if (!socketPath) {
+ 			console.error("vite-node-shared: NUXT_VITE_NODE_OPTIONS.socketPath is not defined.");
+ 			return reject(/* @__PURE__ */ new Error("Vite Node IPC socket path not configured."));
+ 		}
+ 		const attemptConnection = (attempt = 0) => {
+-			const socket = net.createConnection(viteNodeOptions.socketPath);
++			const socket = net.createConnection(socketPath);
+ 			const INITIAL_BUFFER_SIZE = 64 * 1024;
+ 			const MAX_BUFFER_SIZE = 1024 * 1024 * 1024;
+ 			let buffer = Buffer.alloc(INITIAL_BUFFER_SIZE);
+@@ -114,7 +132,7 @@ function connectSocket() {
+ 			const onError = (err) => {
+ 				cleanup();
+ 				resetBuffer();
+-				if (attempt < MAX_RETRY_ATTEMPTS) {
++				if (attempt < getViteNodeOption("maxRetryAttempts", 5)) {
+ 					const delay = calculateRetryDelay(attempt);
+ 					setTimeout(() => attemptConnection(attempt + 1), delay);
+ 				} else {
+@@ -146,13 +164,15 @@ function connectSocket() {
+ async function sendRequest(type, payload) {
+ 	const requestId = requestIdCounter++;
+ 	let lastError;
+-	for (let requestAttempt = 0; requestAttempt <= MAX_RETRY_ATTEMPTS; requestAttempt++) try {
++	const maxRetryAttempts = getViteNodeOption("maxRetryAttempts", 5);
++	const requestTimeoutMs = getViteNodeOption("requestTimeout", 6e4);
++	for (let requestAttempt = 0; requestAttempt <= maxRetryAttempts; requestAttempt++) try {
+ 		const socket = await connectSocket();
+ 		return await new Promise((resolve, reject) => {
+ 			const timeoutId = setTimeout(() => {
+ 				pendingRequests.delete(requestId);
+-				reject(/* @__PURE__ */ new Error(`Request timeout after ${REQUEST_TIMEOUT_MS}ms for type: ${type}`));
+-			}, REQUEST_TIMEOUT_MS);
++				reject(/* @__PURE__ */ new Error(`Request timeout after ${requestTimeoutMs}ms for type: ${type}`));
++			}, requestTimeoutMs);
+ 			pendingRequests.set(requestId, {
+ 				resolve: (value) => {
+ 					clearTimeout(timeoutId);
+@@ -184,7 +204,7 @@ async function sendRequest(type, payload) {
+ 	} catch (error) {
+ 		lastError = error;
+ 		if (error && typeof error === "object" && "_fromServer" in error) break;
+-		if (requestAttempt < MAX_RETRY_ATTEMPTS) {
++		if (requestAttempt < maxRetryAttempts) {
+ 			const delay = calculateRetryDelay(requestAttempt);
+ 			await new Promise((resolve) => setTimeout(resolve, delay));
+ 			if (clientSocket) {
+@@ -218,7 +238,7 @@ const viteNodeFetch = {
+ };
+ let preConnectAttempted = false;
+ function preConnect() {
+-	if (preConnectAttempted || !viteNodeOptions.socketPath) return;
++	if (preConnectAttempted || !getViteNodeOption("socketPath")) return;
+ 	preConnectAttempted = true;
+ 	return connectSocket().catch(() => {});
+ }
