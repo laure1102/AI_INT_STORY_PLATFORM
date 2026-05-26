@@ -86,20 +86,6 @@ export interface StoryLoopEventFile extends Omit<StoryEventFile, "next"> {
 
 export type StoryLoopEventsFile = StoryLoopEventFile[]
 
-export interface StoryViewNode {
-  eventId: string
-  x: number
-  y: number
-  color?: string
-}
-
-export interface StoryViewFile {
-  id: string
-  name: string
-  layoutVersion?: number
-  nodes: StoryViewNode[]
-}
-
 export interface StoryDocument {
   story: StoryMetaFile
   vals: StoryValsFile
@@ -109,7 +95,6 @@ export interface StoryDocument {
   graphEvents: StoryGraphEventsFile
   bigOnceEvents: StoryBigOnceEventsFile
   loopEvents: StoryLoopEventsFile
-  views: StoryViewFile[]
 }
 
 export interface StorySummary {

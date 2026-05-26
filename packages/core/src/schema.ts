@@ -88,20 +88,6 @@ export const storyLoopEventSchema = storyEventSchema.extend({
 
 export const storyLoopEventsSchema = z.array(storyLoopEventSchema).default([])
 
-export const storyViewNodeSchema = z.object({
-  eventId: z.string().min(1),
-  x: z.number(),
-  y: z.number(),
-  color: z.string().optional()
-})
-
-export const storyViewSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  layoutVersion: z.number().int().optional(),
-  nodes: z.array(storyViewNodeSchema)
-})
-
 export const storyDocumentSchema = z.object({
   story: storyMetaSchema,
   vals: storyValsSchema,
@@ -110,6 +96,5 @@ export const storyDocumentSchema = z.object({
   eventLocations: storyEventLocationSchema,
   graphEvents: storyGraphEventsSchema,
   bigOnceEvents: storyBigOnceEventsSchema,
-  loopEvents: storyLoopEventsSchema,
-  views: z.array(storyViewSchema)
+  loopEvents: storyLoopEventsSchema
 })

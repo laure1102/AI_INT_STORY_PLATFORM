@@ -2,7 +2,6 @@
 import type {
   StoryDocument,
   StoryEventFile,
-  StoryViewFile,
   ValidationIssue,
   ValidationResult
 } from "@story-mgr/core"
@@ -14,14 +13,13 @@ const props = defineProps<{
 }>()
 
 const projectStore = useProjectStore()
-const { exportStory, getStory, saveEvent, saveView, validateStory } = useStoryApi()
+const { exportStory, getStory, saveEvent, validateStory } = useStoryApi()
 
 const storyDocument = ref<StoryDocument | null>(null)
 const validation = shallowRef<ValidationResult | null>(null)
 const exportPath = shallowRef<string | null>(null)
 const isLoading = shallowRef(true)
 const isSaving = shallowRef(false)
-const isSavingView = shallowRef(false)
 const isExporting = shallowRef(false)
 const errorMessage = shallowRef<string | null>(null)
 const editingEventId = shallowRef<string | null>(null)
@@ -29,7 +27,6 @@ const creatingFromEventId = shallowRef<string | null>(null)
 const creatingEventDraft = shallowRef<StoryEventFile | null>(null)
 
 const selectedEventId = computed(() => projectStore.getSelectedEventId(props.storyId))
-const activeView = computed(() => storyDocument.value?.views[0] ?? null)
 
 const selectedEvent = computed(() => {
   return storyDocument.value?.graphEvents.find((event) => event.id === selectedEventId.value) ?? null
@@ -71,21 +68,6 @@ function replaceEventInDocument(savedEvent: StoryEventFile, matchEventId = saved
           currentEvent.id === matchEventId ? savedEvent : currentEvent
         )
       : [...storyDocument.value.graphEvents, savedEvent]
-  }
-}
-
-function upsertViewInDocument(savedView: StoryViewFile) {
-  if (!storyDocument.value) {
-    return
-  }
-
-  const hasExistingView = storyDocument.value.views.some((view) => view.id === savedView.id)
-
-  storyDocument.value = {
-    ...storyDocument.value,
-    views: hasExistingView
-      ? storyDocument.value.views.map((view) => (view.id === savedView.id ? savedView : view))
-      : [...storyDocument.value.views, savedView]
   }
 }
 
@@ -228,20 +210,6 @@ async function handleSaveEvent(event: StoryEventFile) {
   }
 }
 
-async function handleSaveView(view: StoryViewFile) {
-  isSavingView.value = true
-  errorMessage.value = null
-
-  try {
-    const savedView = await saveView(props.storyId, view)
-    upsertViewInDocument(savedView)
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "保存画布视图失败。"
-  } finally {
-    isSavingView.value = false
-  }
-}
-
 async function handleToggleLink(payload: {
   sourceEventId: string
   targetEventId: string
@@ -311,7 +279,7 @@ watch(
 </script>
 
 <template>
-  <main class="page-shell fade-up">
+  <main class="page-shell page-shell--editor fade-up">
     <div class="editor-header">
       <div class="editor-header__copy">
         <NuxtLink class="editor-header__back" to="/">返回剧情列表</NuxtLink>
@@ -351,7 +319,6 @@ watch(
             </h2>
           </div>
           <div class="editor-status__actions">
-            <span v-if="isSavingView" class="muted">正在保存画布...</span>
             <button class="btn-secondary" type="button" @click="refreshValidation">
               重新校验
             </button>
@@ -387,8 +354,6 @@ watch(
         :entry-event-id="storyDocument.story.startEventId ?? storyDocument.graphEvents[0]?.id ?? null"
         :events="storyDocument.graphEvents"
         :selected-event-id="selectedEventId"
-        :view="activeView"
-        @save-view="handleSaveView"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
         @create="handleCreateEvent"
@@ -424,49 +389,85 @@ watch(
 </template>
 
 <style scoped>
+.page-shell--editor {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 10px 10px 0;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .editor-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 22px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .editor-header__copy {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: 10px;
+  min-width: 0;
+  flex: 1;
 }
 
 .editor-header__back {
   color: var(--accent);
   font-family: "Space Grotesk", sans-serif;
-  font-size: 0.92rem;
+  font-size: 0.78rem;
+  flex-shrink: 0;
 }
 
 .editor-header__title {
   margin: 0;
   font-family: "Space Grotesk", sans-serif;
-  font-size: clamp(2rem, 4vw, 3rem);
+  font-size: clamp(1.1rem, 1.9vw, 1.45rem);
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .editor-header__description {
-  max-width: 58ch;
+  max-width: none;
   margin: 0;
   color: var(--text-muted);
-  line-height: 1.8;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .editor-header__actions {
   display: flex;
-  gap: 12px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.editor-header :deep(.btn-primary),
+.editor-header :deep(.btn-secondary),
+.editor-main :deep(.btn-secondary) {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
 }
 
 .editor-banner {
-  margin-bottom: 18px;
-  padding: 14px 16px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
   border: 1px solid rgba(124, 227, 195, 0.4);
-  border-radius: 16px;
+  border-radius: 12px;
   background: rgba(124, 227, 195, 0.12);
+  font-size: 0.82rem;
+  line-height: 1.25;
 }
 
 .editor-banner--error {
@@ -476,58 +477,80 @@ watch(
 
 .editor-main {
   display: grid;
-  gap: 18px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .editor-canvas-band {
-  width: 100vw;
-  margin: 18px 0 0 calc(50% - 50vw);
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+  margin: 4px 0 0;
 }
 
 .editor-validation-row {
   display: grid;
-  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
-  gap: 18px;
-  align-items: stretch;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
 }
 
 .editor-status {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  padding: 18px 22px;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 16px;
 }
 
 .editor-status__actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
 }
 
 .issues {
-  padding: 20px 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 16px;
 }
 
 .issues__head {
-  margin-bottom: 14px;
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .issues__list {
-  display: grid;
-  gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
+  min-width: 0;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-right: 0;
+  white-space: nowrap;
 }
 
 .issues__item {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
+  font-size: 0.8rem;
+  flex-shrink: 0;
 }
 
 .issues__item--error {
@@ -540,6 +563,27 @@ watch(
 
 .issues__item code {
   color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.editor-main .section-title {
+  font-size: 0.92rem;
+  line-height: 1;
+}
+
+.editor-main .eyebrow {
+  gap: 6px;
+  font-size: 0.72rem;
+}
+
+.editor-main .eyebrow::before {
+  width: 22px;
+}
+
+.issues .muted {
+  margin: 0;
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 
 .editor-modal {
@@ -579,6 +623,14 @@ watch(
 }
 
 @media (max-width: 1024px) {
+  .page-shell--editor {
+    width: 100%;
+    height: 100dvh;
+    margin: 0;
+    padding: 8px 6px 0;
+    padding-bottom: 0;
+  }
+
   .editor-header,
   .editor-header__actions,
   .editor-status,
@@ -587,6 +639,24 @@ watch(
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .editor-header__copy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .editor-header__title,
+  .editor-header__description {
+    white-space: normal;
+  }
+
+  .issues {
+    align-items: flex-start;
+  }
+
+  .issues__list {
+    width: 100%;
   }
 }
 </style>

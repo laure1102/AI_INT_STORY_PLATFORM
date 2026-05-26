@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import type { ComponentPublicInstance } from "vue"
-import type { StoryEventFile, StoryViewFile, StoryViewNode } from "@story-mgr/core"
+import type { CSSProperties, ComponentPublicInstance } from "vue"
+import type { StoryEventFile } from "@story-mgr/core"
+
+type GraphDirection = "horizontal" | "vertical"
 
 interface GraphNodeView {
   color: string
@@ -22,15 +24,6 @@ interface GraphEdgeView {
   y2: number
 }
 
-interface DragState {
-  eventId: string
-  moved: boolean
-  originX: number
-  originY: number
-  startClientX: number
-  startClientY: number
-}
-
 interface PanState {
   moved: boolean
   originX: number
@@ -43,11 +36,9 @@ const props = defineProps<{
   entryEventId?: string | null
   events: StoryEventFile[]
   selectedEventId: string | null
-  view: StoryViewFile | null
 }>()
 
 const emit = defineEmits<{
-  saveView: [view: StoryViewFile]
   select: [eventId: string]
   edit: [eventId: string]
   create: [eventId: string]
@@ -62,53 +53,59 @@ const NODE_HEIGHT = 124
 const MIN_CANVAS_SCALE = 0.5
 const MAX_CANVAS_SCALE = 2
 const ZOOM_STEP_FACTOR = 1.15
-const AUTO_LAYOUT_COLUMN_GAP = 320
-const AUTO_LAYOUT_ROW_GAP = 240
+const AUTO_LAYOUT_BRANCH_MARGIN = 16
+const AUTO_LAYOUT_FLOW_MARGIN = 36
 const AUTO_LAYOUT_START_X = 120
 const AUTO_LAYOUT_START_Y = 80
-const STORY_GRAPH_LAYOUT_VERSION = 2
+const DEFAULT_DIRECTION: GraphDirection = "horizontal"
 
 const camera = reactive({
   x: 0,
   y: 0
 })
+
 const pointerPosition = reactive({
   x: 0,
   y: 0
 })
+
 const viewportSize = reactive({
   width: 1,
   height: 560
 })
 
-const dragState = shallowRef<DragState | null>(null)
 const panState = shallowRef<PanState | null>(null)
 const linkSourceId = shallowRef<string | null>(null)
 const suppressClickBefore = shallowRef(0)
 const canvasScale = shallowRef(1)
-const localNodes = ref<GraphNodeView[]>([])
+const nodeHeights = reactive<Record<string, number>>({})
+const direction = shallowRef<GraphDirection>(DEFAULT_DIRECTION)
 
-const colorPalette = [
-  "#ffb454",
-  "#7ce3c3",
-  "#c8e1ff",
-  "#ff8b7b",
-  "#ffd66b",
-  "#87b7ff"
-]
+const colorPalette = ["#ffb454", "#7ce3c3", "#c8e1ff", "#ff8b7b", "#ffd66b", "#87b7ff"]
 
-const nodeCardElements = new Map<string, HTMLDivElement>()
-let nodeCardObserver: ResizeObserver | null = null
 let viewportObserver: ResizeObserver | null = null
+let nodeCardObserver: ResizeObserver | null = null
+const nodeCardElements = new Map<string, HTMLElement>()
 
-function createDefaultPosition(index: number) {
-  const column = index % 3
-  const row = Math.floor(index / 3)
+const isHorizontalDirection = computed(() => direction.value === "horizontal")
 
-  return {
-    x: AUTO_LAYOUT_START_X + column * AUTO_LAYOUT_COLUMN_GAP,
-    y: AUTO_LAYOUT_START_Y + row * AUTO_LAYOUT_ROW_GAP
-  }
+function getNodeHeight(eventId: string) {
+  return nodeHeights[eventId] ?? NODE_HEIGHT
+}
+
+function createDefaultPosition(index: number, layoutDirection = direction.value) {
+  const column = layoutDirection === "horizontal" ? Math.floor(index / 3) : index % 3
+  const row = layoutDirection === "horizontal" ? index % 3 : Math.floor(index / 3)
+
+  return layoutDirection === "horizontal"
+    ? {
+        x: AUTO_LAYOUT_START_X + column * (NODE_WIDTH + AUTO_LAYOUT_FLOW_MARGIN),
+        y: AUTO_LAYOUT_START_Y + row * (NODE_HEIGHT + AUTO_LAYOUT_BRANCH_MARGIN)
+      }
+    : {
+        x: AUTO_LAYOUT_START_X + column * (NODE_WIDTH + AUTO_LAYOUT_BRANCH_MARGIN),
+        y: AUTO_LAYOUT_START_Y + row * (NODE_HEIGHT + AUTO_LAYOUT_FLOW_MARGIN)
+      }
 }
 
 function createRootOrder(events: StoryEventFile[], entryEventId?: string | null) {
@@ -149,12 +146,14 @@ function createRootOrder(events: StoryEventFile[], entryEventId?: string | null)
 
 function buildAutoLayoutPositionMap(
   events: StoryEventFile[],
-  entryEventId?: string | null
+  entryEventId?: string | null,
+  layoutDirection: GraphDirection = direction.value
 ) {
   const eventMap = new Map(events.map((event) => [event.id, event]))
   const treeChildren = new Map(events.map((event) => [event.id, [] as string[]]))
   const assignedParent = new Map<string, string | null>()
   const depthById = new Map<string, number>()
+  const desiredBranchCenterById = new Map<string, number>()
   const visited = new Set<string>()
 
   function traverse(nodeId: string, depth: number) {
@@ -194,74 +193,124 @@ function buildAutoLayoutPositionMap(
     .filter(([, parentId]) => parentId === null)
     .map(([eventId]) => eventId)
 
-  const positionMap = new Map<string, { x: number; y: number }>()
-  let nextLeafColumn = 0
+  let branchCursor =
+    layoutDirection === "horizontal" ? AUTO_LAYOUT_START_Y : AUTO_LAYOUT_START_X
 
-  function layoutNode(nodeId: string): number {
+  function assignDesiredBranchCenter(nodeId: string): number {
     const children = treeChildren.get(nodeId) ?? []
-    const depth = depthById.get(nodeId) ?? 0
-    const y = AUTO_LAYOUT_START_Y + depth * AUTO_LAYOUT_ROW_GAP
+    const size = layoutDirection === "horizontal" ? getNodeHeight(nodeId) : NODE_WIDTH
 
     if (!children.length) {
-      const x = AUTO_LAYOUT_START_X + nextLeafColumn * AUTO_LAYOUT_COLUMN_GAP
-      nextLeafColumn += 1
-      positionMap.set(nodeId, { x, y })
-      return x
+      const center = branchCursor + size / 2
+      desiredBranchCenterById.set(nodeId, center)
+      branchCursor += size + AUTO_LAYOUT_BRANCH_MARGIN
+      return center
     }
 
-    const childColumns = children.map((childId) => layoutNode(childId))
-    const x = Math.round((childColumns[0] + childColumns[childColumns.length - 1]) / 2)
-    positionMap.set(nodeId, { x, y })
-    return x
+    const childCenters = children.map((childId) => assignDesiredBranchCenter(childId))
+    const center = Math.round((childCenters[0] + childCenters[childCenters.length - 1]) / 2)
+    desiredBranchCenterById.set(nodeId, center)
+    return center
   }
 
-  for (const rootId of rootIds) {
-    if (nextLeafColumn > 0) {
-      nextLeafColumn += 1
+  for (const [index, rootId] of rootIds.entries()) {
+    if (index > 0) {
+      branchCursor += AUTO_LAYOUT_BRANCH_MARGIN * 2
     }
 
-    layoutNode(rootId)
+    assignDesiredBranchCenter(rootId)
+  }
+
+  const nodesByDepth = new Map<number, string[]>()
+
+  for (const event of events) {
+    const depth = depthById.get(event.id) ?? 0
+    const nodes = nodesByDepth.get(depth) ?? []
+    nodes.push(event.id)
+    nodesByDepth.set(depth, nodes)
+  }
+
+  const positionMap = new Map<string, { x: number; y: number }>()
+
+  if (layoutDirection === "horizontal") {
+    const depths = [...nodesByDepth.keys()].sort((left, right) => left - right)
+
+    for (const depth of depths) {
+      const x = AUTO_LAYOUT_START_X + depth * (NODE_WIDTH + AUTO_LAYOUT_FLOW_MARGIN)
+      const nodeIds = [...(nodesByDepth.get(depth) ?? [])].sort((left, right) => {
+        return (desiredBranchCenterById.get(left) ?? 0) - (desiredBranchCenterById.get(right) ?? 0)
+      })
+
+      let branchTopCursor = AUTO_LAYOUT_START_Y
+
+      for (const nodeId of nodeIds) {
+        const height = getNodeHeight(nodeId)
+        const desiredTop = (desiredBranchCenterById.get(nodeId) ?? AUTO_LAYOUT_START_Y) - height / 2
+        const y = Math.max(branchTopCursor, desiredTop)
+
+        positionMap.set(nodeId, {
+          x: Math.round(x),
+          y: Math.round(y)
+        })
+
+        branchTopCursor = y + height + AUTO_LAYOUT_BRANCH_MARGIN
+      }
+    }
+  } else {
+    const depths = [...nodesByDepth.keys()].sort((left, right) => left - right)
+    let flowTop = AUTO_LAYOUT_START_Y
+
+    for (const depth of depths) {
+      const nodeIds = [...(nodesByDepth.get(depth) ?? [])].sort((left, right) => {
+        return (desiredBranchCenterById.get(left) ?? 0) - (desiredBranchCenterById.get(right) ?? 0)
+      })
+
+      let branchLeftCursor = AUTO_LAYOUT_START_X
+
+      for (const nodeId of nodeIds) {
+        const desiredLeft =
+          (desiredBranchCenterById.get(nodeId) ?? AUTO_LAYOUT_START_X) - NODE_WIDTH / 2
+        const x = Math.max(branchLeftCursor, desiredLeft)
+
+        positionMap.set(nodeId, {
+          x: Math.round(x),
+          y: Math.round(flowTop)
+        })
+
+        branchLeftCursor = x + NODE_WIDTH + AUTO_LAYOUT_BRANCH_MARGIN
+      }
+
+      const rowHeight = Math.max(...nodeIds.map((nodeId) => getNodeHeight(nodeId)), NODE_HEIGHT)
+      flowTop += rowHeight + AUTO_LAYOUT_FLOW_MARGIN
+    }
   }
 
   for (const [index, event] of events.entries()) {
     if (!positionMap.has(event.id)) {
-      positionMap.set(event.id, createDefaultPosition(index))
+      positionMap.set(event.id, createDefaultPosition(index, layoutDirection))
     }
   }
 
   return positionMap
 }
 
-function createNodeMap(view: StoryViewFile | null) {
-  return new Map<string, StoryViewNode>(view?.nodes.map((node) => [node.eventId, node]) ?? [])
-}
+const localNodes = computed<GraphNodeView[]>(() => {
+  const positionMap = buildAutoLayoutPositionMap(props.events, props.entryEventId, direction.value)
 
-function buildNodeViews(
-  events: StoryEventFile[],
-  view: StoryViewFile | null,
-  previousHeights: Map<string, number>
-): GraphNodeView[] {
-  const viewNodes = createNodeMap(view)
-  const autoLayoutPositions = buildAutoLayoutPositionMap(events, props.entryEventId)
-  const preferAutoLayout = (view?.layoutVersion ?? 0) < STORY_GRAPH_LAYOUT_VERSION
-
-  return events.map((event, index) => {
-    const layoutNode = viewNodes.get(event.id)
-    const fallbackPosition = autoLayoutPositions.get(event.id) ?? createDefaultPosition(index)
-    const resolvedX = preferAutoLayout ? fallbackPosition.x : (layoutNode?.x ?? fallbackPosition.x)
-    const resolvedY = preferAutoLayout ? fallbackPosition.y : (layoutNode?.y ?? fallbackPosition.y)
+  return props.events.map((event, index) => {
+    const position = positionMap.get(event.id) ?? createDefaultPosition(index, direction.value)
 
     return {
-      color: layoutNode?.color ?? colorPalette[index % colorPalette.length] ?? "#87b7ff",
+      color: colorPalette[index % colorPalette.length] ?? "#87b7ff",
       eventId: event.id,
-      height: previousHeights.get(event.id) ?? NODE_HEIGHT,
+      height: nodeHeights[event.id] ?? NODE_HEIGHT,
       nextCount: event.next.length,
       title: event.title,
-      x: Math.round(resolvedX),
-      y: Math.round(resolvedY)
+      x: Math.round(position.x),
+      y: Math.round(position.y)
     }
   })
-}
+})
 
 const nodeMap = computed(() => {
   return new Map(localNodes.value.map((node) => [node.eventId, node]))
@@ -271,21 +320,10 @@ const viewportViewBox = computed(() => {
   return `0 0 ${Math.max(viewportSize.width, 1)} ${Math.max(viewportSize.height, 1)}`
 })
 
-const zoomPercentageLabel = computed(() => {
-  return `${Math.round(canvasScale.value * 100)}%`
-})
-
-const isAtMinimumZoom = computed(() => {
-  return canvasScale.value <= MIN_CANVAS_SCALE + 0.001
-})
-
-const isAtMaximumZoom = computed(() => {
-  return canvasScale.value >= MAX_CANVAS_SCALE - 0.001
-})
-
-const isAtDefaultZoom = computed(() => {
-  return Math.abs(canvasScale.value - 1) < 0.001
-})
+const zoomPercentageLabel = computed(() => `${Math.round(canvasScale.value * 100)}%`)
+const isAtMinimumZoom = computed(() => canvasScale.value <= MIN_CANVAS_SCALE + 0.001)
+const isAtMaximumZoom = computed(() => canvasScale.value >= MAX_CANVAS_SCALE - 0.001)
+const isAtDefaultZoom = computed(() => Math.abs(canvasScale.value - 1) < 0.001)
 
 const edges = computed<GraphEdgeView[]>(() => {
   const graphEdges: GraphEdgeView[] = []
@@ -306,10 +344,18 @@ const edges = computed<GraphEdgeView[]>(() => {
         fromEventId: event.id,
         id: `${event.id}->${nextId}`,
         toEventId: nextId,
-        x1: toScreenX(sourceNode.x) + (NODE_WIDTH * canvasScale.value) / 2,
-        x2: toScreenX(targetNode.x) + (NODE_WIDTH * canvasScale.value) / 2,
-        y1: toScreenY(sourceNode.y) + sourceNode.height * canvasScale.value,
-        y2: toScreenY(targetNode.y)
+        x1: isHorizontalDirection.value
+          ? toScreenX(sourceNode.x) + NODE_WIDTH * canvasScale.value
+          : toScreenX(sourceNode.x) + (NODE_WIDTH * canvasScale.value) / 2,
+        x2: isHorizontalDirection.value
+          ? toScreenX(targetNode.x)
+          : toScreenX(targetNode.x) + (NODE_WIDTH * canvasScale.value) / 2,
+        y1: isHorizontalDirection.value
+          ? toScreenY(sourceNode.y) + (sourceNode.height * canvasScale.value) / 2
+          : toScreenY(sourceNode.y) + sourceNode.height * canvasScale.value,
+        y2: isHorizontalDirection.value
+          ? toScreenY(targetNode.y) + (targetNode.height * canvasScale.value) / 2
+          : toScreenY(targetNode.y)
       })
     }
   }
@@ -331,24 +377,15 @@ const previewEdge = computed<GraphEdgeView | null>(() => {
     fromEventId: sourceNode.eventId,
     id: `${sourceNode.eventId}->preview`,
     toEventId: "preview",
-    x1: toScreenX(sourceNode.x) + (NODE_WIDTH * canvasScale.value) / 2,
+    x1: isHorizontalDirection.value
+      ? toScreenX(sourceNode.x) + NODE_WIDTH * canvasScale.value
+      : toScreenX(sourceNode.x) + (NODE_WIDTH * canvasScale.value) / 2,
     x2: pointerPosition.x,
-    y1: toScreenY(sourceNode.y) + sourceNode.height * canvasScale.value,
+    y1: isHorizontalDirection.value
+      ? toScreenY(sourceNode.y) + (sourceNode.height * canvasScale.value) / 2
+      : toScreenY(sourceNode.y) + sourceNode.height * canvasScale.value,
     y2: pointerPosition.y
   }
-})
-
-const linkModeLabel = computed(() => {
-  if (!linkSourceId.value) {
-    return "剧情沿纵轴自上而下展开。滚轮可缩放，拖动画布空白区域可平移，点击节点底部连接点即可选择下一个事件。"
-  }
-
-  const sourceNode = nodeMap.value.get(linkSourceId.value)
-  if (!sourceNode) {
-    return "当前已开启连线模式。"
-  }
-
-  return `连线模式：${sourceNode.title}。可滚轮缩放或拖动画布查看，再点击目标节点以新增或移除向下连接。`
 })
 
 const canvasBackgroundStyle = computed(() => {
@@ -414,15 +451,6 @@ function resetZoom() {
   zoomTo(1)
 }
 
-function syncNodeViews() {
-  const previousHeights = new Map(localNodes.value.map((node) => [node.eventId, node.height]))
-
-  localNodes.value = buildNodeViews(props.events, props.view, previousHeights)
-  void nextTick().then(() => {
-    measureNodeHeights()
-  })
-}
-
 function updateViewportMetrics() {
   const rect = viewportRef.value?.getBoundingClientRect()
   if (!rect) {
@@ -443,20 +471,6 @@ function updatePointerPosition(event: PointerEvent | MouseEvent) {
   pointerPosition.y = event.clientY - rect.top
 }
 
-function updateNodePosition(eventId: string, x: number, y: number) {
-  localNodes.value = localNodes.value.map((node) => {
-    if (node.eventId !== eventId) {
-      return node
-    }
-
-    return {
-      ...node,
-      x: Math.round(x),
-      y: Math.round(y)
-    }
-  })
-}
-
 function setNodeCardElement(eventId: string, element: Element | ComponentPublicInstance | null) {
   const previousElement = nodeCardElements.get(eventId)
 
@@ -464,9 +478,13 @@ function setNodeCardElement(eventId: string, element: Element | ComponentPublicI
     nodeCardObserver?.unobserve(previousElement)
   }
 
-  if (element instanceof HTMLDivElement) {
+  if (element instanceof HTMLElement) {
     nodeCardElements.set(eventId, element)
     nodeCardObserver?.observe(element)
+    const measuredHeight = Math.max(NODE_HEIGHT, element.offsetHeight)
+    if (nodeHeights[eventId] !== measuredHeight) {
+      nodeHeights[eventId] = measuredHeight
+    }
     return
   }
 
@@ -474,65 +492,12 @@ function setNodeCardElement(eventId: string, element: Element | ComponentPublicI
 }
 
 function measureNodeHeights() {
-  let hasChanges = false
-
-  const nextNodes = localNodes.value.map((node) => {
-    const cardElement = nodeCardElements.get(node.eventId)
-    if (!cardElement) {
-      return node
+  for (const [eventId, element] of nodeCardElements.entries()) {
+    const measuredHeight = Math.max(NODE_HEIGHT, element.offsetHeight)
+    if (nodeHeights[eventId] !== measuredHeight) {
+      nodeHeights[eventId] = measuredHeight
     }
-
-    const measuredHeight = Math.max(NODE_HEIGHT, cardElement.offsetHeight)
-    if (measuredHeight === node.height) {
-      return node
-    }
-
-    hasChanges = true
-
-    return {
-      ...node,
-      height: measuredHeight
-    }
-  })
-
-  if (hasChanges) {
-    localNodes.value = nextNodes
   }
-}
-
-function buildViewPayload(): StoryViewFile {
-  return {
-    id: props.view?.id ?? "main",
-    layoutVersion: STORY_GRAPH_LAYOUT_VERSION,
-    name: props.view?.name ?? "主画布",
-    nodes: localNodes.value.map((node) => ({
-      color: node.color,
-      eventId: node.eventId,
-      x: node.x,
-      y: node.y
-    }))
-  }
-}
-
-function applyAutoLayout() {
-  const positionMap = buildAutoLayoutPositionMap(props.events, props.entryEventId)
-
-  localNodes.value = localNodes.value.map((node) => {
-    const nextPosition = positionMap.get(node.eventId)
-    if (!nextPosition) {
-      return node
-    }
-
-    return {
-      ...node,
-      x: nextPosition.x,
-      y: nextPosition.y
-    }
-  })
-
-  linkSourceId.value = null
-  centerGraph()
-  emit("saveView", buildViewPayload())
 }
 
 function addWindowInteractionListeners() {
@@ -545,42 +510,33 @@ function removeWindowInteractionListeners() {
   window.removeEventListener("pointerup", handleWindowPointerUp)
 }
 
-function finishWindowInteraction(shouldSaveView: boolean) {
-  const activeDrag = dragState.value
+function finishWindowInteraction() {
   const activePan = panState.value
 
   removeWindowInteractionListeners()
-  dragState.value = null
   panState.value = null
-
-  if (activeDrag?.moved) {
-    suppressClickBefore.value = Date.now() + 120
-
-    if (shouldSaveView) {
-      emit("saveView", buildViewPayload())
-    }
-  }
 
   if (activePan?.moved) {
     suppressClickBefore.value = Date.now() + 120
   }
 }
 
-function handleWindowPointerMove(event: PointerEvent) {
-  updatePointerPosition(event)
-
-  const activeDrag = dragState.value
-  if (activeDrag) {
-    const deltaX = (event.clientX - activeDrag.startClientX) / canvasScale.value
-    const deltaY = (event.clientY - activeDrag.startClientY) / canvasScale.value
-
-    if (!activeDrag.moved && (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2)) {
-      activeDrag.moved = true
-    }
-
-    updateNodePosition(activeDrag.eventId, activeDrag.originX + deltaX, activeDrag.originY + deltaY)
+function centerGraph() {
+  if (!localNodes.value.length) {
     return
   }
+
+  const minX = Math.min(...localNodes.value.map((node) => node.x))
+  const maxX = Math.max(...localNodes.value.map((node) => node.x + NODE_WIDTH))
+  const minY = Math.min(...localNodes.value.map((node) => node.y))
+  const maxY = Math.max(...localNodes.value.map((node) => node.y + node.height))
+
+  camera.x = Math.round(viewportSize.width / 2 - ((minX + maxX) * canvasScale.value) / 2)
+  camera.y = Math.round(viewportSize.height / 2 - ((minY + maxY) * canvasScale.value) / 2)
+}
+
+function handleWindowPointerMove(event: PointerEvent) {
+  updatePointerPosition(event)
 
   const activePan = panState.value
   if (!activePan) {
@@ -599,36 +555,7 @@ function handleWindowPointerMove(event: PointerEvent) {
 }
 
 function handleWindowPointerUp() {
-  finishWindowInteraction(true)
-}
-
-function handleNodeDragStart(event: PointerEvent, eventId: string) {
-  if (event.button !== 0) {
-    return
-  }
-
-  event.preventDefault()
-  event.stopPropagation()
-
-  const node = nodeMap.value.get(eventId)
-  if (!node) {
-    return
-  }
-
-  emit("select", eventId)
-  updatePointerPosition(event)
-  finishWindowInteraction(false)
-
-  dragState.value = {
-    eventId,
-    moved: false,
-    originX: node.x,
-    originY: node.y,
-    startClientX: event.clientX,
-    startClientY: event.clientY
-  }
-
-  addWindowInteractionListeners()
+  finishWindowInteraction()
 }
 
 function handleViewportPointerDown(event: PointerEvent) {
@@ -642,7 +569,7 @@ function handleViewportPointerDown(event: PointerEvent) {
 
   event.preventDefault()
   updatePointerPosition(event)
-  finishWindowInteraction(false)
+  finishWindowInteraction()
 
   panState.value = {
     moved: false,
@@ -699,12 +626,41 @@ function handleConnectorClick(eventId: string) {
   linkSourceId.value = linkSourceId.value === eventId ? null : eventId
 }
 
+function getConnectorStyle(kind: "input" | "output"): CSSProperties {
+  if (isHorizontalDirection.value) {
+    return kind === "input"
+      ? {
+          left: "0",
+          top: "calc(50% - 2.5px)",
+          transform: "translateX(-50%)"
+        }
+      : {
+          left: "auto",
+          right: "0",
+          top: "calc(50% - 2.5px)",
+          transform: "translateX(50%)"
+        }
+  }
+
+  return kind === "input"
+    ? {
+        left: "calc(50% - 2.5px)",
+        top: "0",
+        transform: "translateY(-50%)"
+      }
+    : {
+        left: "calc(50% - 2.5px)",
+        bottom: "0",
+        transform: "translateY(50%)"
+      }
+}
+
 function handleViewportPointerMove(event: PointerEvent) {
   updatePointerPosition(event)
 }
 
 function handleViewportWheel(event: WheelEvent) {
-  if (dragState.value || panState.value) {
+  if (panState.value) {
     return
   }
 
@@ -730,14 +686,40 @@ function handleViewportClick() {
   linkSourceId.value = null
 }
 
+function switchDirection(nextDirection: GraphDirection) {
+  if (nextDirection === direction.value) {
+    return
+  }
+
+  direction.value = nextDirection
+  linkSourceId.value = null
+
+  void nextTick().then(() => {
+    measureNodeHeights()
+    centerGraph()
+  })
+}
+
 function createEdgePath(edge: GraphEdgeView) {
-  const direction = edge.y2 >= edge.y1 ? 1 : -1
+  if (isHorizontalDirection.value) {
+    const horizontalDirection = edge.x2 >= edge.x1 ? 1 : -1
+    const curve = Math.max(90 * canvasScale.value, Math.abs(edge.x2 - edge.x1) * 0.45)
+
+    return [
+      `M ${edge.x1} ${edge.y1}`,
+      `C ${edge.x1 + curve * horizontalDirection} ${edge.y1},`,
+      `${edge.x2 - curve * horizontalDirection} ${edge.y2},`,
+      `${edge.x2} ${edge.y2}`
+    ].join(" ")
+  }
+
+  const verticalDirection = edge.y2 >= edge.y1 ? 1 : -1
   const curve = Math.max(90 * canvasScale.value, Math.abs(edge.y2 - edge.y1) * 0.45)
 
   return [
     `M ${edge.x1} ${edge.y1}`,
-    `C ${edge.x1} ${edge.y1 + curve * direction},`,
-    `${edge.x2} ${edge.y2 - curve * direction},`,
+    `C ${edge.x1} ${edge.y1 + curve * verticalDirection},`,
+    `${edge.x2} ${edge.y2 - curve * verticalDirection},`,
     `${edge.x2} ${edge.y2}`
   ].join(" ")
 }
@@ -759,20 +741,6 @@ function getNodeFrameStyle(node: GraphNodeView) {
   }
 }
 
-function centerGraph() {
-  if (!localNodes.value.length) {
-    return
-  }
-
-  const minX = Math.min(...localNodes.value.map((node) => node.x))
-  const maxX = Math.max(...localNodes.value.map((node) => node.x + NODE_WIDTH))
-  const minY = Math.min(...localNodes.value.map((node) => node.y))
-  const maxY = Math.max(...localNodes.value.map((node) => node.y + node.height))
-
-  camera.x = Math.round(viewportSize.width / 2 - ((minX + maxX) * canvasScale.value) / 2)
-  camera.y = Math.round(viewportSize.height / 2 - ((minY + maxY) * canvasScale.value) / 2)
-}
-
 function isNodeActive(eventId: string) {
   return props.selectedEventId === eventId
 }
@@ -782,9 +750,13 @@ function isNodeLinkSource(eventId: string) {
 }
 
 watch(
-  () => [props.events, props.view] as const,
+  () => [props.events, direction.value] as const,
   () => {
-    syncNodeViews()
+    linkSourceId.value = null
+    void nextTick().then(() => {
+      measureNodeHeights()
+      centerGraph()
+    })
   },
   {
     deep: true,
@@ -794,6 +766,7 @@ watch(
 
 onMounted(() => {
   updateViewportMetrics()
+
   nodeCardObserver = new ResizeObserver(() => {
     measureNodeHeights()
   })
@@ -805,29 +778,14 @@ onMounted(() => {
     viewportObserver.observe(viewportRef.value)
   }
 
-  for (const cardElement of nodeCardElements.values()) {
-    nodeCardObserver.observe(cardElement)
-  }
-
   void nextTick().then(() => {
     measureNodeHeights()
+    centerGraph()
   })
 })
 
-watch(
-  () => props.view?.layoutVersion ?? 0,
-  (layoutVersion) => {
-    if (layoutVersion >= STORY_GRAPH_LAYOUT_VERSION || !props.events.length) {
-      return
-    }
-
-    applyAutoLayout()
-  },
-  { immediate: true }
-)
-
 onUnmounted(() => {
-  finishWindowInteraction(false)
+  finishWindowInteraction()
   nodeCardObserver?.disconnect()
   nodeCardElements.clear()
   viewportObserver?.disconnect()
@@ -839,7 +797,7 @@ onUnmounted(() => {
     <div class="graph-panel__header">
       <div class="graph-panel__headline">
         <span class="eyebrow">图谱画布</span>
-        <h2 class="section-title">无限剧情画布</h2>
+        <h2 class="section-title">自动布局剧情画布</h2>
       </div>
 
       <div class="graph-panel__meta">
@@ -875,18 +833,27 @@ onUnmounted(() => {
             100%
           </button>
         </div>
-        <button class="btn-secondary graph-panel__button" type="button" @click="applyAutoLayout">
-          自动布局
+        <button
+          class="btn-secondary graph-panel__direction-button"
+          :class="{ 'graph-panel__direction-button--active': isHorizontalDirection }"
+          type="button"
+          @click="switchDirection('horizontal')"
+        >
+          横向
+        </button>
+        <button
+          class="btn-secondary graph-panel__direction-button"
+          :class="{ 'graph-panel__direction-button--active': !isHorizontalDirection }"
+          type="button"
+          @click="switchDirection('vertical')"
+        >
+          纵向
         </button>
         <button class="btn-secondary graph-panel__button" type="button" @click="centerGraph">
           视图居中
         </button>
       </div>
     </div>
-
-    <p class="graph-panel__instructions muted">
-      {{ linkModeLabel }}
-    </p>
 
     <div
       ref="viewport"
@@ -898,11 +865,7 @@ onUnmounted(() => {
       @pointermove="handleViewportPointerMove"
       @wheel.prevent="handleViewportWheel"
     >
-      <svg
-        class="graph-canvas__edges"
-        :viewBox="viewportViewBox"
-        preserveAspectRatio="none"
-      >
+      <svg class="graph-canvas__edges" :viewBox="viewportViewBox" preserveAspectRatio="none">
         <defs>
           <marker
             id="graph-arrow"
@@ -954,13 +917,14 @@ onUnmounted(() => {
           class="graph-node"
           :class="{
             'graph-node--active': isNodeActive(node.eventId),
+            'graph-node--horizontal': isHorizontalDirection,
             'graph-node--link-source': isNodeLinkSource(node.eventId)
           }"
           :style="getNodeStyle(node)"
         >
           <div class="graph-node__frame" :style="getNodeFrameStyle(node)">
             <div
-            class="graph-node__card"
+              class="graph-node__card"
               :ref="(element) => setNodeCardElement(node.eventId, element)"
               role="button"
               tabindex="0"
@@ -973,16 +937,7 @@ onUnmounted(() => {
               />
 
               <div class="graph-node__header">
-                <button
-                  class="graph-node__drag"
-                  type="button"
-                  title="拖动节点"
-                  aria-label="拖动节点"
-                  @click.stop
-                  @pointerdown="handleNodeDragStart($event, node.eventId)"
-                >
-                  <span class="graph-node__drag-icon" aria-hidden="true" />
-                </button>
+                <span class="graph-node__spacer" aria-hidden="true" />
 
                 <button
                   class="graph-node__edit"
@@ -1022,6 +977,7 @@ onUnmounted(() => {
 
           <button
             class="graph-node__connector graph-node__connector--input"
+            :style="getConnectorStyle('input')"
             type="button"
             tabindex="-1"
             aria-hidden="true"
@@ -1030,6 +986,7 @@ onUnmounted(() => {
           <button
             class="graph-node__connector graph-node__connector--output"
             :class="{ 'graph-node__connector--active': isNodeLinkSource(node.eventId) }"
+            :style="getConnectorStyle('output')"
             type="button"
             :title="isNodeLinkSource(node.eventId) ? '取消连线' : '开始连线'"
             @click.stop="handleConnectorClick(node.eventId)"
@@ -1043,45 +1000,93 @@ onUnmounted(() => {
 <style scoped>
 .graph-panel {
   width: 100%;
-  padding: 22px;
+  height: 100%;
+  min-height: 0;
+  padding: 10px 10px 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .graph-panel__header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 10px;
 }
 
 .graph-panel__headline {
   display: grid;
-  gap: 10px;
+  gap: 4px;
 }
 
 .graph-panel__meta {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
 }
 
-.graph-panel__button {
-  min-height: 40px;
+.graph-panel__meta :deep(.pill) {
+  min-height: 26px;
+  padding: 0 9px;
+  font-size: 0.76rem;
 }
 
-.graph-panel__instructions {
-  margin: 16px 0 18px;
-  line-height: 1.7;
+.graph-panel__meta :deep(.btn-secondary) {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.graph-panel__button,
+.graph-panel__direction-button {
+  min-height: 28px;
+}
+
+.graph-panel__direction-button--active {
+  border-color: rgba(255, 180, 84, 0.65);
+  background: rgba(255, 180, 84, 0.14);
+}
+
+.graph-panel .section-title {
+  font-size: 0.98rem;
+}
+
+.graph-panel .eyebrow {
+  gap: 6px;
+  font-size: 0.72rem;
+}
+
+.graph-panel .eyebrow::before {
+  width: 24px;
+}
+
+.graph-panel__zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.graph-panel__zoom-button {
+  min-width: 28px;
+  padding: 0;
+}
+
+.graph-panel__zoom-value {
+  min-width: 52px;
+  justify-content: center;
 }
 
 .graph-canvas__viewport {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   max-width: 100%;
-  height: 3000px;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 16px;
   background:
     radial-gradient(circle at top left, rgba(255, 180, 84, 0.08), transparent 26%),
     linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
@@ -1117,7 +1122,7 @@ onUnmounted(() => {
 .graph-canvas__edge {
   fill: none;
   stroke: rgba(158, 200, 255, 0.6);
-  stroke-width: 1.5;
+  stroke-width: 0.75;
   transition:
     stroke 160ms ease,
     stroke-width 160ms ease,
@@ -1126,7 +1131,7 @@ onUnmounted(() => {
 
 .graph-canvas__edge--active {
   stroke: rgba(255, 180, 84, 0.88);
-  stroke-width: 2;
+  stroke-width: 1;
 }
 
 .graph-canvas__edge--link-source {
@@ -1135,7 +1140,7 @@ onUnmounted(() => {
 
 .graph-canvas__edge--preview {
   stroke: rgba(255, 180, 84, 0.95);
-  stroke-dasharray: 10 8;
+  stroke-dasharray: 5 4;
 }
 
 .graph-node {
@@ -1214,44 +1219,16 @@ onUnmounted(() => {
   padding-left: 6px;
 }
 
+.graph-node__spacer {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+}
+
 .graph-node__id,
 .graph-node__count {
   color: var(--text-muted);
   font-size: 0.82rem;
-}
-
-.graph-node__drag {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: grab;
-  touch-action: none;
-}
-
-.graph-node__drag-icon {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  background:
-    radial-gradient(circle, currentColor 1.2px, transparent 1.25px) 0 0 / 5px 5px,
-    radial-gradient(circle, currentColor 1.2px, transparent 1.25px) 2.5px 2.5px / 5px 5px;
-  opacity: 0.9;
-}
-
-.graph-node__drag:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.graph-node__drag:focus-visible {
-  outline: 2px solid rgba(255, 180, 84, 0.72);
-  outline-offset: 2px;
 }
 
 .graph-node__edit {
@@ -1279,10 +1256,6 @@ onUnmounted(() => {
 .graph-node__edit-icon {
   width: 12px;
   height: 12px;
-}
-
-.graph-node__drag:active {
-  cursor: grabbing;
 }
 
 .graph-node__title {
@@ -1334,10 +1307,9 @@ onUnmounted(() => {
 
 .graph-node__connector {
   position: absolute;
-  left: calc(50% - 10px);
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(186, 220, 255, 0.45);
+  width: 5px;
+  height: 5px;
+  border: 0.5px solid rgba(186, 220, 255, 0.45);
   border-radius: 999px;
   background: #08131e;
   transition:
@@ -1347,14 +1319,7 @@ onUnmounted(() => {
 }
 
 .graph-node__connector--input {
-  top: 0;
-  transform: translateY(-50%);
   pointer-events: none;
-}
-
-.graph-node__connector--output {
-  bottom: 0;
-  transform: translateY(50%);
 }
 
 .graph-node__connector--output:hover,
@@ -1364,9 +1329,36 @@ onUnmounted(() => {
   transform: scale(1.08);
 }
 
+.graph-node--horizontal .graph-node__connector--input {
+  left: 0;
+  top: calc(50% - 2.5px);
+  transform: translateX(-50%);
+}
+
+.graph-node--horizontal .graph-node__connector--output {
+  left: auto;
+  right: 0;
+  top: calc(50% - 2.5px);
+  bottom: auto;
+  transform: translateX(50%);
+}
+
+.graph-node:not(.graph-node--horizontal) .graph-node__connector--input {
+  left: calc(50% - 2.5px);
+  top: 0;
+  transform: translateY(-50%);
+}
+
+.graph-node:not(.graph-node--horizontal) .graph-node__connector--output {
+  left: calc(50% - 2.5px);
+  bottom: 0;
+  top: auto;
+  transform: translateY(50%);
+}
+
 @media (max-width: 900px) {
   .graph-panel {
-    padding: 18px;
+    padding: 8px 8px 0;
   }
 
   .graph-panel__header {

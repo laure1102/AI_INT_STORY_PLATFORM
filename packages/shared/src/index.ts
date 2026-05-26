@@ -3,7 +3,6 @@ import type {
   StoryDocument,
   StoryEventFile,
   StorySummary,
-  StoryViewFile,
   ValidationResult
 } from "@story-mgr/core"
 
@@ -23,16 +22,8 @@ export interface StoryEventResponse {
   event: StoryEventFile
 }
 
-export interface StoryViewResponse {
-  view: StoryViewFile
-}
-
 export interface SaveEventRequest {
   event: StoryEventFile
-}
-
-export interface SaveViewRequest {
-  view: StoryViewFile
 }
 
 export interface ValidationResponse {

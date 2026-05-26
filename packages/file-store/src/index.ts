@@ -11,7 +11,6 @@ import {
   storyRolesSchema,
   storySceneSchema,
   storyValsSchema,
-  storyViewSchema,
   type StoryBigOnceEventFile,
   type StoryBigOnceEventsFile,
   type StoryDocument,
@@ -24,8 +23,7 @@ import {
   type StoryRolesFile,
   type StorySceneFile,
   type StorySummary,
-  type StoryValsFile,
-  type StoryViewFile
+  type StoryValsFile
 } from "@story-mgr/core"
 
 export class FileStoreError extends Error {
@@ -49,8 +47,6 @@ export interface StoryFileStore {
   readStoryDocument(storyId: string): Promise<StoryDocument>
   readEvent(storyId: string, eventId: string): Promise<StoryEventFile>
   writeEvent(storyId: string, eventId: string, event: StoryEventFile): Promise<StoryEventFile>
-  readView(storyId: string, viewId: string): Promise<StoryViewFile>
-  writeView(storyId: string, viewId: string, view: StoryViewFile): Promise<StoryViewFile>
 }
 
 function sortObjectKeys(value: unknown): unknown {
@@ -158,8 +154,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
     eventsDir: path.join(storyDir, "events"),
     graphEventsFile: path.join(storyDir, "events", "events.json5"),
     bigOnceEventsFile: path.join(storyDir, "events", "big_once_events.json5"),
-    loopEventsFile: path.join(storyDir, "events", "loop_events.json5"),
-    viewsDir: path.join(storyDir, "views")
+    loopEventsFile: path.join(storyDir, "events", "loop_events.json5")
   }
 }
 
@@ -260,19 +255,6 @@ async function readStoryLoopEvents(
   return storyLoopEventsSchema.parse(normalizedLoopEvents)
 }
 
-async function readStoryViews(dataDir: string, storyId: string): Promise<StoryViewFile[]> {
-  const paths = createStoryPaths(dataDir, storyId)
-  const fileNames = await listJson5FileNames(paths.viewsDir)
-  const views = await Promise.all(
-    fileNames.map(async (fileName) => {
-      const view = await readJson5File<StoryViewFile>(path.join(paths.viewsDir, fileName))
-      return storyViewSchema.parse(view)
-    })
-  )
-
-  return views
-}
-
 export function createStoryFileStore(dataDir: string): StoryFileStore {
   async function listStorySummaries(): Promise<StorySummary[]> {
     const storyIds = await listStoryIds(path.join(dataDir, "stories"))
@@ -297,7 +279,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   }
 
   async function readStoryDocument(storyId: string): Promise<StoryDocument> {
-    const [story, vals, scenes, roles, eventLocations, graphEvents, bigOnceEvents, loopEvents, views] =
+    const [story, vals, scenes, roles, eventLocations, graphEvents, bigOnceEvents, loopEvents] =
       await Promise.all([
       readStoryMeta(dataDir, storyId),
       readStoryVals(dataDir, storyId),
@@ -306,8 +288,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       readStoryEventLocations(dataDir, storyId),
       readStoryGraphEvents(dataDir, storyId),
       readStoryBigOnceEvents(dataDir, storyId),
-      readStoryLoopEvents(dataDir, storyId),
-      readStoryViews(dataDir, storyId)
+      readStoryLoopEvents(dataDir, storyId)
       ])
 
     return {
@@ -318,8 +299,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       eventLocations,
       graphEvents,
       bigOnceEvents,
-      loopEvents,
-      views
+      loopEvents
     }
   }
 
@@ -358,33 +338,10 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return parsedEvent
   }
 
-  async function readView(storyId: string, viewId: string): Promise<StoryViewFile> {
-    const filePath = path.join(createStoryPaths(dataDir, storyId).viewsDir, `${viewId}.json5`)
-    const view = await readJson5File<StoryViewFile>(filePath)
-    return storyViewSchema.parse(view)
-  }
-
-  async function writeView(
-    storyId: string,
-    viewId: string,
-    view: StoryViewFile
-  ): Promise<StoryViewFile> {
-    if (view.id !== viewId) {
-      throw new FileStoreError("View id in path and payload must match.", 400, "view.id-mismatch")
-    }
-
-    const parsedView = storyViewSchema.parse(view)
-    const filePath = path.join(createStoryPaths(dataDir, storyId).viewsDir, `${viewId}.json5`)
-    await writeJson5File(filePath, parsedView)
-    return parsedView
-  }
-
   return {
     listStorySummaries,
     readStoryDocument,
     readEvent,
-    writeEvent,
-    readView,
-    writeView
+    writeEvent
   }
 }
