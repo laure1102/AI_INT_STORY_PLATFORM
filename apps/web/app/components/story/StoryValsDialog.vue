@@ -1,5 +1,16 @@
 <script setup lang="ts">
-import type { StoryValDefinition, StoryValValueType, StoryValsFile } from "@story-mgr/core"
+import type {
+  StoryValDefinition,
+  StoryValEntryDefinition,
+  StoryValValueType,
+  StoryValsFile
+} from "@story-mgr/core"
+import {
+  DEFAULT_MAX_CALC_NESTING_DEPTH,
+  evaluateStoryValCalcRule,
+  formatStoryValInput,
+  parseStoryValInput
+} from "@story-mgr/core"
 
 interface StoryValRowDraft {
   draftKey: string
@@ -37,7 +48,15 @@ const calcEditorState = reactive({
   groupKey: "",
   rowKey: ""
 })
-const MAX_CALC_NESTING_DEPTH = 5
+const calcRuleTextarea = useTemplateRef<HTMLTextAreaElement>("calcRuleTextarea")
+const MAX_CALC_NESTING_DEPTH = DEFAULT_MAX_CALC_NESTING_DEPTH
+const calcAutocompleteState = reactive({
+  open: false,
+  query: "",
+  replaceStart: 0,
+  replaceEnd: 0,
+  activeIndex: 0
+})
 
 const activeGroup = computed(() => draft.variables[activeTabIndex.value] ?? null)
 
@@ -62,6 +81,54 @@ const editingCalcRow = computed(() => {
 })
 
 const isCalcEditorOpen = computed(() => !!editingCalcRow.value)
+const activeGroupVariableCount = computed(() => activeGroup.value?.vals.length ?? 0)
+const calcAutocompleteItems = computed(() => {
+  if (!editingCalcGroup.value || !editingCalcRow.value) {
+    return []
+  }
+
+  const currentRowName = normalizeRowName(editingCalcRow.value.name)
+  const seen = new Set<string>()
+  const candidates = editingCalcGroup.value.vals
+    .map((row) => ({
+      name: normalizeRowName(row.name),
+      description: normalizeText(row.description)
+    }))
+    .filter((item) => item.name && item.name !== currentRowName)
+    .filter((item) => {
+      if (seen.has(item.name)) {
+        return false
+      }
+
+      seen.add(item.name)
+      return true
+    })
+
+  const query = calcAutocompleteState.query.trim().toLowerCase()
+
+  if (!query) {
+    return candidates
+  }
+
+  return candidates.filter((item) => {
+    return (
+      item.name.toLowerCase().includes(query) ||
+      item.description.toLowerCase().includes(query)
+    )
+  })
+})
+const isCalcAutocompleteOpen = computed(() => {
+  return calcAutocompleteState.open && !!editingCalcRow.value
+})
+const activeCalcAutocompleteItem = computed(() => {
+  if (!isCalcAutocompleteOpen.value || calcAutocompleteItems.value.length === 0) {
+    return null
+  }
+
+  return calcAutocompleteItems.value[
+    calcAutocompleteState.activeIndex % calcAutocompleteItems.value.length
+  ]
+})
 
 const hasInvalidDraft = computed(() => {
   return draft.variables.some(
@@ -80,65 +147,6 @@ let draftKeySeed = 0
 function createDraftKey(prefix: string) {
   draftKeySeed += 1
   return `${prefix}-${draftKeySeed}`
-}
-
-function formatValueInput(value: unknown) {
-  if (typeof value === "string") {
-    return value
-  }
-
-  if (value === undefined) {
-    return ""
-  }
-
-  if (typeof value === "number" || typeof value === "boolean" || value === null) {
-    return String(value)
-  }
-
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return String(value)
-  }
-}
-
-function parseValueInput(valueText: string): unknown {
-  const trimmed = valueText.trim()
-
-  if (trimmed === "") {
-    return ""
-  }
-
-  if (trimmed === "true") {
-    return true
-  }
-
-  if (trimmed === "false") {
-    return false
-  }
-
-  if (trimmed === "null") {
-    return null
-  }
-
-  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(trimmed)) {
-    return Number(trimmed)
-  }
-
-  const maybeJson =
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
-    (trimmed.startsWith('"') && trimmed.endsWith('"'))
-
-  if (maybeJson) {
-    try {
-      return JSON.parse(trimmed)
-    } catch {
-      return valueText
-    }
-  }
-
-  return valueText
 }
 
 function createEmptyRow(): StoryValRowDraft {
@@ -171,7 +179,7 @@ function cloneGroup(group: StoryValDefinition): StoryValGroupDraft {
       name: normalizeText(row.name),
       description: normalizeText(row.description),
       valueType: normalizeValueType(row.value_type),
-      valueText: formatValueInput(row.value),
+      valueText: formatStoryValInput(row.value),
       calcRule: normalizeText(row.calc_rule)
     }))
   }
@@ -203,6 +211,25 @@ function addGroup() {
 }
 
 function removeGroup(index: number) {
+  const group = draft.variables[index]
+
+  if (!group) {
+    return
+  }
+
+  const groupLabel = getGroupLabel(group, index)
+  const variableCount = group.vals.length
+  const confirmed =
+    typeof window === "undefined"
+      ? true
+      : window.confirm(
+          `确认删除分组“${groupLabel}”吗？\n\n该分组下共有 ${variableCount} 个变量，删除后无法撤销。`
+        )
+
+  if (!confirmed) {
+    return
+  }
+
   draft.variables.splice(index, 1)
   ensureGroupExists()
 }
@@ -228,6 +255,7 @@ function openCalcEditor(group: StoryValGroupDraft, row: StoryValRowDraft) {
     return
   }
 
+  closeCalcAutocomplete()
   calcEditorState.groupKey = group.draftKey
   calcEditorState.rowKey = row.draftKey
 }
@@ -235,24 +263,121 @@ function openCalcEditor(group: StoryValGroupDraft, row: StoryValRowDraft) {
 function closeCalcEditor() {
   calcEditorState.groupKey = ""
   calcEditorState.rowKey = ""
+  closeCalcAutocomplete()
 }
 
-function toNumericValue(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value
+function closeCalcAutocomplete() {
+  calcAutocompleteState.open = false
+  calcAutocompleteState.query = ""
+  calcAutocompleteState.replaceStart = 0
+  calcAutocompleteState.replaceEnd = 0
+  calcAutocompleteState.activeIndex = 0
+}
+
+function getCalcRuleTextareaValue() {
+  return editingCalcRow.value?.calcRule ?? ""
+}
+
+function setCalcRuleTextareaValue(value: string) {
+  if (editingCalcRow.value) {
+    editingCalcRow.value.calcRule = value
+  }
+}
+
+function updateCalcAutocompleteFromCaret() {
+  const textarea = calcRuleTextarea.value
+  const calcRule = getCalcRuleTextareaValue()
+
+  if (!textarea) {
+    closeCalcAutocomplete()
+    return
   }
 
-  if (typeof value === "string") {
-    const trimmed = value.trim()
-    if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(trimmed)) {
-      const parsed = Number(trimmed)
-      if (Number.isFinite(parsed)) {
-        return parsed
-      }
+  const caret = textarea.selectionStart ?? calcRule.length
+  const beforeCaret = calcRule.slice(0, caret)
+  const openBraceIndex = beforeCaret.lastIndexOf("{")
+
+  if (openBraceIndex < 0 || beforeCaret.slice(openBraceIndex + 1).includes("}")) {
+    closeCalcAutocomplete()
+    return
+  }
+
+  const query = beforeCaret.slice(openBraceIndex + 1)
+
+  calcAutocompleteState.open = true
+  calcAutocompleteState.query = query
+  calcAutocompleteState.replaceStart = openBraceIndex
+  calcAutocompleteState.replaceEnd = caret
+
+  if (calcAutocompleteItems.value.length === 0) {
+    calcAutocompleteState.activeIndex = 0
+  } else if (calcAutocompleteState.activeIndex >= calcAutocompleteItems.value.length) {
+    calcAutocompleteState.activeIndex = 0
+  }
+}
+
+function insertCalcAutocompleteItem(itemName: string) {
+  const textarea = calcRuleTextarea.value
+  const calcRule = getCalcRuleTextareaValue()
+  const replaceStart = calcAutocompleteState.replaceStart
+  const nextValue =
+    calcRule.slice(0, replaceStart + 1) +
+    itemName +
+    "}" +
+    calcRule.slice(calcAutocompleteState.replaceEnd)
+
+  setCalcRuleTextareaValue(nextValue)
+  closeCalcAutocomplete()
+
+  requestAnimationFrame(() => {
+    const nextCaret = replaceStart + itemName.length + 2
+    textarea?.focus()
+    textarea?.setSelectionRange(nextCaret, nextCaret)
+  })
+}
+
+function onCalcRuleInput() {
+  updateCalcAutocompleteFromCaret()
+}
+
+function onCalcRuleKeydown(event: KeyboardEvent) {
+  if (!isCalcAutocompleteOpen.value) {
+    if (event.key === "{") {
+      requestAnimationFrame(updateCalcAutocompleteFromCaret)
     }
+    return
   }
 
-  return null
+  if (event.key === "Escape") {
+    event.preventDefault()
+    closeCalcAutocomplete()
+    return
+  }
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault()
+    calcAutocompleteState.activeIndex =
+      (calcAutocompleteState.activeIndex + 1) % Math.max(calcAutocompleteItems.value.length, 1)
+    return
+  }
+
+  if (event.key === "ArrowUp") {
+    event.preventDefault()
+    const length = Math.max(calcAutocompleteItems.value.length, 1)
+    calcAutocompleteState.activeIndex =
+      (calcAutocompleteState.activeIndex - 1 + length) % length
+    return
+  }
+
+  if (event.key === "Enter" || event.key === "Tab") {
+    const item = activeCalcAutocompleteItem.value
+    if (!item) {
+      return
+    }
+
+    event.preventDefault()
+    insertCalcAutocompleteItem(item.name)
+  }
 }
 
 interface CalcEvaluationResult {
@@ -267,91 +392,21 @@ interface CalcValueDisplay {
   detail?: string
 }
 
-function evaluateExpression(expression: string) {
-  if (!/^[\d+\-*/().\s]+$/.test(expression)) {
-    throw new Error("\u89c4\u5219\u4e2d\u5305\u542b\u4e0d\u652f\u6301\u7684\u5b57\u7b26")
-  }
-
-  // Only arithmetic characters are allowed after placeholder substitution.
-  const result = Function(`"use strict"; return (${expression})`)() as unknown
-
-  if (typeof result !== "number" || !Number.isFinite(result)) {
-    throw new Error("\u8ba1\u7b97\u7ed3\u679c\u4e0d\u662f\u6709\u6548\u6570\u503c")
-  }
-
-  return result
-}
-
-function resolveCalcRowValue(
-  group: StoryValGroupDraft,
-  rowName: string,
-  visited: Set<string>,
-  depth: number
-): number {
-  if (depth > MAX_CALC_NESTING_DEPTH) {
-    throw new Error(`最多只支持 ${MAX_CALC_NESTING_DEPTH} 层嵌套计算`)
-  }
-
-  if (visited.has(rowName)) {
-    throw new Error(`\u68c0\u6d4b\u5230\u5faa\u73af\u5f15\u7528\uff1a${[...visited, rowName].join(" -> ")}`)
-  }
-
-  const row = group.vals.find((item) => normalizeRowName(item.name) === rowName)
-
-  if (!row) {
-    throw new Error(`\u672a\u627e\u5230\u53d8\u91cf {${rowName}}`)
-  }
-
-  if (isValueMode(row)) {
-    const numericValue = toNumericValue(parseValueInput(normalizeText(row.valueText)))
-
-    if (numericValue === null) {
-      throw new Error(`\u53d8\u91cf {${rowName}} \u4e0d\u662f\u6570\u503c`)
-    }
-
-    return numericValue
-  }
-
-  const nextVisited = new Set(visited)
-  nextVisited.add(rowName)
-  const nestedRule = normalizeText(row.calcRule).trim()
-
-  if (!nestedRule) {
-    throw new Error(`\u53d8\u91cf {${rowName}} \u7f3a\u5c11 calc_rule`)
-  }
-
-  return evaluateCalcRuleExpression(group, nestedRule, nextVisited, depth + 1).result
-}
-
-function evaluateCalcRuleExpression(
-  group: StoryValGroupDraft,
-  calcRule: string,
-  visited: Set<string>,
-  depth: number
-): { expression: string; result: number } {
-  if (depth > MAX_CALC_NESTING_DEPTH) {
-    throw new Error(`最多只支持 ${MAX_CALC_NESTING_DEPTH} 层嵌套计算`)
-  }
-
-  const trimmedRule = calcRule.trim()
-
-  if (!trimmedRule) {
-    throw new Error("\u8bf7\u5148\u8f93\u5165 calc_rule")
-  }
-
-  const expression = trimmedRule.replace(/\{([^{}]+)\}/g, (_match, token: string) => {
-    const rowName = token.trim()
-
-    if (!rowName) {
-      throw new Error("\u5f15\u7528\u5360\u4f4d\u7b26\u4e0d\u80fd\u4e3a\u7a7a")
-    }
-
-    return String(resolveCalcRowValue(group, rowName, visited, depth))
-  })
-
+function buildCoreGroup(group: StoryValGroupDraft): StoryValDefinition {
   return {
-    expression,
-    result: evaluateExpression(expression)
+    name: normalizeText(group.name).trim(),
+    description: normalizeText(group.description).trim() || undefined,
+    vals: group.vals.map((row) => buildCoreRow(row))
+  }
+}
+
+function buildCoreRow(row: StoryValRowDraft): StoryValEntryDefinition {
+  return {
+    name: normalizeText(row.name).trim(),
+    description: normalizeText(row.description).trim() || undefined,
+    value_type: normalizeValueType(row.valueType),
+    value: isValueMode(row) ? parseStoryValInput(row.valueText) : undefined,
+    calc_rule: normalizeText(row.calcRule).trim()
   }
 }
 
@@ -382,7 +437,11 @@ const calcPreview = computed<CalcEvaluationResult>(() => {
   }
 
   try {
-    const preview = evaluateCalcRuleExpression(editingCalcGroup.value, calcRule, visited, 1)
+    const preview = evaluateStoryValCalcRule(buildCoreGroup(editingCalcGroup.value), calcRule, {
+      visited,
+      depth: 1,
+      maxDepth: MAX_CALC_NESTING_DEPTH
+    })
 
     return {
       ok: true,
@@ -408,7 +467,11 @@ function getRowCalcDisplay(group: StoryValGroupDraft, row: StoryValRowDraft): Ca
   }
 
   try {
-    const preview = evaluateCalcRuleExpression(group, calcRule, visited, 1)
+    const preview = evaluateStoryValCalcRule(buildCoreGroup(group), calcRule, {
+      visited,
+      depth: 1,
+      maxDepth: MAX_CALC_NESTING_DEPTH
+    })
 
     return {
       ok: true,
@@ -433,7 +496,7 @@ function submitDraft() {
         name: normalizeText(row.name).trim(),
         description: normalizeText(row.description).trim() || undefined,
         value_type: normalizeValueType(row.valueType),
-        value: isValueMode(row) ? parseValueInput(row.valueText) : undefined,
+        value: isValueMode(row) ? parseStoryValInput(row.valueText) : undefined,
         calc_rule: normalizeText(row.calcRule).trim()
       }))
     }))
@@ -452,7 +515,7 @@ watch(
 
 <template>
   <Teleport to="body">
-    <div class="vals-dialog" @click.self="emit('close')">
+    <div class="vals-dialog">
       <section class="vals-dialog__panel glass-panel">
         <div class="vals-dialog__header">
           <div>
@@ -512,6 +575,10 @@ watch(
         </div>
 
         <div v-if="activeGroup" class="vals-dialog__body">
+          <div class="vals-dialog__group-count">
+            当前分组变量：{{ activeGroupVariableCount }} 个
+          </div>
+
           <div class="vals-dialog__group-meta">
             <label class="field">
               <span class="field-label">&#x5206;&#x7ec4;&#x540d;&#x79f0;</span>
@@ -600,6 +667,20 @@ watch(
             </button>
           </div>
         </div>
+
+        <div class="vals-dialog__actions vals-dialog__actions--footer">
+          <button class="btn-secondary" type="button" @click="emit('close')">
+            &#x5173;&#x95ed;
+          </button>
+          <button
+            class="btn-primary"
+            type="button"
+            :disabled="saving || hasInvalidDraft"
+            @click="submitDraft"
+          >
+            {{ saving ? "\u4fdd\u5b58\u4e2d..." : "\u4fdd\u5b58" }}
+          </button>
+        </div>
       </section>
 
       <div v-if="isCalcEditorOpen && editingCalcRow" class="vals-dialog__calc-editor" @click.self="closeCalcEditor">
@@ -618,11 +699,44 @@ watch(
 
           <label class="field">
             <span class="field-label">calc_rule</span>
-            <textarea
-              v-model="editingCalcRow.calcRule"
-              class="text-area vals-dialog__calc-editor-area"
-              placeholder="{a}+{b}+{c}"
-            />
+            <div class="vals-dialog__calc-editor-input-wrap">
+              <textarea
+                ref="calcRuleTextarea"
+                v-model="editingCalcRow.calcRule"
+                class="text-area vals-dialog__calc-editor-area"
+                placeholder="{a}+{b}+{c}"
+                @input="onCalcRuleInput"
+                @click="updateCalcAutocompleteFromCaret"
+                @keyup="updateCalcAutocompleteFromCaret"
+                @keydown="onCalcRuleKeydown"
+              />
+
+              <div v-if="isCalcAutocompleteOpen" class="vals-dialog__calc-autocomplete">
+                <button
+                  v-for="(item, index) in calcAutocompleteItems"
+                  :key="item.name"
+                  class="vals-dialog__calc-autocomplete-item"
+                  :class="{
+                    'vals-dialog__calc-autocomplete-item--active':
+                      index === calcAutocompleteState.activeIndex
+                  }"
+                  type="button"
+                  @mousedown.prevent="insertCalcAutocompleteItem(item.name)"
+                >
+                  <span class="vals-dialog__calc-autocomplete-name">{{ item.name }}</span>
+                  <span v-if="item.description" class="vals-dialog__calc-autocomplete-description">
+                    {{ item.description }}
+                  </span>
+                </button>
+
+                <div
+                  v-if="!calcAutocompleteItems.length"
+                  class="vals-dialog__calc-autocomplete-empty"
+                >
+                  没有匹配的变量
+                </div>
+              </div>
+            </div>
           </label>
 
           <div class="vals-dialog__calc-preview">
@@ -641,6 +755,9 @@ watch(
 
             <p class="vals-dialog__calc-preview-tip">
               &#x4f7f;&#x7528; `{a}` &#x5f15;&#x7528;&#x5f53;&#x524d;&#x5206;&#x7ec4;&#x5185;&#x7684;&#x5176;&#x4ed6;&#x53d8;&#x91cf;&#x3002;
+            </p>
+            <p class="vals-dialog__calc-preview-tip">
+              &#x652f;&#x6301; `Math.floor`、`Math.min`、`Math.max` &#x7b49;&#x5e38;&#x7528;&#x6570;&#x5b66;&#x51fd;&#x6570;&#x3002;
             </p>
 
             <template v-if="calcPreview.ok">
@@ -778,6 +895,11 @@ watch(
   margin-top: 16px;
 }
 
+.vals-dialog__group-count {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
 .vals-dialog__group-meta {
   display: grid;
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
@@ -893,6 +1015,60 @@ watch(
   min-height: 136px;
 }
 
+.vals-dialog__calc-editor-input-wrap {
+  position: relative;
+}
+
+.vals-dialog__calc-autocomplete {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 2;
+  width: min(100%, 360px);
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid rgba(186, 220, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(9, 19, 30, 0.98);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+.vals-dialog__calc-autocomplete-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(186, 220, 255, 0.08);
+  text-align: left;
+}
+
+.vals-dialog__calc-autocomplete-item:last-child {
+  border-bottom: 0;
+}
+
+.vals-dialog__calc-autocomplete-item--active {
+  background: rgba(255, 180, 84, 0.16);
+}
+
+.vals-dialog__calc-autocomplete-name {
+  font-size: 0.84rem;
+  color: var(--text);
+}
+
+.vals-dialog__calc-autocomplete-description {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.vals-dialog__calc-autocomplete-empty {
+  padding: 10px 12px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
 .vals-dialog__calc-preview {
   display: grid;
   gap: 10px;
@@ -967,6 +1143,11 @@ watch(
 .vals-dialog__footer {
   display: flex;
   justify-content: flex-start;
+}
+
+.vals-dialog__actions--footer {
+  margin-top: 16px;
+  justify-content: flex-end;
 }
 
 @media (max-width: 900px) {

@@ -6,6 +6,7 @@ import type {
   ValidationIssue,
   ValidationResult
 } from "./types"
+import { validateStoryValsCalcRules } from "./vals"
 
 function pushIssue(
   issues: ValidationIssue[],
@@ -143,6 +144,16 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
       "story.no-start-event",
       "The story does not define a start event yet.",
       ["story", "startEventId"]
+    )
+  }
+
+  for (const calcIssue of validateStoryValsCalcRules(document.vals)) {
+    pushIssue(
+      issues,
+      "error",
+      "vals.calc-rule-invalid",
+      `Variable "${calcIssue.groupName}" / "${calcIssue.rowName}" calc_rule is invalid: ${calcIssue.message}`,
+      ["vals", String(calcIssue.groupIndex), String(calcIssue.rowIndex), "calc_rule"]
     )
   }
 
