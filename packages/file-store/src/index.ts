@@ -47,6 +47,7 @@ export interface StoryFileStore {
   readStoryDocument(storyId: string): Promise<StoryDocument>
   readEvent(storyId: string, eventId: string): Promise<StoryEventFile>
   writeEvent(storyId: string, eventId: string, event: StoryEventFile): Promise<StoryEventFile>
+  writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile>
 }
 
 function sortObjectKeys(value: unknown): unknown {
@@ -338,10 +339,20 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return parsedEvent
   }
 
+  async function writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile> {
+    const parsedVals = storyValsSchema.parse(vals)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(paths.valsFile, parsedVals satisfies StoryValsFile)
+
+    return parsedVals
+  }
+
   return {
     listStorySummaries,
     readStoryDocument,
     readEvent,
-    writeEvent
+    writeEvent,
+    writeVals
   }
 }

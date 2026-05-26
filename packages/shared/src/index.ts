@@ -2,6 +2,7 @@ import type {
   CompiledStory,
   StoryDocument,
   StoryEventFile,
+  StoryValsFile,
   StorySummary,
   ValidationResult
 } from "@story-mgr/core"
@@ -24,6 +25,14 @@ export interface StoryEventResponse {
 
 export interface SaveEventRequest {
   event: StoryEventFile
+}
+
+export interface StoryValsResponse {
+  vals: StoryValsFile
+}
+
+export interface SaveValsRequest {
+  vals: StoryValsFile
 }
 
 export interface ValidationResponse {

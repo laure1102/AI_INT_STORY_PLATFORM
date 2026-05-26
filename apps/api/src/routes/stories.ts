@@ -4,7 +4,7 @@ import Router from "@koa/router"
 import { compileStory } from "@story-mgr/compiler"
 import { validateStoryDocument } from "@story-mgr/core"
 import type { StoryFileStore } from "@story-mgr/file-store"
-import type { SaveEventRequest } from "@story-mgr/shared"
+import type { SaveEventRequest, SaveValsRequest } from "@story-mgr/shared"
 import type { ApiConfig } from "../config"
 
 function requireParam(value: string | undefined, name: string) {
@@ -50,6 +50,15 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
 
     context.body = {
       event: await store.writeEvent(storyId, eventId, body.event)
+    }
+  })
+
+  router.put("/stories/:storyId/vals", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as SaveValsRequest
+
+    context.body = {
+      vals: await store.writeVals(storyId, body.vals)
     }
   })
 

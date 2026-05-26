@@ -2,18 +2,20 @@
 import type {
   StoryDocument,
   StoryEventFile,
+  StoryValsFile,
   ValidationIssue,
   ValidationResult
 } from "@story-mgr/core"
 import EventDetailPanel from "./EventDetailPanel.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
+import StoryValsDialog from "./StoryValsDialog.vue"
 
 const props = defineProps<{
   storyId: string
 }>()
 
 const projectStore = useProjectStore()
-const { exportStory, getStory, saveEvent, validateStory } = useStoryApi()
+const { exportStory, getStory, saveEvent, saveVals, validateStory } = useStoryApi()
 
 const storyDocument = ref<StoryDocument | null>(null)
 const validation = shallowRef<ValidationResult | null>(null)
@@ -25,6 +27,7 @@ const errorMessage = shallowRef<string | null>(null)
 const editingEventId = shallowRef<string | null>(null)
 const creatingFromEventId = shallowRef<string | null>(null)
 const creatingEventDraft = shallowRef<StoryEventFile | null>(null)
+const isValsDialogOpen = shallowRef(false)
 
 const selectedEventId = computed(() => projectStore.getSelectedEventId(props.storyId))
 
@@ -37,14 +40,14 @@ const editingEvent = computed(() => {
 })
 
 const activeDraftEvent = computed(() => {
-  if (creatingFromEventId.value) {
+  if (creatingFromEventId.value || creatingEventDraft.value) {
     return creatingEventDraft.value
   }
 
   return editingEvent.value
 })
 
-const isCreateMode = computed(() => !!creatingFromEventId.value)
+const isCreateMode = computed(() => !!creatingEventDraft.value)
 
 const issueSummary = computed(() => {
   const issues = validation.value?.issues ?? []
@@ -79,6 +82,19 @@ function closeEditor() {
   editingEventId.value = null
   creatingFromEventId.value = null
   creatingEventDraft.value = null
+}
+
+function openValsDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  closeEditor()
+  isValsDialogOpen.value = true
+}
+
+function closeValsDialog() {
+  isValsDialogOpen.value = false
 }
 
 async function loadStory() {
@@ -160,11 +176,30 @@ function buildNewEventFromParent(parentEventId: string): StoryEventFile {
   }
 }
 
+function buildNewRootEvent(): StoryEventFile {
+  const newId = createUniqueEventId("root")
+
+  return {
+    id: newId,
+    title: "新根事件",
+    kind: "scene",
+    body: "",
+    next: []
+  }
+}
+
 function handleCreateEvent(parentEventId: string) {
   creatingFromEventId.value = parentEventId
   editingEventId.value = null
   creatingEventDraft.value = buildNewEventFromParent(parentEventId)
   projectStore.selectEvent(props.storyId, parentEventId)
+}
+
+function handleCreateRootEvent() {
+  creatingFromEventId.value = null
+  editingEventId.value = null
+  creatingEventDraft.value = buildNewRootEvent()
+  projectStore.clearEvent(props.storyId)
 }
 
 async function handleSaveEvent(event: StoryEventFile) {
@@ -205,6 +240,29 @@ async function handleSaveEvent(event: StoryEventFile) {
     await refreshValidation()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "保存事件失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function handleSaveVals(vals: StoryValsFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    const savedVals = await saveVals(props.storyId, vals)
+    storyDocument.value = {
+      ...storyDocument.value,
+      vals: savedVals
+    }
+    isValsDialogOpen.value = false
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存全局变量失败。"
   } finally {
     isSaving.value = false
   }
@@ -272,6 +330,7 @@ watch(
     editingEventId.value = null
     creatingFromEventId.value = null
     creatingEventDraft.value = null
+    isValsDialogOpen.value = false
     void loadStory()
   },
   { immediate: true }
@@ -286,9 +345,14 @@ watch(
         <h1 class="editor-header__title">
           {{ storyDocument?.story.title || "正在加载剧情..." }}
         </h1>
-        <p class="editor-header__description">
-          {{ storyDocument?.story.description || "这个剧情暂时还没有描述。" }}
-        </p>
+        <div class="editor-header__tools" aria-label="故事配置入口">
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openValsDialog">
+            全局变量
+          </button>
+          <button class="btn-secondary editor-header__tool-button" type="button">场景</button>
+          <button class="btn-secondary editor-header__tool-button" type="button">地点</button>
+          <button class="btn-secondary editor-header__tool-button" type="button">角色</button>
+        </div>
       </div>
 
       <div class="editor-header__actions">
@@ -357,6 +421,7 @@ watch(
         @select="handleSelectEvent"
         @edit="handleEditEvent"
         @create="handleCreateEvent"
+        @create-root="handleCreateRootEvent"
         @toggle-link="handleToggleLink"
       />
     </section>
@@ -385,6 +450,14 @@ watch(
         </div>
       </Transition>
     </Teleport>
+
+    <StoryValsDialog
+      v-if="storyDocument && isValsDialogOpen"
+      :saving="isSaving"
+      :vals="storyDocument.vals"
+      @close="closeValsDialog"
+      @save="handleSaveVals"
+    />
   </main>
 </template>
 
@@ -434,22 +507,25 @@ watch(
   flex-shrink: 0;
 }
 
-.editor-header__description {
-  max-width: none;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  line-height: 1.2;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .editor-header__actions {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.editor-header__tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.editor-header__tool-button {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 0.78rem;
 }
 
 .editor-header :deep(.btn-primary),
@@ -647,7 +723,7 @@ watch(
   }
 
   .editor-header__title,
-  .editor-header__description {
+  .editor-header__tools {
     white-space: normal;
   }
 

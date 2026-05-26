@@ -42,6 +42,7 @@ const emit = defineEmits<{
   select: [eventId: string]
   edit: [eventId: string]
   create: [eventId: string]
+  createRoot: []
   toggleLink: [payload: { sourceEventId: string; targetEventId: string }]
 }>()
 
@@ -795,9 +796,19 @@ onUnmounted(() => {
 <template>
   <section class="graph-panel glass-panel">
     <div class="graph-panel__header">
-      <div class="graph-panel__headline">
-        <span class="eyebrow">图谱画布</span>
-        <h2 class="section-title">自动布局剧情画布</h2>
+      <div class="graph-panel__header-left">
+        <div class="graph-panel__headline">
+          <span class="eyebrow">图谱画布</span>
+          <h2 class="section-title">自动布局剧情画布</h2>
+        </div>
+
+        <button
+          class="btn-secondary graph-panel__button"
+          type="button"
+          @click="emit('createRoot')"
+        >
+          创建根事件
+        </button>
       </div>
 
       <div class="graph-panel__meta">
@@ -1014,6 +1025,13 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.graph-panel__header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .graph-panel__headline {
   display: grid;
   gap: 4px;
@@ -1163,10 +1181,10 @@ onUnmounted(() => {
 .graph-node__card {
   position: relative;
   display: grid;
-  gap: 10px;
+  gap: 1px;
   width: 100%;
   min-height: 124px;
-  padding: 16px 18px 16px;
+  padding: 2px 2px;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(8, 18, 29, 0.9);

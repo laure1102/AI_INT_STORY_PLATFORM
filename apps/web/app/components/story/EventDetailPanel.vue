@@ -115,6 +115,9 @@ watch(
         <p v-if="props.mode === 'create' && props.parentEventId" class="detail-panel__callout">
           这个新节点会从 <code>{{ props.parentEventId }}</code> 连出。
         </p>
+        <p v-else-if="props.mode === 'create'" class="detail-panel__callout">
+          这个新节点会作为一个没有父节点的根事件创建。
+        </p>
 
         <div class="detail-panel__row">
           <label class="field">

@@ -1,53 +1,70 @@
-﻿[
+[
   {
-    id: "arrival",
-    title: "抵达裂笺城",
-    kind: "scene",
-    body: "城门边传来旧钟的回响，巡逻兵和集市叫卖声一起涌来。你必须决定先跟着谁走。",
-    next: ["market_choice", "old_guard", "arrival-child"],
+    body: '城门边传来旧钟的回响，巡逻兵和集市叫卖声一起涌来。你必须决定先跟着谁走。',
+    id: 'arrival',
+    kind: 'scene',
     meta: {
       chapter: 1,
-      tone: "tense"
-    }
+      tone: 'tense',
+    },
+    next: [
+      'market_choice',
+      'old_guard',
+      'arrival-child',
+    ],
+    title: '抵达裂笺城',
   },
   {
-    id: "arrival-child",
-    title: "护士的安抚",
-    kind: "scene",
-    body: "你来到医院，接受护士姐姐的安抚。",
-    next: ["north_tower"]
+    body: '你来到医院，接受护士姐姐的安抚。',
+    id: 'arrival-child',
+    kind: 'scene',
+    next: [
+      'north_tower',
+    ],
+    title: '护士的安抚',
   },
   {
-    id: "market_choice",
-    title: "喧闹的市集",
-    kind: "branch",
-    body: "你穿过搭着布帐的市集，听见有人提到昨夜在北塔失踪的抄写员。也许线索就在这里。",
-    next: ["north_tower"],
+    body: '你穿过搭着布帐的市集，听见有人提到昨夜在北塔失踪的抄写员。也许线索就在这里。',
+    id: 'market_choice',
+    kind: 'branch',
     meta: {
       chapter: 1,
-      tone: "busy"
-    }
+      tone: 'busy',
+    },
+    next: [
+      'north_tower',
+    ],
+    title: '喧闹的市集',
   },
   {
-    id: "north_tower",
-    title: "北塔脚下",
-    kind: "scene",
-    body: "塔下的石阶仍残留着新鲜泥痕，似乎有人比你更早一步进了塔。",
+    body: '塔下的石阶仍残留着新鲜泥痕，似乎有人比你更早一步进了塔。',
+    id: 'north_tower',
+    kind: 'scene',
+    meta: {
+      chapter: 1,
+      tone: 'mystery',
+    },
     next: [],
-    meta: {
-      chapter: 1,
-      tone: "mystery"
-    }
+    title: '北塔脚下',
   },
   {
-    id: "old_guard",
-    title: "老卫兵的警告",
-    kind: "scene",
-    body: "老卫兵压低声音，说每当城里的旧钟在暮色里响第三次，北塔就会吞下一段记忆。",
-    next: ["north_tower"],
+    body: '老卫兵压低声音，说每当城里的旧钟在暮色里响第三次，北塔就会吞下一段记忆。',
+    id: 'old_guard',
+    kind: 'scene',
     meta: {
       chapter: 1,
-      tone: "ominous"
-    }
-  }
+      tone: 'ominous',
+    },
+    next: [
+      'north_tower',
+    ],
+    title: '老卫兵的警告',
+  },
+  {
+    body: '爱丽丝的肌肤拉萨的\n爱老骥伏枥撒旦\n爱上帝开了房间啦可是大家\n爱上的离开房间拉萨的肌肤\n奥克兰的上飞机了四大会计法\n奥克兰的手机费',
+    id: 'root-child2',
+    kind: 'scene',
+    next: [],
+    title: '哈哈哈哈1',
+  },
 ]

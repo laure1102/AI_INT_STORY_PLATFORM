@@ -1,10 +1,12 @@
-import type { StoryDocument, StoryEventFile } from "@story-mgr/core"
+import type { StoryDocument, StoryEventFile, StoryValsFile } from "@story-mgr/core"
 import type {
   ExportResponse,
   SaveEventRequest,
+  SaveValsRequest,
   StoryDocumentResponse,
   StoryEventResponse,
   StoryListResponse,
+  StoryValsResponse,
   ValidationResponse
 } from "@story-mgr/shared"
 
@@ -43,6 +45,17 @@ export function useStoryApi() {
     return response.event
   }
 
+  async function saveVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile> {
+    const response = await $fetch<StoryValsResponse>(`${apiBase}/stories/${storyId}/vals`, {
+      method: "PUT",
+      body: {
+        vals
+      } satisfies SaveValsRequest
+    })
+
+    return response.vals
+  }
+
   async function validateStory(storyId: string) {
     const response = await $fetch<ValidationResponse>(`${apiBase}/stories/${storyId}/validate`, {
       method: "POST"
@@ -63,6 +76,7 @@ export function useStoryApi() {
     getStory,
     listStories,
     saveEvent,
+    saveVals,
     validateStory
   }
 }

@@ -61,7 +61,8 @@ a {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -181,6 +182,16 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+select.text-input {
+  color-scheme: dark;
+}
+
+select.text-input option,
+select.text-input optgroup {
+  background: #0d1b28;
   color: var(--text);
 }
 

@@ -10,12 +10,28 @@ export const storyMetaSchema = z.object({
   tags: z.array(z.string()).optional()
 })
 
-export const storyValSchema = z.object({
-  id: z.string().min(1),
-  type: z.string().min(1).optional(),
-  initialValue: z.unknown().optional(),
+const storyValValueTypeSchema = z.enum(["value", "calc"])
+
+export const storyValEntrySchema = z.object({
+  name: z.string().min(1),
   description: z.string().optional(),
-  meta: looseMetaSchema.optional()
+  value_type: storyValValueTypeSchema.default("value"),
+  value: z.unknown().optional(),
+  calc_rule: z.string().default("")
+}).superRefine((entry, context) => {
+  if (entry.value_type === "calc" && entry.calc_rule.trim().length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "calc_rule is required when value_type is calc.",
+      path: ["calc_rule"]
+    })
+  }
+})
+
+export const storyValSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  vals: z.array(storyValEntrySchema).default([])
 })
 
 export const storyValsSchema = z.object({

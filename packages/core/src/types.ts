@@ -6,12 +6,20 @@ export interface StoryMetaFile {
   tags?: string[]
 }
 
-export interface StoryValDefinition {
-  id: string
-  type?: string
-  initialValue?: unknown
+export type StoryValValueType = "value" | "calc"
+
+export interface StoryValEntryDefinition {
+  name: string
   description?: string
-  meta?: Record<string, unknown>
+  value_type: StoryValValueType
+  value?: unknown
+  calc_rule: string
+}
+
+export interface StoryValDefinition {
+  name: string
+  description?: string
+  vals: StoryValEntryDefinition[]
 }
 
 export interface StoryValsFile {
