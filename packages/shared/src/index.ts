@@ -4,6 +4,7 @@ import type {
   StoryDocument,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryRolesFile,
   StorySceneBackgroundVariant,
   StorySceneFile,
   StoryValsFile,
@@ -47,6 +48,14 @@ export interface SaveScenesRequest {
   scenes: StorySceneFile
 }
 
+export interface StoryRolesResponse {
+  roles: StoryRolesFile
+}
+
+export interface SaveRolesRequest {
+  roles: StoryRolesFile
+}
+
 export interface StoryEventLocationsResponse {
   eventLocations: StoryEventLocationFile
 }
@@ -80,6 +89,37 @@ export interface CompressSceneBackgroundRequest {
   sourcePath: string
   level: number
   variant: StorySceneBackgroundVariant
+  quality: number
+}
+
+export interface GenerateRolePromptRequest {
+  descr: string
+  import: boolean
+  qufenXingbie: boolean
+  roleName: string
+  storyTitle?: string
+  xingge: string
+}
+
+export interface GenerateRolePromptResponse {
+  prompt: string
+}
+
+export interface GenerateRoleImageRequest {
+  gender: "common" | "male" | "female"
+  globalPrompt: string
+  imageSize: string
+  prompt: string
+  targetName: string
+}
+
+export interface GenerateRoleImageResponse {
+  asset: StoryAssetMetadata
+}
+
+export interface CompressRoleImageRequest {
+  sourcePath: string
+  targetName: string
   quality: number
 }
 

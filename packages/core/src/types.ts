@@ -46,14 +46,25 @@ export interface StorySceneFile {
 }
 
 export interface StoryRoleDefinition {
-  id: string
   name: string
-  avatar?: string
-  description?: string
-  meta?: Record<string, unknown>
+  descr: string
+  prompt: string
+  img: string
+  import: boolean
+  xingge: string
+  qufen_xingbie: boolean
+  img_male: string
+  img_female: string
+}
+
+export interface StoryRolesAiConfig {
+  image_size: string
+  global_prompt: string
+  compress_quality: number
 }
 
 export interface StoryRolesFile {
+  ai: StoryRolesAiConfig
   roles: StoryRoleDefinition[]
 }
 

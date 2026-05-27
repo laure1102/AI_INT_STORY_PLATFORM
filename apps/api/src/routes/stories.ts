@@ -8,20 +8,32 @@ import { FileStoreError, type StoryFileStore } from "@story-mgr/file-store"
 import type {
   AppSettingsResponse,
   CompressLocationImageRequest,
+  CompressRoleImageRequest,
   CompressSceneBackgroundRequest,
   GenerateLocationImageRequest,
   GenerateLocationImageResponse,
   GenerateLocationPromptRequest,
   GenerateLocationPromptResponse,
+  GenerateRoleImageRequest,
+  GenerateRoleImageResponse,
+  GenerateRolePromptRequest,
+  GenerateRolePromptResponse,
   SaveAppSettingsRequest,
   SaveEventRequest,
   SaveEventLocationsRequest,
+  SaveRolesRequest,
   SaveScenesRequest,
+  StoryRolesResponse,
   SaveValsRequest,
   StoryAssetResponse
 } from "@story-mgr/shared"
 import type { ApiConfig } from "../config"
-import { generateLocationImage, generateLocationPrompt } from "../services/ai"
+import {
+  generateLocationImage,
+  generateLocationPrompt,
+  generateRoleImage,
+  generateRolePrompt
+} from "../services/ai"
 
 const upload = multer({
   storage: multer.memoryStorage()
@@ -113,6 +125,15 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     }
   })
 
+  router.put("/stories/:storyId/roles", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as SaveRolesRequest
+
+    context.body = {
+      roles: await store.writeRoles(storyId, body.roles)
+    } satisfies StoryRolesResponse
+  })
+
   router.put("/stories/:storyId/event-locations", async (context) => {
     const storyId = requireParam(context.params.storyId, "storyId")
     const body = context.request.body as SaveEventLocationsRequest
@@ -139,6 +160,26 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     } satisfies GenerateLocationPromptResponse
   })
 
+  router.post("/stories/:storyId/roles/prompt", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as GenerateRolePromptRequest
+    const [settings, story] = await Promise.all([
+      store.readAppSettings(),
+      store.readStoryDocument(storyId)
+    ])
+
+    context.body = {
+      prompt: await generateRolePrompt(settings, {
+        descr: body.descr,
+        import: body.import,
+        qufenXingbie: body.qufenXingbie,
+        roleName: body.roleName,
+        storyTitle: body.storyTitle ?? story.story.title,
+        xingge: body.xingge
+      })
+    } satisfies GenerateRolePromptResponse
+  })
+
   router.post("/stories/:storyId/event-locations/image", async (context) => {
     const storyId = requireParam(context.params.storyId, "storyId")
     const body = context.request.body as GenerateLocationImageRequest
@@ -155,12 +196,42 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     } satisfies GenerateLocationImageResponse
   })
 
+  router.post("/stories/:storyId/roles/image", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as GenerateRoleImageRequest
+    const settings = await store.readAppSettings()
+    const image = await generateRoleImage(
+      settings,
+      body.prompt,
+      body.globalPrompt,
+      body.imageSize,
+      body.gender
+    )
+
+    context.body = {
+      asset: await store.writeRoleImageSource(storyId, body.targetName, image.buffer)
+    } satisfies GenerateRoleImageResponse
+  })
+
   router.post("/stories/:storyId/event-locations/compress", async (context) => {
     const storyId = requireParam(context.params.storyId, "storyId")
     const body = context.request.body as CompressLocationImageRequest
 
     context.body = {
       asset: await store.compressLocationImage(storyId, {
+        sourcePath: body.sourcePath,
+        targetName: body.targetName,
+        quality: body.quality
+      })
+    } satisfies StoryAssetResponse
+  })
+
+  router.post("/stories/:storyId/roles/compress", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as CompressRoleImageRequest
+
+    context.body = {
+      asset: await store.compressRoleImage(storyId, {
         sourcePath: body.sourcePath,
         targetName: body.targetName,
         quality: body.quality

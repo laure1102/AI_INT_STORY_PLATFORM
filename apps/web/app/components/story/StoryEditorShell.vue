@@ -4,6 +4,7 @@ import type {
   StoryDocument,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryRolesFile,
   StorySceneFile,
   StoryValsFile,
   ValidationIssue,
@@ -13,6 +14,7 @@ import AppSettingsDialog from "./AppSettingsDialog.vue"
 import EventDetailPanel from "./EventDetailPanel.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
 import StoryLocationsDialog from "./StoryLocationsDialog.vue"
+import StoryRolesDialog from "./StoryRolesDialog.vue"
 import StoryScenesDialog from "./StoryScenesDialog.vue"
 import StoryValsDialog from "./StoryValsDialog.vue"
 
@@ -28,6 +30,7 @@ const {
   saveAppSettings,
   saveEvent,
   saveEventLocations,
+  saveRoles,
   saveScenes,
   saveVals,
   validateStory
@@ -47,6 +50,7 @@ const creatingEventDraft = shallowRef<StoryEventFile | null>(null)
 const isValsDialogOpen = shallowRef(false)
 const isScenesDialogOpen = shallowRef(false)
 const isLocationsDialogOpen = shallowRef(false)
+const isRolesDialogOpen = shallowRef(false)
 const isSettingsDialogOpen = shallowRef(false)
 
 const selectedEventId = computed(() => projectStore.getSelectedEventId(props.storyId))
@@ -112,6 +116,7 @@ function openValsDialog() {
   closeEditor()
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
+  isRolesDialogOpen.value = false
   isValsDialogOpen.value = true
 }
 
@@ -127,6 +132,7 @@ function openScenesDialog() {
   closeEditor()
   isValsDialogOpen.value = false
   isLocationsDialogOpen.value = false
+  isRolesDialogOpen.value = false
   isScenesDialogOpen.value = true
 }
 
@@ -142,11 +148,28 @@ function openLocationsDialog() {
   closeEditor()
   isValsDialogOpen.value = false
   isScenesDialogOpen.value = false
+  isRolesDialogOpen.value = false
   isLocationsDialogOpen.value = true
 }
 
 function closeLocationsDialog() {
   isLocationsDialogOpen.value = false
+}
+
+function openRolesDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  closeEditor()
+  isValsDialogOpen.value = false
+  isScenesDialogOpen.value = false
+  isLocationsDialogOpen.value = false
+  isRolesDialogOpen.value = true
+}
+
+function closeRolesDialog() {
+  isRolesDialogOpen.value = false
 }
 
 function openSettingsDialog() {
@@ -380,6 +403,29 @@ async function handleSaveEventLocations(eventLocations: StoryEventLocationFile) 
   }
 }
 
+async function handleSaveRoles(roles: StoryRolesFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    const savedRoles = await saveRoles(props.storyId, roles)
+    storyDocument.value = {
+      ...storyDocument.value,
+      roles: savedRoles
+    }
+    isRolesDialogOpen.value = false
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存角色失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
 async function handleSaveAppSettings(settings: AppSettingsFile) {
   isSaving.value = true
   errorMessage.value = null
@@ -459,6 +505,7 @@ watch(
     isValsDialogOpen.value = false
     isScenesDialogOpen.value = false
     isLocationsDialogOpen.value = false
+    isRolesDialogOpen.value = false
     void loadStory()
   },
   { immediate: true }
@@ -483,7 +530,9 @@ watch(
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openLocationsDialog">
             地点
           </button>
-          <button class="btn-secondary editor-header__tool-button" type="button">角色</button>
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openRolesDialog">
+            角色
+          </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openSettingsDialog">
             设置
           </button>
@@ -611,6 +660,16 @@ watch(
       :story-title="storyDocument.story.title"
       @close="closeLocationsDialog"
       @save="handleSaveEventLocations"
+    />
+
+    <StoryRolesDialog
+      v-if="storyDocument && isRolesDialogOpen"
+      :roles="storyDocument.roles"
+      :saving="isSaving"
+      :story-id="storyId"
+      :story-title="storyDocument.story.title"
+      @close="closeRolesDialog"
+      @save="handleSaveRoles"
     />
 
     <AppSettingsDialog

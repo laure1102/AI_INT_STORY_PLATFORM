@@ -58,14 +58,40 @@ export const storySceneSchema = z.object({
 })
 
 export const storyRoleSchema = z.object({
-  id: z.string().min(1),
   name: z.string().min(1),
-  avatar: z.string().min(1).optional(),
-  description: z.string().optional(),
-  meta: looseMetaSchema.optional()
+  descr: z.string().default(""),
+  prompt: z.string().default(""),
+  img: z.string().default(""),
+  import: z.boolean().default(false),
+  xingge: z.string().default(""),
+  qufen_xingbie: z.boolean().default(false),
+  img_male: z.string().default(""),
+  img_female: z.string().default("")
+}).transform((role) => {
+  if (role.qufen_xingbie) {
+    return {
+      ...role,
+      img: ""
+    }
+  }
+
+  return {
+    ...role,
+    img_male: "",
+    img_female: ""
+  }
 })
 
 export const storyRolesSchema = z.object({
+  ai: z.object({
+    image_size: z.string().default("1536x1024"),
+    global_prompt: z.string().default(""),
+    compress_quality: z.number().int().min(1).max(100).default(60)
+  }).default({
+    image_size: "1536x1024",
+    global_prompt: "",
+    compress_quality: 60
+  }),
   roles: z.array(storyRoleSchema).default([])
 })
 

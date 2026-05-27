@@ -3,27 +3,35 @@ import type {
   StoryDocument,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryRolesFile,
   StorySceneFile,
   StoryValsFile
 } from "@story-mgr/core"
 import type {
   AppSettingsResponse,
   CompressLocationImageRequest,
+  CompressRoleImageRequest,
   CompressSceneBackgroundRequest,
   ExportResponse,
   GenerateLocationImageRequest,
   GenerateLocationImageResponse,
   GenerateLocationPromptRequest,
   GenerateLocationPromptResponse,
+  GenerateRoleImageRequest,
+  GenerateRoleImageResponse,
+  GenerateRolePromptRequest,
+  GenerateRolePromptResponse,
   SaveAppSettingsRequest,
   SaveEventRequest,
   SaveEventLocationsRequest,
+  SaveRolesRequest,
   SaveScenesRequest,
   SaveValsRequest,
   StoryAssetMetadata,
   StoryDocumentResponse,
   StoryEventResponse,
   StoryEventLocationsResponse,
+  StoryRolesResponse,
   StoryListResponse,
   StoryAssetResponse,
   StoryScenesResponse,
@@ -91,6 +99,17 @@ export function useStoryApi() {
     })
 
     return response.scenes
+  }
+
+  async function saveRoles(storyId: string, roles: StoryRolesFile): Promise<StoryRolesFile> {
+    const response = await $fetch<StoryRolesResponse>(`${apiBase}/stories/${storyId}/roles`, {
+      method: "PUT",
+      body: {
+        roles
+      } satisfies SaveRolesRequest
+    })
+
+    return response.roles
   }
 
   async function saveEventLocations(
@@ -173,12 +192,42 @@ export function useStoryApi() {
     return response.prompt
   }
 
+  async function generateRolePrompt(
+    storyId: string,
+    payload: GenerateRolePromptRequest
+  ): Promise<string> {
+    const response = await $fetch<GenerateRolePromptResponse>(
+      `${apiBase}/stories/${storyId}/roles/prompt`,
+      {
+        method: "POST",
+        body: payload
+      }
+    )
+
+    return response.prompt
+  }
+
   async function generateLocationImage(
     storyId: string,
     payload: GenerateLocationImageRequest
   ): Promise<StoryAssetMetadata> {
     const response = await $fetch<GenerateLocationImageResponse>(
       `${apiBase}/stories/${storyId}/event-locations/image`,
+      {
+        method: "POST",
+        body: payload
+      }
+    )
+
+    return response.asset
+  }
+
+  async function generateRoleImage(
+    storyId: string,
+    payload: GenerateRoleImageRequest
+  ): Promise<StoryAssetMetadata> {
+    const response = await $fetch<GenerateRoleImageResponse>(
+      `${apiBase}/stories/${storyId}/roles/image`,
       {
         method: "POST",
         body: payload
@@ -199,6 +248,18 @@ export function useStoryApi() {
         body: payload
       }
     )
+
+    return response.asset
+  }
+
+  async function compressRoleImage(
+    storyId: string,
+    payload: CompressRoleImageRequest
+  ): Promise<StoryAssetMetadata> {
+    const response = await $fetch<StoryAssetResponse>(`${apiBase}/stories/${storyId}/roles/compress`, {
+      method: "POST",
+      body: payload
+    })
 
     return response.asset
   }
@@ -227,10 +288,13 @@ export function useStoryApi() {
 
   return {
     compressLocationImage,
+    compressRoleImage,
     compressSceneAsset,
     exportStory,
     generateLocationImage,
     generateLocationPrompt,
+    generateRoleImage,
+    generateRolePrompt,
     getAppSettings,
     getEvent,
     getStoryAssetMeta,
@@ -240,6 +304,7 @@ export function useStoryApi() {
     saveAppSettings,
     saveEvent,
     saveEventLocations,
+    saveRoles,
     saveScenes,
     saveVals,
     uploadStoryAsset,
