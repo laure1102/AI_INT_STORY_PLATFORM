@@ -25,6 +25,8 @@ export function createApp(config: ApiConfig) {
         } satisfies ApiErrorResponse
       }
     } catch (error) {
+      console.error("[api] request failed", error)
+
       if (error instanceof FileStoreError) {
         context.status = error.statusCode
         context.body = {

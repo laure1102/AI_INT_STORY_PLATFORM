@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import type { StorySummary } from "@story-mgr/core"
+import type { AppSettingsFile, StorySummary } from "@story-mgr/core"
+import AppSettingsDialog from "./AppSettingsDialog.vue"
+import StoryBrowserSettingsBar from "./StoryBrowserSettingsBar.vue"
 import StoryList from "./StoryList.vue"
 
-const { listStories } = useStoryApi()
+const { getAppSettings, listStories, saveAppSettings } = useStoryApi()
 
 const stories = ref<StorySummary[]>([])
+const appSettings = ref<AppSettingsFile | null>(null)
 const selectedStoryId = shallowRef<string | null>(null)
 const isLoading = shallowRef(true)
+const isSavingSettings = shallowRef(false)
+const isSettingsDialogOpen = shallowRef(false)
 const errorMessage = shallowRef<string | null>(null)
 
 async function loadStories() {
@@ -14,8 +19,10 @@ async function loadStories() {
   errorMessage.value = null
 
   try {
-    stories.value = await listStories()
-    selectedStoryId.value = stories.value[0]?.id ?? null
+    const [storyList, settings] = await Promise.all([listStories(), getAppSettings()])
+    stories.value = storyList
+    appSettings.value = settings
+    selectedStoryId.value = storyList[0]?.id ?? null
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "加载故事列表失败。"
   } finally {
@@ -27,6 +34,32 @@ const selectedStory = computed(() => {
   return stories.value.find((story) => story.id === selectedStoryId.value) ?? null
 })
 
+function openSettingsDialog() {
+  if (!appSettings.value) {
+    return
+  }
+
+  isSettingsDialogOpen.value = true
+}
+
+function closeSettingsDialog() {
+  isSettingsDialogOpen.value = false
+}
+
+async function handleSaveSettings(settings: AppSettingsFile) {
+  isSavingSettings.value = true
+  errorMessage.value = null
+
+  try {
+    appSettings.value = await saveAppSettings(settings)
+    isSettingsDialogOpen.value = false
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存设置失败。"
+  } finally {
+    isSavingSettings.value = false
+  }
+}
+
 onMounted(() => {
   void loadStories()
 })
@@ -34,21 +67,24 @@ onMounted(() => {
 
 <template>
   <main class="page-shell fade-up">
+    <StoryBrowserSettingsBar @open-settings="openSettingsDialog" />
+
     <section class="hero">
       <div class="hero__content">
         <span class="eyebrow">Story Manager</span>
         <h1 class="hero__title">游戏网状剧情事件编辑器</h1>
         <p class="hero__copy">
-          先把故事拆成 Git 友好的 JSON5 文件，再用 Nuxt 编辑器和 Koa 文件服务把读写链路跑通。
+          用 Git 友好的 JSON5 管理剧情数据，结合 Nuxt 编辑器与 Koa 文件服务，把故事内容、地点素材和 AI 工作流统一收进一个项目里。
         </p>
       </div>
+
       <div class="hero__status glass-panel">
         <div class="pill">
           <span class="status-dot" />
           当前骨架：Nuxt + Koa2 + JSON5
         </div>
         <p class="hero__status-copy muted">
-          当前示例故事已经接入，后续我们可以在这套骨架上继续设计剧情事件 DSL 和图编辑器。
+          现在已经支持故事浏览、事件图谱编辑、全局变量、场景和地点配置，后续可以继续扩展角色与更细的剧情 DSL。
         </p>
       </div>
     </section>
@@ -57,9 +93,7 @@ onMounted(() => {
       <div class="workspace__sidebar">
         <div class="workspace__header">
           <h2 class="section-title">故事列表</h2>
-          <button class="btn-secondary" type="button" @click="loadStories">
-            刷新
-          </button>
+          <button class="btn-secondary" type="button" @click="loadStories">刷新</button>
         </div>
 
         <p v-if="isLoading" class="muted">正在读取 `data/stories` ...</p>
@@ -79,13 +113,14 @@ onMounted(() => {
               <p class="eyebrow">Selected Story</p>
               <h2 class="workspace__detail-title">{{ selectedStory.title }}</h2>
             </div>
+
             <NuxtLink class="btn-primary" :to="`/editor/${selectedStory.id}`">
               打开编辑器
             </NuxtLink>
           </div>
 
           <p class="workspace__detail-copy">
-            {{ selectedStory.description || "这一条故事还没有写简介。" }}
+            {{ selectedStory.description || "这条故事还没有填写简介。" }}
           </p>
 
           <div class="workspace__stats">
@@ -93,6 +128,7 @@ onMounted(() => {
               <span class="workspace__stat-label">事件数量</span>
               <strong class="workspace__stat-value">{{ selectedStory.eventCount }}</strong>
             </div>
+
             <div class="workspace__stat-card">
               <span class="workspace__stat-label">最后同步</span>
               <strong class="workspace__stat-value">
@@ -103,10 +139,18 @@ onMounted(() => {
         </template>
 
         <div v-else class="workspace__empty">
-          还没有读到故事目录，你可以先保留示例，后面再继续扩展。
+          还没有读取到故事目录，可以先保留示例故事，后续再继续扩展。
         </div>
       </div>
     </section>
+
+    <AppSettingsDialog
+      v-if="appSettings && isSettingsDialogOpen"
+      :saving="isSavingSettings"
+      :settings="appSettings"
+      @close="closeSettingsDialog"
+      @save="handleSaveSettings"
+    />
   </main>
 </template>
 

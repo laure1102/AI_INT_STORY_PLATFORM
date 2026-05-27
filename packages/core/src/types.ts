@@ -27,14 +27,21 @@ export interface StoryValsFile {
 }
 
 export interface StorySceneDefinition {
-  id: string
-  title: string
-  image?: string
-  description?: string
-  meta?: Record<string, unknown>
+  level: number
+  description: string
+  music: string
+  day_img: string
+  night_img: string
+}
+
+export type StorySceneBackgroundVariant = "day" | "night"
+
+export interface StorySceneAiConfig {
+  compress_quality: number
 }
 
 export interface StorySceneFile {
+  ai: StorySceneAiConfig
   scenes: StorySceneDefinition[]
 }
 
@@ -50,16 +57,37 @@ export interface StoryRolesFile {
   roles: StoryRoleDefinition[]
 }
 
+export interface StoryEventLocationAiConfig {
+  image_size: string
+  global_prompt: string
+  compress_quality: number
+}
+
 export interface StoryEventLocationAssignment {
-  eventId: string
-  sceneId?: string
-  location: string
-  description?: string
-  meta?: Record<string, unknown>
+  name: string
+  descr: string
+  img: string
+  prompt: string
 }
 
 export interface StoryEventLocationFile {
+  ai: StoryEventLocationAiConfig
   assignments: StoryEventLocationAssignment[]
+}
+
+export interface AppAiProviderSettings {
+  apiKey: string
+  baseUrl: string
+  model: string
+}
+
+export interface AppSettingsFile {
+  ai: AppAiSettings
+}
+
+export interface AppAiSettings {
+  image: AppAiProviderSettings
+  text: AppAiProviderSettings
 }
 
 export interface StoryEventFile {

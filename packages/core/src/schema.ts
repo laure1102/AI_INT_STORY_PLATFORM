@@ -39,14 +39,21 @@ export const storyValsSchema = z.object({
 })
 
 export const storySceneEntrySchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1),
-  image: z.string().min(1).optional(),
-  description: z.string().optional(),
-  meta: looseMetaSchema.optional()
+  level: z.number().int().min(1),
+  description: z.string().default(""),
+  music: z.string().default(""),
+  day_img: z.string().default(""),
+  night_img: z.string().default("")
+})
+
+export const storySceneAiConfigSchema = z.object({
+  compress_quality: z.number().int().min(1).max(100).default(60)
 })
 
 export const storySceneSchema = z.object({
+  ai: storySceneAiConfigSchema.default({
+    compress_quality: 60
+  }),
   scenes: z.array(storySceneEntrySchema).default([])
 })
 
@@ -62,16 +69,60 @@ export const storyRolesSchema = z.object({
   roles: z.array(storyRoleSchema).default([])
 })
 
+export const storyEventLocationAiConfigSchema = z.object({
+  image_size: z.string().default("1536x1024"),
+  global_prompt: z.string().default(""),
+  compress_quality: z.number().int().min(1).max(100).default(60)
+})
+
 export const storyEventLocationAssignmentSchema = z.object({
-  eventId: z.string().min(1),
-  sceneId: z.string().min(1).optional(),
-  location: z.string().min(1),
-  description: z.string().optional(),
-  meta: looseMetaSchema.optional()
+  name: z.string().min(1),
+  descr: z.string().default(""),
+  img: z.string().default(""),
+  prompt: z.string().default("")
 })
 
 export const storyEventLocationSchema = z.object({
+  ai: storyEventLocationAiConfigSchema.default({
+    image_size: "1536x1024",
+    global_prompt: "",
+    compress_quality: 60
+  }),
   assignments: z.array(storyEventLocationAssignmentSchema).default([])
+})
+
+export const appAiProviderSettingsSchema = z.object({
+  apiKey: z.string().default(""),
+  baseUrl: z.string().default(""),
+  model: z.string().default("")
+})
+
+export const appAiSettingsSchema = z.object({
+  image: appAiProviderSettingsSchema.default({
+    apiKey: "",
+    baseUrl: "",
+    model: ""
+  }),
+  text: appAiProviderSettingsSchema.default({
+    apiKey: "",
+    baseUrl: "",
+    model: ""
+  })
+})
+
+export const appSettingsSchema = z.object({
+  ai: appAiSettingsSchema.default({
+    image: {
+      apiKey: "",
+      baseUrl: "",
+      model: ""
+    },
+    text: {
+      apiKey: "",
+      baseUrl: "",
+      model: ""
+    }
+  })
 })
 
 export const storyEventSchema = z.object({

@@ -1,0 +1,14 @@
+{
+  ai: {
+    image: {
+      apiKey: "",
+      baseUrl: "",
+      model: ""
+    },
+    text: {
+      apiKey: "",
+      baseUrl: "",
+      model: ""
+    }
+  }
+}

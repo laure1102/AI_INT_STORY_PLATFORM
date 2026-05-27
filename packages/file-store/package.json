@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@story-mgr/core": "workspace:*",
-    "json5": "^2.2.3"
+    "json5": "^2.2.3",
+    "sharp": "^0.34.5"
   }
 }

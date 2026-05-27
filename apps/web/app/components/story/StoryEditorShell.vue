@@ -1,13 +1,19 @@
 ﻿<script setup lang="ts">
 import type {
+  AppSettingsFile,
   StoryDocument,
   StoryEventFile,
+  StoryEventLocationFile,
+  StorySceneFile,
   StoryValsFile,
   ValidationIssue,
   ValidationResult
 } from "@story-mgr/core"
+import AppSettingsDialog from "./AppSettingsDialog.vue"
 import EventDetailPanel from "./EventDetailPanel.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
+import StoryLocationsDialog from "./StoryLocationsDialog.vue"
+import StoryScenesDialog from "./StoryScenesDialog.vue"
 import StoryValsDialog from "./StoryValsDialog.vue"
 
 const props = defineProps<{
@@ -15,9 +21,20 @@ const props = defineProps<{
 }>()
 
 const projectStore = useProjectStore()
-const { exportStory, getStory, saveEvent, saveVals, validateStory } = useStoryApi()
+const {
+  exportStory,
+  getAppSettings,
+  getStory,
+  saveAppSettings,
+  saveEvent,
+  saveEventLocations,
+  saveScenes,
+  saveVals,
+  validateStory
+} = useStoryApi()
 
 const storyDocument = ref<StoryDocument | null>(null)
+const appSettings = ref<AppSettingsFile | null>(null)
 const validation = shallowRef<ValidationResult | null>(null)
 const exportPath = shallowRef<string | null>(null)
 const isLoading = shallowRef(true)
@@ -28,6 +45,9 @@ const editingEventId = shallowRef<string | null>(null)
 const creatingFromEventId = shallowRef<string | null>(null)
 const creatingEventDraft = shallowRef<StoryEventFile | null>(null)
 const isValsDialogOpen = shallowRef(false)
+const isScenesDialogOpen = shallowRef(false)
+const isLocationsDialogOpen = shallowRef(false)
+const isSettingsDialogOpen = shallowRef(false)
 
 const selectedEventId = computed(() => projectStore.getSelectedEventId(props.storyId))
 
@@ -90,11 +110,55 @@ function openValsDialog() {
   }
 
   closeEditor()
+  isScenesDialogOpen.value = false
+  isLocationsDialogOpen.value = false
   isValsDialogOpen.value = true
 }
 
 function closeValsDialog() {
   isValsDialogOpen.value = false
+}
+
+function openScenesDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  closeEditor()
+  isValsDialogOpen.value = false
+  isLocationsDialogOpen.value = false
+  isScenesDialogOpen.value = true
+}
+
+function closeScenesDialog() {
+  isScenesDialogOpen.value = false
+}
+
+function openLocationsDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  closeEditor()
+  isValsDialogOpen.value = false
+  isScenesDialogOpen.value = false
+  isLocationsDialogOpen.value = true
+}
+
+function closeLocationsDialog() {
+  isLocationsDialogOpen.value = false
+}
+
+function openSettingsDialog() {
+  if (!appSettings.value) {
+    return
+  }
+
+  isSettingsDialogOpen.value = true
+}
+
+function closeSettingsDialog() {
+  isSettingsDialogOpen.value = false
 }
 
 async function loadStory() {
@@ -103,7 +167,9 @@ async function loadStory() {
   exportPath.value = null
 
   try {
-    storyDocument.value = await getStory(props.storyId)
+    const [story, settings] = await Promise.all([getStory(props.storyId), getAppSettings()])
+    storyDocument.value = story
+    appSettings.value = settings
 
     const currentSelection = projectStore.getSelectedEventId(props.storyId)
     const fallbackEventId = storyDocument.value.graphEvents[0]?.id
@@ -268,6 +334,66 @@ async function handleSaveVals(vals: StoryValsFile) {
   }
 }
 
+async function handleSaveScenes(scenes: StorySceneFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    const savedScenes = await saveScenes(props.storyId, scenes)
+    storyDocument.value = {
+      ...storyDocument.value,
+      scenes: savedScenes
+    }
+    isScenesDialogOpen.value = false
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存场景失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function handleSaveEventLocations(eventLocations: StoryEventLocationFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    const savedEventLocations = await saveEventLocations(props.storyId, eventLocations)
+    storyDocument.value = {
+      ...storyDocument.value,
+      eventLocations: savedEventLocations
+    }
+    isLocationsDialogOpen.value = false
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存地点失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function handleSaveAppSettings(settings: AppSettingsFile) {
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    appSettings.value = await saveAppSettings(settings)
+    isSettingsDialogOpen.value = false
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存设置失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
 async function handleToggleLink(payload: {
   sourceEventId: string
   targetEventId: string
@@ -331,6 +457,8 @@ watch(
     creatingFromEventId.value = null
     creatingEventDraft.value = null
     isValsDialogOpen.value = false
+    isScenesDialogOpen.value = false
+    isLocationsDialogOpen.value = false
     void loadStory()
   },
   { immediate: true }
@@ -349,9 +477,16 @@ watch(
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openValsDialog">
             全局变量
           </button>
-          <button class="btn-secondary editor-header__tool-button" type="button">场景</button>
-          <button class="btn-secondary editor-header__tool-button" type="button">地点</button>
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openScenesDialog">
+            场景
+          </button>
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openLocationsDialog">
+            地点
+          </button>
           <button class="btn-secondary editor-header__tool-button" type="button">角色</button>
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openSettingsDialog">
+            设置
+          </button>
         </div>
       </div>
 
@@ -457,6 +592,33 @@ watch(
       :vals="storyDocument.vals"
       @close="closeValsDialog"
       @save="handleSaveVals"
+    />
+
+    <StoryScenesDialog
+      v-if="storyDocument && isScenesDialogOpen"
+      :saving="isSaving"
+      :story-id="storyId"
+      :scenes="storyDocument.scenes"
+      @close="closeScenesDialog"
+      @save="handleSaveScenes"
+    />
+
+    <StoryLocationsDialog
+      v-if="storyDocument && isLocationsDialogOpen"
+      :event-locations="storyDocument.eventLocations"
+      :saving="isSaving"
+      :story-id="storyId"
+      :story-title="storyDocument.story.title"
+      @close="closeLocationsDialog"
+      @save="handleSaveEventLocations"
+    />
+
+    <AppSettingsDialog
+      v-if="appSettings && isSettingsDialogOpen"
+      :saving="isSaving"
+      :settings="appSettings"
+      @close="closeSettingsDialog"
+      @save="handleSaveAppSettings"
     />
   </main>
 </template>
