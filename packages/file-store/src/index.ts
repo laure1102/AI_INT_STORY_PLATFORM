@@ -115,12 +115,14 @@ export interface CompressLocationImagePayload {
   sourcePath: string
   targetName: string
   quality: number
+  slot: 1 | 2
 }
 
 export interface CompressRoleImagePayload {
   sourcePath: string
   targetName: string
   quality: number
+  slot: 1 | 2
 }
 
 function sortObjectKeys(value: unknown): unknown {
@@ -478,10 +480,19 @@ function collectReferencedLocationAssetPaths(eventLocations: StoryEventLocationF
   const references = new Set<string>()
 
   for (const assignment of eventLocations.assignments) {
-    const normalizedAssetPath = normalizeTextAssetPathForPrefix(assignment.img, "assets/event_location/")
+    for (const assetPath of [
+      assignment.img_raw,
+      assignment.img_compress_1,
+      assignment.img_compress_2
+    ]) {
+      const normalizedAssetPath = normalizeTextAssetPathForPrefix(
+        assetPath,
+        "assets/event_location/"
+      )
 
-    if (normalizedAssetPath) {
-      references.add(normalizedAssetPath)
+      if (normalizedAssetPath) {
+        references.add(normalizedAssetPath)
+      }
     }
   }
 
@@ -492,7 +503,7 @@ function collectReferencedRoleAssetPaths(roles: StoryRolesFile) {
   const references = new Set<string>()
 
   for (const role of roles.normal.roles) {
-    for (const assetPath of [role.img]) {
+    for (const assetPath of [role.img_raw, role.img_compress_1, role.img_compress_2]) {
       const normalizedAssetPath = normalizeTextAssetPathForPrefix(assetPath, "assets/roles/")
 
       if (normalizedAssetPath) {
@@ -502,7 +513,17 @@ function collectReferencedRoleAssetPaths(roles: StoryRolesFile) {
   }
 
   for (const role of roles.important.roles) {
-    for (const assetPath of [role.img, role.img_male, role.img_female]) {
+    for (const assetPath of [
+      role.img_raw,
+      role.img_compress_1,
+      role.img_compress_2,
+      role.img_male_raw,
+      role.img_male_compress_1,
+      role.img_male_compress_2,
+      role.img_female_raw,
+      role.img_female_compress_1,
+      role.img_female_compress_2
+    ]) {
       const normalizedAssetPath = normalizeTextAssetPathForPrefix(assetPath, "assets/roles/")
 
       if (normalizedAssetPath) {
@@ -654,7 +675,8 @@ async function readStoryRoles(dataDir: string, storyId: string): Promise<StoryRo
         width: 1536,
         height: 1024,
         global_prompt: "",
-        compress_quality: 60
+        compress_quality_1: 60,
+        compress_quality_2: 80
       },
       roles: []
     }),
@@ -663,7 +685,8 @@ async function readStoryRoles(dataDir: string, storyId: string): Promise<StoryRo
         width: 1536,
         height: 1024,
         global_prompt: "",
-        compress_quality: 60
+        compress_quality_1: 60,
+        compress_quality_2: 80
       },
       roles: []
     })
@@ -690,7 +713,8 @@ async function readStoryEventLocations(
         width: 1536,
         height: 1024,
         global_prompt: "",
-        compress_quality: 60
+        compress_quality_1: 60,
+        compress_quality_2: 80
       },
       assignments: []
     }
@@ -986,7 +1010,8 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
 
     const paths = createStoryPaths(dataDir, storyId)
     const source = resolveStoryAssetPath(dataDir, storyId, payload.sourcePath)
-    const targetName = `${normalizedTargetName}.webp`
+    const normalizedSlot = payload.slot === 2 ? 2 : 1
+    const targetName = `${normalizedTargetName}_c${normalizedSlot}.webp`
     const assetPath = path.posix.join("assets", "event_location", targetName)
     const outputPath = path.join(paths.eventLocationAssetsDir, targetName)
     const sourceBuffer = await readFile(source.resolvedPath)
@@ -1037,7 +1062,8 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
 
     const paths = createStoryPaths(dataDir, storyId)
     const source = resolveStoryAssetPath(dataDir, storyId, payload.sourcePath)
-    const targetName = `${normalizedTargetName}.webp`
+    const normalizedSlot = payload.slot === 2 ? 2 : 1
+    const targetName = `${normalizedTargetName}_c${normalizedSlot}.webp`
     const assetPath = path.posix.join("assets", "roles", targetName)
     const outputPath = path.join(paths.roleAssetsDir, targetName)
     const sourceBuffer = await readFile(source.resolvedPath)

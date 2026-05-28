@@ -2,13 +2,25 @@
 import type { StoryEventLocationFile } from "@story-mgr/core"
 import type { StoryAssetMetadata } from "@story-mgr/shared"
 
+type LocationImageVariant = "raw" | "compress1" | "compress2"
+
 interface LocationDraft {
   draftKey: string
   descr: string
-  img: string
+  img_compress_1: string
+  img_compress_2: string
+  img_raw: string
   name: string
   prompt: string
   selected: boolean
+}
+
+interface LocationAiDraft {
+  compressQuality1Text: string
+  compressQuality2Text: string
+  globalPrompt: string
+  imageHeightText: string
+  imageWidthText: string
 }
 
 interface LocationAssetState {
@@ -50,10 +62,13 @@ const {
 } = useStoryApi()
 
 const draft = reactive({
-  aiGlobalPrompt: "",
-  aiImageWidthText: "1536",
-  aiImageHeightText: "1024",
-  compressQualityText: "60",
+  ai: {
+    compressQuality1Text: "60",
+    compressQuality2Text: "80",
+    globalPrompt: "",
+    imageHeightText: "1024",
+    imageWidthText: "1536"
+  } satisfies LocationAiDraft,
   assignments: [] as LocationDraft[]
 })
 
@@ -72,11 +87,14 @@ const imagePreviewState = reactive<ImagePreviewState>({
   url: ""
 })
 const batchState = reactive({
-  compressing: false,
+  compressing1: false,
+  compressing2: false,
   generatingImages: false,
   generatingPrompts: false,
-  compressDone: 0,
-  compressTotal: 0,
+  compress1Done: 0,
+  compress1Total: 0,
+  compress2Done: 0,
+  compress2Total: 0,
   imageDone: 0,
   imageTotal: 0,
   promptDone: 0,
@@ -147,8 +165,8 @@ function createEmptyPromptState(): LocationPromptState {
   }
 }
 
-function getAssetStateKey(draftKey: string) {
-  return `${draftKey}:img`
+function getAssetStateKey(draftKey: string, variant: LocationImageVariant) {
+  return `${draftKey}:${variant}`
 }
 
 function getPromptStateKey(draftKey: string) {
@@ -156,7 +174,9 @@ function getPromptStateKey(draftKey: string) {
 }
 
 function initializeAssetState(assignment: LocationDraft) {
-  assetStates[getAssetStateKey(assignment.draftKey)] = createEmptyAssetState()
+  assetStates[getAssetStateKey(assignment.draftKey, "raw")] = createEmptyAssetState()
+  assetStates[getAssetStateKey(assignment.draftKey, "compress1")] = createEmptyAssetState()
+  assetStates[getAssetStateKey(assignment.draftKey, "compress2")] = createEmptyAssetState()
 }
 
 function initializePromptState(assignment: LocationDraft) {
@@ -164,7 +184,9 @@ function initializePromptState(assignment: LocationDraft) {
 }
 
 function clearAssetState(assignment: LocationDraft) {
-  delete assetStates[getAssetStateKey(assignment.draftKey)]
+  delete assetStates[getAssetStateKey(assignment.draftKey, "raw")]
+  delete assetStates[getAssetStateKey(assignment.draftKey, "compress1")]
+  delete assetStates[getAssetStateKey(assignment.draftKey, "compress2")]
 }
 
 function clearPromptState(assignment: LocationDraft) {
@@ -183,8 +205,8 @@ function resetPromptStates() {
   }
 }
 
-function getAssetState(assignment: LocationDraft) {
-  return assetStates[getAssetStateKey(assignment.draftKey)]
+function getAssetState(assignment: LocationDraft, variant: LocationImageVariant) {
+  return assetStates[getAssetStateKey(assignment.draftKey, variant)]
 }
 
 function getPromptState(assignment: LocationDraft) {
@@ -192,10 +214,12 @@ function getPromptState(assignment: LocationDraft) {
 }
 
 function cloneAssignment(assignment: StoryEventLocationFile["assignments"][number]): LocationDraft {
-  const draftAssignment = {
+  const draftAssignment: LocationDraft = {
     draftKey: createDraftKey("location"),
     descr: normalizeText(assignment.descr),
-    img: normalizeText(assignment.img),
+    img_compress_1: normalizeText(assignment.img_compress_1),
+    img_compress_2: normalizeText(assignment.img_compress_2),
+    img_raw: normalizeText(assignment.img_raw),
     name: normalizeText(assignment.name),
     prompt: normalizeText(assignment.prompt),
     selected: false
@@ -227,14 +251,44 @@ function formatErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
-function getAssetUrl(assignment: LocationDraft) {
-  const assetPath = assignment.img.trim()
-  return assetPath ? getStoryAssetUrl(props.storyId, assetPath) : ""
+function getImageVariantLabel(variant: LocationImageVariant) {
+  if (variant === "raw") return "原图"
+  if (variant === "compress1") return "压缩图1"
+  return "压缩图2"
 }
 
-function getImagePreviewTitle(name: string) {
-  const trimmedName = name.trim()
-  return trimmedName ? `${trimmedName} 图片预览` : "图片预览"
+function getImagePreviewTitle(name: string, variant: LocationImageVariant) {
+  const trimmedName = name.trim() || "地点"
+  return `${trimmedName} ${getImageVariantLabel(variant)}`
+}
+
+function getAssetPath(assignment: LocationDraft, variant: LocationImageVariant) {
+  if (variant === "compress1") return assignment.img_compress_1.trim()
+  if (variant === "compress2") return assignment.img_compress_2.trim()
+  return assignment.img_raw.trim()
+}
+
+function setAssetPath(
+  assignment: LocationDraft,
+  variant: LocationImageVariant,
+  assetPath: string
+) {
+  if (variant === "compress1") {
+    assignment.img_compress_1 = assetPath
+    return
+  }
+
+  if (variant === "compress2") {
+    assignment.img_compress_2 = assetPath
+    return
+  }
+
+  assignment.img_raw = assetPath
+}
+
+function getAssetUrl(assignment: LocationDraft, variant: LocationImageVariant) {
+  const assetPath = getAssetPath(assignment, variant)
+  return assetPath ? getStoryAssetUrl(props.storyId, assetPath) : ""
 }
 
 function openImagePreview(title: string, assetPath: string) {
@@ -253,9 +307,12 @@ function closeImagePreview() {
   imagePreviewState.url = ""
 }
 
-async function loadAssetMeta(assignment: LocationDraft) {
-  const state = getAssetState(assignment)
-  const assetPath = assignment.img.trim()
+async function loadAssetMeta(
+  assignment: LocationDraft,
+  variant: LocationImageVariant
+) {
+  const state = getAssetState(assignment, variant)
+  const assetPath = getAssetPath(assignment, variant)
 
   state.error = null
 
@@ -270,33 +327,42 @@ async function loadAssetMeta(assignment: LocationDraft) {
   try {
     const asset = await getStoryAssetMeta(props.storyId, assetPath)
 
-    if (assignment.img.trim() === assetPath) {
+    if (getAssetPath(assignment, variant) === assetPath) {
       state.meta = asset
       state.error = null
     }
   } catch (error) {
-    if (assignment.img.trim() === assetPath) {
+    if (getAssetPath(assignment, variant) === assetPath) {
       state.meta = null
       state.error = formatErrorMessage(error, "读取图片信息失败。")
     }
   } finally {
-    if (assignment.img.trim() === assetPath) {
+    if (getAssetPath(assignment, variant) === assetPath) {
       state.loading = false
     }
   }
 }
 
 async function hydrateAssetMeta() {
-  await Promise.allSettled(draft.assignments.map((assignment) => loadAssetMeta(assignment)))
+  const tasks: Promise<void>[] = []
+
+  for (const assignment of draft.assignments) {
+    tasks.push(loadAssetMeta(assignment, "raw"))
+    tasks.push(loadAssetMeta(assignment, "compress1"))
+    tasks.push(loadAssetMeta(assignment, "compress2"))
+  }
+
+  await Promise.allSettled(tasks)
 }
 
 function syncDraft(eventLocations: StoryEventLocationFile) {
   resetAssetStates()
   resetPromptStates()
-  draft.aiGlobalPrompt = normalizeText(eventLocations.ai.global_prompt)
-  draft.aiImageWidthText = String(eventLocations.ai.width ?? 1536)
-  draft.aiImageHeightText = String(eventLocations.ai.height ?? 1024)
-  draft.compressQualityText = String(eventLocations.ai.compress_quality ?? 60)
+  draft.ai.globalPrompt = normalizeText(eventLocations.ai.global_prompt)
+  draft.ai.imageWidthText = String(eventLocations.ai.width ?? 1536)
+  draft.ai.imageHeightText = String(eventLocations.ai.height ?? 1024)
+  draft.ai.compressQuality1Text = String(eventLocations.ai.compress_quality_1 ?? 60)
+  draft.ai.compressQuality2Text = String(eventLocations.ai.compress_quality_2 ?? 80)
   draft.assignments = eventLocations.assignments.map(cloneAssignment)
   void hydrateAssetMeta()
 }
@@ -331,9 +397,10 @@ const duplicateNames = computed(() => {
 })
 
 const hasInvalidDraft = computed(() => {
-  if (parseImageDimensionInput(draft.aiImageWidthText) === null) return true
-  if (parseImageDimensionInput(draft.aiImageHeightText) === null) return true
-  if (parseCompressQualityInput(draft.compressQualityText) === null) return true
+  if (parseImageDimensionInput(draft.ai.imageWidthText) === null) return true
+  if (parseImageDimensionInput(draft.ai.imageHeightText) === null) return true
+  if (parseCompressQualityInput(draft.ai.compressQuality1Text) === null) return true
+  if (parseCompressQualityInput(draft.ai.compressQuality2Text) === null) return true
 
   return draft.assignments.some((assignment) => !sanitizeNameInput(assignment.name))
     || duplicateNames.value.size > 0
@@ -341,7 +408,11 @@ const hasInvalidDraft = computed(() => {
 
 const hasBatchSelection = computed(() => selectedCount.value > 0)
 const isBatchRunning = computed(
-  () => batchState.generatingPrompts || batchState.generatingImages || batchState.compressing
+  () =>
+    batchState.generatingPrompts
+    || batchState.generatingImages
+    || batchState.compressing1
+    || batchState.compressing2
 )
 const canBatchGeneratePrompts = computed(() =>
   hasBatchSelection.value
@@ -351,21 +422,28 @@ const canBatchGeneratePrompts = computed(() =>
 const canBatchGenerateImages = computed(() =>
   hasBatchSelection.value
   && !isBatchRunning.value
-  && parseImageDimensionInput(draft.aiImageWidthText) !== null
-  && parseImageDimensionInput(draft.aiImageHeightText) !== null
+  && parseImageDimensionInput(draft.ai.imageWidthText) !== null
+  && parseImageDimensionInput(draft.ai.imageHeightText) !== null
   && draft.assignments.some((assignment) => assignment.selected && assignment.prompt.trim())
 )
-const canBatchCompressImages = computed(() =>
+const canBatchCompressImages1 = computed(() =>
   hasBatchSelection.value
   && !isBatchRunning.value
-  && draft.assignments.some((assignment) => assignment.selected && assignment.img.trim())
+  && draft.assignments.some((assignment) => assignment.selected && assignment.img_raw.trim())
+)
+const canBatchCompressImages2 = computed(() =>
+  hasBatchSelection.value
+  && !isBatchRunning.value
+  && draft.assignments.some((assignment) => assignment.selected && assignment.img_raw.trim())
 )
 
 function addLocation() {
   const assignment: LocationDraft = {
     draftKey: createDraftKey("location"),
     descr: "",
-    img: "",
+    img_compress_1: "",
+    img_compress_2: "",
+    img_raw: "",
     name: getNextDefaultName(),
     prompt: "",
     selected: false
@@ -434,20 +512,20 @@ async function handleGeneratePrompt(assignment: LocationDraft) {
 }
 
 async function handleGenerateImage(assignment: LocationDraft) {
-  const state = getAssetState(assignment)
+  const state = getAssetState(assignment, "raw")
   state.error = null
   state.loading = true
 
   try {
     const asset = await generateLocationImage(props.storyId, {
-      globalPrompt: draft.aiGlobalPrompt,
-      width: parseImageDimensionInput(draft.aiImageWidthText) ?? 1536,
-      height: parseImageDimensionInput(draft.aiImageHeightText) ?? 1024,
+      globalPrompt: draft.ai.globalPrompt,
+      width: parseImageDimensionInput(draft.ai.imageWidthText) ?? 1536,
+      height: parseImageDimensionInput(draft.ai.imageHeightText) ?? 1024,
       prompt: assignment.prompt,
-      targetName: assignment.name
+      targetName: sanitizeNameInput(assignment.name) || "location"
     })
 
-    assignment.img = asset.assetPath
+    assignment.img_raw = asset.assetPath
     state.meta = asset
   } catch (error) {
     state.error = formatErrorMessage(error, "生成图片失败。")
@@ -456,22 +534,30 @@ async function handleGenerateImage(assignment: LocationDraft) {
   }
 }
 
-async function handleCompressImage(assignment: LocationDraft) {
-  const state = getAssetState(assignment)
+async function handleCompressImage(
+  assignment: LocationDraft,
+  slot: 1 | 2
+) {
+  const variant: LocationImageVariant = slot === 1 ? "compress1" : "compress2"
+  const state = getAssetState(assignment, variant)
   state.error = null
   state.loading = true
 
   try {
     const asset = await compressLocationImage(props.storyId, {
-      quality: parseCompressQualityInput(draft.compressQualityText) ?? 60,
-      sourcePath: assignment.img,
-      targetName: assignment.name
+      quality:
+        parseCompressQualityInput(
+          slot === 1 ? draft.ai.compressQuality1Text : draft.ai.compressQuality2Text
+        ) ?? (slot === 1 ? 60 : 80),
+      slot,
+      sourcePath: assignment.img_raw,
+      targetName: sanitizeNameInput(assignment.name) || "location"
     })
 
-    assignment.img = asset.assetPath
+    setAssetPath(assignment, variant, asset.assetPath)
     state.meta = asset
   } catch (error) {
-    state.error = formatErrorMessage(error, "压缩图片失败。")
+    state.error = formatErrorMessage(error, `压缩图片${slot}失败。`)
   } finally {
     state.loading = false
   }
@@ -498,9 +584,9 @@ async function handleBatchGeneratePrompts() {
 async function handleBatchGenerateImages() {
   const assignments = getSelectedAssignments().filter((assignment) => assignment.prompt.trim())
   if (
-    !assignments.length ||
-    parseImageDimensionInput(draft.aiImageWidthText) === null ||
-    parseImageDimensionInput(draft.aiImageHeightText) === null
+    !assignments.length
+    || parseImageDimensionInput(draft.ai.imageWidthText) === null
+    || parseImageDimensionInput(draft.ai.imageHeightText) === null
   ) {
     return
   }
@@ -519,35 +605,52 @@ async function handleBatchGenerateImages() {
   }
 }
 
-async function handleBatchCompressImages() {
-  const assignments = getSelectedAssignments().filter((assignment) => assignment.img.trim())
+async function handleBatchCompressImages(slot: 1 | 2) {
+  const assignments = getSelectedAssignments().filter((assignment) => assignment.img_raw.trim())
   if (!assignments.length) return
 
-  batchState.compressing = true
-  batchState.compressDone = 0
-  batchState.compressTotal = assignments.length
+  if (slot === 1) {
+    batchState.compressing1 = true
+    batchState.compress1Done = 0
+    batchState.compress1Total = assignments.length
+  } else {
+    batchState.compressing2 = true
+    batchState.compress2Done = 0
+    batchState.compress2Total = assignments.length
+  }
 
   try {
     for (const assignment of assignments) {
-      await handleCompressImage(assignment)
-      batchState.compressDone += 1
+      await handleCompressImage(assignment, slot)
+      if (slot === 1) {
+        batchState.compress1Done += 1
+      } else {
+        batchState.compress2Done += 1
+      }
     }
   } finally {
-    batchState.compressing = false
+    if (slot === 1) {
+      batchState.compressing1 = false
+    } else {
+      batchState.compressing2 = false
+    }
   }
 }
 
 function submitDraft() {
   emit("save", {
     ai: {
-      compress_quality: parseCompressQualityInput(draft.compressQualityText) ?? 60,
-      global_prompt: draft.aiGlobalPrompt.trim(),
-      width: parseImageDimensionInput(draft.aiImageWidthText) ?? 1536,
-      height: parseImageDimensionInput(draft.aiImageHeightText) ?? 1024
+      compress_quality_1: parseCompressQualityInput(draft.ai.compressQuality1Text) ?? 60,
+      compress_quality_2: parseCompressQualityInput(draft.ai.compressQuality2Text) ?? 80,
+      global_prompt: draft.ai.globalPrompt.trim(),
+      width: parseImageDimensionInput(draft.ai.imageWidthText) ?? 1536,
+      height: parseImageDimensionInput(draft.ai.imageHeightText) ?? 1024
     },
     assignments: draft.assignments.map((assignment) => ({
       descr: assignment.descr.trim(),
-      img: assignment.img.trim(),
+      img_compress_1: assignment.img_compress_1.trim(),
+      img_compress_2: assignment.img_compress_2.trim(),
+      img_raw: assignment.img_raw.trim(),
       name: sanitizeNameInput(assignment.name),
       prompt: assignment.prompt.trim()
     }))
@@ -593,14 +696,14 @@ watch(
 
           <section class="locations-dialog__config">
             <div class="locations-dialog__config-head">
-              <h3 class="locations-dialog__config-title">地点 AI 配置</h3>
+              <h3 class="locations-dialog__config-title">地点 AI 工具配置</h3>
             </div>
 
             <div class="locations-dialog__config-grid">
               <label class="locations-dialog__field">
                 <span class="locations-dialog__label">图片宽度</span>
                 <input
-                  v-model="draft.aiImageWidthText"
+                  v-model="draft.ai.imageWidthText"
                   class="text-input"
                   type="number"
                   min="1"
@@ -612,7 +715,7 @@ watch(
               <label class="locations-dialog__field">
                 <span class="locations-dialog__label">图片高度</span>
                 <input
-                  v-model="draft.aiImageHeightText"
+                  v-model="draft.ai.imageHeightText"
                   class="text-input"
                   type="number"
                   min="1"
@@ -622,9 +725,9 @@ watch(
               </label>
 
               <label class="locations-dialog__field">
-                <span class="locations-dialog__label">压缩质量</span>
+                <span class="locations-dialog__label">压缩质量1</span>
                 <input
-                  v-model="draft.compressQualityText"
+                  v-model="draft.ai.compressQuality1Text"
                   class="text-input"
                   type="number"
                   min="1"
@@ -634,10 +737,23 @@ watch(
                 />
               </label>
 
+              <label class="locations-dialog__field">
+                <span class="locations-dialog__label">压缩质量2</span>
+                <input
+                  v-model="draft.ai.compressQuality2Text"
+                  class="text-input"
+                  type="number"
+                  min="1"
+                  max="100"
+                  step="1"
+                  placeholder="80"
+                />
+              </label>
+
               <label class="locations-dialog__field locations-dialog__field--wide">
                 <span class="locations-dialog__label">整体提示词</span>
                 <textarea
-                  v-model="draft.aiGlobalPrompt"
+                  v-model="draft.ai.globalPrompt"
                   class="text-input locations-dialog__textarea"
                   rows="3"
                   placeholder="统一风格、时代背景、镜头语言、材质倾向等"
@@ -679,20 +795,33 @@ watch(
                 {{
                   batchState.generatingImages
                     ? `批量生图中 ${batchState.imageDone}/${batchState.imageTotal}`
-                    : "批量生成图片"
+                    : "批量生成原图"
                 }}
               </button>
 
               <button
                 class="btn-secondary locations-dialog__row-button"
                 type="button"
-                :disabled="!canBatchCompressImages"
-                @click="handleBatchCompressImages"
+                :disabled="!canBatchCompressImages1"
+                @click="handleBatchCompressImages(1)"
               >
                 {{
-                  batchState.compressing
-                    ? `批量压缩中 ${batchState.compressDone}/${batchState.compressTotal}`
-                    : "批量压缩图片"
+                  batchState.compressing1
+                    ? `批量压缩1中 ${batchState.compress1Done}/${batchState.compress1Total}`
+                    : "批量压缩到1"
+                }}
+              </button>
+
+              <button
+                class="btn-secondary locations-dialog__row-button"
+                type="button"
+                :disabled="!canBatchCompressImages2"
+                @click="handleBatchCompressImages(2)"
+              >
+                {{
+                  batchState.compressing2
+                    ? `批量压缩2中 ${batchState.compress2Done}/${batchState.compress2Total}`
+                    : "批量压缩到2"
                 }}
               </button>
             </div>
@@ -725,7 +854,7 @@ watch(
                       v-model="assignment.name"
                       class="text-input locations-dialog__cell-input"
                       type="text"
-                      placeholder="office"
+                      placeholder="office_small"
                     />
                   </td>
                   <td>
@@ -733,7 +862,7 @@ watch(
                       v-model="assignment.descr"
                       class="text-input locations-dialog__textarea locations-dialog__textarea--cell"
                       rows="3"
-                      placeholder="办公室，落地窗，夜景，现代商务风"
+                      placeholder="现代办公室，落地窗，夜景，简洁商务风"
                     />
                   </td>
                   <td>
@@ -760,48 +889,57 @@ watch(
                     </div>
                   </td>
                   <td>
-                    <div class="locations-dialog__asset-cell">
-                      <button
-                        v-if="assignment.img"
-                        class="locations-dialog__asset-thumb-button"
-                        type="button"
-                        @click="openImagePreview(getImagePreviewTitle(assignment.name), assignment.img)"
+                    <div class="locations-dialog__asset-grid">
+                      <div
+                        v-for="variant in ['raw', 'compress1', 'compress2'] as LocationImageVariant[]"
+                        :key="variant"
+                        class="locations-dialog__asset-card"
                       >
-                        <img
-                          class="locations-dialog__asset-thumb"
-                          :src="getAssetUrl(assignment)"
-                          :alt="assignment.name || '地点缩略图'"
-                          loading="lazy"
-                        />
-                      </button>
-                      <a
-                        v-if="assignment.img"
-                        class="locations-dialog__asset-link"
-                        :href="getAssetUrl(assignment)"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {{ assignment.img }}
-                      </a>
-                      <span v-else class="locations-dialog__asset-empty">未生成图片</span>
-                      <span
-                        v-if="formatAssetMeta(getAssetState(assignment).meta)"
-                        class="locations-dialog__asset-meta"
-                      >
-                        {{ formatAssetMeta(getAssetState(assignment).meta) }}
-                      </span>
-                      <span
-                        v-if="getAssetState(assignment).loading"
-                        class="locations-dialog__asset-status"
-                      >
-                        处理中...
-                      </span>
-                      <span
-                        v-if="getAssetState(assignment).error"
-                        class="locations-dialog__asset-error"
-                      >
-                        {{ getAssetState(assignment).error }}
-                      </span>
+                        <span class="locations-dialog__asset-title">
+                          {{ getImageVariantLabel(variant) }}
+                        </span>
+                        <button
+                          v-if="variant === 'raw' && getAssetPath(assignment, variant)"
+                          class="locations-dialog__asset-thumb-button"
+                          type="button"
+                          @click="openImagePreview(getImagePreviewTitle(assignment.name, variant), getAssetPath(assignment, variant))"
+                        >
+                          <img
+                            class="locations-dialog__asset-thumb"
+                            :src="getAssetUrl(assignment, variant)"
+                            :alt="`${assignment.name || '地点'} ${getImageVariantLabel(variant)} 缩略图`"
+                            loading="lazy"
+                          />
+                        </button>
+                        <a
+                          v-if="getAssetPath(assignment, variant)"
+                          class="locations-dialog__asset-link"
+                          :href="getAssetUrl(assignment, variant)"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {{ getAssetPath(assignment, variant) }}
+                        </a>
+                        <span v-else class="locations-dialog__asset-empty">暂无图片</span>
+                        <span
+                          v-if="formatAssetMeta(getAssetState(assignment, variant).meta)"
+                          class="locations-dialog__asset-meta"
+                        >
+                          {{ formatAssetMeta(getAssetState(assignment, variant).meta) }}
+                        </span>
+                        <span
+                          v-if="getAssetState(assignment, variant).loading"
+                          class="locations-dialog__asset-status"
+                        >
+                          处理中...
+                        </span>
+                        <span
+                          v-if="getAssetState(assignment, variant).error"
+                          class="locations-dialog__asset-error"
+                        >
+                          {{ getAssetState(assignment, variant).error }}
+                        </span>
+                      </div>
                     </div>
                   </td>
                   <td>
@@ -817,18 +955,26 @@ watch(
                       <button
                         class="btn-secondary locations-dialog__row-button"
                         type="button"
-                        :disabled="getAssetState(assignment).loading || !assignment.prompt.trim() || parseImageDimensionInput(draft.aiImageWidthText) === null || parseImageDimensionInput(draft.aiImageHeightText) === null"
+                        :disabled="getAssetState(assignment, 'raw').loading || !assignment.prompt.trim() || parseImageDimensionInput(draft.ai.imageWidthText) === null || parseImageDimensionInput(draft.ai.imageHeightText) === null"
                         @click="handleGenerateImage(assignment)"
                       >
-                        生成图片
+                        生成原图
                       </button>
                       <button
                         class="btn-secondary locations-dialog__row-button"
                         type="button"
-                        :disabled="getAssetState(assignment).loading || !assignment.img.trim()"
-                        @click="handleCompressImage(assignment)"
+                        :disabled="getAssetState(assignment, 'compress1').loading || !assignment.img_raw.trim()"
+                        @click="handleCompressImage(assignment, 1)"
                       >
-                        压缩图片
+                        压缩到1
+                      </button>
+                      <button
+                        class="btn-secondary locations-dialog__row-button"
+                        type="button"
+                        :disabled="getAssetState(assignment, 'compress2').loading || !assignment.img_raw.trim()"
+                        @click="handleCompressImage(assignment, 2)"
+                      >
+                        压缩到2
                       </button>
                     </div>
                   </td>
@@ -930,7 +1076,7 @@ watch(
 }
 
 .locations-dialog__panel {
-  width: min(1420px, calc(100vw - 24px));
+  width: min(1680px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   padding: 20px;
   overflow: auto;
@@ -970,7 +1116,12 @@ watch(
 
 .locations-dialog__config-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(220px, 260px) minmax(220px, 260px) minmax(0, 1fr);
+  grid-template-columns:
+    minmax(180px, 220px)
+    minmax(180px, 220px)
+    minmax(180px, 220px)
+    minmax(180px, 220px)
+    minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -1039,7 +1190,7 @@ watch(
 
 .locations-dialog__table {
   width: 100%;
-  min-width: 1320px;
+  min-width: 1560px;
   border-collapse: collapse;
 }
 
@@ -1097,13 +1248,25 @@ watch(
   color: var(--warning);
 }
 
-.locations-dialog__asset-cell,
+.locations-dialog__asset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.locations-dialog__asset-card,
 .locations-dialog__action-stack {
   display: grid;
   gap: 6px;
 }
 
+.locations-dialog__asset-title {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
 .locations-dialog__asset-thumb-button {
+  justify-self: start;
   width: 88px;
   aspect-ratio: 1;
   padding: 0;
@@ -1283,6 +1446,10 @@ watch(
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .locations-dialog__asset-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

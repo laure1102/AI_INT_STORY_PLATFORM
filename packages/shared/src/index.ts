@@ -123,6 +123,7 @@ export interface CompressRoleImageRequest {
   sourcePath: string
   targetName: string
   quality: number
+  slot: 1 | 2
 }
 
 export interface GenerateLocationPromptRequest {
@@ -151,6 +152,7 @@ export interface CompressLocationImageRequest {
   sourcePath: string
   targetName: string
   quality: number
+  slot: 1 | 2
 }
 
 export interface ValidationResponse {

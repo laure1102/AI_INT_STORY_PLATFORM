@@ -223,6 +223,7 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       asset: await store.compressLocationImage(storyId, {
         sourcePath: body.sourcePath,
+        slot: body.slot,
         targetName: body.targetName,
         quality: body.quality
       })
@@ -236,6 +237,7 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       asset: await store.compressRoleImage(storyId, {
         sourcePath: body.sourcePath,
+        slot: body.slot,
         targetName: body.targetName,
         quality: body.quality
       })

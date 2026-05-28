@@ -8,18 +8,22 @@ import type { StoryAssetMetadata } from "@story-mgr/shared"
 
 type RolesTab = "normal" | "important"
 type ImportantRoleImageMode = "common" | "male" | "female"
+type ImageVariant = "raw" | "compress1" | "compress2"
 
 interface RoleAiDraft {
-  compressQualityText: string
+  compressQuality1Text: string
+  compressQuality2Text: string
   globalPrompt: string
-  imageWidthText: string
   imageHeightText: string
+  imageWidthText: string
 }
 
 interface NormalRoleDraft {
   draftKey: string
   descr: string
-  img: string
+  img_compress_1: string
+  img_compress_2: string
+  img_raw: string
   name: string
   prompt: string
   selected: boolean
@@ -30,9 +34,15 @@ interface ImportantRoleDraft {
   descr: string
   descr_female: string
   descr_male: string
-  img: string
-  img_female: string
-  img_male: string
+  img_compress_1: string
+  img_compress_2: string
+  img_female_compress_1: string
+  img_female_compress_2: string
+  img_female_raw: string
+  img_male_compress_1: string
+  img_male_compress_2: string
+  img_male_raw: string
+  img_raw: string
   name: string
   prompt: string
   prompt_female: string
@@ -64,6 +74,8 @@ interface ImportantRoleImageTask {
   role: ImportantRoleDraft
 }
 
+const imageVariants: ImageVariant[] = ["raw", "compress1", "compress2"]
+
 const props = defineProps<{
   roles: StoryRolesFile
   saveSuccessMessage?: string | null
@@ -89,18 +101,19 @@ const activeTab = shallowRef<RolesTab>("normal")
 
 function createRoleAiDraft(): RoleAiDraft {
   return {
-    compressQualityText: "60",
+    compressQuality1Text: "60",
+    compressQuality2Text: "30",
     globalPrompt: "",
-    imageWidthText: "1536",
-    imageHeightText: "1024"
+    imageHeightText: "1024",
+    imageWidthText: "1536"
   }
 }
 
 const draft = reactive({
-  normalAi: createRoleAiDraft(),
   importantAi: createRoleAiDraft(),
-  normalRoles: [] as NormalRoleDraft[],
-  importantRoles: [] as ImportantRoleDraft[]
+  importantRoles: [] as ImportantRoleDraft[],
+  normalAi: createRoleAiDraft(),
+  normalRoles: [] as NormalRoleDraft[]
 })
 
 const assetStates = reactive<Record<string, RoleAssetState>>({})
@@ -120,17 +133,20 @@ const imagePreviewState = reactive<ImagePreviewState>({
   url: ""
 })
 const batchState = reactive({
-  compressing: false,
+  commonImageDone: 0,
+  commonImageTotal: 0,
+  compress1Done: 0,
+  compress1Total: 0,
+  compress2Done: 0,
+  compress2Total: 0,
+  compressing1: false,
+  compressing2: false,
+  femaleImageDone: 0,
+  femaleImageTotal: 0,
   generatingCommonImages: false,
   generatingFemaleImages: false,
   generatingMaleImages: false,
   generatingPrompts: false,
-  compressDone: 0,
-  compressTotal: 0,
-  commonImageDone: 0,
-  commonImageTotal: 0,
-  femaleImageDone: 0,
-  femaleImageTotal: 0,
   maleImageDone: 0,
   maleImageTotal: 0,
   promptDone: 0,
@@ -189,27 +205,40 @@ function getPromptStateKey(draftKey: string) {
   return `${draftKey}:prompt`
 }
 
-function getAssetStateKey(draftKey: string, mode: ImportantRoleImageMode = "common") {
-  return `${draftKey}:${mode}`
+function getAssetStateKey(
+  draftKey: string,
+  mode: ImportantRoleImageMode = "common",
+  variant: ImageVariant = "raw"
+) {
+  return `${draftKey}:${mode}:${variant}`
 }
 
 function initializeNormalRoleState(role: NormalRoleDraft) {
-  assetStates[getAssetStateKey(role.draftKey)] = createEmptyAssetState()
+  for (const variant of imageVariants) {
+    assetStates[getAssetStateKey(role.draftKey, "common", variant)] = createEmptyAssetState()
+  }
+
   promptStates[getPromptStateKey(role.draftKey)] = createEmptyPromptState()
 }
 
 function initializeImportantRoleState(role: ImportantRoleDraft) {
-  assetStates[getAssetStateKey(role.draftKey, "common")] = createEmptyAssetState()
-  assetStates[getAssetStateKey(role.draftKey, "male")] = createEmptyAssetState()
-  assetStates[getAssetStateKey(role.draftKey, "female")] = createEmptyAssetState()
+  for (const mode of ["common", "male", "female"] as ImportantRoleImageMode[]) {
+    for (const variant of imageVariants) {
+      assetStates[getAssetStateKey(role.draftKey, mode, variant)] = createEmptyAssetState()
+    }
+  }
+
   promptStates[getPromptStateKey(role.draftKey)] = createEmptyPromptState()
 }
 
 function clearRoleState(draftKey: string) {
   delete promptStates[getPromptStateKey(draftKey)]
-  delete assetStates[getAssetStateKey(draftKey, "common")]
-  delete assetStates[getAssetStateKey(draftKey, "male")]
-  delete assetStates[getAssetStateKey(draftKey, "female")]
+
+  for (const mode of ["common", "male", "female"] as ImportantRoleImageMode[]) {
+    for (const variant of imageVariants) {
+      delete assetStates[getAssetStateKey(draftKey, mode, variant)]
+    }
+  }
 }
 
 function resetStates() {
@@ -226,15 +255,21 @@ function getPromptState(draftKey: string) {
   return promptStates[getPromptStateKey(draftKey)]
 }
 
-function getAssetState(draftKey: string, mode: ImportantRoleImageMode = "common") {
-  return assetStates[getAssetStateKey(draftKey, mode)]
+function getAssetState(
+  draftKey: string,
+  mode: ImportantRoleImageMode = "common",
+  variant: ImageVariant = "raw"
+) {
+  return assetStates[getAssetStateKey(draftKey, mode, variant)]
 }
 
 function cloneNormalRole(role: StoryNormalRoleDefinition): NormalRoleDraft {
   const draftRole: NormalRoleDraft = {
-    draftKey: createDraftKey("normal-role"),
     descr: normalizeText(role.descr),
-    img: normalizeText(role.img),
+    draftKey: createDraftKey("normal-role"),
+    img_compress_1: normalizeText(role.img_compress_1),
+    img_compress_2: normalizeText(role.img_compress_2),
+    img_raw: normalizeText(role.img_raw),
     name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
     selected: false
@@ -246,13 +281,19 @@ function cloneNormalRole(role: StoryNormalRoleDefinition): NormalRoleDraft {
 
 function cloneImportantRole(role: StoryImportantRoleDefinition): ImportantRoleDraft {
   const draftRole: ImportantRoleDraft = {
-    draftKey: createDraftKey("important-role"),
     descr: normalizeText(role.descr),
     descr_female: normalizeText(role.descr_female),
     descr_male: normalizeText(role.descr_male),
-    img: normalizeText(role.img),
-    img_female: normalizeText(role.img_female),
-    img_male: normalizeText(role.img_male),
+    draftKey: createDraftKey("important-role"),
+    img_compress_1: normalizeText(role.img_compress_1),
+    img_compress_2: normalizeText(role.img_compress_2),
+    img_female_compress_1: normalizeText(role.img_female_compress_1),
+    img_female_compress_2: normalizeText(role.img_female_compress_2),
+    img_female_raw: normalizeText(role.img_female_raw),
+    img_male_compress_1: normalizeText(role.img_male_compress_1),
+    img_male_compress_2: normalizeText(role.img_male_compress_2),
+    img_male_raw: normalizeText(role.img_male_raw),
+    img_raw: normalizeText(role.img_raw),
     name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
     prompt_female: normalizeText(role.prompt_female),
@@ -295,16 +336,18 @@ function getPromptPreview(prompt: string) {
 function applyRoleAiDraft(
   target: RoleAiDraft,
   source: {
-    compress_quality?: number
+    compress_quality_1?: number
+    compress_quality_2?: number
     global_prompt?: string
-    width?: number
     height?: number
+    width?: number
   }
 ) {
   target.globalPrompt = normalizeText(source.global_prompt)
   target.imageWidthText = String(source.width ?? 1536)
   target.imageHeightText = String(source.height ?? 1024)
-  target.compressQualityText = String(source.compress_quality ?? 60)
+  target.compressQuality1Text = String(source.compress_quality_1 ?? 60)
+  target.compressQuality2Text = String(source.compress_quality_2 ?? 30)
 }
 
 function getActiveAiDraft() {
@@ -323,9 +366,10 @@ function syncDraft(roles: StoryRolesFile) {
 async function loadAssetMeta(
   draftKey: string,
   assetPath: string,
-  mode: ImportantRoleImageMode = "common"
+  mode: ImportantRoleImageMode = "common",
+  variant: ImageVariant = "raw"
 ) {
-  const state = getAssetState(draftKey, mode)
+  const state = getAssetState(draftKey, mode, variant)
   const trimmedPath = assetPath.trim()
 
   state.error = null
@@ -353,31 +397,169 @@ async function hydrateAssetMeta() {
   const tasks: Promise<void>[] = []
 
   for (const role of draft.normalRoles) {
-    tasks.push(loadAssetMeta(role.draftKey, role.img))
+    for (const variant of imageVariants) {
+      tasks.push(loadAssetMeta(role.draftKey, getNormalAssetPath(role, variant), "common", variant))
+    }
   }
 
   for (const role of draft.importantRoles) {
-    tasks.push(loadAssetMeta(role.draftKey, role.img, "common"))
-    tasks.push(loadAssetMeta(role.draftKey, role.img_male, "male"))
-    tasks.push(loadAssetMeta(role.draftKey, role.img_female, "female"))
+    if (role.qufen_xingbie) {
+      for (const variant of imageVariants) {
+        tasks.push(loadAssetMeta(role.draftKey, getImportantAssetPath(role, "male", variant), "male", variant))
+        tasks.push(loadAssetMeta(role.draftKey, getImportantAssetPath(role, "female", variant), "female", variant))
+      }
+      continue
+    }
+
+    for (const variant of imageVariants) {
+      tasks.push(loadAssetMeta(role.draftKey, getImportantAssetPath(role, "common", variant), "common", variant))
+    }
   }
 
   await Promise.allSettled(tasks)
 }
 
-function getNormalAssetUrl(role: NormalRoleDraft) {
-  return role.img.trim() ? getStoryAssetUrl(props.storyId, role.img.trim()) : ""
+function getImageVariantLabel(variant: ImageVariant) {
+  if (variant === "raw") return "原图"
+  if (variant === "compress1") return "压缩图1"
+  return "压缩图2"
 }
 
-function getImagePreviewTitle(name: string, label?: string) {
+function getRoleImageModeLabel(mode: ImportantRoleImageMode) {
+  if (mode === "male") return "男图"
+  if (mode === "female") return "女图"
+  return "通用图"
+}
+
+function getImagePreviewTitle(
+  name: string,
+  variant: ImageVariant,
+  mode?: ImportantRoleImageMode
+) {
   const trimmedName = name.trim() || "角色"
-  return label ? `${trimmedName} ${label}` : `${trimmedName} 图片预览`
+  const suffix = mode ? `${getRoleImageModeLabel(mode)} ${getImageVariantLabel(variant)}` : getImageVariantLabel(variant)
+  return `${trimmedName} ${suffix}`
 }
 
-function getImportantAssetPath(role: ImportantRoleDraft, mode: ImportantRoleImageMode) {
-  if (mode === "male") return role.img_male.trim()
-  if (mode === "female") return role.img_female.trim()
-  return role.img.trim()
+function getNormalAssetPath(role: NormalRoleDraft, variant: ImageVariant) {
+  if (variant === "compress1") return role.img_compress_1.trim()
+  if (variant === "compress2") return role.img_compress_2.trim()
+  return role.img_raw.trim()
+}
+
+function setNormalAssetPath(role: NormalRoleDraft, variant: ImageVariant, assetPath: string) {
+  if (variant === "compress1") {
+    role.img_compress_1 = assetPath
+    return
+  }
+
+  if (variant === "compress2") {
+    role.img_compress_2 = assetPath
+    return
+  }
+
+  role.img_raw = assetPath
+}
+
+function getNormalAssetUrl(role: NormalRoleDraft, variant: ImageVariant) {
+  const assetPath = getNormalAssetPath(role, variant)
+  return assetPath ? getStoryAssetUrl(props.storyId, assetPath) : ""
+}
+
+function getImportantAssetPath(
+  role: ImportantRoleDraft,
+  mode: ImportantRoleImageMode,
+  variant: ImageVariant
+) {
+  if (mode === "male") {
+    if (variant === "compress1") return role.img_male_compress_1.trim()
+    if (variant === "compress2") return role.img_male_compress_2.trim()
+    return role.img_male_raw.trim()
+  }
+
+  if (mode === "female") {
+    if (variant === "compress1") return role.img_female_compress_1.trim()
+    if (variant === "compress2") return role.img_female_compress_2.trim()
+    return role.img_female_raw.trim()
+  }
+
+  if (variant === "compress1") return role.img_compress_1.trim()
+  if (variant === "compress2") return role.img_compress_2.trim()
+  return role.img_raw.trim()
+}
+
+function setImportantAssetPath(
+  role: ImportantRoleDraft,
+  mode: ImportantRoleImageMode,
+  variant: ImageVariant,
+  assetPath: string
+) {
+  if (mode === "male") {
+    if (variant === "compress1") {
+      role.img_male_compress_1 = assetPath
+      return
+    }
+
+    if (variant === "compress2") {
+      role.img_male_compress_2 = assetPath
+      return
+    }
+
+    role.img_male_raw = assetPath
+    return
+  }
+
+  if (mode === "female") {
+    if (variant === "compress1") {
+      role.img_female_compress_1 = assetPath
+      return
+    }
+
+    if (variant === "compress2") {
+      role.img_female_compress_2 = assetPath
+      return
+    }
+
+    role.img_female_raw = assetPath
+    return
+  }
+
+  if (variant === "compress1") {
+    role.img_compress_1 = assetPath
+    return
+  }
+
+  if (variant === "compress2") {
+    role.img_compress_2 = assetPath
+    return
+  }
+
+  role.img_raw = assetPath
+}
+
+function getImportantAssetUrl(
+  role: ImportantRoleDraft,
+  mode: ImportantRoleImageMode,
+  variant: ImageVariant
+) {
+  const assetPath = getImportantAssetPath(role, mode, variant)
+  return assetPath ? getStoryAssetUrl(props.storyId, assetPath) : ""
+}
+
+function openImagePreview(title: string, assetPath: string) {
+  const trimmedPath = assetPath.trim()
+
+  if (!trimmedPath) return
+
+  imagePreviewState.path = trimmedPath
+  imagePreviewState.title = title
+  imagePreviewState.url = getStoryAssetUrl(props.storyId, trimmedPath)
+}
+
+function closeImagePreview() {
+  imagePreviewState.path = ""
+  imagePreviewState.title = ""
+  imagePreviewState.url = ""
 }
 
 function getImportantRolePrompt(role: ImportantRoleDraft, mode: ImportantRoleImageMode) {
@@ -404,51 +586,6 @@ function setImportantRolePrompt(
   role.prompt = prompt
 }
 
-function setImportantAssetPath(
-  role: ImportantRoleDraft,
-  mode: ImportantRoleImageMode,
-  assetPath: string
-) {
-  if (mode === "male") {
-    role.img_male = assetPath
-    return
-  }
-
-  if (mode === "female") {
-    role.img_female = assetPath
-    return
-  }
-
-  role.img = assetPath
-}
-
-function getImportantAssetUrl(role: ImportantRoleDraft, mode: ImportantRoleImageMode) {
-  const assetPath = getImportantAssetPath(role, mode)
-  return assetPath ? getStoryAssetUrl(props.storyId, assetPath) : ""
-}
-
-function openImagePreview(title: string, assetPath: string) {
-  const trimmedPath = assetPath.trim()
-
-  if (!trimmedPath) return
-
-  imagePreviewState.path = trimmedPath
-  imagePreviewState.title = title
-  imagePreviewState.url = getStoryAssetUrl(props.storyId, trimmedPath)
-}
-
-function closeImagePreview() {
-  imagePreviewState.path = ""
-  imagePreviewState.title = ""
-  imagePreviewState.url = ""
-}
-
-function getImportantAssetLabel(mode: ImportantRoleImageMode) {
-  if (mode === "male") return "男图"
-  if (mode === "female") return "女图"
-  return "通用图"
-}
-
 function getNextDefaultName(target: RolesTab) {
   const source = target === "normal" ? draft.normalRoles : draft.importantRoles
   const prefix = target === "normal" ? "normal_role" : "important_role"
@@ -467,9 +604,11 @@ function getNextDefaultName(target: RolesTab) {
 
 function addNormalRole() {
   const role: NormalRoleDraft = {
-    draftKey: createDraftKey("normal-role"),
     descr: "",
-    img: "",
+    draftKey: createDraftKey("normal-role"),
+    img_compress_1: "",
+    img_compress_2: "",
+    img_raw: "",
     name: getNextDefaultName("normal"),
     prompt: "",
     selected: false
@@ -481,13 +620,19 @@ function addNormalRole() {
 
 function addImportantRole() {
   const role: ImportantRoleDraft = {
-    draftKey: createDraftKey("important-role"),
     descr: "",
     descr_female: "",
     descr_male: "",
-    img: "",
-    img_female: "",
-    img_male: "",
+    draftKey: createDraftKey("important-role"),
+    img_compress_1: "",
+    img_compress_2: "",
+    img_female_compress_1: "",
+    img_female_compress_2: "",
+    img_female_raw: "",
+    img_male_compress_1: "",
+    img_male_compress_2: "",
+    img_male_raw: "",
+    img_raw: "",
     name: getNextDefaultName("important"),
     prompt: "",
     prompt_female: "",
@@ -548,11 +693,7 @@ function savePromptEditor() {
     (role) => role.draftKey === promptEditorState.roleKey
   )
   if (importantRole) {
-    setImportantRolePrompt(
-      importantRole,
-      promptEditorState.mode,
-      promptEditorState.value.trim()
-    )
+    setImportantRolePrompt(importantRole, promptEditorState.mode, promptEditorState.value.trim())
   }
 
   closePromptEditor()
@@ -602,8 +743,10 @@ const hasInvalidDraft = computed(() => {
   if (parseImageDimensionInput(draft.normalAi.imageHeightText) === null) return true
   if (parseImageDimensionInput(draft.importantAi.imageWidthText) === null) return true
   if (parseImageDimensionInput(draft.importantAi.imageHeightText) === null) return true
-  if (parseCompressQualityInput(draft.normalAi.compressQualityText) === null) return true
-  if (parseCompressQualityInput(draft.importantAi.compressQualityText) === null) return true
+  if (parseCompressQualityInput(draft.normalAi.compressQuality1Text) === null) return true
+  if (parseCompressQualityInput(draft.normalAi.compressQuality2Text) === null) return true
+  if (parseCompressQualityInput(draft.importantAi.compressQuality1Text) === null) return true
+  if (parseCompressQualityInput(draft.importantAi.compressQuality2Text) === null) return true
 
   return (
     [...draft.normalRoles, ...draft.importantRoles].some((role) => !sanitizeNameInput(role.name))
@@ -618,7 +761,8 @@ const isBatchRunning = computed(
     || batchState.generatingCommonImages
     || batchState.generatingMaleImages
     || batchState.generatingFemaleImages
-    || batchState.compressing
+    || batchState.compressing1
+    || batchState.compressing2
 )
 
 const canBatchGeneratePrompts = computed(() => {
@@ -687,18 +831,36 @@ const canBatchGenerateFemaleImages = computed(() => {
   )
 })
 
-const canBatchCompressImages = computed(() => {
+function hasNormalRawAsset(role: NormalRoleDraft) {
+  return role.img_raw.trim().length > 0
+}
+
+function hasImportantRawAsset(role: ImportantRoleDraft) {
+  if (role.qufen_xingbie) {
+    return Boolean(role.img_male_raw.trim() || role.img_female_raw.trim())
+  }
+
+  return role.img_raw.trim().length > 0
+}
+
+const canBatchCompressImages1 = computed(() => {
   if (!hasActiveSelection.value || isBatchRunning.value) {
     return false
   }
 
   return activeTab.value === "normal"
-    ? draft.normalRoles.some((role) => role.selected && role.img.trim())
-    : draft.importantRoles.some(
-        (role) =>
-          role.selected
-          && (role.img.trim() || role.img_male.trim() || role.img_female.trim())
-      )
+    ? draft.normalRoles.some((role) => role.selected && hasNormalRawAsset(role))
+    : draft.importantRoles.some((role) => role.selected && hasImportantRawAsset(role))
+})
+
+const canBatchCompressImages2 = computed(() => {
+  if (!hasActiveSelection.value || isBatchRunning.value) {
+    return false
+  }
+
+  return activeTab.value === "normal"
+    ? draft.normalRoles.some((role) => role.selected && hasNormalRawAsset(role))
+    : draft.importantRoles.some((role) => role.selected && hasImportantRawAsset(role))
 })
 
 async function handleGenerateNormalPrompt(role: NormalRoleDraft) {
@@ -782,7 +944,7 @@ async function handleGenerateImportantPrompt(role: ImportantRoleDraft) {
 }
 
 async function handleGenerateNormalImage(role: NormalRoleDraft) {
-  const state = getAssetState(role.draftKey)
+  const state = getAssetState(role.draftKey, "common", "raw")
   state.error = null
   state.loading = true
   const aiDraft = draft.normalAi
@@ -797,7 +959,7 @@ async function handleGenerateNormalImage(role: NormalRoleDraft) {
       targetName: sanitizeNameInput(role.name) || "normal_role"
     })
 
-    role.img = asset.assetPath
+    setNormalAssetPath(role, "raw", asset.assetPath)
     state.meta = asset
   } catch (error) {
     state.error = formatErrorMessage(error, "生成图片失败。")
@@ -806,23 +968,28 @@ async function handleGenerateNormalImage(role: NormalRoleDraft) {
   }
 }
 
-async function handleCompressNormalImage(role: NormalRoleDraft) {
-  const state = getAssetState(role.draftKey)
+async function handleCompressNormalImage(role: NormalRoleDraft, slot: 1 | 2) {
+  const variant: ImageVariant = slot === 1 ? "compress1" : "compress2"
+  const state = getAssetState(role.draftKey, "common", variant)
   state.error = null
   state.loading = true
   const aiDraft = draft.normalAi
 
   try {
     const asset = await compressRoleImage(props.storyId, {
-      quality: parseCompressQualityInput(aiDraft.compressQualityText) ?? 60,
-      sourcePath: role.img,
+      quality:
+        parseCompressQualityInput(
+          slot === 1 ? aiDraft.compressQuality1Text : aiDraft.compressQuality2Text
+        ) ?? (slot === 1 ? 60 : 30),
+      slot,
+      sourcePath: role.img_raw,
       targetName: sanitizeNameInput(role.name) || "normal_role"
     })
 
-    role.img = asset.assetPath
+    setNormalAssetPath(role, variant, asset.assetPath)
     state.meta = asset
   } catch (error) {
-    state.error = formatErrorMessage(error, "压缩图片失败。")
+    state.error = formatErrorMessage(error, `压缩图片${slot}失败。`)
   } finally {
     state.loading = false
   }
@@ -839,7 +1006,7 @@ async function handleGenerateImportantImage(
   role: ImportantRoleDraft,
   mode: ImportantRoleImageMode
 ) {
-  const state = getAssetState(role.draftKey, mode)
+  const state = getAssetState(role.draftKey, mode, "raw")
   state.error = null
   state.loading = true
   const aiDraft = draft.importantAi
@@ -854,10 +1021,10 @@ async function handleGenerateImportantImage(
       targetName: getImportantImageTargetName(role, mode)
     })
 
-    setImportantAssetPath(role, mode, asset.assetPath)
+    setImportantAssetPath(role, mode, "raw", asset.assetPath)
     state.meta = asset
   } catch (error) {
-    state.error = formatErrorMessage(error, `生成${getImportantAssetLabel(mode)}失败。`)
+    state.error = formatErrorMessage(error, `生成${getRoleImageModeLabel(mode)}失败。`)
   } finally {
     state.loading = false
   }
@@ -865,24 +1032,30 @@ async function handleGenerateImportantImage(
 
 async function handleCompressImportantImage(
   role: ImportantRoleDraft,
-  mode: ImportantRoleImageMode
+  mode: ImportantRoleImageMode,
+  slot: 1 | 2
 ) {
-  const state = getAssetState(role.draftKey, mode)
+  const variant: ImageVariant = slot === 1 ? "compress1" : "compress2"
+  const state = getAssetState(role.draftKey, mode, variant)
   state.error = null
   state.loading = true
   const aiDraft = draft.importantAi
 
   try {
     const asset = await compressRoleImage(props.storyId, {
-      quality: parseCompressQualityInput(aiDraft.compressQualityText) ?? 60,
-      sourcePath: getImportantAssetPath(role, mode),
+      quality:
+        parseCompressQualityInput(
+          slot === 1 ? aiDraft.compressQuality1Text : aiDraft.compressQuality2Text
+        ) ?? (slot === 1 ? 60 : 30),
+      slot,
+      sourcePath: getImportantAssetPath(role, mode, "raw"),
       targetName: getImportantImageTargetName(role, mode)
     })
 
-    setImportantAssetPath(role, mode, asset.assetPath)
+    setImportantAssetPath(role, mode, variant, asset.assetPath)
     state.meta = asset
   } catch (error) {
-    state.error = formatErrorMessage(error, `压缩${getImportantAssetLabel(mode)}失败。`)
+    state.error = formatErrorMessage(error, `压缩${getRoleImageModeLabel(mode)}${slot}失败。`)
   } finally {
     state.loading = false
   }
@@ -1011,22 +1184,36 @@ async function handleBatchGenerateImages(mode: ImportantRoleImageMode = "common"
   }
 }
 
-async function handleBatchCompressImages() {
+async function handleBatchCompressImages(slot: 1 | 2) {
   if (activeTab.value === "normal") {
-    const roles = draft.normalRoles.filter((role) => role.selected && role.img.trim())
+    const roles = draft.normalRoles.filter((role) => role.selected && role.img_raw.trim())
     if (!roles.length) return
 
-    batchState.compressing = true
-    batchState.compressDone = 0
-    batchState.compressTotal = roles.length
+    if (slot === 1) {
+      batchState.compressing1 = true
+      batchState.compress1Done = 0
+      batchState.compress1Total = roles.length
+    } else {
+      batchState.compressing2 = true
+      batchState.compress2Done = 0
+      batchState.compress2Total = roles.length
+    }
 
     try {
       for (const role of roles) {
-        await handleCompressNormalImage(role)
-        batchState.compressDone += 1
+        await handleCompressNormalImage(role, slot)
+        if (slot === 1) {
+          batchState.compress1Done += 1
+        } else {
+          batchState.compress2Done += 1
+        }
       }
     } finally {
-      batchState.compressing = false
+      if (slot === 1) {
+        batchState.compressing1 = false
+      } else {
+        batchState.compressing2 = false
+      }
     }
 
     return
@@ -1036,56 +1223,60 @@ async function handleBatchCompressImages() {
 
   for (const role of draft.importantRoles.filter((item) => item.selected)) {
     if (role.qufen_xingbie) {
-      if (role.img_male.trim()) {
-        tasks.push({ role, mode: "male" })
+      if (role.img_male_raw.trim()) {
+        tasks.push({ mode: "male", role })
       }
 
-      if (role.img_female.trim()) {
-        tasks.push({ role, mode: "female" })
+      if (role.img_female_raw.trim()) {
+        tasks.push({ mode: "female", role })
       }
-    } else if (role.img.trim()) {
-      tasks.push({ role, mode: "common" })
+      continue
+    }
+
+    if (role.img_raw.trim()) {
+      tasks.push({ mode: "common", role })
     }
   }
 
   if (!tasks.length) return
 
-  batchState.compressing = true
-  batchState.compressDone = 0
-  batchState.compressTotal = tasks.length
+  if (slot === 1) {
+    batchState.compressing1 = true
+    batchState.compress1Done = 0
+    batchState.compress1Total = tasks.length
+  } else {
+    batchState.compressing2 = true
+    batchState.compress2Done = 0
+    batchState.compress2Total = tasks.length
+  }
 
   try {
     for (const task of tasks) {
-      await handleCompressImportantImage(task.role, task.mode)
-      batchState.compressDone += 1
+      await handleCompressImportantImage(task.role, task.mode, slot)
+      if (slot === 1) {
+        batchState.compress1Done += 1
+      } else {
+        batchState.compress2Done += 1
+      }
     }
   } finally {
-    batchState.compressing = false
+    if (slot === 1) {
+      batchState.compressing1 = false
+    } else {
+      batchState.compressing2 = false
+    }
   }
 }
 
 function submitDraft() {
   emit("save", {
-    normal: {
-      ai: {
-        compress_quality: parseCompressQualityInput(draft.normalAi.compressQualityText) ?? 60,
-        global_prompt: draft.normalAi.globalPrompt.trim(),
-        width: parseImageDimensionInput(draft.normalAi.imageWidthText) ?? 1536,
-        height: parseImageDimensionInput(draft.normalAi.imageHeightText) ?? 1024
-      },
-      roles: draft.normalRoles.map((role) => ({
-        descr: role.descr.trim(),
-        img: role.img.trim(),
-        name: sanitizeNameInput(role.name),
-        prompt: role.prompt.trim()
-      }))
-    },
     important: {
       ai: {
-        compress_quality: parseCompressQualityInput(draft.importantAi.compressQualityText) ?? 60,
+        compress_quality_1: parseCompressQualityInput(draft.importantAi.compressQuality1Text) ?? 60,
+        compress_quality_2: parseCompressQualityInput(draft.importantAi.compressQuality2Text) ?? 30,
         global_prompt: draft.importantAi.globalPrompt.trim(),
-        width: parseImageDimensionInput(draft.importantAi.imageWidthText) ?? 1536,
-        height: parseImageDimensionInput(draft.importantAi.imageHeightText) ?? 1024
+        height: parseImageDimensionInput(draft.importantAi.imageHeightText) ?? 1024,
+        width: parseImageDimensionInput(draft.importantAi.imageWidthText) ?? 1536
       },
       roles: draft.importantRoles.map((role) => {
         const isSplitByGender = role.qufen_xingbie
@@ -1094,9 +1285,15 @@ function submitDraft() {
           descr: isSplitByGender ? "" : role.descr.trim(),
           descr_female: isSplitByGender ? role.descr_female.trim() : "",
           descr_male: isSplitByGender ? role.descr_male.trim() : "",
-          img: isSplitByGender ? "" : role.img.trim(),
-          img_female: isSplitByGender ? role.img_female.trim() : "",
-          img_male: isSplitByGender ? role.img_male.trim() : "",
+          img_compress_1: isSplitByGender ? "" : role.img_compress_1.trim(),
+          img_compress_2: isSplitByGender ? "" : role.img_compress_2.trim(),
+          img_female_compress_1: isSplitByGender ? role.img_female_compress_1.trim() : "",
+          img_female_compress_2: isSplitByGender ? role.img_female_compress_2.trim() : "",
+          img_female_raw: isSplitByGender ? role.img_female_raw.trim() : "",
+          img_male_compress_1: isSplitByGender ? role.img_male_compress_1.trim() : "",
+          img_male_compress_2: isSplitByGender ? role.img_male_compress_2.trim() : "",
+          img_male_raw: isSplitByGender ? role.img_male_raw.trim() : "",
+          img_raw: isSplitByGender ? "" : role.img_raw.trim(),
           name: sanitizeNameInput(role.name),
           prompt: isSplitByGender ? "" : role.prompt.trim(),
           prompt_female: isSplitByGender ? role.prompt_female.trim() : "",
@@ -1105,6 +1302,23 @@ function submitDraft() {
           xingge: role.xingge.trim()
         }
       })
+    },
+    normal: {
+      ai: {
+        compress_quality_1: parseCompressQualityInput(draft.normalAi.compressQuality1Text) ?? 60,
+        compress_quality_2: parseCompressQualityInput(draft.normalAi.compressQuality2Text) ?? 30,
+        global_prompt: draft.normalAi.globalPrompt.trim(),
+        height: parseImageDimensionInput(draft.normalAi.imageHeightText) ?? 1024,
+        width: parseImageDimensionInput(draft.normalAi.imageWidthText) ?? 1536
+      },
+      roles: draft.normalRoles.map((role) => ({
+        descr: role.descr.trim(),
+        img_compress_1: role.img_compress_1.trim(),
+        img_compress_2: role.img_compress_2.trim(),
+        img_raw: role.img_raw.trim(),
+        name: sanitizeNameInput(role.name),
+        prompt: role.prompt.trim()
+      }))
     }
   })
 }
@@ -1182,8 +1396,8 @@ watch(
               <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="!canBatchGenerateImages" @click="handleBatchGenerateImages('common')">
                 {{
                   batchState.generatingCommonImages
-                    ? `通用图生成中 ${batchState.commonImageDone}/${batchState.commonImageTotal}`
-                    : "批量生成通用图"
+                    ? `批量生图中 ${batchState.commonImageDone}/${batchState.commonImageTotal}`
+                    : "批量生成通用原图"
                 }}
               </button>
 
@@ -1197,7 +1411,7 @@ watch(
                 {{
                   batchState.generatingMaleImages
                     ? `男图生成中 ${batchState.maleImageDone}/${batchState.maleImageTotal}`
-                    : "批量生成男图"
+                    : "批量生成男原图"
                 }}
               </button>
 
@@ -1211,15 +1425,23 @@ watch(
                 {{
                   batchState.generatingFemaleImages
                     ? `女图生成中 ${batchState.femaleImageDone}/${batchState.femaleImageTotal}`
-                    : "批量生成女图"
+                    : "批量生成女原图"
                 }}
               </button>
 
-              <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="!canBatchCompressImages" @click="handleBatchCompressImages">
+              <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="!canBatchCompressImages1" @click="handleBatchCompressImages(1)">
                 {{
-                  batchState.compressing
-                    ? `批量压缩中 ${batchState.compressDone}/${batchState.compressTotal}`
-                    : "批量压缩图片"
+                  batchState.compressing1
+                    ? `批量压缩1中 ${batchState.compress1Done}/${batchState.compress1Total}`
+                    : "批量压缩到1"
+                }}
+              </button>
+
+              <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="!canBatchCompressImages2" @click="handleBatchCompressImages(2)">
+                {{
+                  batchState.compressing2
+                    ? `批量压缩2中 ${batchState.compress2Done}/${batchState.compress2Total}`
+                    : "批量压缩到2"
                 }}
               </button>
             </div>
@@ -1247,15 +1469,28 @@ watch(
                 </label>
 
                 <label class="roles-dialog__field">
-                  <span class="roles-dialog__label">压缩质量</span>
+                  <span class="roles-dialog__label">压缩质量1</span>
                   <input
-                    v-model="draft.normalAi.compressQualityText"
+                    v-model="draft.normalAi.compressQuality1Text"
                     class="text-input"
                     type="number"
                     min="1"
                     max="100"
                     step="1"
                     placeholder="60"
+                  />
+                </label>
+
+                <label class="roles-dialog__field">
+                  <span class="roles-dialog__label">压缩质量2</span>
+                  <input
+                    v-model="draft.normalAi.compressQuality2Text"
+                    class="text-input"
+                    type="number"
+                    min="1"
+                    max="100"
+                    step="1"
+                    placeholder="30"
                   />
                 </label>
 
@@ -1297,7 +1532,7 @@ watch(
                         v-model="role.descr"
                         class="text-input roles-dialog__textarea roles-dialog__textarea--cell"
                         rows="3"
-                        placeholder="普通村民，朴素布衣，路人感"
+                        placeholder="普通路人，朴素布衣，生活气息"
                       />
                     </td>
                     <td>
@@ -1312,31 +1547,34 @@ watch(
                       </div>
                     </td>
                     <td>
-                      <div class="roles-dialog__asset-cell">
-                        <button
-                          v-if="role.img"
-                          class="roles-dialog__asset-thumb-button"
-                          type="button"
-                          @click="openImagePreview(getImagePreviewTitle(role.name), role.img)"
-                        >
-                          <img
-                            class="roles-dialog__asset-thumb"
-                            :src="getNormalAssetUrl(role)"
-                            :alt="role.name || '角色缩略图'"
-                            loading="lazy"
-                          />
-                        </button>
-                        <a v-if="role.img" class="roles-dialog__asset-link" :href="getNormalAssetUrl(role)" target="_blank" rel="noreferrer">
-                          {{ role.img }}
-                        </a>
-                        <span v-else class="roles-dialog__asset-empty">未生成图片</span>
-                        <span v-if="formatAssetMeta(getAssetState(role.draftKey).meta)" class="roles-dialog__asset-meta">
-                          {{ formatAssetMeta(getAssetState(role.draftKey).meta) }}
-                        </span>
-                        <span v-if="getAssetState(role.draftKey).loading" class="roles-dialog__asset-status">处理中...</span>
-                        <span v-if="getAssetState(role.draftKey).error" class="roles-dialog__asset-error">
-                          {{ getAssetState(role.draftKey).error }}
-                        </span>
+                      <div class="roles-dialog__asset-grid">
+                        <div v-for="variant in imageVariants" :key="variant" class="roles-dialog__asset-card">
+                          <span class="roles-dialog__asset-title">{{ getImageVariantLabel(variant) }}</span>
+                          <button
+                            v-if="variant === 'raw' && getNormalAssetPath(role, variant)"
+                            class="roles-dialog__asset-thumb-button"
+                            type="button"
+                            @click="openImagePreview(getImagePreviewTitle(role.name, variant), getNormalAssetPath(role, variant))"
+                          >
+                            <img
+                              class="roles-dialog__asset-thumb"
+                              :src="getNormalAssetUrl(role, variant)"
+                              :alt="`${role.name || '角色'} ${getImageVariantLabel(variant)} 缩略图`"
+                              loading="lazy"
+                            />
+                          </button>
+                          <a v-if="getNormalAssetPath(role, variant)" class="roles-dialog__asset-link" :href="getNormalAssetUrl(role, variant)" target="_blank" rel="noreferrer">
+                            {{ getNormalAssetPath(role, variant) }}
+                          </a>
+                          <span v-else class="roles-dialog__asset-empty">暂无图片</span>
+                          <span v-if="formatAssetMeta(getAssetState(role.draftKey, 'common', variant).meta)" class="roles-dialog__asset-meta">
+                            {{ formatAssetMeta(getAssetState(role.draftKey, 'common', variant).meta) }}
+                          </span>
+                          <span v-if="getAssetState(role.draftKey, 'common', variant).loading" class="roles-dialog__asset-status">处理中...</span>
+                          <span v-if="getAssetState(role.draftKey, 'common', variant).error" class="roles-dialog__asset-error">
+                            {{ getAssetState(role.draftKey, 'common', variant).error }}
+                          </span>
+                        </div>
                       </div>
                     </td>
                     <td>
@@ -1344,11 +1582,14 @@ watch(
                         <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getPromptState(role.draftKey).loading || !role.descr.trim()" @click="handleGenerateNormalPrompt(role)">
                           生成提示词
                         </button>
-                        <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey).loading || !role.prompt.trim() || parseImageDimensionInput(draft.normalAi.imageWidthText) === null || parseImageDimensionInput(draft.normalAi.imageHeightText) === null" @click="handleGenerateNormalImage(role)">
-                          生成图片
+                        <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'common', 'raw').loading || !role.prompt.trim() || parseImageDimensionInput(draft.normalAi.imageWidthText) === null || parseImageDimensionInput(draft.normalAi.imageHeightText) === null" @click="handleGenerateNormalImage(role)">
+                          生成原图
                         </button>
-                        <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey).loading || !role.img.trim()" @click="handleCompressNormalImage(role)">
-                          压缩图片
+                        <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'common', 'compress1').loading || !role.img_raw.trim()" @click="handleCompressNormalImage(role, 1)">
+                          压缩到1
+                        </button>
+                        <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'common', 'compress2').loading || !role.img_raw.trim()" @click="handleCompressNormalImage(role, 2)">
+                          压缩到2
                         </button>
                       </div>
                     </td>
@@ -1383,15 +1624,28 @@ watch(
                 </label>
 
                 <label class="roles-dialog__field">
-                  <span class="roles-dialog__label">压缩质量</span>
+                  <span class="roles-dialog__label">压缩质量1</span>
                   <input
-                    v-model="draft.importantAi.compressQualityText"
+                    v-model="draft.importantAi.compressQuality1Text"
                     class="text-input"
                     type="number"
                     min="1"
                     max="100"
                     step="1"
                     placeholder="60"
+                  />
+                </label>
+
+                <label class="roles-dialog__field">
+                  <span class="roles-dialog__label">压缩质量2</span>
+                  <input
+                    v-model="draft.importantAi.compressQuality2Text"
+                    class="text-input"
+                    type="number"
+                    min="1"
+                    max="100"
+                    step="1"
+                    placeholder="30"
                   />
                 </label>
 
@@ -1431,7 +1685,7 @@ watch(
                       <input v-model="role.name" class="text-input roles-dialog__cell-input" type="text" placeholder="suanming_xiansheng" />
                     </td>
                     <td>
-                      <div v-if="role.qufen_xingbie" class="roles-dialog__asset-group">
+                      <div v-if="role.qufen_xingbie" class="roles-dialog__asset-group roles-dialog__asset-group--images">
                         <div class="roles-dialog__asset-card">
                           <span class="roles-dialog__asset-title">男描述</span>
                           <textarea
@@ -1474,7 +1728,7 @@ watch(
                       </select>
                     </td>
                     <td>
-                      <div v-if="role.qufen_xingbie" class="roles-dialog__asset-group">
+                      <div v-if="role.qufen_xingbie" class="roles-dialog__asset-group roles-dialog__asset-group--images">
                         <div class="roles-dialog__asset-card">
                           <span class="roles-dialog__asset-title">男提示词</span>
                           <button class="roles-dialog__prompt-link" type="button" @click="openPromptEditor(role.draftKey, role.prompt_male, 'male')">
@@ -1501,89 +1755,105 @@ watch(
                       </div>
                     </td>
                     <td>
-                      <div v-if="role.qufen_xingbie" class="roles-dialog__asset-group">
-                        <div class="roles-dialog__asset-card">
-                          <span class="roles-dialog__asset-title">男图</span>
-                          <button
-                            v-if="role.img_male"
-                            class="roles-dialog__asset-thumb-button"
-                            type="button"
-                            @click="openImagePreview(getImagePreviewTitle(role.name, '男图'), role.img_male)"
-                          >
-                            <img
-                              class="roles-dialog__asset-thumb"
-                              :src="getImportantAssetUrl(role, 'male')"
-                              :alt="`${role.name || '角色'} 男图缩略图`"
-                              loading="lazy"
-                            />
-                          </button>
-                          <a v-if="role.img_male" class="roles-dialog__asset-link" :href="getImportantAssetUrl(role, 'male')" target="_blank" rel="noreferrer">
-                            {{ role.img_male }}
-                          </a>
-                          <span v-else class="roles-dialog__asset-empty">未生成图片</span>
-                          <span v-if="formatAssetMeta(getAssetState(role.draftKey, 'male').meta)" class="roles-dialog__asset-meta">
-                            {{ formatAssetMeta(getAssetState(role.draftKey, 'male').meta) }}
-                          </span>
-                          <span v-if="getAssetState(role.draftKey, 'male').loading" class="roles-dialog__asset-status">处理中...</span>
-                          <span v-if="getAssetState(role.draftKey, 'male').error" class="roles-dialog__asset-error">
-                            {{ getAssetState(role.draftKey, 'male').error }}
-                          </span>
+                      <div v-if="role.qufen_xingbie" class="roles-dialog__asset-group roles-dialog__asset-group--images">
+                        <div class="roles-dialog__asset-set">
+                          <span class="roles-dialog__asset-set-title">男图</span>
+                          <div class="roles-dialog__asset-grid">
+                            <div v-for="variant in imageVariants" :key="`male-${variant}`" class="roles-dialog__asset-card">
+                              <span class="roles-dialog__asset-title">{{ getImageVariantLabel(variant) }}</span>
+                              <button
+                                v-if="variant === 'raw' && getImportantAssetPath(role, 'male', variant)"
+                                class="roles-dialog__asset-thumb-button"
+                                type="button"
+                                @click="openImagePreview(getImagePreviewTitle(role.name, variant, 'male'), getImportantAssetPath(role, 'male', variant))"
+                              >
+                                <img
+                                  class="roles-dialog__asset-thumb"
+                                  :src="getImportantAssetUrl(role, 'male', variant)"
+                                  :alt="`${role.name || '角色'} 男图 ${getImageVariantLabel(variant)} 缩略图`"
+                                  loading="lazy"
+                                />
+                              </button>
+                              <a v-if="getImportantAssetPath(role, 'male', variant)" class="roles-dialog__asset-link" :href="getImportantAssetUrl(role, 'male', variant)" target="_blank" rel="noreferrer">
+                                {{ getImportantAssetPath(role, 'male', variant) }}
+                              </a>
+                              <span v-else class="roles-dialog__asset-empty">暂无图片</span>
+                              <span v-if="formatAssetMeta(getAssetState(role.draftKey, 'male', variant).meta)" class="roles-dialog__asset-meta">
+                                {{ formatAssetMeta(getAssetState(role.draftKey, 'male', variant).meta) }}
+                              </span>
+                              <span v-if="getAssetState(role.draftKey, 'male', variant).loading" class="roles-dialog__asset-status">处理中...</span>
+                              <span v-if="getAssetState(role.draftKey, 'male', variant).error" class="roles-dialog__asset-error">
+                                {{ getAssetState(role.draftKey, 'male', variant).error }}
+                              </span>
+                            </div>
+                          </div>
                         </div>
 
-                        <div class="roles-dialog__asset-card">
-                          <span class="roles-dialog__asset-title">女图</span>
-                          <button
-                            v-if="role.img_female"
-                            class="roles-dialog__asset-thumb-button"
-                            type="button"
-                            @click="openImagePreview(getImagePreviewTitle(role.name, '女图'), role.img_female)"
-                          >
-                            <img
-                              class="roles-dialog__asset-thumb"
-                              :src="getImportantAssetUrl(role, 'female')"
-                              :alt="`${role.name || '角色'} 女图缩略图`"
-                              loading="lazy"
-                            />
-                          </button>
-                          <a v-if="role.img_female" class="roles-dialog__asset-link" :href="getImportantAssetUrl(role, 'female')" target="_blank" rel="noreferrer">
-                            {{ role.img_female }}
-                          </a>
-                          <span v-else class="roles-dialog__asset-empty">未生成图片</span>
-                          <span v-if="formatAssetMeta(getAssetState(role.draftKey, 'female').meta)" class="roles-dialog__asset-meta">
-                            {{ formatAssetMeta(getAssetState(role.draftKey, 'female').meta) }}
-                          </span>
-                          <span v-if="getAssetState(role.draftKey, 'female').loading" class="roles-dialog__asset-status">处理中...</span>
-                          <span v-if="getAssetState(role.draftKey, 'female').error" class="roles-dialog__asset-error">
-                            {{ getAssetState(role.draftKey, 'female').error }}
-                          </span>
+                        <div class="roles-dialog__asset-set">
+                          <span class="roles-dialog__asset-set-title">女图</span>
+                          <div class="roles-dialog__asset-grid">
+                            <div v-for="variant in imageVariants" :key="`female-${variant}`" class="roles-dialog__asset-card">
+                              <span class="roles-dialog__asset-title">{{ getImageVariantLabel(variant) }}</span>
+                              <button
+                                v-if="variant === 'raw' && getImportantAssetPath(role, 'female', variant)"
+                                class="roles-dialog__asset-thumb-button"
+                                type="button"
+                                @click="openImagePreview(getImagePreviewTitle(role.name, variant, 'female'), getImportantAssetPath(role, 'female', variant))"
+                              >
+                                <img
+                                  class="roles-dialog__asset-thumb"
+                                  :src="getImportantAssetUrl(role, 'female', variant)"
+                                  :alt="`${role.name || '角色'} 女图 ${getImageVariantLabel(variant)} 缩略图`"
+                                  loading="lazy"
+                                />
+                              </button>
+                              <a v-if="getImportantAssetPath(role, 'female', variant)" class="roles-dialog__asset-link" :href="getImportantAssetUrl(role, 'female', variant)" target="_blank" rel="noreferrer">
+                                {{ getImportantAssetPath(role, 'female', variant) }}
+                              </a>
+                              <span v-else class="roles-dialog__asset-empty">暂无图片</span>
+                              <span v-if="formatAssetMeta(getAssetState(role.draftKey, 'female', variant).meta)" class="roles-dialog__asset-meta">
+                                {{ formatAssetMeta(getAssetState(role.draftKey, 'female', variant).meta) }}
+                              </span>
+                              <span v-if="getAssetState(role.draftKey, 'female', variant).loading" class="roles-dialog__asset-status">处理中...</span>
+                              <span v-if="getAssetState(role.draftKey, 'female', variant).error" class="roles-dialog__asset-error">
+                                {{ getAssetState(role.draftKey, 'female', variant).error }}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <div v-else class="roles-dialog__asset-cell">
-                        <button
-                          v-if="role.img"
-                          class="roles-dialog__asset-thumb-button"
-                          type="button"
-                          @click="openImagePreview(getImagePreviewTitle(role.name, '通用图'), role.img)"
-                        >
-                          <img
-                            class="roles-dialog__asset-thumb"
-                            :src="getImportantAssetUrl(role, 'common')"
-                            :alt="`${role.name || '角色'} 通用图缩略图`"
-                            loading="lazy"
-                          />
-                        </button>
-                        <a v-if="role.img" class="roles-dialog__asset-link" :href="getImportantAssetUrl(role, 'common')" target="_blank" rel="noreferrer">
-                          {{ role.img }}
-                        </a>
-                        <span v-else class="roles-dialog__asset-empty">未生成图片</span>
-                        <span v-if="formatAssetMeta(getAssetState(role.draftKey, 'common').meta)" class="roles-dialog__asset-meta">
-                          {{ formatAssetMeta(getAssetState(role.draftKey, 'common').meta) }}
-                        </span>
-                        <span v-if="getAssetState(role.draftKey, 'common').loading" class="roles-dialog__asset-status">处理中...</span>
-                        <span v-if="getAssetState(role.draftKey, 'common').error" class="roles-dialog__asset-error">
-                          {{ getAssetState(role.draftKey, 'common').error }}
-                        </span>
+                      <div v-else class="roles-dialog__asset-set">
+                        <span class="roles-dialog__asset-set-title">通用图</span>
+                        <div class="roles-dialog__asset-grid">
+                          <div v-for="variant in imageVariants" :key="`common-${variant}`" class="roles-dialog__asset-card">
+                            <span class="roles-dialog__asset-title">{{ getImageVariantLabel(variant) }}</span>
+                            <button
+                              v-if="variant === 'raw' && getImportantAssetPath(role, 'common', variant)"
+                              class="roles-dialog__asset-thumb-button"
+                              type="button"
+                              @click="openImagePreview(getImagePreviewTitle(role.name, variant, 'common'), getImportantAssetPath(role, 'common', variant))"
+                            >
+                              <img
+                                class="roles-dialog__asset-thumb"
+                                :src="getImportantAssetUrl(role, 'common', variant)"
+                                :alt="`${role.name || '角色'} 通用图 ${getImageVariantLabel(variant)} 缩略图`"
+                                loading="lazy"
+                              />
+                            </button>
+                            <a v-if="getImportantAssetPath(role, 'common', variant)" class="roles-dialog__asset-link" :href="getImportantAssetUrl(role, 'common', variant)" target="_blank" rel="noreferrer">
+                              {{ getImportantAssetPath(role, 'common', variant) }}
+                            </a>
+                            <span v-else class="roles-dialog__asset-empty">暂无图片</span>
+                            <span v-if="formatAssetMeta(getAssetState(role.draftKey, 'common', variant).meta)" class="roles-dialog__asset-meta">
+                              {{ formatAssetMeta(getAssetState(role.draftKey, 'common', variant).meta) }}
+                            </span>
+                            <span v-if="getAssetState(role.draftKey, 'common', variant).loading" class="roles-dialog__asset-status">处理中...</span>
+                            <span v-if="getAssetState(role.draftKey, 'common', variant).error" class="roles-dialog__asset-error">
+                              {{ getAssetState(role.draftKey, 'common', variant).error }}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td>
@@ -1598,26 +1868,35 @@ watch(
                         </button>
 
                         <template v-if="role.qufen_xingbie">
-                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'male').loading || !role.prompt_male.trim() || parseImageDimensionInput(draft.importantAi.imageWidthText) === null || parseImageDimensionInput(draft.importantAi.imageHeightText) === null" @click="handleGenerateImportantImage(role, 'male')">
-                            生成男图
+                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'male', 'raw').loading || !role.prompt_male.trim() || parseImageDimensionInput(draft.importantAi.imageWidthText) === null || parseImageDimensionInput(draft.importantAi.imageHeightText) === null" @click="handleGenerateImportantImage(role, 'male')">
+                            生成男原图
                           </button>
-                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'female').loading || !role.prompt_female.trim() || parseImageDimensionInput(draft.importantAi.imageWidthText) === null || parseImageDimensionInput(draft.importantAi.imageHeightText) === null" @click="handleGenerateImportantImage(role, 'female')">
-                            生成女图
+                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'female', 'raw').loading || !role.prompt_female.trim() || parseImageDimensionInput(draft.importantAi.imageWidthText) === null || parseImageDimensionInput(draft.importantAi.imageHeightText) === null" @click="handleGenerateImportantImage(role, 'female')">
+                            生成女原图
                           </button>
-                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'male').loading || !role.img_male.trim()" @click="handleCompressImportantImage(role, 'male')">
-                            压缩男图
+                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'male', 'compress1').loading || !role.img_male_raw.trim()" @click="handleCompressImportantImage(role, 'male', 1)">
+                            男图压缩到1
                           </button>
-                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'female').loading || !role.img_female.trim()" @click="handleCompressImportantImage(role, 'female')">
-                            压缩女图
+                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'male', 'compress2').loading || !role.img_male_raw.trim()" @click="handleCompressImportantImage(role, 'male', 2)">
+                            男图压缩到2
+                          </button>
+                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'female', 'compress1').loading || !role.img_female_raw.trim()" @click="handleCompressImportantImage(role, 'female', 1)">
+                            女图压缩到1
+                          </button>
+                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'female', 'compress2').loading || !role.img_female_raw.trim()" @click="handleCompressImportantImage(role, 'female', 2)">
+                            女图压缩到2
                           </button>
                         </template>
 
                         <template v-else>
-                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'common').loading || !role.prompt.trim() || parseImageDimensionInput(draft.importantAi.imageWidthText) === null || parseImageDimensionInput(draft.importantAi.imageHeightText) === null" @click="handleGenerateImportantImage(role, 'common')">
-                            生成图片
+                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'common', 'raw').loading || !role.prompt.trim() || parseImageDimensionInput(draft.importantAi.imageWidthText) === null || parseImageDimensionInput(draft.importantAi.imageHeightText) === null" @click="handleGenerateImportantImage(role, 'common')">
+                            生成通用原图
                           </button>
-                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'common').loading || !role.img.trim()" @click="handleCompressImportantImage(role, 'common')">
-                            压缩图片
+                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'common', 'compress1').loading || !role.img_raw.trim()" @click="handleCompressImportantImage(role, 'common', 1)">
+                            压缩到1
+                          </button>
+                          <button class="btn-secondary roles-dialog__row-button" type="button" :disabled="getAssetState(role.draftKey, 'common', 'compress2').loading || !role.img_raw.trim()" @click="handleCompressImportantImage(role, 'common', 2)">
+                            压缩到2
                           </button>
                         </template>
                       </div>
@@ -1714,7 +1993,7 @@ watch(
 }
 
 .roles-dialog__panel {
-  width: min(1560px, calc(100vw - 24px));
+  width: min(1760px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   padding: 20px;
   overflow: auto;
@@ -1758,7 +2037,12 @@ watch(
 
 .roles-dialog__config-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(220px, 260px) minmax(220px, 260px) minmax(0, 1fr);
+  grid-template-columns:
+    minmax(180px, 220px)
+    minmax(180px, 220px)
+    minmax(180px, 220px)
+    minmax(180px, 220px)
+    minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -1849,7 +2133,7 @@ watch(
 
 .roles-dialog__table {
   width: 100%;
-  min-width: 1400px;
+  min-width: 1600px;
   border-collapse: collapse;
 }
 
@@ -1911,19 +2195,33 @@ watch(
   color: var(--warning);
 }
 
-.roles-dialog__asset-group {
-  display: grid;
-  gap: 10px;
-}
-
+.roles-dialog__asset-group,
+.roles-dialog__asset-set,
 .roles-dialog__asset-card,
-.roles-dialog__asset-cell,
 .roles-dialog__action-stack {
   display: grid;
   gap: 6px;
 }
 
+.roles-dialog__asset-group--images {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.roles-dialog__asset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.roles-dialog__asset-set-title,
+.roles-dialog__asset-title {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
 .roles-dialog__asset-thumb-button {
+  justify-self: start;
   width: 88px;
   aspect-ratio: 1;
   padding: 0;
@@ -1939,11 +2237,6 @@ watch(
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.roles-dialog__asset-title {
-  font-size: 0.76rem;
-  color: var(--text-muted);
 }
 
 .roles-dialog__asset-link,
@@ -2105,6 +2398,14 @@ watch(
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .roles-dialog__asset-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .roles-dialog__asset-group--images {
+    grid-template-columns: 1fr;
   }
 }
 </style>

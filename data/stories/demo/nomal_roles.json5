@@ -1,14 +1,17 @@
 {
   ai: {
-    compress_quality: 20,
-    global_prompt: 'Anime style, clean line art, Makoto Shinkai style, clear lighting, isolated background.\n\nA precise character expression sheet presented as a seamless 2x3 thumbnail grid layout (3 perfect 1:1 square panels per row). There are two strictly aligned horizontal rows, totaling 6 individual portraits. Each individual portrait frame is a perfect 1:1 square shape, with no horizontal stretching and no vertical elongation. The images fill their respective grid cells completely, with no letterboxing or blank vertical spaces. Clean, thin white borders perfectly divide all 6 grid cells.\n\nThe top row (frames 1, 2, and 3 from left to right) features the same character in identical matching upper-body shots from the waist up, including complete shoulders and chest, with the head centered. The expressions on the top row are: (1) Calm, (2) Sad, (3) Smiling.\n\nThe bottom row (frames 4, 5, and 6 from left to right) features the exact same matching upper-body shots of the character. The expressions on the bottom row are: (4) Laughing, (5) Angry, (6) Astonished.\n\nConsistent character design, identical camera distance, and identical clothing across all 6 frames; a perfectly symmetrical and organized layout.',
+    compress_quality_1: 10,
+    compress_quality_2: 40,
+    global_prompt: 'Anime style, clean line art, Makoto Shinkai style, clear lighting, isolated background, center composition.\n\nA high-quality individual character portrait with a calm and neutral expression. It is a strict upper body shot from the waist up, including complete shoulders and chest, with the character perfectly centered in the frame. \n\nThe character is presented within a standard 1:1 ratio square frame, with no stretching, no distortion, and no framing grids. The background is a clean, solid neutral color, optimized for game UI asset creation. Highly detailed, sharp focus, symmetrical layout --ar 1:1',
     height: 1024,
     width: 1024,
   },
   roles: [
     {
       descr: '一个50多岁的大叔，头发乱糟糟的。',
-      img: 'assets/roles/raw/mpp1smy9-start_suanming.png',
+      img_compress_1: 'assets/roles/start_suanming_c1.webp',
+      img_compress_2: 'assets/roles/start_suanming_c2.webp',
+      img_raw: 'assets/roles/raw/mpp7shfr-start_suanming.png',
       name: 'start_suanming',
       prompt: 'A middle-aged Chinese fortune-teller in his 50s, disheveled and unkempt, messy gray-black hair, tired yet sharp eyes, weathered face with deep smile lines and subtle wrinkles, slightly rough skin texture, understated but memorable streetwise aura. Wearing a worn traditional long robe mixed with old urban layers, faded fabric, frayed cuffs, muted earthy tones, loosely draped scarf, simple wooden beads and small talisman accessories, practical and slightly shabby. Standing in a relaxed but guarded pose, one hand holding a divination tool or folded note, the other tucked near the sleeve, as if speaking in a low calm voice. Character design illustration, full body or half body, clean silhouette, clear facial features, high recognizability, detailed cloth texture, soft cinematic rim light, moody low-key lighting, subtle dust in the air, painterly realism, high detail, sharp focus, neutral background.',
     },

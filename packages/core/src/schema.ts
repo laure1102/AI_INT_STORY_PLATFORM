@@ -61,14 +61,17 @@ export const storyRoleAiConfigSchema = z.object({
   width: z.number().int().min(1).default(1536),
   height: z.number().int().min(1).default(1024),
   global_prompt: z.string().default(""),
-  compress_quality: z.number().int().min(1).max(100).default(60)
+  compress_quality_1: z.number().int().min(1).max(100).default(60),
+  compress_quality_2: z.number().int().min(1).max(100).default(80)
 })
 
 export const storyNormalRoleSchema = z.object({
   name: z.string().min(1),
   descr: z.string().default(""),
   prompt: z.string().default(""),
-  img: z.string().default("")
+  img_raw: z.string().default(""),
+  img_compress_1: z.string().default(""),
+  img_compress_2: z.string().default("")
 })
 
 export const storyImportantRoleSchema = z.object({
@@ -79,18 +82,26 @@ export const storyImportantRoleSchema = z.object({
   prompt: z.string().default(""),
   prompt_male: z.string().default(""),
   prompt_female: z.string().default(""),
-  img: z.string().default(""),
+  img_raw: z.string().default(""),
+  img_compress_1: z.string().default(""),
+  img_compress_2: z.string().default(""),
   xingge: z.string().default(""),
   qufen_xingbie: z.boolean().default(false),
-  img_male: z.string().default(""),
-  img_female: z.string().default("")
+  img_male_raw: z.string().default(""),
+  img_male_compress_1: z.string().default(""),
+  img_male_compress_2: z.string().default(""),
+  img_female_raw: z.string().default(""),
+  img_female_compress_1: z.string().default(""),
+  img_female_compress_2: z.string().default("")
 }).transform((role) => {
   if (role.qufen_xingbie) {
     return {
       ...role,
       descr: "",
       prompt: "",
-      img: ""
+      img_raw: "",
+      img_compress_1: "",
+      img_compress_2: ""
     }
   }
 
@@ -100,8 +111,12 @@ export const storyImportantRoleSchema = z.object({
     descr_female: "",
     prompt_male: "",
     prompt_female: "",
-    img_male: "",
-    img_female: ""
+    img_male_raw: "",
+    img_male_compress_1: "",
+    img_male_compress_2: "",
+    img_female_raw: "",
+    img_female_compress_1: "",
+    img_female_compress_2: ""
   }
 })
 
@@ -110,7 +125,8 @@ export const storyNormalRolesDataFileSchema = z.object({
     width: 1536,
     height: 1024,
     global_prompt: "",
-    compress_quality: 60
+    compress_quality_1: 60,
+    compress_quality_2: 80
   }),
   roles: z.array(storyNormalRoleSchema).default([])
 })
@@ -120,7 +136,8 @@ export const storyImportantRolesDataFileSchema = z.object({
     width: 1536,
     height: 1024,
     global_prompt: "",
-    compress_quality: 60
+    compress_quality_1: 60,
+    compress_quality_2: 80
   }),
   roles: z.array(storyImportantRoleSchema).default([])
 })
@@ -131,7 +148,8 @@ export const storyRolesSchema = z.object({
       width: 1536,
       height: 1024,
       global_prompt: "",
-      compress_quality: 60
+      compress_quality_1: 60,
+      compress_quality_2: 80
     },
     roles: []
   }),
@@ -140,7 +158,8 @@ export const storyRolesSchema = z.object({
       width: 1536,
       height: 1024,
       global_prompt: "",
-      compress_quality: 60
+      compress_quality_1: 60,
+      compress_quality_2: 80
     },
     roles: []
   })
@@ -150,14 +169,17 @@ export const storyEventLocationAiConfigSchema = z.object({
   width: z.number().int().min(1).default(1536),
   height: z.number().int().min(1).default(1024),
   global_prompt: z.string().default(""),
-  compress_quality: z.number().int().min(1).max(100).default(60)
+  compress_quality_1: z.number().int().min(1).max(100).default(60),
+  compress_quality_2: z.number().int().min(1).max(100).default(80)
 })
 
 export const storyEventLocationAssignmentSchema = z.object({
   name: z.string().min(1),
   descr: z.string().default(""),
-  img: z.string().default(""),
-  prompt: z.string().default("")
+  prompt: z.string().default(""),
+  img_raw: z.string().default(""),
+  img_compress_1: z.string().default(""),
+  img_compress_2: z.string().default("")
 })
 
 export const storyEventLocationSchema = z.object({
@@ -165,7 +187,8 @@ export const storyEventLocationSchema = z.object({
     width: 1536,
     height: 1024,
     global_prompt: "",
-    compress_quality: 60
+    compress_quality_1: 60,
+    compress_quality_2: 80
   }),
   assignments: z.array(storyEventLocationAssignmentSchema).default([])
 })

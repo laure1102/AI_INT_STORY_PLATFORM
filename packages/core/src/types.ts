@@ -49,14 +49,17 @@ export interface StoryRoleAiConfig {
   width: number
   height: number
   global_prompt: string
-  compress_quality: number
+  compress_quality_1: number
+  compress_quality_2: number
 }
 
 export interface StoryNormalRoleDefinition {
   name: string
   descr: string
   prompt: string
-  img: string
+  img_raw: string
+  img_compress_1: string
+  img_compress_2: string
 }
 
 export interface StoryImportantRoleDefinition {
@@ -67,11 +70,17 @@ export interface StoryImportantRoleDefinition {
   prompt: string
   prompt_male: string
   prompt_female: string
-  img: string
+  img_raw: string
+  img_compress_1: string
+  img_compress_2: string
   xingge: string
   qufen_xingbie: boolean
-  img_male: string
-  img_female: string
+  img_male_raw: string
+  img_male_compress_1: string
+  img_male_compress_2: string
+  img_female_raw: string
+  img_female_compress_1: string
+  img_female_compress_2: string
 }
 
 export interface StoryNormalRolesDataFile {
@@ -93,14 +102,17 @@ export interface StoryEventLocationAiConfig {
   width: number
   height: number
   global_prompt: string
-  compress_quality: number
+  compress_quality_1: number
+  compress_quality_2: number
 }
 
 export interface StoryEventLocationAssignment {
   name: string
   descr: string
-  img: string
   prompt: string
+  img_raw: string
+  img_compress_1: string
+  img_compress_2: string
 }
 
 export interface StoryEventLocationFile {
