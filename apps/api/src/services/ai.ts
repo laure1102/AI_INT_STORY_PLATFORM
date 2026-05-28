@@ -10,11 +10,12 @@ interface LocationPromptInput {
 
 interface RolePromptInput {
   descr: string
-  import: boolean
+  gender: "common" | "male" | "female"
+  important: boolean
   qufenXingbie: boolean
   roleName: string
   storyTitle?: string
-  xingge: string
+  xingge?: string
 }
 
 interface GeneratedImageResult {
@@ -70,7 +71,9 @@ function buildCompatibleUrl(baseUrl: string, endpoint: string) {
   return `${normalized.replace(/\/+$/, "")}${endpoint}`
 }
 
-function extractTextContent(content: string | Array<{ type?: string; text?: string }> | undefined) {
+function extractTextContent(
+  content: string | Array<{ type?: string; text?: string }> | undefined
+) {
   if (typeof content === "string") {
     return content.trim()
   }
@@ -122,43 +125,64 @@ async function postJson<TResponse>(
   return (await response.json()) as TResponse
 }
 
+function requireTextProvider(settings: AppSettingsFile) {
+  const ai = requireAiConfig(settings).text
+
+  if (!ai.baseUrl.trim()) {
+    throw new FileStoreError("Text model baseUrl is required.", 400, "ai.text-base-url-required")
+  }
+
+  if (!ai.apiKey.trim()) {
+    throw new FileStoreError("Text model apiKey is required.", 400, "ai.text-api-key-required")
+  }
+
+  if (!ai.model.trim()) {
+    throw new FileStoreError("Text model name is required.", 400, "ai.text-model-required")
+  }
+
+  return ai
+}
+
+function requireImageProvider(settings: AppSettingsFile) {
+  const ai = requireAiConfig(settings).image
+
+  if (!ai.baseUrl.trim()) {
+    throw new FileStoreError("Image model baseUrl is required.", 400, "ai.image-base-url-required")
+  }
+
+  if (!ai.apiKey.trim()) {
+    throw new FileStoreError("Image model apiKey is required.", 400, "ai.image-api-key-required")
+  }
+
+  if (!ai.model.trim()) {
+    throw new FileStoreError("Image model name is required.", 400, "ai.image-model-required")
+  }
+
+  return ai
+}
+
 export async function generateLocationPrompt(
   settings: AppSettingsFile,
   input: LocationPromptInput
 ) {
-  const ai = requireAiConfig(settings).text
-
-  if (!ai.baseUrl.trim()) {
-    throw new FileStoreError("文生 baseUrl 未设置。", 400, "ai.text-base-url-required")
-  }
-
-  if (!ai.apiKey.trim()) {
-    throw new FileStoreError("文生 apiKey 未设置。", 400, "ai.text-api-key-required")
-  }
-
-  if (!ai.model.trim()) {
-    throw new FileStoreError("文生模型未设置。", 400, "ai.text-model-required")
-  }
+  const ai = requireTextProvider(settings)
 
   if (!input.descr.trim()) {
-    throw new FileStoreError("地点描述不能为空。", 400, "location.descr-required")
+    throw new FileStoreError("Location description is required.", 400, "location.descr-required")
   }
 
   const systemPrompt = [
-    "你是游戏美术提示词设计助手。",
-    "你的任务是根据地点名称、地点描述和全局提示词，输出一段适合 AI 生图的最终 prompt。",
-    "输出要求：",
-    "1. 只输出最终 prompt，不要解释。",
-    "2. 优先输出适合主流文生图模型理解的英文 prompt。",
-    "3. 如果用户给了中文全局提示词，也要吸收其含义并转成自然的英文美术描述。",
-    "4. 需要包含环境、材质、光照、镜头感、氛围等要素。",
-    "5. 保持适合游戏背景场景，不要出现人物特写。"
+    "You are a game environment concept prompt designer.",
+    "Return only the final English image prompt.",
+    "Focus on environment, material, lighting, camera language, mood, and composition.",
+    "Keep it suitable for a game background or establishing shot.",
+    "Do not add explanation or markdown."
   ].join("\n")
 
   const userPrompt = [
-    `故事标题: ${input.storyTitle?.trim() || "未提供"}`,
-    `地点名称: ${input.locationName.trim()}`,
-    `地点描述: ${input.descr.trim()}`
+    `Story title: ${input.storyTitle?.trim() || "Not provided"}`,
+    `Location name: ${input.locationName.trim()}`,
+    `Location description: ${input.descr.trim()}`
   ].join("\n")
 
   const payload = await postJson<OpenAiChatCompletionResponse>(
@@ -173,13 +197,13 @@ export async function generateLocationPrompt(
       ]
     },
     "ai.text-generation-failed",
-    "AI 生成提示词失败"
+    "Failed to generate location prompt"
   )
 
   const prompt = extractTextContent(payload.choices?.[0]?.message?.content)
 
   if (!prompt) {
-    throw new FileStoreError("AI 没有返回可用的提示词。", 502, "ai.empty-prompt")
+    throw new FileStoreError("AI returned an empty location prompt.", 502, "ai.empty-prompt")
   }
 
   return prompt
@@ -189,42 +213,31 @@ export async function generateRolePrompt(
   settings: AppSettingsFile,
   input: RolePromptInput
 ) {
-  const ai = requireAiConfig(settings).text
-
-  if (!ai.baseUrl.trim()) {
-    throw new FileStoreError("文生 baseUrl 未设置。", 400, "ai.text-base-url-required")
-  }
-
-  if (!ai.apiKey.trim()) {
-    throw new FileStoreError("文生 apiKey 未设置。", 400, "ai.text-api-key-required")
-  }
-
-  if (!ai.model.trim()) {
-    throw new FileStoreError("文生模型未设置。", 400, "ai.text-model-required")
-  }
+  const ai = requireTextProvider(settings)
 
   if (!input.descr.trim()) {
-    throw new FileStoreError("角色描述不能为空。", 400, "role.descr-required")
+    throw new FileStoreError("Role description is required.", 400, "role.descr-required")
   }
 
   const systemPrompt = [
-    "你是游戏角色美术提示词设计助手。",
-    "你的任务是根据角色名称、角色描述、角色性格和生成要求，输出一段适合 AI 生图的英文最终 prompt。",
-    "输出要求：",
-    "1. 只输出最终 prompt，不要解释。",
-    "2. prompt 要适合角色立绘或角色设定图。",
-    "3. 需要明确服装、年龄感、气质、面部特征、姿态倾向、材质与光影风格。",
-    "4. 如果角色需要区分性别，不要在这里直接写死 male 或 female，保留成中性角色设定，后续生图时再追加性别指令。",
-    "5. 如果是重要角色，请强化辨识度、记忆点和主角感。"
+    "You are a game character concept prompt designer.",
+    "Return only the final English image prompt.",
+    "The prompt should be suitable for a character design sheet or portrait generation.",
+    "Describe clothing, age impression, silhouette, facial features, pose tendency, material, and lighting style.",
+    "If gender is male or female, explicitly reflect that gender presentation in the prompt.",
+    "If gender is common, keep the prompt gender-neutral.",
+    "If the role is important, strengthen recognizability and memorable signature traits.",
+    "Do not add explanation or markdown."
   ].join("\n")
 
   const userPrompt = [
-    `故事标题: ${input.storyTitle?.trim() || "未提供"}`,
-    `角色名称: ${input.roleName.trim()}`,
-    `角色描述: ${input.descr.trim()}`,
-    `角色性格: ${input.xingge.trim() || "未提供"}`,
-    `是否重要角色: ${input.import ? "是" : "否"}`,
-    `是否区分性别: ${input.qufenXingbie ? "是" : "否"}`
+    `Story title: ${input.storyTitle?.trim() || "Not provided"}`,
+    `Role name: ${input.roleName.trim()}`,
+    `Role description: ${input.descr.trim()}`,
+    `Role personality: ${input.xingge?.trim() || "Not provided"}`,
+    `Generation gender: ${input.gender}`,
+    `Important role: ${input.important ? "yes" : "no"}`,
+    `Split by gender: ${input.qufenXingbie ? "yes" : "no"}`
   ].join("\n")
 
   const payload = await postJson<OpenAiChatCompletionResponse>(
@@ -239,13 +252,13 @@ export async function generateRolePrompt(
       ]
     },
     "ai.role-text-generation-failed",
-    "AI 生成角色提示词失败"
+    "Failed to generate role prompt"
   )
 
   const prompt = extractTextContent(payload.choices?.[0]?.message?.content)
 
   if (!prompt) {
-    throw new FileStoreError("AI 没有返回可用的角色提示词。", 502, "ai.empty-role-prompt")
+    throw new FileStoreError("AI returned an empty role prompt.", 502, "ai.empty-role-prompt")
   }
 
   return prompt
@@ -255,27 +268,17 @@ export async function generateLocationImage(
   settings: AppSettingsFile,
   prompt: string,
   globalPrompt: string,
-  imageSize: string
+  width: number,
+  height: number
 ): Promise<GeneratedImageResult> {
-  const ai = requireAiConfig(settings).image
-
-  if (!ai.baseUrl.trim()) {
-    throw new FileStoreError("图生 baseUrl 未设置。", 400, "ai.image-base-url-required")
-  }
-
-  if (!ai.apiKey.trim()) {
-    throw new FileStoreError("图生 apiKey 未设置。", 400, "ai.image-api-key-required")
-  }
-
-  if (!ai.model.trim()) {
-    throw new FileStoreError("图生模型未设置。", 400, "ai.image-model-required")
-  }
+  const ai = requireImageProvider(settings)
 
   if (!prompt.trim()) {
-    throw new FileStoreError("提示词不能为空。", 400, "location.prompt-required")
+    throw new FileStoreError("Location prompt is required.", 400, "location.prompt-required")
   }
 
   const finalPrompt = [globalPrompt.trim(), prompt.trim()].filter(Boolean).join("\n")
+  const size = `${Math.max(1, Math.round(width))}x${Math.max(1, Math.round(height))}`
 
   const payload = await postJson<OpenAiImageGenerationResponse>(
     buildCompatibleUrl(ai.baseUrl, "/images/generations"),
@@ -283,17 +286,17 @@ export async function generateLocationImage(
     {
       model: ai.model,
       prompt: finalPrompt,
-      size: imageSize,
+      size,
       response_format: "b64_json"
     },
     "ai.image-generation-failed",
-    "AI 生图失败"
+    "Failed to generate image"
   )
 
   const base64 = payload.data?.[0]?.b64_json
 
   if (!base64) {
-    throw new FileStoreError("AI 生图返回为空。", 502, "ai.empty-image")
+    throw new FileStoreError("AI returned an empty image.", 502, "ai.empty-image")
   }
 
   return {
@@ -306,7 +309,8 @@ export async function generateRoleImage(
   settings: AppSettingsFile,
   prompt: string,
   globalPrompt: string,
-  imageSize: string,
+  width: number,
+  height: number,
   gender: "common" | "male" | "female"
 ): Promise<GeneratedImageResult> {
   const genderPromptSuffix =
@@ -320,6 +324,7 @@ export async function generateRoleImage(
     settings,
     `${prompt.trim()}\n${genderPromptSuffix}`,
     globalPrompt,
-    imageSize
+    width,
+    height
   )
 }

@@ -171,11 +171,12 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       prompt: await generateRolePrompt(settings, {
         descr: body.descr,
-        import: body.import,
+        gender: body.gender,
+        important: body.important,
         qufenXingbie: body.qufenXingbie,
         roleName: body.roleName,
         storyTitle: body.storyTitle ?? story.story.title,
-        xingge: body.xingge
+        xingge: body.xingge ?? ""
       })
     } satisfies GenerateRolePromptResponse
   })
@@ -188,7 +189,8 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
       settings,
       body.prompt,
       body.globalPrompt,
-      body.imageSize
+      body.width,
+      body.height
     )
 
     context.body = {
@@ -204,7 +206,8 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
       settings,
       body.prompt,
       body.globalPrompt,
-      body.imageSize,
+      body.width,
+      body.height,
       body.gender
     )
 

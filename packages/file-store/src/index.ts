@@ -8,8 +8,10 @@ import {
   storyEventLocationSchema,
   storyEventSchema,
   storyGraphEventsSchema,
+  storyImportantRolesDataFileSchema,
   storyLoopEventsSchema,
   storyMetaSchema,
+  storyNormalRolesDataFileSchema,
   storyRolesSchema,
   storySceneSchema,
   storyValsSchema,
@@ -23,6 +25,8 @@ import {
   type StoryLoopEventFile,
   type StoryLoopEventsFile,
   type StoryMetaFile,
+  type StoryNormalRolesDataFile,
+  type StoryImportantRolesDataFile,
   type StoryRolesFile,
   type StorySceneBackgroundVariant,
   type StorySceneFile,
@@ -219,7 +223,9 @@ function createStoryPaths(dataDir: string, storyId: string) {
     metaFile: path.join(storyDir, "story.json5"),
     valsFile: path.join(storyDir, "vals.json5"),
     sceneFile: path.join(storyDir, "scene.json5"),
-    rolesFile: path.join(storyDir, "roles.json5"),
+    rolesLegacyFile: path.join(storyDir, "roles.json5"),
+    normalRolesFile: path.join(storyDir, "nomal_roles.json5"),
+    importantRolesFile: path.join(storyDir, "import_roles.json5"),
     eventLocationFile: path.join(storyDir, "event_location.json5"),
     assetsDir: path.join(storyDir, "assets"),
     backgroundDir: path.join(storyDir, "assets", "background"),
@@ -485,7 +491,17 @@ function collectReferencedLocationAssetPaths(eventLocations: StoryEventLocationF
 function collectReferencedRoleAssetPaths(roles: StoryRolesFile) {
   const references = new Set<string>()
 
-  for (const role of roles.roles) {
+  for (const role of roles.normal.roles) {
+    for (const assetPath of [role.img]) {
+      const normalizedAssetPath = normalizeTextAssetPathForPrefix(assetPath, "assets/roles/")
+
+      if (normalizedAssetPath) {
+        references.add(normalizedAssetPath)
+      }
+    }
+  }
+
+  for (const role of roles.important.roles) {
     for (const assetPath of [role.img, role.img_male, role.img_female]) {
       const normalizedAssetPath = normalizeTextAssetPathForPrefix(assetPath, "assets/roles/")
 
@@ -631,15 +647,35 @@ async function readStoryScenes(dataDir: string, storyId: string): Promise<StoryS
 
 async function readStoryRoles(dataDir: string, storyId: string): Promise<StoryRolesFile> {
   const paths = createStoryPaths(dataDir, storyId)
-  const roles = await readOptionalJson5File<StoryRolesFile>(paths.rolesFile, {
-    ai: {
-      image_size: "1536x1024",
-      global_prompt: "",
-      compress_quality: 60
-    },
-    roles: []
+
+  const [normalRolesFile, importantRolesFile] = await Promise.all([
+    readOptionalJson5File<StoryNormalRolesDataFile>(paths.normalRolesFile, {
+      ai: {
+        width: 1536,
+        height: 1024,
+        global_prompt: "",
+        compress_quality: 60
+      },
+      roles: []
+    }),
+    readOptionalJson5File<StoryImportantRolesDataFile>(paths.importantRolesFile, {
+      ai: {
+        width: 1536,
+        height: 1024,
+        global_prompt: "",
+        compress_quality: 60
+      },
+      roles: []
+    })
+  ])
+
+  const parsedNormalRoles = storyNormalRolesDataFileSchema.parse(normalRolesFile)
+  const parsedImportantRoles = storyImportantRolesDataFileSchema.parse(importantRolesFile)
+
+  return storyRolesSchema.parse({
+    normal: parsedNormalRoles,
+    important: parsedImportantRoles
   })
-  return storyRolesSchema.parse(roles)
 }
 
 async function readStoryEventLocations(
@@ -651,7 +687,8 @@ async function readStoryEventLocations(
     paths.eventLocationFile,
     {
       ai: {
-        image_size: "1536x1024",
+        width: 1536,
+        height: 1024,
         global_prompt: "",
         compress_quality: 60
       },
@@ -817,7 +854,16 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     const parsedRoles = storyRolesSchema.parse(roles)
     const paths = createStoryPaths(dataDir, storyId)
 
-    await writeJson5File(paths.rolesFile, parsedRoles satisfies StoryRolesFile)
+    await writeJson5File(
+      paths.normalRolesFile,
+      parsedRoles.normal satisfies StoryNormalRolesDataFile
+    )
+    await writeJson5File(
+      paths.importantRolesFile,
+      parsedRoles.important satisfies StoryImportantRolesDataFile
+    )
+    await rm(paths.rolesLegacyFile, { force: true })
+    await rm(path.join(paths.storyDir, "roles_setting.json5"), { force: true })
     await pruneUnusedRoleAssets(dataDir, storyId, parsedRoles)
 
     return parsedRoles

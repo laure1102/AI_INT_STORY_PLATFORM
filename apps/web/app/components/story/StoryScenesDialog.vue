@@ -22,6 +22,7 @@ interface SceneAssetState {
 }
 
 const props = defineProps<{
+  saveSuccessMessage?: string | null
   storyId: string
   saving: boolean
   scenes: StorySceneFile
@@ -368,6 +369,10 @@ watch(
           场景级别必须大于等于 1，压缩质量必须在 1 到 100 之间。
         </p>
 
+        <p v-if="props.saveSuccessMessage" class="scenes-dialog__success">
+          {{ props.saveSuccessMessage }}
+        </p>
+
         <div class="scenes-dialog__body">
           <section class="scenes-dialog__config">
             <label class="scenes-dialog__field">
@@ -606,6 +611,12 @@ watch(
 
 .scenes-dialog__warning {
   color: var(--warning);
+}
+
+.scenes-dialog__success {
+  margin: 10px 0 0;
+  font-size: 0.86rem;
+  color: var(--accent);
 }
 
 .scenes-dialog__body {

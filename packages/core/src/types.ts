@@ -45,31 +45,53 @@ export interface StorySceneFile {
   scenes: StorySceneDefinition[]
 }
 
-export interface StoryRoleDefinition {
+export interface StoryRoleAiConfig {
+  width: number
+  height: number
+  global_prompt: string
+  compress_quality: number
+}
+
+export interface StoryNormalRoleDefinition {
   name: string
   descr: string
   prompt: string
   img: string
-  import: boolean
+}
+
+export interface StoryImportantRoleDefinition {
+  name: string
+  descr: string
+  descr_male: string
+  descr_female: string
+  prompt: string
+  prompt_male: string
+  prompt_female: string
+  img: string
   xingge: string
   qufen_xingbie: boolean
   img_male: string
   img_female: string
 }
 
-export interface StoryRolesAiConfig {
-  image_size: string
-  global_prompt: string
-  compress_quality: number
+export interface StoryNormalRolesDataFile {
+  ai: StoryRoleAiConfig
+  roles: StoryNormalRoleDefinition[]
+}
+
+export interface StoryImportantRolesDataFile {
+  ai: StoryRoleAiConfig
+  roles: StoryImportantRoleDefinition[]
 }
 
 export interface StoryRolesFile {
-  ai: StoryRolesAiConfig
-  roles: StoryRoleDefinition[]
+  normal: StoryNormalRolesDataFile
+  important: StoryImportantRolesDataFile
 }
 
 export interface StoryEventLocationAiConfig {
-  image_size: string
+  width: number
+  height: number
   global_prompt: string
   compress_quality: number
 }

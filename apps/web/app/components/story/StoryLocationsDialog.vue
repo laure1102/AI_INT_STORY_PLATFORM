@@ -22,8 +22,15 @@ interface LocationPromptState {
   loading: boolean
 }
 
+interface ImagePreviewState {
+  path: string
+  title: string
+  url: string
+}
+
 const props = defineProps<{
   eventLocations: StoryEventLocationFile
+  saveSuccessMessage?: string | null
   saving: boolean
   storyId: string
   storyTitle?: string
@@ -44,7 +51,8 @@ const {
 
 const draft = reactive({
   aiGlobalPrompt: "",
-  aiImageSize: "1536x1024",
+  aiImageWidthText: "1536",
+  aiImageHeightText: "1024",
   compressQualityText: "60",
   assignments: [] as LocationDraft[]
 })
@@ -57,6 +65,11 @@ const promptEditorState = reactive<{
 }>({
   locationKey: null,
   value: ""
+})
+const imagePreviewState = reactive<ImagePreviewState>({
+  path: "",
+  title: "",
+  url: ""
 })
 const batchState = reactive({
   compressing: false,
@@ -94,6 +107,13 @@ function parseCompressQualityInput(value: unknown) {
   if (!/^\d+$/.test(trimmed)) return null
   const parsed = Number(trimmed)
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 100 ? parsed : null
+}
+
+function parseImageDimensionInput(value: unknown) {
+  const trimmed = String(value ?? "").trim()
+  if (!/^\d+$/.test(trimmed)) return null
+  const parsed = Number(trimmed)
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : null
 }
 
 function getNextDefaultName() {
@@ -212,6 +232,27 @@ function getAssetUrl(assignment: LocationDraft) {
   return assetPath ? getStoryAssetUrl(props.storyId, assetPath) : ""
 }
 
+function getImagePreviewTitle(name: string) {
+  const trimmedName = name.trim()
+  return trimmedName ? `${trimmedName} 图片预览` : "图片预览"
+}
+
+function openImagePreview(title: string, assetPath: string) {
+  const trimmedPath = assetPath.trim()
+
+  if (!trimmedPath) return
+
+  imagePreviewState.path = trimmedPath
+  imagePreviewState.title = title
+  imagePreviewState.url = getStoryAssetUrl(props.storyId, trimmedPath)
+}
+
+function closeImagePreview() {
+  imagePreviewState.path = ""
+  imagePreviewState.title = ""
+  imagePreviewState.url = ""
+}
+
 async function loadAssetMeta(assignment: LocationDraft) {
   const state = getAssetState(assignment)
   const assetPath = assignment.img.trim()
@@ -253,7 +294,8 @@ function syncDraft(eventLocations: StoryEventLocationFile) {
   resetAssetStates()
   resetPromptStates()
   draft.aiGlobalPrompt = normalizeText(eventLocations.ai.global_prompt)
-  draft.aiImageSize = normalizeText(eventLocations.ai.image_size) || "1536x1024"
+  draft.aiImageWidthText = String(eventLocations.ai.width ?? 1536)
+  draft.aiImageHeightText = String(eventLocations.ai.height ?? 1024)
   draft.compressQualityText = String(eventLocations.ai.compress_quality ?? 60)
   draft.assignments = eventLocations.assignments.map(cloneAssignment)
   void hydrateAssetMeta()
@@ -289,7 +331,8 @@ const duplicateNames = computed(() => {
 })
 
 const hasInvalidDraft = computed(() => {
-  if (!draft.aiImageSize.trim()) return true
+  if (parseImageDimensionInput(draft.aiImageWidthText) === null) return true
+  if (parseImageDimensionInput(draft.aiImageHeightText) === null) return true
   if (parseCompressQualityInput(draft.compressQualityText) === null) return true
 
   return draft.assignments.some((assignment) => !sanitizeNameInput(assignment.name))
@@ -308,7 +351,8 @@ const canBatchGeneratePrompts = computed(() =>
 const canBatchGenerateImages = computed(() =>
   hasBatchSelection.value
   && !isBatchRunning.value
-  && draft.aiImageSize.trim().length > 0
+  && parseImageDimensionInput(draft.aiImageWidthText) !== null
+  && parseImageDimensionInput(draft.aiImageHeightText) !== null
   && draft.assignments.some((assignment) => assignment.selected && assignment.prompt.trim())
 )
 const canBatchCompressImages = computed(() =>
@@ -397,7 +441,8 @@ async function handleGenerateImage(assignment: LocationDraft) {
   try {
     const asset = await generateLocationImage(props.storyId, {
       globalPrompt: draft.aiGlobalPrompt,
-      imageSize: draft.aiImageSize.trim(),
+      width: parseImageDimensionInput(draft.aiImageWidthText) ?? 1536,
+      height: parseImageDimensionInput(draft.aiImageHeightText) ?? 1024,
       prompt: assignment.prompt,
       targetName: assignment.name
     })
@@ -452,7 +497,13 @@ async function handleBatchGeneratePrompts() {
 
 async function handleBatchGenerateImages() {
   const assignments = getSelectedAssignments().filter((assignment) => assignment.prompt.trim())
-  if (!assignments.length || !draft.aiImageSize.trim()) return
+  if (
+    !assignments.length ||
+    parseImageDimensionInput(draft.aiImageWidthText) === null ||
+    parseImageDimensionInput(draft.aiImageHeightText) === null
+  ) {
+    return
+  }
 
   batchState.generatingImages = true
   batchState.imageDone = 0
@@ -491,7 +542,8 @@ function submitDraft() {
     ai: {
       compress_quality: parseCompressQualityInput(draft.compressQualityText) ?? 60,
       global_prompt: draft.aiGlobalPrompt.trim(),
-      image_size: draft.aiImageSize.trim()
+      width: parseImageDimensionInput(draft.aiImageWidthText) ?? 1536,
+      height: parseImageDimensionInput(draft.aiImageHeightText) ?? 1024
     },
     assignments: draft.assignments.map((assignment) => ({
       descr: assignment.descr.trim(),
@@ -535,6 +587,10 @@ watch(
         </div>
 
         <div class="locations-dialog__body">
+          <div v-if="props.saveSuccessMessage" class="locations-dialog__success">
+            {{ props.saveSuccessMessage }}
+          </div>
+
           <section class="locations-dialog__config">
             <div class="locations-dialog__config-head">
               <h3 class="locations-dialog__config-title">地点 AI 配置</h3>
@@ -542,12 +598,26 @@ watch(
 
             <div class="locations-dialog__config-grid">
               <label class="locations-dialog__field">
-                <span class="locations-dialog__label">图片尺寸</span>
+                <span class="locations-dialog__label">图片宽度</span>
                 <input
-                  v-model="draft.aiImageSize"
+                  v-model="draft.aiImageWidthText"
                   class="text-input"
-                  type="text"
-                  placeholder="1536x1024"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="1536"
+                />
+              </label>
+
+              <label class="locations-dialog__field">
+                <span class="locations-dialog__label">图片高度</span>
+                <input
+                  v-model="draft.aiImageHeightText"
+                  class="text-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="1024"
                 />
               </label>
 
@@ -691,6 +761,19 @@ watch(
                   </td>
                   <td>
                     <div class="locations-dialog__asset-cell">
+                      <button
+                        v-if="assignment.img"
+                        class="locations-dialog__asset-thumb-button"
+                        type="button"
+                        @click="openImagePreview(getImagePreviewTitle(assignment.name), assignment.img)"
+                      >
+                        <img
+                          class="locations-dialog__asset-thumb"
+                          :src="getAssetUrl(assignment)"
+                          :alt="assignment.name || '地点缩略图'"
+                          loading="lazy"
+                        />
+                      </button>
                       <a
                         v-if="assignment.img"
                         class="locations-dialog__asset-link"
@@ -734,7 +817,7 @@ watch(
                       <button
                         class="btn-secondary locations-dialog__row-button"
                         type="button"
-                        :disabled="getAssetState(assignment).loading || !assignment.prompt.trim() || !draft.aiImageSize.trim()"
+                        :disabled="getAssetState(assignment).loading || !assignment.prompt.trim() || parseImageDimensionInput(draft.aiImageWidthText) === null || parseImageDimensionInput(draft.aiImageHeightText) === null"
                         @click="handleGenerateImage(assignment)"
                       >
                         生成图片
@@ -808,6 +891,30 @@ watch(
         </div>
       </section>
     </div>
+
+    <div
+      v-if="imagePreviewState.url"
+      class="locations-dialog__image-modal"
+      @click.self="closeImagePreview"
+    >
+      <section class="locations-dialog__image-panel glass-panel">
+        <div class="locations-dialog__image-head">
+          <div class="locations-dialog__image-copy">
+            <h3 class="locations-dialog__image-title">{{ imagePreviewState.title }}</h3>
+            <span class="locations-dialog__image-path">{{ imagePreviewState.path }}</span>
+          </div>
+          <button class="btn-secondary" type="button" @click="closeImagePreview">关闭</button>
+        </div>
+
+        <div class="locations-dialog__image-frame">
+          <img
+            class="locations-dialog__image-full"
+            :src="imagePreviewState.url"
+            :alt="imagePreviewState.title"
+          />
+        </div>
+      </section>
+    </div>
   </Teleport>
 </template>
 
@@ -863,7 +970,7 @@ watch(
 
 .locations-dialog__config-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(220px, 260px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 260px) minmax(220px, 260px) minmax(220px, 260px) minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -908,6 +1015,11 @@ watch(
 .locations-dialog__warning {
   color: var(--warning);
   font-size: 0.82rem;
+}
+
+.locations-dialog__success {
+  color: var(--accent);
+  font-size: 0.84rem;
 }
 
 .locations-dialog__textarea {
@@ -989,6 +1101,24 @@ watch(
 .locations-dialog__action-stack {
   display: grid;
   gap: 6px;
+}
+
+.locations-dialog__asset-thumb-button {
+  width: 88px;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(186, 220, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: zoom-in;
+}
+
+.locations-dialog__asset-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .locations-dialog__asset-link,
@@ -1080,11 +1210,76 @@ watch(
   resize: vertical;
 }
 
+.locations-dialog__image-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 8, 16, 0.82);
+}
+
+.locations-dialog__image-panel {
+  width: min(1120px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 18px;
+  overflow: auto;
+  border-radius: 20px;
+}
+
+.locations-dialog__image-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.locations-dialog__image-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.locations-dialog__image-title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.locations-dialog__image-path {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.locations-dialog__image-frame {
+  display: grid;
+  place-items: center;
+  margin-top: 14px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.locations-dialog__image-full {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 220px);
+  object-fit: contain;
+}
+
 @media (max-width: 900px) {
   .locations-dialog__header,
   .locations-dialog__actions,
   .locations-dialog__config-grid,
-  .locations-dialog__prompt-head {
+  .locations-dialog__prompt-head,
+  .locations-dialog__image-head {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;

@@ -57,12 +57,29 @@ export const storySceneSchema = z.object({
   scenes: z.array(storySceneEntrySchema).default([])
 })
 
-export const storyRoleSchema = z.object({
+export const storyRoleAiConfigSchema = z.object({
+  width: z.number().int().min(1).default(1536),
+  height: z.number().int().min(1).default(1024),
+  global_prompt: z.string().default(""),
+  compress_quality: z.number().int().min(1).max(100).default(60)
+})
+
+export const storyNormalRoleSchema = z.object({
   name: z.string().min(1),
   descr: z.string().default(""),
   prompt: z.string().default(""),
+  img: z.string().default("")
+})
+
+export const storyImportantRoleSchema = z.object({
+  name: z.string().min(1),
+  descr: z.string().default(""),
+  descr_male: z.string().default(""),
+  descr_female: z.string().default(""),
+  prompt: z.string().default(""),
+  prompt_male: z.string().default(""),
+  prompt_female: z.string().default(""),
   img: z.string().default(""),
-  import: z.boolean().default(false),
   xingge: z.string().default(""),
   qufen_xingbie: z.boolean().default(false),
   img_male: z.string().default(""),
@@ -71,32 +88,67 @@ export const storyRoleSchema = z.object({
   if (role.qufen_xingbie) {
     return {
       ...role,
+      descr: "",
+      prompt: "",
       img: ""
     }
   }
 
   return {
     ...role,
+    descr_male: "",
+    descr_female: "",
+    prompt_male: "",
+    prompt_female: "",
     img_male: "",
     img_female: ""
   }
 })
 
-export const storyRolesSchema = z.object({
-  ai: z.object({
-    image_size: z.string().default("1536x1024"),
-    global_prompt: z.string().default(""),
-    compress_quality: z.number().int().min(1).max(100).default(60)
-  }).default({
-    image_size: "1536x1024",
+export const storyNormalRolesDataFileSchema = z.object({
+  ai: storyRoleAiConfigSchema.default({
+    width: 1536,
+    height: 1024,
     global_prompt: "",
     compress_quality: 60
   }),
-  roles: z.array(storyRoleSchema).default([])
+  roles: z.array(storyNormalRoleSchema).default([])
+})
+
+export const storyImportantRolesDataFileSchema = z.object({
+  ai: storyRoleAiConfigSchema.default({
+    width: 1536,
+    height: 1024,
+    global_prompt: "",
+    compress_quality: 60
+  }),
+  roles: z.array(storyImportantRoleSchema).default([])
+})
+
+export const storyRolesSchema = z.object({
+  normal: storyNormalRolesDataFileSchema.default({
+    ai: {
+      width: 1536,
+      height: 1024,
+      global_prompt: "",
+      compress_quality: 60
+    },
+    roles: []
+  }),
+  important: storyImportantRolesDataFileSchema.default({
+    ai: {
+      width: 1536,
+      height: 1024,
+      global_prompt: "",
+      compress_quality: 60
+    },
+    roles: []
+  })
 })
 
 export const storyEventLocationAiConfigSchema = z.object({
-  image_size: z.string().default("1536x1024"),
+  width: z.number().int().min(1).default(1536),
+  height: z.number().int().min(1).default(1024),
   global_prompt: z.string().default(""),
   compress_quality: z.number().int().min(1).max(100).default(60)
 })
@@ -110,7 +162,8 @@ export const storyEventLocationAssignmentSchema = z.object({
 
 export const storyEventLocationSchema = z.object({
   ai: storyEventLocationAiConfigSchema.default({
-    image_size: "1536x1024",
+    width: 1536,
+    height: 1024,
     global_prompt: "",
     compress_quality: 60
   }),

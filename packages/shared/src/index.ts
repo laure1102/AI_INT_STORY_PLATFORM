@@ -94,11 +94,12 @@ export interface CompressSceneBackgroundRequest {
 
 export interface GenerateRolePromptRequest {
   descr: string
-  import: boolean
+  gender: "common" | "male" | "female"
+  important: boolean
   qufenXingbie: boolean
   roleName: string
   storyTitle?: string
-  xingge: string
+  xingge?: string
 }
 
 export interface GenerateRolePromptResponse {
@@ -108,7 +109,8 @@ export interface GenerateRolePromptResponse {
 export interface GenerateRoleImageRequest {
   gender: "common" | "male" | "female"
   globalPrompt: string
-  imageSize: string
+  width: number
+  height: number
   prompt: string
   targetName: string
 }
@@ -135,7 +137,8 @@ export interface GenerateLocationPromptResponse {
 
 export interface GenerateLocationImageRequest {
   globalPrompt: string
-  imageSize: string
+  width: number
+  height: number
   prompt: string
   targetName: string
 }

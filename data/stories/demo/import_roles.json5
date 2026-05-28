@@ -1,0 +1,24 @@
+{
+  ai: {
+    compress_quality: 20,
+    global_prompt: 'Anime style, clean line art, Makoto Shinkai style, clear lighting, isolated background.\n\nA precise character expression sheet presented as a seamless 2x3 thumbnail grid layout (3 perfect 1:1 square panels per row). There are two strictly aligned horizontal rows, totaling 6 individual portraits. Each individual portrait frame is a perfect 1:1 square shape, with no horizontal stretching and no vertical elongation. The images fill their respective grid cells completely, with no letterboxing or blank vertical spaces. Clean, thin white borders perfectly divide all 6 grid cells.\n\nThe top row (frames 1, 2, and 3 from left to right) features the same character in identical matching upper-body shots from the waist up, including complete shoulders and chest, with the head centered. The expressions on the top row are: (1) Calm, (2) Sad, (3) Smiling.\n\nThe bottom row (frames 4, 5, and 6 from left to right) features the exact same matching upper-body shots of the character. The expressions on the bottom row are: (4) Laughing, (5) Angry, (6) Astonished.\n\nConsistent character design, identical camera distance, and identical clothing across all 6 frames; a perfectly symmetrical and organized layout.',
+    height: 1024,
+    width: 1024,
+  },
+  roles: [
+    {
+      descr: '',
+      descr_female: '成熟漂亮的25岁女生，长发大波浪，大框眼镜，白衬衣。',
+      descr_male: '帅气阳光的25岁男生，黑色短发，白衬衣。',
+      img: '',
+      img_female: 'assets/roles/raw/mpp3s0q4-zhuli_female.png',
+      img_male: 'assets/roles/raw/mpp3lb0o-zhuli_male.png',
+      name: 'zhuli',
+      prompt: '',
+      prompt_female: 'Female character design portrait of Zhuli, a beautiful mature 25-year-old woman with a lively, cheerful presence, long voluminous big-wave hair, oversized black-rim or translucent large-frame glasses, bright expressive eyes, a warm confident smile, and a slim elegant silhouette with graceful posture. She wears a crisp white button-up shirt with slightly rolled sleeves, fine cotton fabric with subtle natural wrinkles and soft sheen, neatly tucked to suggest a clean yet spirited look. Emphasize refined facial features, clear skin, lively eyebrows, and an approachable energetic expression. Signature traits: polished city-woman charm with a distinctive scholarly fashion edge, memorable oversized glasses and flowing hair as key identifiers. Pose tendency: relaxed standing pose, one hand lightly adjusting the glasses or resting near the collar, body angled slightly forward to convey openness and enthusiasm. Lighting style: soft daylight portrait lighting with gentle rim light, clean highlights on hair waves and glasses, subtle shadows for depth, elegant modern character sheet presentation, high detail, natural color palette, crisp and expressive design.',
+      prompt_male: 'A handsome, cheerful 25-year-old male character, bright and energetic with a confident, friendly expression, black short hair neatly styled, clean youthful face with clear eyes and a warm smile, slim athletic build and upright posture, memorable as a radiant urban hero from “The Echoes of Ruibo City.” He wears a crisp white shirt as the core outfit, tailored but slightly relaxed, with subtle rolled sleeves and a refined collar, paired with dark fitted trousers and simple leather shoes for a clean modern silhouette. Add a signature city-inspired detail such as a thin silver accessory, a faint fabric texture, or a wind-touched shirt hem to enhance recognizability. Natural portrait pose with one hand in pocket or lightly adjusting the collar, open and approachable stance, lively body language. Realistic fabric folds, soft cotton sheen, clean lines, detailed skin texture. Lighting style: bright cinematic daylight with soft side light and gentle rim light, emphasizing freshness, charm, and optimistic energy, suitable for a character design sheet or portrait.',
+      qufen_xingbie: true,
+      xingge: '活泼开朗',
+    },
+  ],
+}

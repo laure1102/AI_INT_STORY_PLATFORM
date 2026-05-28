@@ -52,6 +52,9 @@ const isScenesDialogOpen = shallowRef(false)
 const isLocationsDialogOpen = shallowRef(false)
 const isRolesDialogOpen = shallowRef(false)
 const isSettingsDialogOpen = shallowRef(false)
+const scenesSaveSuccessMessage = shallowRef<string | null>(null)
+const locationsSaveSuccessMessage = shallowRef<string | null>(null)
+const rolesSaveSuccessMessage = shallowRef<string | null>(null)
 
 const selectedEventId = computed(() => projectStore.getSelectedEventId(props.storyId))
 
@@ -133,10 +136,12 @@ function openScenesDialog() {
   isValsDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isRolesDialogOpen.value = false
+  scenesSaveSuccessMessage.value = null
   isScenesDialogOpen.value = true
 }
 
 function closeScenesDialog() {
+  scenesSaveSuccessMessage.value = null
   isScenesDialogOpen.value = false
 }
 
@@ -149,10 +154,12 @@ function openLocationsDialog() {
   isValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isRolesDialogOpen.value = false
+  locationsSaveSuccessMessage.value = null
   isLocationsDialogOpen.value = true
 }
 
 function closeLocationsDialog() {
+  locationsSaveSuccessMessage.value = null
   isLocationsDialogOpen.value = false
 }
 
@@ -165,10 +172,12 @@ function openRolesDialog() {
   isValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
+  rolesSaveSuccessMessage.value = null
   isRolesDialogOpen.value = true
 }
 
 function closeRolesDialog() {
+  rolesSaveSuccessMessage.value = null
   isRolesDialogOpen.value = false
 }
 
@@ -364,6 +373,7 @@ async function handleSaveScenes(scenes: StorySceneFile) {
 
   isSaving.value = true
   errorMessage.value = null
+  scenesSaveSuccessMessage.value = null
 
   try {
     const savedScenes = await saveScenes(props.storyId, scenes)
@@ -371,7 +381,7 @@ async function handleSaveScenes(scenes: StorySceneFile) {
       ...storyDocument.value,
       scenes: savedScenes
     }
-    isScenesDialogOpen.value = false
+    scenesSaveSuccessMessage.value = "已保存"
     await refreshValidation()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "保存场景失败。"
@@ -387,6 +397,7 @@ async function handleSaveEventLocations(eventLocations: StoryEventLocationFile) 
 
   isSaving.value = true
   errorMessage.value = null
+  locationsSaveSuccessMessage.value = null
 
   try {
     const savedEventLocations = await saveEventLocations(props.storyId, eventLocations)
@@ -394,7 +405,7 @@ async function handleSaveEventLocations(eventLocations: StoryEventLocationFile) 
       ...storyDocument.value,
       eventLocations: savedEventLocations
     }
-    isLocationsDialogOpen.value = false
+    locationsSaveSuccessMessage.value = "已保存"
     await refreshValidation()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "保存地点失败。"
@@ -410,6 +421,7 @@ async function handleSaveRoles(roles: StoryRolesFile) {
 
   isSaving.value = true
   errorMessage.value = null
+  rolesSaveSuccessMessage.value = null
 
   try {
     const savedRoles = await saveRoles(props.storyId, roles)
@@ -417,7 +429,7 @@ async function handleSaveRoles(roles: StoryRolesFile) {
       ...storyDocument.value,
       roles: savedRoles
     }
-    isRolesDialogOpen.value = false
+    rolesSaveSuccessMessage.value = "已保存"
     await refreshValidation()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "保存角色失败。"
@@ -506,6 +518,9 @@ watch(
     isScenesDialogOpen.value = false
     isLocationsDialogOpen.value = false
     isRolesDialogOpen.value = false
+    scenesSaveSuccessMessage.value = null
+    locationsSaveSuccessMessage.value = null
+    rolesSaveSuccessMessage.value = null
     void loadStory()
   },
   { immediate: true }
@@ -645,6 +660,7 @@ watch(
 
     <StoryScenesDialog
       v-if="storyDocument && isScenesDialogOpen"
+      :save-success-message="scenesSaveSuccessMessage"
       :saving="isSaving"
       :story-id="storyId"
       :scenes="storyDocument.scenes"
@@ -655,6 +671,7 @@ watch(
     <StoryLocationsDialog
       v-if="storyDocument && isLocationsDialogOpen"
       :event-locations="storyDocument.eventLocations"
+      :save-success-message="locationsSaveSuccessMessage"
       :saving="isSaving"
       :story-id="storyId"
       :story-title="storyDocument.story.title"
@@ -665,6 +682,7 @@ watch(
     <StoryRolesDialog
       v-if="storyDocument && isRolesDialogOpen"
       :roles="storyDocument.roles"
+      :save-success-message="rolesSaveSuccessMessage"
       :saving="isSaving"
       :story-id="storyId"
       :story-title="storyDocument.story.title"
