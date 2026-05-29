@@ -1,1 +1,16 @@
-[]
+[
+  {
+    bgm: '',
+    dialogues: [],
+    end_script: '',
+    id: 'daily_money',
+    init_script: '',
+    location: '',
+    loop: {
+      mode: 'daily',
+    },
+    object_keys: [],
+    title: '每日签到发钱',
+    trigger_expr: '',
+  },
+]

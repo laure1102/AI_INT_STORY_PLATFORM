@@ -178,10 +178,17 @@ export interface StoryBigOnceEventFile {
 
 export type StoryBigOnceEventsFile = StoryBigOnceEventFile[]
 
-export interface StoryLoopEventFile extends Omit<StoryEventFile, "next"> {
-  next: string[]
-  trigger?: StoryEventTrigger
-  cooldown?: Record<string, unknown>
+export type StoryLoopMode = "daily" | "weekly" | "monthly" | "interval_days"
+
+export interface StoryLoopRule {
+  mode: StoryLoopMode
+  interval_days?: number
+  weekday?: number
+  month_day?: number
+}
+
+export interface StoryLoopEventFile extends StoryBigOnceEventFile {
+  loop: StoryLoopRule
 }
 
 export type StoryLoopEventsFile = StoryLoopEventFile[]

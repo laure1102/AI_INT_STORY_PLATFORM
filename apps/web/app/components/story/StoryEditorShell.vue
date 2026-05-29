@@ -7,6 +7,7 @@ import type {
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryLoopEventFile,
   StoryRolesFile,
   StorySceneFile,
   StoryValsFile,
@@ -16,6 +17,7 @@ import type {
 import AppSettingsDialog from "./AppSettingsDialog.vue"
 import BigOnceEventDetailPanel from "./BigOnceEventDetailPanel.vue"
 import EventDetailPanel from "./EventDetailPanel.vue"
+import LoopEventDetailPanel from "./LoopEventDetailPanel.vue"
 import StoryBigOnceCanvas from "./StoryBigOnceCanvas.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
 import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
@@ -108,12 +110,12 @@ const activeBigOnceEvents = computed<StoryBigOnceEventFile[]>(() => {
   return getEventsByCollectionType("bigOnce") as StoryBigOnceEventFile[]
 })
 
-const activeLoopEvents = computed<StoryEventFile[]>(() => {
+const activeLoopEvents = computed<StoryLoopEventFile[]>(() => {
   if (activeEventTab.value !== "loop") {
     return []
   }
 
-  return getEventsByCollectionType("loop") as StoryEventFile[]
+  return getEventsByCollectionType("loop") as StoryLoopEventFile[]
 })
 
 const selectedEventId = computed(() =>
@@ -138,6 +140,10 @@ const activeDraftEvent = computed(() => {
 
 const activeRegularDraftEvent = computed<StoryEventFile | null>(() => {
   if (activeEventTab.value === "bigOnce") {
+    return null
+  }
+
+  if (activeEventTab.value === "loop") {
     return null
   }
 
@@ -186,7 +192,7 @@ function replaceEventInDocument(
 
   if (collectionType === "loop") {
     const sourceEvents = storyDocument.value.loopEvents
-    const typedSavedEvent = savedEvent as StoryEventFile
+    const typedSavedEvent = savedEvent as StoryLoopEventFile
     const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
     const nextEvents = hasExistingEvent
       ? sourceEvents.map((currentEvent) =>
@@ -462,7 +468,26 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
     return event
   }
 
-  const defaultId = activeEventTab.value === "loop" ? "loop-event" : "event"
+  if (activeEventTab.value === "loop") {
+    const event: StoryLoopEventFile = {
+      id: createUniqueEventId("loop-event"),
+      title: "新循环事件",
+      trigger_expr: "",
+      init_script: "",
+      object_keys: [],
+      dialogues: [],
+      location: "",
+      bgm: "",
+      end_script: "",
+      loop: {
+        mode: "daily"
+      }
+    }
+
+    return event
+  }
+
+  const defaultId = "event"
 
   return {
     id: createUniqueEventId(defaultId),
@@ -919,6 +944,7 @@ watch(
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
+        @delete="handleDeleteEvent"
         @create="handleCreateStandaloneEvent"
       />
     </section>
@@ -932,7 +958,7 @@ watch(
         >
           <div class="editor-modal__panel">
             <button
-              v-if="activeEventTab !== 'bigOnce'"
+              v-if="activeEventTab === 'graph'"
               class="editor-modal__close"
               type="button"
               aria-label="关闭编辑窗口"
@@ -942,7 +968,7 @@ watch(
               ×
             </button>
             <EventDetailPanel
-              v-if="activeEventTab !== 'bigOnce'"
+              v-if="activeEventTab === 'graph'"
               :event="activeRegularDraftEvent"
               :event-type="activeEventTab"
               :mode="isCreateMode ? 'create' : 'edit'"
@@ -952,8 +978,20 @@ watch(
               @save="handleSaveEvent"
             />
             <BigOnceEventDetailPanel
-              v-else
+              v-else-if="activeEventTab === 'bigOnce'"
               :event="activeDraftEvent as StoryBigOnceEventFile | null"
+              :event-locations="storyDocument.eventLocations"
+              :mode="isCreateMode ? 'create' : 'edit'"
+              :roles="storyDocument.roles"
+              :saving="isSaving"
+              :scenes="storyDocument.scenes"
+              :vals="storyDocument.vals"
+              @close="closeEditor"
+              @save="handleSaveEvent"
+            />
+            <LoopEventDetailPanel
+              v-else
+              :event="activeDraftEvent as StoryLoopEventFile | null"
               :event-locations="storyDocument.eventLocations"
               :mode="isCreateMode ? 'create' : 'edit'"
               :roles="storyDocument.roles"

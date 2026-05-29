@@ -1,20 +1,79 @@
 <script setup lang="ts">
-import type { StoryEventFile } from "@story-mgr/core"
+import type { StoryLoopEventFile } from "@story-mgr/core"
 
-defineProps<{
-  events: StoryEventFile[]
+const props = defineProps<{
+  events: StoryLoopEventFile[]
   selectedEventId: string | null
 }>()
 
 const emit = defineEmits<{
   select: [eventId: string]
   edit: [eventId: string]
+  delete: [eventId: string]
   create: []
 }>()
+
+const selectedEvent = computed(() => {
+  return props.events.find((event) => event.id === props.selectedEventId) ?? null
+})
+
+function summarizeTrigger(expression: string) {
+  const trimmed = expression.trim()
+
+  if (!trimmed) {
+    return "无条件触发"
+  }
+
+  if (trimmed.length <= 56) {
+    return trimmed
+  }
+
+  return `${trimmed.slice(0, 56)}...`
+}
+
+function formatLoopMode(event: StoryLoopEventFile) {
+  if (event.loop.mode === "daily") {
+    return "每天"
+  }
+
+  if (event.loop.mode === "weekly") {
+    const weekdayMap: Record<number, string> = {
+      1: "周一",
+      2: "周二",
+      3: "周三",
+      4: "周四",
+      5: "周五",
+      6: "周六",
+      7: "周日"
+    }
+
+    return `每周 ${weekdayMap[event.loop.weekday ?? 1] ?? "周一"}`
+  }
+
+  if (event.loop.mode === "monthly") {
+    return `每月 ${event.loop.month_day ?? 1} 日`
+  }
+
+  return `每 ${event.loop.interval_days ?? 1} 天`
+}
 
 function handleEdit(eventId: string) {
   emit("select", eventId)
   emit("edit", eventId)
+}
+
+function handleDelete(event: StoryLoopEventFile) {
+  const label = event.title.trim() || event.id
+  const confirmed =
+    typeof window === "undefined"
+      ? true
+      : window.confirm(`确认删除事件“${label}”吗？\n\n删除后无法撤销。`)
+
+  if (!confirmed) {
+    return
+  }
+
+  emit("delete", event.id)
 }
 </script>
 
@@ -44,26 +103,44 @@ function handleEdit(eventId: string) {
         class="loop-card"
         :class="{ 'loop-card--active': event.id === selectedEventId }"
       >
-        <div class="loop-card__rail" aria-hidden="true" />
-
         <button class="loop-card__body" type="button" @click="emit('select', event.id)">
           <div class="loop-card__top">
             <strong class="loop-card__title">{{ event.title }}</strong>
-            <span class="loop-card__badge">{{ event.kind }}</span>
+            <span class="loop-card__badge">{{ formatLoopMode(event) }}</span>
           </div>
           <span class="loop-card__id">{{ event.id }}</span>
-          <p class="loop-card__text">
-            {{ event.body?.trim() || "暂无正文内容。" }}
-          </p>
+          <div class="loop-card__facts">
+            <span class="loop-card__fact">
+              <strong>触发</strong>
+              <span>{{ summarizeTrigger(event.trigger_expr) }}</span>
+            </span>
+            <span class="loop-card__fact">
+              <strong>地点</strong>
+              <span>{{ event.location.trim() || "未设置" }}</span>
+            </span>
+            <span class="loop-card__fact">
+              <strong>对象</strong>
+              <span>{{ event.object_keys.length }} 个</span>
+            </span>
+            <span class="loop-card__fact">
+              <strong>对白</strong>
+              <span>{{ event.dialogues.length }} 条</span>
+            </span>
+          </div>
         </button>
 
         <div class="loop-card__actions">
           <span class="loop-card__hint">
-            {{ event.id === selectedEventId ? "当前已选中" : "独立循环事件" }}
+            {{ selectedEvent?.id === event.id ? "当前已选中" : "独立循环事件" }}
           </span>
-          <button class="btn-secondary loop-card__edit" type="button" @click="handleEdit(event.id)">
-            编辑
-          </button>
+          <div class="loop-card__action-row">
+            <button class="btn-danger loop-card__delete" type="button" @click="handleDelete(event)">
+              删除
+            </button>
+            <button class="btn-secondary loop-card__edit" type="button" @click="handleEdit(event.id)">
+              编辑
+            </button>
+          </div>
         </div>
       </article>
     </div>
@@ -132,21 +209,21 @@ function handleEdit(eventId: string) {
 }
 
 .loop-card {
-  position: relative;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) max-content;
-  align-items: stretch;
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid rgba(124, 227, 195, 0.14);
-  border-radius: 24px;
-  background: rgba(8, 18, 29, 0.9);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(124, 227, 195, 0.16);
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(124, 227, 195, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(8, 18, 29, 0.88);
+  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.2);
   transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .loop-card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(124, 227, 195, 0.32);
+  transform: translateY(-2px);
+  border-color: rgba(124, 227, 195, 0.34);
 }
 
 .loop-card--active {
@@ -156,16 +233,9 @@ function handleEdit(eventId: string) {
     0 20px 30px rgba(0, 0, 0, 0.22);
 }
 
-.loop-card__rail {
-  width: 6px;
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(124, 227, 195, 0.95), rgba(135, 183, 255, 0.55));
-}
-
 .loop-card__body {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -202,19 +272,48 @@ function handleEdit(eventId: string) {
   font-size: 0.82rem;
 }
 
-.loop-card__text {
-  margin: 0;
+.loop-card__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.loop-card__fact {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.loop-card__fact strong {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.loop-card__fact span {
+  min-width: 0;
   color: var(--text-muted);
-  line-height: 1.6;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .loop-card__actions {
-  display: grid;
-  align-content: space-between;
-  justify-items: end;
-  gap: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
+.loop-card__action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loop-card__delete,
 .loop-card__edit {
   min-height: 30px;
 }
@@ -249,19 +348,18 @@ function handleEdit(eventId: string) {
   }
 
   .loop-board__header,
-  .loop-card {
+  .loop-card__actions {
     grid-template-columns: 1fr;
   }
 
   .loop-board__actions,
   .loop-card__actions {
     justify-content: flex-start;
-    justify-items: start;
+    align-items: stretch;
   }
 
-  .loop-card__rail {
-    width: 100%;
-    height: 6px;
+  .loop-card__facts {
+    grid-template-columns: 1fr;
   }
 }
 </style>

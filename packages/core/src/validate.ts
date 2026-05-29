@@ -126,6 +126,47 @@ function validateBigOnceEvent(
   }
 }
 
+function validateLoopEvent(
+  event: StoryLoopEventFile,
+  eventIndex: number,
+  document: StoryDocument,
+  issues: ValidationIssue[]
+) {
+  validateBigOnceEvent(event, eventIndex, document, issues)
+
+  const loopPath = ["loopEvents", String(eventIndex), "loop"] as const
+
+  if (event.loop.mode === "weekly" && !event.loop.weekday) {
+    pushIssue(
+      issues,
+      "error",
+      "loop.schedule-weekday-missing",
+      `Loop event "${event.id}" requires weekday when mode is weekly.`,
+      [...loopPath, "weekday"]
+    )
+  }
+
+  if (event.loop.mode === "monthly" && !event.loop.month_day) {
+    pushIssue(
+      issues,
+      "error",
+      "loop.schedule-month-day-missing",
+      `Loop event "${event.id}" requires month_day when mode is monthly.`,
+      [...loopPath, "month_day"]
+    )
+  }
+
+  if (event.loop.mode === "interval_days" && !event.loop.interval_days) {
+    pushIssue(
+      issues,
+      "error",
+      "loop.schedule-interval-missing",
+      `Loop event "${event.id}" requires interval_days when mode is interval_days.`,
+      [...loopPath, "interval_days"]
+    )
+  }
+}
+
 function collectReachableEvents(
   startEventId: string,
   eventMap: Map<string, StoryEventFile>
@@ -213,6 +254,10 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
 
       if (group.key === "bigOnceEvents") {
         validateBigOnceEvent(event as StoryBigOnceEventFile, eventIndex, document, issues)
+      }
+
+      if (group.key === "loopEvents") {
+        validateLoopEvent(event as StoryLoopEventFile, eventIndex, document, issues)
       }
     }
   }

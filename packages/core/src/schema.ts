@@ -270,9 +270,15 @@ export const storyBigOnceEventSchema = storyEventSchema.extend({
 
 export const storyBigOnceEventsSchema = z.array(storyBigOnceEventSchema).default([])
 
-export const storyLoopEventSchema = storyEventSchema.extend({
-  trigger: storyEventTriggerSchema.optional(),
-  cooldown: looseMetaSchema.optional()
+export const storyLoopRuleSchema = z.object({
+  mode: z.enum(["daily", "weekly", "monthly", "interval_days"]),
+  interval_days: z.number().int().min(1).optional(),
+  weekday: z.number().int().min(1).max(7).optional(),
+  month_day: z.number().int().min(1).max(31).optional()
+})
+
+export const storyLoopEventSchema = storyBigOnceEventSchema.extend({
+  loop: storyLoopRuleSchema
 })
 
 export const storyLoopEventsSchema = z.array(storyLoopEventSchema).default([])
