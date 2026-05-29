@@ -177,6 +177,32 @@ function formatAssetMeta(meta: StoryAssetMetadata | null) {
 }
 
 function formatErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object") {
+    const responseError = error as {
+      data?: {
+        error?: {
+          message?: string
+        }
+      }
+      message?: string
+      statusMessage?: string
+    }
+
+    const apiMessage = responseError.data?.error?.message?.trim()
+
+    if (apiMessage) {
+      return apiMessage
+    }
+
+    if (typeof responseError.message === "string" && responseError.message.trim()) {
+      return responseError.message
+    }
+
+    if (typeof responseError.statusMessage === "string" && responseError.statusMessage.trim()) {
+      return responseError.statusMessage
+    }
+  }
+
   return error instanceof Error ? error.message : fallback
 }
 

@@ -57,12 +57,16 @@ export function createApp(config: ApiConfig) {
   app.use(bodyParser())
   app.use(async (context, next) => {
     const startedAt = Date.now()
-    await next()
-    const elapsedMs = Date.now() - startedAt
 
-    console.info(
-      `[api] ${context.method} ${context.path} -> ${context.status} (${elapsedMs}ms)`
-    )
+    try {
+      await next()
+    } finally {
+      const elapsedMs = Date.now() - startedAt
+
+      console.info(
+        `[api] ${context.method} ${context.path} -> ${context.status} (${elapsedMs}ms)`
+      )
+    }
   })
 
   app.use(storiesRouter.routes())

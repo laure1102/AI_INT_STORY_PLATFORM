@@ -55,6 +55,7 @@ export interface StoryRoleAiConfig {
 
 export interface StoryNormalRoleDefinition {
   name: string
+  zhiye: string
   descr: string
   prompt: string
   img_raw: string
@@ -64,6 +65,7 @@ export interface StoryNormalRoleDefinition {
 
 export interface StoryImportantRoleDefinition {
   name: string
+  zhiye: string
   descr: string
   descr_male: string
   descr_female: string

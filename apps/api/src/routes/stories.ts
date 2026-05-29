@@ -194,7 +194,12 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     )
 
     context.body = {
-      asset: await store.writeLocationImageSource(storyId, body.targetName, image.buffer)
+      asset: await store.writeLocationImageSource(
+        storyId,
+        body.targetName,
+        image.buffer,
+        image.mimeType
+      )
     } satisfies GenerateLocationImageResponse
   })
 
@@ -212,7 +217,12 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     )
 
     context.body = {
-      asset: await store.writeRoleImageSource(storyId, body.targetName, image.buffer)
+      asset: await store.writeRoleImageSource(
+        storyId,
+        body.targetName,
+        image.buffer,
+        image.mimeType
+      )
     } satisfies GenerateRoleImageResponse
   })
 

@@ -76,7 +76,8 @@ export interface StoryFileStore {
   writeLocationImageSource(
     storyId: string,
     targetName: string,
-    fileContent: Buffer
+    fileContent: Buffer,
+    mimeType?: string
   ): Promise<StoryAssetMetadata>
   compressLocationImage(
     storyId: string,
@@ -85,7 +86,8 @@ export interface StoryFileStore {
   writeRoleImageSource(
     storyId: string,
     targetName: string,
-    fileContent: Buffer
+    fileContent: Buffer,
+    mimeType?: string
   ): Promise<StoryAssetMetadata>
   compressRoleImage(
     storyId: string,
@@ -256,6 +258,12 @@ const imageMimeTypes = {
   ".webp": "image/webp"
 } as const
 
+const mimeTypeExtensions = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp"
+} as const
+
 function normalizeStoryAssetPath(assetPath: string) {
   const trimmedPath = assetPath.replace(/\\/g, "/").trim()
 
@@ -337,6 +345,14 @@ function resolveUploadExtension(fileName: string) {
   }
 
   return extension
+}
+
+function resolveExtensionFromMimeType(mimeType: string | undefined) {
+  if (!mimeType) {
+    return ".png"
+  }
+
+  return mimeTypeExtensions[mimeType.trim().toLowerCase() as keyof typeof mimeTypeExtensions] ?? ".png"
 }
 
 async function ensureReadableImage(fileContent: Buffer) {
@@ -980,12 +996,14 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   async function writeLocationImageSource(
     storyId: string,
     targetName: string,
-    fileContent: Buffer
+    fileContent: Buffer,
+    mimeType?: string
   ): Promise<StoryAssetMetadata> {
     await ensureStoryExists(dataDir, storyId)
     const paths = createStoryPaths(dataDir, storyId)
     const fileStem = sanitizeAssetStem(targetName)
-    const uniqueName = `${Date.now().toString(36)}-${fileStem}.png`
+    const extension = resolveExtensionFromMimeType(mimeType)
+    const uniqueName = `${Date.now().toString(36)}-${fileStem}${extension}`
     const assetPath = path.posix.join("assets", "event_location", "raw", uniqueName)
     const outputPath = path.join(paths.eventLocationRawDir, uniqueName)
 
@@ -1032,12 +1050,14 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   async function writeRoleImageSource(
     storyId: string,
     targetName: string,
-    fileContent: Buffer
+    fileContent: Buffer,
+    mimeType?: string
   ): Promise<StoryAssetMetadata> {
     await ensureStoryExists(dataDir, storyId)
     const paths = createStoryPaths(dataDir, storyId)
     const fileStem = sanitizeAssetStem(targetName)
-    const uniqueName = `${Date.now().toString(36)}-${fileStem}.png`
+    const extension = resolveExtensionFromMimeType(mimeType)
+    const uniqueName = `${Date.now().toString(36)}-${fileStem}${extension}`
     const assetPath = path.posix.join("assets", "roles", "raw", uniqueName)
     const outputPath = path.join(paths.roleRawDir, uniqueName)
 

@@ -27,6 +27,7 @@ interface NormalRoleDraft {
   name: string
   prompt: string
   selected: boolean
+  zhiye: string
 }
 
 interface ImportantRoleDraft {
@@ -50,6 +51,7 @@ interface ImportantRoleDraft {
   qufen_xingbie: boolean
   selected: boolean
   xingge: string
+  zhiye: string
 }
 
 interface RoleAssetState {
@@ -272,7 +274,8 @@ function cloneNormalRole(role: StoryNormalRoleDefinition): NormalRoleDraft {
     img_raw: normalizeText(role.img_raw),
     name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
-    selected: false
+    selected: false,
+    zhiye: normalizeText(role.zhiye)
   }
 
   initializeNormalRoleState(draftRole)
@@ -300,7 +303,8 @@ function cloneImportantRole(role: StoryImportantRoleDefinition): ImportantRoleDr
     prompt_male: normalizeText(role.prompt_male),
     qufen_xingbie: Boolean(role.qufen_xingbie),
     selected: false,
-    xingge: normalizeText(role.xingge)
+    xingge: normalizeText(role.xingge),
+    zhiye: normalizeText(role.zhiye)
   }
 
   initializeImportantRoleState(draftRole)
@@ -325,6 +329,32 @@ function formatAssetMeta(meta: StoryAssetMetadata | null) {
 }
 
 function formatErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object") {
+    const responseError = error as {
+      data?: {
+        error?: {
+          message?: string
+        }
+      }
+      message?: string
+      statusMessage?: string
+    }
+
+    const apiMessage = responseError.data?.error?.message?.trim()
+
+    if (apiMessage) {
+      return apiMessage
+    }
+
+    if (typeof responseError.message === "string" && responseError.message.trim()) {
+      return responseError.message
+    }
+
+    if (typeof responseError.statusMessage === "string" && responseError.statusMessage.trim()) {
+      return responseError.statusMessage
+    }
+  }
+
   return error instanceof Error ? error.message : fallback
 }
 
@@ -611,7 +641,8 @@ function addNormalRole() {
     img_raw: "",
     name: getNextDefaultName("normal"),
     prompt: "",
-    selected: false
+    selected: false,
+    zhiye: ""
   }
 
   initializeNormalRoleState(role)
@@ -639,7 +670,8 @@ function addImportantRole() {
     prompt_male: "",
     qufen_xingbie: false,
     selected: false,
-    xingge: ""
+    xingge: "",
+    zhiye: ""
   }
 
   initializeImportantRoleState(role)
@@ -1299,7 +1331,8 @@ function submitDraft() {
           prompt_female: isSplitByGender ? role.prompt_female.trim() : "",
           prompt_male: isSplitByGender ? role.prompt_male.trim() : "",
           qufen_xingbie: isSplitByGender,
-          xingge: role.xingge.trim()
+          xingge: role.xingge.trim(),
+          zhiye: role.zhiye.trim()
         }
       })
     },
@@ -1317,7 +1350,8 @@ function submitDraft() {
         img_compress_2: role.img_compress_2.trim(),
         img_raw: role.img_raw.trim(),
         name: sanitizeNameInput(role.name),
-        prompt: role.prompt.trim()
+        prompt: role.prompt.trim(),
+        zhiye: role.zhiye.trim()
       }))
     }
   })
@@ -1512,6 +1546,7 @@ watch(
                   <tr>
                     <th class="roles-dialog__select-col">选择</th>
                     <th>名称</th>
+                    <th>职业</th>
                     <th>描述</th>
                     <th>提示词</th>
                     <th>图片</th>
@@ -1526,6 +1561,9 @@ watch(
                     </td>
                     <td>
                       <input v-model="role.name" class="text-input roles-dialog__cell-input" type="text" placeholder="villager_old_man" />
+                    </td>
+                    <td>
+                      <input v-model="role.zhiye" class="text-input roles-dialog__cell-input" type="text" placeholder="算命先生" />
                     </td>
                     <td>
                       <textarea
@@ -1667,6 +1705,7 @@ watch(
                   <tr>
                     <th class="roles-dialog__select-col">选择</th>
                     <th>名称</th>
+                    <th>职业</th>
                     <th>描述</th>
                     <th>性格</th>
                     <th>区分性别</th>
@@ -1683,6 +1722,9 @@ watch(
                     </td>
                     <td>
                       <input v-model="role.name" class="text-input roles-dialog__cell-input" type="text" placeholder="suanming_xiansheng" />
+                    </td>
+                    <td>
+                      <input v-model="role.zhiye" class="text-input roles-dialog__cell-input" type="text" placeholder="县长" />
                     </td>
                     <td>
                       <div v-if="role.qufen_xingbie" class="roles-dialog__asset-group roles-dialog__asset-group--images">
