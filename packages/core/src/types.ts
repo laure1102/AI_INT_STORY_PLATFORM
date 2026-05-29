@@ -156,9 +156,24 @@ export type StoryEventCollectionType = "graph" | "bigOnce" | "loop"
 
 export type StoryGraphEventsFile = StoryEventFile[]
 
-export interface StoryBigOnceEventFile extends Omit<StoryEventFile, "next"> {
-  next: string[]
-  trigger?: StoryEventTrigger
+export type StoryBigOnceSpeakerType = "player" | "object"
+
+export interface StoryBigOnceDialogueDefinition {
+  speaker_type: StoryBigOnceSpeakerType
+  speaker_key: string
+  content: string
+}
+
+export interface StoryBigOnceEventFile {
+  id: string
+  title: string
+  trigger_expr: string
+  init_script: string
+  object_keys: string[]
+  dialogues: StoryBigOnceDialogueDefinition[]
+  location: string
+  bgm: string
+  end_script: string
 }
 
 export type StoryBigOnceEventsFile = StoryBigOnceEventFile[]
@@ -170,6 +185,11 @@ export interface StoryLoopEventFile extends Omit<StoryEventFile, "next"> {
 }
 
 export type StoryLoopEventsFile = StoryLoopEventFile[]
+
+export type StoryAnyEventFile =
+  | StoryEventFile
+  | StoryBigOnceEventFile
+  | StoryLoopEventFile
 
 export interface StoryDocument {
   story: StoryMetaFile

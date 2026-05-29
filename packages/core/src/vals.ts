@@ -11,14 +11,57 @@ export interface StoryValCalcEvaluation {
   result: number
 }
 
+export interface StoryBooleanExpressionEvaluation {
+  expression: string
+  result: boolean
+}
+
 export interface StoryValCalcDisplay {
   ok: boolean
   text: string
   detail?: string
 }
 
+export interface StoryScriptExecutionResult {
+  vals: StoryValsFile
+  locals: Record<string, unknown>
+}
+
+export interface StoryScriptValidationIssue {
+  lineNumber: number
+  message: string
+}
+
+interface StoryValueEntryReference {
+  group: StoryValDefinition
+  row: StoryValEntryDefinition
+  groupName: string
+  rowName: string
+}
+
+interface StoryScriptStatement {
+  kind: "declareLocal" | "assignLocal" | "assignGlobal"
+  lineNumber: number
+  target: string
+  expression: string
+}
+
+class StoryScriptError extends Error {
+  lineNumber: number
+
+  constructor(lineNumber: number, message: string) {
+    super(message)
+    this.name = "StoryScriptError"
+    this.lineNumber = lineNumber
+  }
+}
+
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value : ""
+}
+
+function normalizeGroupName(value: unknown) {
+  return normalizeText(value).trim()
 }
 
 function normalizeRowName(value: unknown) {
@@ -27,6 +70,39 @@ function normalizeRowName(value: unknown) {
 
 function isCalcRow(row: Pick<StoryValEntryDefinition, "value_type">) {
   return row.value_type === "calc"
+}
+
+function cloneStoryValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneStoryValue(item))
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        cloneStoryValue(item)
+      ])
+    )
+  }
+
+  return value
+}
+
+function cloneStoryValsFile(valsFile: StoryValsFile): StoryValsFile {
+  return {
+    variables: valsFile.variables.map((group) => ({
+      name: group.name,
+      description: group.description,
+      vals: group.vals.map((row) => ({
+        name: row.name,
+        description: row.description,
+        value_type: row.value_type,
+        value: cloneStoryValue(row.value),
+        calc_rule: row.calc_rule
+      }))
+    }))
+  }
 }
 
 const CALC_MATH_CONTEXT = {
@@ -112,27 +188,64 @@ const CALC_BARE_MATH_FUNCTION_ALIASES: Array<[RegExp, string]> = [
   [/\btrunc\b/g, "__math_trunc"]
 ]
 
-function normalizeCalcExpression(calcRule: string) {
-  let expression = calcRule
+const SCRIPT_RESERVED_IDENTIFIERS = new Set([
+  "Math",
+  "E",
+  "PI",
+  "abs",
+  "acos",
+  "asin",
+  "atan",
+  "atan2",
+  "ceil",
+  "clamp",
+  "cos",
+  "exp",
+  "floor",
+  "log",
+  "log10",
+  "log2",
+  "max",
+  "min",
+  "pow",
+  "round",
+  "sign",
+  "sin",
+  "sqrt",
+  "tan",
+  "trunc",
+  "true",
+  "false",
+  "null"
+])
+
+function normalizeCalcExpression(expression: string) {
+  let normalizedExpression = expression
 
   for (const [pattern, replacement] of CALC_MATH_ALIAS_PATTERNS) {
-    expression = expression.replace(pattern, replacement)
+    normalizedExpression = normalizedExpression.replace(pattern, replacement)
   }
 
   for (const [pattern, replacement] of CALC_BARE_MATH_FUNCTION_ALIASES) {
-    expression = expression.replace(pattern, replacement)
+    normalizedExpression = normalizedExpression.replace(pattern, replacement)
   }
 
-  return expression
+  return normalizedExpression
 }
 
-function assertCalcExpressionIdentifiers(expression: string) {
-  const allowedIdentifiers = new Set(CALC_MATH_CONTEXT_KEYS)
+function assertExpressionIdentifiers(expression: string, extraAllowedIdentifiers: string[] = []) {
+  const allowedIdentifiers = new Set([
+    ...CALC_MATH_CONTEXT_KEYS,
+    ...extraAllowedIdentifiers,
+    "true",
+    "false",
+    "null"
+  ])
   const identifiers = expression.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) ?? []
 
   for (const identifier of identifiers) {
-    if (!allowedIdentifiers.has(identifier as keyof typeof CALC_MATH_CONTEXT)) {
-      throw new Error(`规则中包含不支持的标识符：${identifier}`)
+    if (!allowedIdentifiers.has(identifier)) {
+      throw new Error(`Unsupported identifier in expression: ${identifier}`)
     }
   }
 }
@@ -214,22 +327,119 @@ function toNumericValue(value: unknown) {
   return null
 }
 
-function evaluateArithmeticExpression(expression: string) {
+function toExpressionValue(value: unknown) {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error("Referenced value must be a finite number.")
+    }
+
+    return value
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    const numericValue = toNumericValue(trimmed)
+    return numericValue ?? value
+  }
+
+  if (typeof value === "boolean" || value === null) {
+    return value
+  }
+
+  throw new Error("Referenced value type is not supported in trigger expressions.")
+}
+
+function buildExpressionEvaluator(
+  expression: string,
+  extraContext: Array<{ key: string; value: unknown }>
+) {
+  const keys = [...CALC_MATH_CONTEXT_KEYS, ...extraContext.map((item) => item.key)]
+  const values = [
+    ...CALC_MATH_CONTEXT_KEYS.map((key) => CALC_MATH_CONTEXT[key]),
+    ...extraContext.map((item) => item.value)
+  ]
+
+  return Function(
+    ...keys,
+    `"use strict"; return (${expression})`
+  )(...values) as unknown
+}
+
+function evaluateDynamicExpression(
+  expression: string,
+  extraContext: Array<{ key: string; value: unknown }> = []
+) {
+  const normalizedExpression = normalizeCalcExpression(expression)
+
+  if (!/^[\d+\-*/%().,\sA-Za-z_<>=!&|'"`]+$/.test(normalizedExpression)) {
+    throw new Error("The expression contains unsupported characters.")
+  }
+
+  assertExpressionIdentifiers(
+    normalizedExpression,
+    extraContext.map((item) => item.key)
+  )
+
+  const result = buildExpressionEvaluator(normalizedExpression, extraContext)
+
+  if (typeof result === "number") {
+    if (!Number.isFinite(result)) {
+      throw new Error("The expression result must be a finite number.")
+    }
+
+    return result
+  }
+
+  if (typeof result === "string" || typeof result === "boolean" || result === null) {
+    return result
+  }
+
+  throw new Error("The expression result type is not supported.")
+}
+
+function evaluateArithmeticExpression(
+  expression: string,
+  extraContext: Array<{ key: string; value: unknown }> = []
+) {
   const normalizedExpression = normalizeCalcExpression(expression)
 
   if (!/^[\d+\-*/%().,\sA-Za-z_]+$/.test(normalizedExpression)) {
-    throw new Error("规则中包含不支持的字符")
+    throw new Error("The expression contains unsupported characters.")
   }
 
-  assertCalcExpressionIdentifiers(normalizedExpression)
+  assertExpressionIdentifiers(
+    normalizedExpression,
+    extraContext.map((item) => item.key)
+  )
 
-  const result = Function(
-    ...CALC_MATH_CONTEXT_KEYS,
-    `"use strict"; return (${normalizedExpression})`
-  )(...CALC_MATH_CONTEXT_KEYS.map((key) => CALC_MATH_CONTEXT[key])) as unknown
+  const result = buildExpressionEvaluator(normalizedExpression, extraContext)
 
   if (typeof result !== "number" || !Number.isFinite(result)) {
-    throw new Error("计算结果不是有效数值")
+    throw new Error("The calculation result must be a finite number.")
+  }
+
+  return result
+}
+
+function evaluateBooleanExpression(
+  expression: string,
+  extraContext: Array<{ key: string; value: unknown }> = []
+) {
+  const normalizedExpression = normalizeCalcExpression(expression)
+
+  if (!/^[\d+\-*/%().,\sA-Za-z_<>=!&|'"`]+$/.test(normalizedExpression)) {
+    throw new Error("The expression contains unsupported characters.")
+  }
+
+  assertExpressionIdentifiers(
+    normalizedExpression,
+    extraContext.map((item) => item.key)
+  )
+
+  const result = buildExpressionEvaluator(normalizedExpression, extraContext)
+
+  if (typeof result !== "boolean") {
+    throw new Error("The trigger expression must return a boolean value.")
   }
 
   return result
@@ -243,23 +453,23 @@ function resolveCalcEntryValue(
   maxDepth: number
 ): number {
   if (depth > maxDepth) {
-    throw new Error(`最多只支持 ${maxDepth} 层嵌套计算`)
+    throw new Error(`Calculation nesting exceeds the max depth of ${maxDepth}.`)
   }
 
   if (visited.has(rowName)) {
-    throw new Error(`检测到循环引用：${[...visited, rowName].join(" -> ")}`)
+    throw new Error(`Circular calc reference detected: ${[...visited, rowName].join(" -> ")}`)
   }
 
   const row = group.vals.find((item) => normalizeRowName(item.name) === rowName)
 
   if (!row) {
-    throw new Error(`未找到变量 {${rowName}}`)
+    throw new Error(`Referenced variable was not found: {${rowName}}`)
   }
 
   if (!isCalcRow(row)) {
     const numericValue = toNumericValue(row.value)
     if (numericValue === null) {
-      throw new Error(`变量 {${rowName}} 不是数值`)
+      throw new Error(`Referenced variable is not numeric: {${rowName}}`)
     }
 
     return numericValue
@@ -267,7 +477,7 @@ function resolveCalcEntryValue(
 
   const nestedRule = normalizeText(row.calc_rule).trim()
   if (!nestedRule) {
-    throw new Error(`变量 {${rowName}} 缺少 calc_rule`)
+    throw new Error(`calc_rule is required for {${rowName}}`)
   }
 
   const nextVisited = new Set(visited)
@@ -278,6 +488,89 @@ function resolveCalcEntryValue(
     depth: depth + 1,
     maxDepth
   }).result
+}
+
+function resolveStoryValueReference(
+  valsFile: StoryValsFile,
+  token: string,
+  maxDepth: number
+) {
+  const reference = getStoryValueEntryReference(valsFile, token)
+  const { group, row, groupName, rowName } = reference
+
+  if (isCalcRow(row)) {
+    const visited = new Set<string>()
+    if (rowName) {
+      visited.add(rowName)
+    }
+
+    return evaluateStoryValCalcRule(group, normalizeText(row.calc_rule), {
+      visited,
+      depth: 1,
+      maxDepth
+    }).result
+  }
+
+  return toExpressionValue(row.value)
+}
+
+function getStoryValueEntryReference(
+  valsFile: StoryValsFile,
+  token: string
+): StoryValueEntryReference {
+  const [groupNameRaw, rowNameRaw, ...rest] = token.split(".")
+  const groupName = normalizeGroupName(groupNameRaw)
+  const rowName = normalizeRowName(rowNameRaw)
+
+  if (!groupName || !rowName || rest.length > 0) {
+    throw new Error(`Invalid trigger reference: {${token}}. Use {group.row}.`)
+  }
+
+  const group = valsFile.variables.find((item) => normalizeGroupName(item.name) === groupName)
+  if (!group) {
+    throw new Error(`Referenced variable group was not found: ${groupName}`)
+  }
+
+  const row = group.vals.find((item) => normalizeRowName(item.name) === rowName)
+  if (!row) {
+    throw new Error(`Referenced variable was not found: {${groupName}.${rowName}}`)
+  }
+
+  return {
+    group,
+    row,
+    groupName,
+    rowName
+  }
+}
+
+function prepareExpressionTemplate(
+  expressionTemplate: string,
+  resolveToken: (token: string) => unknown
+) {
+  const extraContext: Array<{ key: string; value: unknown }> = []
+  let contextIndex = 0
+
+  const expression = expressionTemplate.replace(/\{([^{}]+)\}/g, (_match, token: string) => {
+    const trimmedToken = token.trim()
+
+    if (!trimmedToken) {
+      throw new Error("Empty placeholder is not allowed.")
+    }
+
+    const key = `__value_${contextIndex}`
+    contextIndex += 1
+    extraContext.push({
+      key,
+      value: resolveToken(trimmedToken)
+    })
+    return key
+  })
+
+  return {
+    expression,
+    extraContext
+  }
 }
 
 export function evaluateStoryValCalcRule(
@@ -294,27 +587,266 @@ export function evaluateStoryValCalcRule(
   const visited = options?.visited ?? new Set<string>()
 
   if (depth > maxDepth) {
-    throw new Error(`最多只支持 ${maxDepth} 层嵌套计算`)
+    throw new Error(`Calculation nesting exceeds the max depth of ${maxDepth}.`)
   }
 
   const trimmedRule = normalizeText(calcRule).trim()
   if (!trimmedRule) {
-    throw new Error("请先输入 calc_rule")
+    throw new Error("calc_rule is required.")
   }
 
-  const expression = trimmedRule.replace(/\{([^{}]+)\}/g, (_match, token: string) => {
-    const rowName = token.trim()
-
-    if (!rowName) {
-      throw new Error("引用占位符不能为空")
-    }
-
-    return String(resolveCalcEntryValue(group, rowName, visited, depth, maxDepth))
-  })
+  const preparedExpression = prepareExpressionTemplate(trimmedRule, (token) =>
+    resolveCalcEntryValue(group, token, visited, depth, maxDepth)
+  )
 
   return {
-    expression,
-    result: evaluateArithmeticExpression(expression)
+    expression: preparedExpression.expression,
+    result: evaluateArithmeticExpression(
+      preparedExpression.expression,
+      preparedExpression.extraContext
+    )
+  }
+}
+
+export function evaluateStoryBooleanExpression(
+  valsFile: StoryValsFile,
+  expression: string,
+  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH
+): StoryBooleanExpressionEvaluation {
+  const trimmedExpression = normalizeText(expression).trim()
+
+  if (!trimmedExpression) {
+    return {
+      expression: "true",
+      result: true
+    }
+  }
+
+  const preparedExpression = prepareExpressionTemplate(trimmedExpression, (token) =>
+    resolveStoryValueReference(valsFile, token, maxDepth)
+  )
+
+  return {
+    expression: preparedExpression.expression,
+    result: evaluateBooleanExpression(
+      preparedExpression.expression,
+      preparedExpression.extraContext
+    )
+  }
+}
+
+function assertScriptLocalIdentifier(identifier: string) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) {
+    throw new Error(`Invalid temporary variable name: ${identifier}`)
+  }
+
+  if (identifier.startsWith("__")) {
+    throw new Error(`Temporary variable name is reserved: ${identifier}`)
+  }
+
+  if (SCRIPT_RESERVED_IDENTIFIERS.has(identifier)) {
+    throw new Error(`Temporary variable name is reserved: ${identifier}`)
+  }
+}
+
+function parseStoryScript(script: string) {
+  const statements: StoryScriptStatement[] = []
+  const lines = normalizeText(script).split(/\r?\n/)
+
+  for (const [lineIndex, rawLine] of lines.entries()) {
+    let line = rawLine.trim()
+
+    if (!line || line.startsWith("//")) {
+      continue
+    }
+
+    if (line.endsWith(";")) {
+      line = line.slice(0, -1).trimEnd()
+    }
+
+    if (!line) {
+      continue
+    }
+
+    const lineNumber = lineIndex + 1
+    const declareMatch = line.match(/^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/)
+    if (declareMatch) {
+      const identifier = declareMatch[1] ?? ""
+      const expression = declareMatch[2] ?? ""
+      statements.push({
+        kind: "declareLocal",
+        lineNumber,
+        target: identifier,
+        expression: expression.trim()
+      })
+      continue
+    }
+
+    const globalAssignMatch = line.match(/^\{([^{}]+)\}\s*=\s*(.+)$/)
+    if (globalAssignMatch) {
+      const token = globalAssignMatch[1] ?? ""
+      const expression = globalAssignMatch[2] ?? ""
+      statements.push({
+        kind: "assignGlobal",
+        lineNumber,
+        target: token.trim(),
+        expression: expression.trim()
+      })
+      continue
+    }
+
+    const localAssignMatch = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/)
+    if (localAssignMatch) {
+      const identifier = localAssignMatch[1] ?? ""
+      const expression = localAssignMatch[2] ?? ""
+      statements.push({
+        kind: "assignLocal",
+        lineNumber,
+        target: identifier,
+        expression: expression.trim()
+      })
+      continue
+    }
+
+    throw new StoryScriptError(lineNumber, "Unsupported script statement.")
+  }
+
+  return statements
+}
+
+function evaluateStoryScriptExpression(
+  valsFile: StoryValsFile,
+  expression: string,
+  locals: Record<string, unknown>,
+  maxDepth: number
+) {
+  const trimmedExpression = normalizeText(expression).trim()
+
+  if (!trimmedExpression) {
+    throw new Error("Script expression is required.")
+  }
+
+  const preparedExpression = prepareExpressionTemplate(trimmedExpression, (token) =>
+    resolveStoryValueReference(valsFile, token, maxDepth)
+  )
+
+  return {
+    expression: preparedExpression.expression,
+    result: evaluateDynamicExpression(preparedExpression.expression, [
+      ...preparedExpression.extraContext,
+      ...Object.entries(locals).map(([key, value]) => ({ key, value }))
+    ])
+  }
+}
+
+function assignStoryScriptGlobalValue(
+  valsFile: StoryValsFile,
+  token: string,
+  value: unknown
+) {
+  const reference = getStoryValueEntryReference(valsFile, token)
+
+  if (isCalcRow(reference.row)) {
+    throw new Error(`Cannot assign to calc variable: {${reference.groupName}.${reference.rowName}}`)
+  }
+
+  reference.row.value = value
+}
+
+export function executeStoryScript(
+  valsFile: StoryValsFile,
+  script: string,
+  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH
+): StoryScriptExecutionResult {
+  const nextVals = cloneStoryValsFile(valsFile)
+  const locals: Record<string, unknown> = {}
+
+  for (const statement of parseStoryScript(script)) {
+    try {
+      if (statement.kind === "declareLocal") {
+        assertScriptLocalIdentifier(statement.target)
+
+        if (Object.prototype.hasOwnProperty.call(locals, statement.target)) {
+          throw new Error(`Temporary variable "${statement.target}" is already declared.`)
+        }
+
+        locals[statement.target] = evaluateStoryScriptExpression(
+          nextVals,
+          statement.expression,
+          locals,
+          maxDepth
+        ).result
+        continue
+      }
+
+      if (statement.kind === "assignLocal") {
+        assertScriptLocalIdentifier(statement.target)
+
+        if (!Object.prototype.hasOwnProperty.call(locals, statement.target)) {
+          throw new Error(`Temporary variable "${statement.target}" was not declared.`)
+        }
+
+        locals[statement.target] = evaluateStoryScriptExpression(
+          nextVals,
+          statement.expression,
+          locals,
+          maxDepth
+        ).result
+        continue
+      }
+
+      const nextValue = evaluateStoryScriptExpression(
+        nextVals,
+        statement.expression,
+        locals,
+        maxDepth
+      ).result
+
+      assignStoryScriptGlobalValue(nextVals, statement.target, nextValue)
+    } catch (error) {
+      if (error instanceof StoryScriptError) {
+        throw error
+      }
+
+      throw new StoryScriptError(
+        statement.lineNumber,
+        error instanceof Error ? error.message : "Script execution failed."
+      )
+    }
+  }
+
+  return {
+    vals: nextVals,
+    locals: { ...locals }
+  }
+}
+
+export function validateStoryScript(
+  valsFile: StoryValsFile,
+  script: string,
+  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH
+): StoryScriptValidationIssue[] {
+  const trimmedScript = normalizeText(script).trim()
+
+  if (!trimmedScript) {
+    return []
+  }
+
+  try {
+    executeStoryScript(valsFile, script, maxDepth)
+    return []
+  } catch (error) {
+    if (error instanceof StoryScriptError) {
+      return [{
+        lineNumber: error.lineNumber,
+        message: error.message
+      }]
+    }
+
+    return [{
+      lineNumber: 0,
+      message: error instanceof Error ? error.message : "Script validation failed."
+    }]
   }
 }
 
@@ -346,7 +878,7 @@ export function getStoryValCalcDisplay(
     return {
       ok: false,
       text: "error",
-      detail: error instanceof Error ? error.message : "计算失败"
+      detail: error instanceof Error ? error.message : "Calculation failed."
     }
   }
 }
@@ -383,7 +915,7 @@ export function validateStoryValsCalcRules(
             rowIndex,
             groupName: group.name,
             rowName: row.name,
-            message: error instanceof Error ? error.message : "calc_rule 校验失败"
+            message: error instanceof Error ? error.message : "calc_rule validation failed."
           }
         ]
       }

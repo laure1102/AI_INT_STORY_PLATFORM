@@ -23,6 +23,7 @@ import type {
   SaveEventLocationsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
+  StoryDeleteEventResponse,
   StoryRolesResponse,
   SaveValsRequest,
   StoryAssetResponse
@@ -119,6 +120,18 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
         normalizeEventCollectionType(body.collectionType)
       )
     }
+  })
+
+  router.delete("/stories/:storyId/events/:eventId", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const eventId = requireParam(context.params.eventId, "eventId")
+    const collectionType = normalizeEventCollectionType(context.query.collectionType)
+
+    await store.deleteEvent(storyId, eventId, collectionType)
+
+    context.body = {
+      ok: true
+    } satisfies StoryDeleteEventResponse
   })
 
   router.put("/stories/:storyId/vals", async (context) => {

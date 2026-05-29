@@ -1,8 +1,8 @@
 import type {
   AppSettingsFile,
+  StoryAnyEventFile,
   StoryEventCollectionType,
   StoryDocument,
-  StoryEventFile,
   StoryEventLocationFile,
   StoryRolesFile,
   StorySceneFile,
@@ -30,6 +30,7 @@ import type {
   SaveValsRequest,
   StoryAssetMetadata,
   StoryDocumentResponse,
+  StoryDeleteEventResponse,
   StoryEventResponse,
   StoryEventLocationsResponse,
   StoryRolesResponse,
@@ -63,7 +64,7 @@ export function useStoryApi() {
     storyId: string,
     eventId: string,
     collectionType: StoryEventCollectionType = "graph"
-  ): Promise<StoryEventFile> {
+  ): Promise<StoryAnyEventFile> {
     const response = await $fetch<StoryEventResponse>(
       `${apiBase}/stories/${storyId}/events/${eventId}`,
       {
@@ -77,9 +78,9 @@ export function useStoryApi() {
 
   async function saveEvent(
     storyId: string,
-    event: StoryEventFile,
+    event: StoryAnyEventFile,
     collectionType: StoryEventCollectionType = "graph"
-  ): Promise<StoryEventFile> {
+  ): Promise<StoryAnyEventFile> {
     const response = await $fetch<StoryEventResponse>(
       `${apiBase}/stories/${storyId}/events/${event.id}`,
       {
@@ -92,6 +93,19 @@ export function useStoryApi() {
     )
 
     return response.event
+  }
+
+  async function deleteEvent(
+    storyId: string,
+    eventId: string,
+    collectionType: StoryEventCollectionType = "graph"
+  ): Promise<void> {
+    await $fetch<StoryDeleteEventResponse>(`${apiBase}/stories/${storyId}/events/${eventId}`, {
+      method: "DELETE",
+      query: {
+        collectionType
+      }
+    })
   }
 
   async function saveVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile> {
@@ -316,6 +330,7 @@ export function useStoryApi() {
     getStoryAssetUrl,
     getStory,
     listStories,
+    deleteEvent,
     saveAppSettings,
     saveEvent,
     saveEventLocations,

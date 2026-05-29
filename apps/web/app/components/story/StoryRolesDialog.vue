@@ -754,22 +754,6 @@ const allSelected = computed({
   }
 })
 
-const duplicateNames = computed(() => {
-  const counts = new Map<string, number>()
-
-  for (const role of [...draft.normalRoles, ...draft.importantRoles]) {
-    const normalizedName = sanitizeNameInput(role.name)
-    if (!normalizedName) continue
-    counts.set(normalizedName, (counts.get(normalizedName) ?? 0) + 1)
-  }
-
-  return new Set(
-    Array.from(counts.entries())
-      .filter(([, count]) => count > 1)
-      .map(([name]) => name)
-  )
-})
-
 const hasInvalidDraft = computed(() => {
   if (parseImageDimensionInput(draft.normalAi.imageWidthText) === null) return true
   if (parseImageDimensionInput(draft.normalAi.imageHeightText) === null) return true
@@ -782,7 +766,6 @@ const hasInvalidDraft = computed(() => {
 
   return (
     [...draft.normalRoles, ...draft.importantRoles].some((role) => !sanitizeNameInput(role.name))
-    || duplicateNames.value.size > 0
   )
 })
 
@@ -1479,10 +1462,6 @@ watch(
                 }}
               </button>
             </div>
-          </div>
-
-          <div v-if="duplicateNames.size" class="roles-dialog__warning">
-            角色名称不能重复，请检查 `name`。
           </div>
 
           <div v-if="activeTab === 'normal'" class="roles-dialog__section">

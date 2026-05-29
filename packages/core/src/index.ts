@@ -1,4 +1,5 @@
 export * from "./schema"
+export * from "./roles"
 export * from "./vals"
 export * from "./types"
 export * from "./validate"

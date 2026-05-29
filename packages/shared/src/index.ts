@@ -1,5 +1,6 @@
 import type {
   AppSettingsFile,
+  StoryAnyEventFile,
   CompiledStory,
   StoryDocument,
   StoryEventCollectionType,
@@ -26,12 +27,16 @@ export interface StoryDocumentResponse {
 }
 
 export interface StoryEventResponse {
-  event: StoryEventFile
+  event: StoryAnyEventFile
+}
+
+export interface StoryDeleteEventResponse {
+  ok: true
 }
 
 export interface SaveEventRequest {
   collectionType: StoryEventCollectionType
-  event: StoryEventFile
+  event: StoryAnyEventFile
 }
 
 export interface StoryValsResponse {

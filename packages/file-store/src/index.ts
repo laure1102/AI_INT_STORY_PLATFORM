@@ -18,6 +18,7 @@ import {
   storySceneSchema,
   storyValsSchema,
   type AppSettingsFile,
+  type StoryAnyEventFile,
   type StoryBigOnceEventFile,
   type StoryBigOnceEventsFile,
   type StoryEventCollectionType,
@@ -61,14 +62,19 @@ export interface StoryFileStore {
     storyId: string,
     eventId: string,
     collectionType?: StoryEventCollectionType
-  ): Promise<StoryEventFile>
+  ): Promise<StoryAnyEventFile>
   writeAppSettings(settings: AppSettingsFile): Promise<AppSettingsFile>
   writeEvent(
     storyId: string,
     eventId: string,
-    event: StoryEventFile,
+    event: StoryAnyEventFile,
     collectionType?: StoryEventCollectionType
-  ): Promise<StoryEventFile>
+  ): Promise<StoryAnyEventFile>
+  deleteEvent(
+    storyId: string,
+    eventId: string,
+    collectionType?: StoryEventCollectionType
+  ): Promise<void>
   writeRoles(storyId: string, roles: StoryRolesFile): Promise<StoryRolesFile>
   writeEventLocations(
     storyId: string,
@@ -863,7 +869,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     storyId: string,
     eventId: string,
     collectionType: StoryEventCollectionType = "graph"
-  ): Promise<StoryEventFile> {
+  ): Promise<StoryAnyEventFile> {
     const normalizedCollectionType = normalizeEventCollectionType(collectionType)
     const events =
       normalizedCollectionType === "bigOnce"
@@ -891,9 +897,9 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   async function writeEvent(
     storyId: string,
     eventId: string,
-    event: StoryEventFile,
+    event: StoryAnyEventFile,
     collectionType: StoryEventCollectionType = "graph"
-  ): Promise<StoryEventFile> {
+  ): Promise<StoryAnyEventFile> {
     if (event.id !== eventId) {
       throw new FileStoreError("Event id in path and payload must match.", 400, "event.id-mismatch")
     }
@@ -949,6 +955,64 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     await writeJson5File(paths.graphEventsFile, nextGraphEvents satisfies StoryGraphEventsFile)
 
     return parsedEvent
+  }
+
+  async function deleteEvent(
+    storyId: string,
+    eventId: string,
+    collectionType: StoryEventCollectionType = "graph"
+  ): Promise<void> {
+    const paths = createStoryPaths(dataDir, storyId)
+    const normalizedCollectionType = normalizeEventCollectionType(collectionType)
+
+    if (normalizedCollectionType === "bigOnce") {
+      const bigOnceEvents = await readStoryBigOnceEvents(dataDir, storyId)
+      const nextBigOnceEvents = bigOnceEvents.filter((currentEvent) => currentEvent.id !== eventId)
+
+      if (nextBigOnceEvents.length === bigOnceEvents.length) {
+        throw new FileStoreError(`Event not found: ${eventId}`, 404, "event.not-found")
+      }
+
+      await writeJson5File(
+        paths.bigOnceEventsFile,
+        nextBigOnceEvents satisfies StoryBigOnceEventsFile
+      )
+
+      return
+    }
+
+    if (normalizedCollectionType === "loop") {
+      const loopEvents = await readStoryLoopEvents(dataDir, storyId)
+      const nextLoopEvents = loopEvents.filter((currentEvent) => currentEvent.id !== eventId)
+
+      if (nextLoopEvents.length === loopEvents.length) {
+        throw new FileStoreError(`Event not found: ${eventId}`, 404, "event.not-found")
+      }
+
+      await writeJson5File(paths.loopEventsFile, nextLoopEvents satisfies StoryLoopEventsFile)
+
+      return
+    }
+
+    const graphEvents = await readStoryGraphEvents(dataDir, storyId)
+    const hasTargetEvent = graphEvents.some((currentEvent) => currentEvent.id === eventId)
+
+    if (!hasTargetEvent) {
+      throw new FileStoreError(`Event not found: ${eventId}`, 404, "event.not-found")
+    }
+
+    const nextGraphEvents = graphEvents
+      .filter((currentEvent) => currentEvent.id !== eventId)
+      .map((currentEvent) =>
+        currentEvent.next.includes(eventId)
+          ? {
+              ...currentEvent,
+              next: currentEvent.next.filter((nextEventId) => nextEventId !== eventId)
+            }
+          : currentEvent
+      )
+
+    await writeJson5File(paths.graphEventsFile, nextGraphEvents satisfies StoryGraphEventsFile)
   }
 
   async function writeAppSettings(settings: AppSettingsFile): Promise<AppSettingsFile> {
@@ -1196,6 +1260,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     readEvent,
     writeAppSettings,
     writeEvent,
+    deleteEvent,
     writeRoles,
     writeEventLocations,
     writeVals,

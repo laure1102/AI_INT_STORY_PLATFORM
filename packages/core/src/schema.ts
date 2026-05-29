@@ -238,6 +238,12 @@ export const storyEventSchema = z.object({
   meta: z.record(z.unknown()).optional()
 })
 
+export const storyBigOnceDialogueSchema = z.object({
+  speaker_type: z.enum(["player", "object"]).default("object"),
+  speaker_key: z.string().default(""),
+  content: z.string().default("")
+})
+
 export const storyEventTriggerSchema = z.object({
   all: z.array(looseMetaSchema).optional(),
   any: z.array(looseMetaSchema).optional(),
@@ -247,7 +253,19 @@ export const storyEventTriggerSchema = z.object({
 export const storyGraphEventsSchema = z.array(storyEventSchema).default([])
 
 export const storyBigOnceEventSchema = storyEventSchema.extend({
-  trigger: storyEventTriggerSchema.optional()
+  id: z.string().min(1),
+  title: z.string().min(1),
+  trigger_expr: z.string().default(""),
+  init_script: z.string().default(""),
+  object_keys: z.array(z.string()).default([]),
+  dialogues: z.array(storyBigOnceDialogueSchema).default([]),
+  location: z.string().default(""),
+  bgm: z.string().default(""),
+  end_script: z.string().default("")
+}).omit({
+  body: true,
+  kind: true,
+  next: true
 })
 
 export const storyBigOnceEventsSchema = z.array(storyBigOnceEventSchema).default([])

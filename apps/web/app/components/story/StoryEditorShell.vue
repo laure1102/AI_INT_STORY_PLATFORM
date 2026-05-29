@@ -1,6 +1,8 @@
 ﻿<script setup lang="ts">
 import type {
   AppSettingsFile,
+  StoryAnyEventFile,
+  StoryBigOnceEventFile,
   StoryDocument,
   StoryEventCollectionType,
   StoryEventFile,
@@ -12,6 +14,7 @@ import type {
   ValidationResult
 } from "@story-mgr/core"
 import AppSettingsDialog from "./AppSettingsDialog.vue"
+import BigOnceEventDetailPanel from "./BigOnceEventDetailPanel.vue"
 import EventDetailPanel from "./EventDetailPanel.vue"
 import StoryBigOnceCanvas from "./StoryBigOnceCanvas.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
@@ -29,6 +32,7 @@ const props = defineProps<{
 
 const projectStore = useProjectStore()
 const {
+  deleteEvent,
   exportStory,
   getAppSettings,
   getStory,
@@ -51,7 +55,7 @@ const isExporting = shallowRef(false)
 const errorMessage = shallowRef<string | null>(null)
 const editingEventId = shallowRef<string | null>(null)
 const creatingFromEventId = shallowRef<string | null>(null)
-const creatingEventDraft = shallowRef<StoryEventFile | null>(null)
+const creatingEventDraft = shallowRef<StoryAnyEventFile | null>(null)
 const isValsDialogOpen = shallowRef(false)
 const isScenesDialogOpen = shallowRef(false)
 const isLocationsDialogOpen = shallowRef(false)
@@ -84,8 +88,32 @@ function getEventsByCollectionType(collectionType: EventCanvasTab) {
   return storyDocument.value.graphEvents
 }
 
-const activeEvents = computed<StoryEventFile[]>(() => {
+const activeEvents = computed<StoryAnyEventFile[]>(() => {
   return getEventsByCollectionType(activeEventTab.value)
+})
+
+const activeGraphEvents = computed<StoryEventFile[]>(() => {
+  if (activeEventTab.value !== "graph") {
+    return []
+  }
+
+  return getEventsByCollectionType("graph") as StoryEventFile[]
+})
+
+const activeBigOnceEvents = computed<StoryBigOnceEventFile[]>(() => {
+  if (activeEventTab.value !== "bigOnce") {
+    return []
+  }
+
+  return getEventsByCollectionType("bigOnce") as StoryBigOnceEventFile[]
+})
+
+const activeLoopEvents = computed<StoryEventFile[]>(() => {
+  if (activeEventTab.value !== "loop") {
+    return []
+  }
+
+  return getEventsByCollectionType("loop") as StoryEventFile[]
 })
 
 const selectedEventId = computed(() =>
@@ -108,6 +136,14 @@ const activeDraftEvent = computed(() => {
   return editingEvent.value
 })
 
+const activeRegularDraftEvent = computed<StoryEventFile | null>(() => {
+  if (activeEventTab.value === "bigOnce") {
+    return null
+  }
+
+  return activeDraftEvent.value as StoryEventFile | null
+})
+
 const isCreateMode = computed(() => !!creatingEventDraft.value)
 
 const issueSummary = computed(() => {
@@ -124,22 +160,23 @@ const activeEventTabLabel = computed(() => {
 
 function replaceEventInDocument(
   collectionType: EventCanvasTab,
-  savedEvent: StoryEventFile,
+  savedEvent: StoryAnyEventFile,
   matchEventId = savedEvent.id
 ) {
   if (!storyDocument.value) {
     return
   }
 
-  const sourceEvents = getEventsByCollectionType(collectionType)
-  const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
-  const nextEvents = hasExistingEvent
-    ? sourceEvents.map((currentEvent) =>
-        currentEvent.id === matchEventId ? savedEvent : currentEvent
-      )
-    : [...sourceEvents, savedEvent]
-
   if (collectionType === "bigOnce") {
+    const sourceEvents = storyDocument.value.bigOnceEvents
+    const typedSavedEvent = savedEvent as StoryBigOnceEventFile
+    const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
+    const nextEvents = hasExistingEvent
+      ? sourceEvents.map((currentEvent) =>
+          currentEvent.id === matchEventId ? typedSavedEvent : currentEvent
+        )
+      : [...sourceEvents, typedSavedEvent]
+
     storyDocument.value = {
       ...storyDocument.value,
       bigOnceEvents: nextEvents
@@ -148,6 +185,15 @@ function replaceEventInDocument(
   }
 
   if (collectionType === "loop") {
+    const sourceEvents = storyDocument.value.loopEvents
+    const typedSavedEvent = savedEvent as StoryEventFile
+    const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
+    const nextEvents = hasExistingEvent
+      ? sourceEvents.map((currentEvent) =>
+          currentEvent.id === matchEventId ? typedSavedEvent : currentEvent
+        )
+      : [...sourceEvents, typedSavedEvent]
+
     storyDocument.value = {
       ...storyDocument.value,
       loopEvents: nextEvents
@@ -155,9 +201,57 @@ function replaceEventInDocument(
     return
   }
 
+  const sourceEvents = storyDocument.value.graphEvents
+  const typedSavedEvent = savedEvent as StoryEventFile
+  const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
+  const nextEvents = hasExistingEvent
+    ? sourceEvents.map((currentEvent) =>
+        currentEvent.id === matchEventId ? typedSavedEvent : currentEvent
+      )
+    : [...sourceEvents, typedSavedEvent]
+
   storyDocument.value = {
     ...storyDocument.value,
     graphEvents: nextEvents
+  }
+}
+
+function removeEventFromDocument(
+  collectionType: EventCanvasTab,
+  eventId: string
+) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  if (collectionType === "bigOnce") {
+    storyDocument.value = {
+      ...storyDocument.value,
+      bigOnceEvents: storyDocument.value.bigOnceEvents.filter((event) => event.id !== eventId)
+    }
+    return
+  }
+
+  if (collectionType === "loop") {
+    storyDocument.value = {
+      ...storyDocument.value,
+      loopEvents: storyDocument.value.loopEvents.filter((event) => event.id !== eventId)
+    }
+    return
+  }
+
+  storyDocument.value = {
+    ...storyDocument.value,
+    graphEvents: storyDocument.value.graphEvents
+      .filter((event) => event.id !== eventId)
+      .map((event) =>
+        event.next.includes(eventId)
+          ? {
+              ...event,
+              next: event.next.filter((nextEventId) => nextEventId !== eventId)
+            }
+          : event
+      )
   }
 }
 
@@ -327,7 +421,7 @@ function createUniqueEventId(baseId: string) {
 }
 
 function buildNewEventFromParent(parentEventId: string): StoryEventFile {
-  const parentEvent = activeEvents.value.find((event) => event.id === parentEventId)
+  const parentEvent = activeGraphEvents.value.find((event) => event.id === parentEventId)
   const newId = createUniqueEventId(`${parentEventId}-child`)
 
   return {
@@ -351,13 +445,24 @@ function buildNewRootEvent(): StoryEventFile {
   }
 }
 
-function buildNewStandaloneEvent(): StoryEventFile {
-  const defaultId =
-    activeEventTab.value === "bigOnce"
-      ? "big-once-event"
-      : activeEventTab.value === "loop"
-        ? "loop-event"
-        : "event"
+function buildNewStandaloneEvent(): StoryAnyEventFile {
+  if (activeEventTab.value === "bigOnce") {
+    const event: StoryBigOnceEventFile = {
+      id: createUniqueEventId("big-once-event"),
+      title: "新事件",
+      trigger_expr: "",
+      init_script: "",
+      object_keys: [],
+      dialogues: [],
+      location: "",
+      bgm: "",
+      end_script: ""
+    }
+
+    return event
+  }
+
+  const defaultId = activeEventTab.value === "loop" ? "loop-event" : "event"
 
   return {
     id: createUniqueEventId(defaultId),
@@ -398,7 +503,7 @@ function handleSwitchEventTab(tab: EventCanvasTab) {
   activeEventTab.value = tab
 }
 
-async function handleSaveEvent(event: StoryEventFile) {
+async function handleSaveEvent(event: StoryAnyEventFile) {
   isSaving.value = true
   errorMessage.value = null
 
@@ -413,7 +518,11 @@ async function handleSaveEvent(event: StoryEventFile) {
     if (parentEventId) {
       const sourceEvent = currentEvents.find((currentEvent) => currentEvent.id === parentEventId)
 
-      if (sourceEvent && !sourceEvent.next.includes(savedEvent.id)) {
+      if (
+        sourceEvent &&
+        "next" in sourceEvent &&
+        !sourceEvent.next.includes(savedEvent.id)
+      ) {
         const linkedSourceEvent = await saveEvent(
           props.storyId,
           {
@@ -441,6 +550,46 @@ async function handleSaveEvent(event: StoryEventFile) {
     await refreshValidation()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "保存事件失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function handleDeleteEvent(eventId: string) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    const collectionType = activeEventTab.value
+
+    await deleteEvent(props.storyId, eventId, collectionType)
+    removeEventFromDocument(collectionType, eventId)
+
+    const remainingEvents = getEventsByCollectionType(collectionType)
+    const fallbackEventId = remainingEvents[0]?.id ?? null
+    const currentSelectedEventId = projectStore.getSelectedEventId(props.storyId, collectionType)
+    const isEditingDeletedEvent =
+      editingEventId.value === eventId || creatingFromEventId.value === eventId
+
+    if (currentSelectedEventId === eventId) {
+      if (fallbackEventId) {
+        projectStore.selectEvent(props.storyId, collectionType, fallbackEventId)
+      } else {
+        projectStore.clearEvent(props.storyId, collectionType)
+      }
+    }
+
+    if (isEditingDeletedEvent || creatingEventDraft.value?.id === eventId) {
+      closeEditor()
+    }
+
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "删除事件失败。"
   } finally {
     isSaving.value = false
   }
@@ -572,7 +721,7 @@ async function handleToggleLink(payload: {
       return
     }
 
-    const sourceEvent = getEventsByCollectionType(collectionType).find(
+    const sourceEvent = activeGraphEvents.value.find(
       (event) => event.id === payload.sourceEventId
     )
 
@@ -744,8 +893,8 @@ watch(
 
       <StoryGraphCanvas
         v-if="activeEventTab === 'graph'"
-        :entry-event-id="storyDocument.story.startEventId ?? activeEvents[0]?.id ?? null"
-        :events="activeEvents"
+        :entry-event-id="storyDocument.story.startEventId ?? activeGraphEvents[0]?.id ?? null"
+        :events="activeGraphEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
@@ -756,16 +905,17 @@ watch(
 
       <StoryBigOnceCanvas
         v-else-if="activeEventTab === 'bigOnce'"
-        :events="activeEvents"
+        :events="activeBigOnceEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
+        @delete="handleDeleteEvent"
         @create="handleCreateStandaloneEvent"
       />
 
       <StoryLoopEventCanvas
         v-else
-        :events="activeEvents"
+        :events="activeLoopEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
@@ -775,9 +925,14 @@ watch(
 
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="editingEvent || creatingEventDraft" class="editor-modal" @click.self="closeEditor">
+        <div
+          v-if="storyDocument && (editingEvent || creatingEventDraft)"
+          class="editor-modal"
+          @click.self="closeEditor"
+        >
           <div class="editor-modal__panel">
             <button
+              v-if="activeEventTab !== 'bigOnce'"
               class="editor-modal__close"
               type="button"
               aria-label="关闭编辑窗口"
@@ -787,12 +942,25 @@ watch(
               ×
             </button>
             <EventDetailPanel
-              :event="activeDraftEvent"
+              v-if="activeEventTab !== 'bigOnce'"
+              :event="activeRegularDraftEvent"
               :event-type="activeEventTab"
               :mode="isCreateMode ? 'create' : 'edit'"
               :mode-label="activeEventTabLabel"
               :parent-event-id="creatingFromEventId"
               :saving="isSaving"
+              @save="handleSaveEvent"
+            />
+            <BigOnceEventDetailPanel
+              v-else
+              :event="activeDraftEvent as StoryBigOnceEventFile | null"
+              :event-locations="storyDocument.eventLocations"
+              :mode="isCreateMode ? 'create' : 'edit'"
+              :roles="storyDocument.roles"
+              :saving="isSaving"
+              :scenes="storyDocument.scenes"
+              :vals="storyDocument.vals"
+              @close="closeEditor"
               @save="handleSaveEvent"
             />
           </div>
@@ -1115,36 +1283,39 @@ watch(
   position: fixed;
   inset: 0;
   z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
   background: rgba(2, 8, 16, 0.72);
   backdrop-filter: blur(10px);
+  overflow: hidden;
 }
 
 .editor-modal__panel {
   position: relative;
-  width: min(980px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: rgba(7, 16, 26, 0.98);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: transparent;
 }
 
 .editor-modal__close {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 18px;
+  right: 18px;
   width: 40px;
   height: 40px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(7, 16, 26, 0.92);
   color: var(--text);
   font-size: 1.5rem;
   line-height: 1;
+  z-index: 2;
 }
 
 @media (max-width: 1024px) {

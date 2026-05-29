@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import type { StoryEventFile } from "@story-mgr/core"
+import type { StoryBigOnceEventFile } from "@story-mgr/core"
 
 const props = defineProps<{
-  events: StoryEventFile[]
+  events: StoryBigOnceEventFile[]
   selectedEventId: string | null
 }>()
 
 const emit = defineEmits<{
   select: [eventId: string]
   edit: [eventId: string]
+  delete: [eventId: string]
   create: []
 }>()
 
@@ -16,9 +17,37 @@ const selectedEvent = computed(() => {
   return props.events.find((event) => event.id === props.selectedEventId) ?? null
 })
 
+function summarizeTrigger(expression: string) {
+  const trimmed = expression.trim()
+
+  if (!trimmed) {
+    return "无条件触发"
+  }
+
+  if (trimmed.length <= 56) {
+    return trimmed
+  }
+
+  return `${trimmed.slice(0, 56)}...`
+}
+
 function handleEdit(eventId: string) {
   emit("select", eventId)
   emit("edit", eventId)
+}
+
+function handleDelete(event: StoryBigOnceEventFile) {
+  const label = event.title.trim() || event.id
+  const confirmed =
+    typeof window === "undefined"
+      ? true
+      : window.confirm(`确认删除事件“${label}”吗？\n\n删除后无法撤销。`)
+
+  if (!confirmed) {
+    return
+  }
+
+  emit("delete", event.id)
 }
 </script>
 
@@ -50,23 +79,43 @@ function handleEdit(eventId: string) {
       >
         <button class="big-once-card__body" type="button" @click="emit('select', event.id)">
           <div class="big-once-card__meta">
-            <span class="big-once-card__kind">{{ event.kind }}</span>
+            <span class="big-once-card__kind">一次性大事件</span>
             <span class="big-once-card__tag">独立事件</span>
           </div>
           <strong class="big-once-card__title">{{ event.title }}</strong>
           <span class="big-once-card__id">{{ event.id }}</span>
-          <p class="big-once-card__text">
-            {{ event.body?.trim() || "暂无正文内容。" }}
-          </p>
+          <div class="big-once-card__facts">
+            <span class="big-once-card__fact">
+              <strong>触发</strong>
+              <span>{{ summarizeTrigger(event.trigger_expr) }}</span>
+            </span>
+            <span class="big-once-card__fact">
+              <strong>地点</strong>
+              <span>{{ event.location.trim() || "未设置" }}</span>
+            </span>
+            <span class="big-once-card__fact">
+              <strong>对象</strong>
+              <span>{{ event.object_keys.length }} 个</span>
+            </span>
+            <span class="big-once-card__fact">
+              <strong>对白</strong>
+              <span>{{ event.dialogues.length }} 条</span>
+            </span>
+          </div>
         </button>
 
         <div class="big-once-card__footer">
           <span class="big-once-card__status">
             {{ selectedEvent?.id === event.id ? "当前已选中" : "点击卡片查看详情" }}
           </span>
-          <button class="btn-secondary big-once-card__edit" type="button" @click="handleEdit(event.id)">
-            编辑
-          </button>
+          <div class="big-once-card__actions">
+            <button class="btn-danger big-once-card__delete" type="button" @click="handleDelete(event)">
+              删除
+            </button>
+            <button class="btn-secondary big-once-card__edit" type="button" @click="handleEdit(event.id)">
+              编辑
+            </button>
+          </div>
         </div>
       </article>
     </div>
@@ -193,16 +242,38 @@ function handleEdit(eventId: string) {
   line-height: 1.35;
 }
 
+.big-once-card__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.big-once-card__fact {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.big-once-card__fact strong {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.big-once-card__fact span {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 .big-once-card__id,
 .big-once-card__status {
   color: var(--text-muted);
   font-size: 0.82rem;
-}
-
-.big-once-card__text {
-  margin: 0;
-  color: var(--text-muted);
-  line-height: 1.6;
 }
 
 .big-once-card__footer {
@@ -212,6 +283,13 @@ function handleEdit(eventId: string) {
   gap: 10px;
 }
 
+.big-once-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.big-once-card__delete,
 .big-once-card__edit {
   min-height: 30px;
 }
@@ -253,6 +331,10 @@ function handleEdit(eventId: string) {
 
   .big-once-board__actions {
     justify-content: flex-start;
+  }
+
+  .big-once-card__facts {
+    grid-template-columns: 1fr;
   }
 }
 </style>

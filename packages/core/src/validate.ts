@@ -1,4 +1,5 @@
 import type {
+  StoryAnyEventFile,
   StoryBigOnceEventFile,
   StoryDocument,
   StoryEventFile,
@@ -6,7 +7,12 @@ import type {
   ValidationIssue,
   ValidationResult
 } from "./types"
-import { validateStoryValsCalcRules } from "./vals"
+import { findStoryRoleReference } from "./roles"
+import {
+  evaluateStoryBooleanExpression,
+  validateStoryScript,
+  validateStoryValsCalcRules
+} from "./vals"
 
 function pushIssue(
   issues: ValidationIssue[],
@@ -30,6 +36,94 @@ function buildAllEventMap(
   return new Map(
     [...graphEvents, ...bigOnceEvents, ...loopEvents].map((event) => [event.id, event])
   )
+}
+
+function collectLocationNames(document: StoryDocument) {
+  return new Set(document.eventLocations.assignments.map((assignment) => assignment.name))
+}
+
+function validateBigOnceEvent(
+  event: StoryBigOnceEventFile,
+  eventIndex: number,
+  document: StoryDocument,
+  issues: ValidationIssue[]
+) {
+  const locationNames = collectLocationNames(document)
+  const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
+
+  try {
+    evaluateStoryBooleanExpression(document.vals, event.trigger_expr)
+  } catch (error) {
+    pushIssue(
+      issues,
+      "error",
+      "big-once.trigger-expr-invalid",
+      `Big once event "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
+      ["bigOnceEvents", String(eventIndex), "trigger_expr"]
+    )
+  }
+
+  for (const scriptField of [
+    { key: "init_script", value: event.init_script, code: "big-once.init-script-invalid" },
+    { key: "end_script", value: event.end_script, code: "big-once.end-script-invalid" }
+  ] as const) {
+    for (const issue of validateStoryScript(document.vals, scriptField.value)) {
+      pushIssue(
+        issues,
+        "error",
+        scriptField.code,
+        `Big once event "${event.id}" ${scriptField.key} is invalid at line ${issue.lineNumber}: ${issue.message}`,
+        ["bigOnceEvents", String(eventIndex), scriptField.key]
+      )
+    }
+  }
+
+  for (const [objectIndex, objectKey] of event.object_keys.entries()) {
+    if (!findStoryRoleReference(document.roles, objectKey)) {
+      pushIssue(
+        issues,
+        "error",
+        "big-once.missing-object",
+        `Big once event "${event.id}" references missing object "${objectKey}".`,
+        ["bigOnceEvents", String(eventIndex), "object_keys", String(objectIndex)]
+      )
+    }
+  }
+
+  if (event.location && !locationNames.has(event.location)) {
+    pushIssue(
+      issues,
+      "error",
+      "big-once.missing-location",
+      `Big once event "${event.id}" references missing location "${event.location}".`,
+      ["bigOnceEvents", String(eventIndex), "location"]
+    )
+  }
+
+  for (const [dialogueIndex, dialogue] of event.dialogues.entries()) {
+    if (dialogue.speaker_type === "player") {
+      if (dialogue.speaker_key !== "player") {
+        pushIssue(
+          issues,
+          "error",
+          "big-once.invalid-player-speaker",
+          `Big once event "${event.id}" player dialogue must use speaker_key "player".`,
+          ["bigOnceEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+        )
+      }
+      continue
+    }
+
+    if (!allowedSpeakerKeys.has(dialogue.speaker_key)) {
+      pushIssue(
+        issues,
+        "error",
+        "big-once.invalid-object-speaker",
+        `Big once event "${event.id}" dialogue speaker "${dialogue.speaker_key}" is not in the current event objects.`,
+        ["bigOnceEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+      )
+    }
+  }
 }
 
 function collectReachableEvents(
@@ -65,6 +159,7 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
   const graphEvents = document.graphEvents
   const bigOnceEvents = document.bigOnceEvents
   const loopEvents = document.loopEvents
+  const graphEventMap = buildEventMap(graphEvents)
   const eventMap = buildAllEventMap(graphEvents, bigOnceEvents, loopEvents)
   const seenIds = new Set<string>()
 
@@ -82,10 +177,13 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
     { key: "graphEvents", events: graphEvents },
     { key: "bigOnceEvents", events: bigOnceEvents },
     { key: "loopEvents", events: loopEvents }
-  ] as const
+  ] as const satisfies Array<{
+    key: "graphEvents" | "bigOnceEvents" | "loopEvents"
+    events: StoryAnyEventFile[]
+  }>
 
   for (const group of eventGroups) {
-    for (const event of group.events) {
+    for (const [eventIndex, event] of group.events.entries()) {
       if (seenIds.has(event.id)) {
         pushIssue(
           issues,
@@ -99,22 +197,28 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
 
       seenIds.add(event.id)
 
-      for (const nextId of event.next) {
-        if (!eventMap.has(nextId)) {
-          pushIssue(
-            issues,
-            "error",
-            "event.missing-link",
-            `Event "${event.id}" points to missing event "${nextId}".`,
-            [group.key, event.id, "next"]
-          )
+      if ("next" in event) {
+        for (const nextId of event.next) {
+          if (!eventMap.has(nextId)) {
+            pushIssue(
+              issues,
+              "error",
+              "event.missing-link",
+              `Event "${event.id}" points to missing event "${nextId}".`,
+              [group.key, event.id, "next"]
+            )
+          }
         }
+      }
+
+      if (group.key === "bigOnceEvents") {
+        validateBigOnceEvent(event as StoryBigOnceEventFile, eventIndex, document, issues)
       }
     }
   }
 
   if (document.story.startEventId) {
-    if (!eventMap.has(document.story.startEventId)) {
+    if (!graphEventMap.has(document.story.startEventId)) {
       pushIssue(
         issues,
         "error",
@@ -123,7 +227,7 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
         ["story", "startEventId"]
       )
     } else {
-      const reachable = collectReachableEvents(document.story.startEventId, eventMap)
+      const reachable = collectReachableEvents(document.story.startEventId, graphEventMap)
 
       for (const event of graphEvents) {
         if (!reachable.has(event.id)) {

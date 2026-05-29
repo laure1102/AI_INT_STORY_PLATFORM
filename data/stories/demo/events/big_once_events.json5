@@ -1,1 +1,33 @@
-[]
+[
+  {
+    bgm: '',
+    dialogues: [
+      {
+        content: '老板，今天天气很好呢。',
+        speaker_key: 'important:zhuli',
+        speaker_type: 'object',
+      },
+      {
+        content: '我们要不要去玩高尔夫？',
+        speaker_key: 'important:zhuli',
+        speaker_type: 'object',
+      },
+      {
+        content: '好啊，好啊。',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+    ],
+    end_script: '{county.level} = 1',
+    id: 'test1',
+    init_script: 'let money = {county.renkou} * 100\nmoney = money * 2',
+    location: '',
+    object_keys: [
+      'important:zhuli',
+      'normal:start_suanming',
+      'important:xianzhang',
+    ],
+    title: '测试大事件',
+    trigger_expr: '1==1',
+  },
+]
