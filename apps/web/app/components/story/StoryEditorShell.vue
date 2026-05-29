@@ -2,6 +2,7 @@
 import type {
   AppSettingsFile,
   StoryDocument,
+  StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
   StoryRolesFile,
@@ -12,11 +13,15 @@ import type {
 } from "@story-mgr/core"
 import AppSettingsDialog from "./AppSettingsDialog.vue"
 import EventDetailPanel from "./EventDetailPanel.vue"
+import StoryBigOnceCanvas from "./StoryBigOnceCanvas.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
+import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
 import StoryLocationsDialog from "./StoryLocationsDialog.vue"
 import StoryRolesDialog from "./StoryRolesDialog.vue"
 import StoryScenesDialog from "./StoryScenesDialog.vue"
 import StoryValsDialog from "./StoryValsDialog.vue"
+
+type EventCanvasTab = StoryEventCollectionType
 
 const props = defineProps<{
   storyId: string
@@ -55,15 +60,44 @@ const isSettingsDialogOpen = shallowRef(false)
 const scenesSaveSuccessMessage = shallowRef<string | null>(null)
 const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
+const activeEventTab = shallowRef<EventCanvasTab>("graph")
 
-const selectedEventId = computed(() => projectStore.getSelectedEventId(props.storyId))
+const eventTabOptions: Array<{ key: EventCanvasTab; label: string }> = [
+  { key: "graph", label: "普通剧情推进事件" },
+  { key: "bigOnce", label: "一次性大事件" },
+  { key: "loop", label: "定时循环事件" }
+]
+
+function getEventsByCollectionType(collectionType: EventCanvasTab) {
+  if (!storyDocument.value) {
+    return []
+  }
+
+  if (collectionType === "bigOnce") {
+    return storyDocument.value.bigOnceEvents
+  }
+
+  if (collectionType === "loop") {
+    return storyDocument.value.loopEvents
+  }
+
+  return storyDocument.value.graphEvents
+}
+
+const activeEvents = computed<StoryEventFile[]>(() => {
+  return getEventsByCollectionType(activeEventTab.value)
+})
+
+const selectedEventId = computed(() =>
+  projectStore.getSelectedEventId(props.storyId, activeEventTab.value)
+)
 
 const selectedEvent = computed(() => {
-  return storyDocument.value?.graphEvents.find((event) => event.id === selectedEventId.value) ?? null
+  return activeEvents.value.find((event) => event.id === selectedEventId.value) ?? null
 })
 
 const editingEvent = computed(() => {
-  return storyDocument.value?.graphEvents.find((event) => event.id === editingEventId.value) ?? null
+  return activeEvents.value.find((event) => event.id === editingEventId.value) ?? null
 })
 
 const activeDraftEvent = computed(() => {
@@ -84,20 +118,46 @@ const issueSummary = computed(() => {
   return { errorCount, warningCount }
 })
 
-function replaceEventInDocument(savedEvent: StoryEventFile, matchEventId = savedEvent.id) {
+const activeEventTabLabel = computed(() => {
+  return eventTabOptions.find((option) => option.key === activeEventTab.value)?.label ?? "普通剧情推进事件"
+})
+
+function replaceEventInDocument(
+  collectionType: EventCanvasTab,
+  savedEvent: StoryEventFile,
+  matchEventId = savedEvent.id
+) {
   if (!storyDocument.value) {
     return
   }
 
-  const hasExistingEvent = storyDocument.value.graphEvents.some((currentEvent) => currentEvent.id === matchEventId)
+  const sourceEvents = getEventsByCollectionType(collectionType)
+  const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
+  const nextEvents = hasExistingEvent
+    ? sourceEvents.map((currentEvent) =>
+        currentEvent.id === matchEventId ? savedEvent : currentEvent
+      )
+    : [...sourceEvents, savedEvent]
+
+  if (collectionType === "bigOnce") {
+    storyDocument.value = {
+      ...storyDocument.value,
+      bigOnceEvents: nextEvents
+    }
+    return
+  }
+
+  if (collectionType === "loop") {
+    storyDocument.value = {
+      ...storyDocument.value,
+      loopEvents: nextEvents
+    }
+    return
+  }
 
   storyDocument.value = {
     ...storyDocument.value,
-    graphEvents: hasExistingEvent
-      ? storyDocument.value.graphEvents.map((currentEvent) =>
-          currentEvent.id === matchEventId ? savedEvent : currentEvent
-        )
-      : [...storyDocument.value.graphEvents, savedEvent]
+    graphEvents: nextEvents
   }
 }
 
@@ -203,21 +263,26 @@ async function loadStory() {
     storyDocument.value = story
     appSettings.value = settings
 
-    const currentSelection = projectStore.getSelectedEventId(props.storyId)
-    const fallbackEventId = storyDocument.value.graphEvents[0]?.id
+    for (const collectionType of ["graph", "bigOnce", "loop"] as EventCanvasTab[]) {
+      const events = getEventsByCollectionType(collectionType)
+      const currentSelection = projectStore.getSelectedEventId(props.storyId, collectionType)
+      const fallbackEventId = events[0]?.id
 
-    if (currentSelection) {
-      const stillExists = storyDocument.value.graphEvents.some((event) => event.id === currentSelection)
+      if (currentSelection) {
+        const stillExists = events.some((event) => event.id === currentSelection)
 
-      if (!stillExists) {
-        if (fallbackEventId) {
-          projectStore.selectEvent(props.storyId, fallbackEventId)
-        } else {
-          projectStore.clearEvent(props.storyId)
+        if (!stillExists) {
+          if (fallbackEventId) {
+            projectStore.selectEvent(props.storyId, collectionType, fallbackEventId)
+          } else {
+            projectStore.clearEvent(props.storyId, collectionType)
+          }
         }
+      } else if (fallbackEventId) {
+        projectStore.selectEvent(props.storyId, collectionType, fallbackEventId)
+      } else {
+        projectStore.clearEvent(props.storyId, collectionType)
       }
-    } else if (fallbackEventId) {
-      projectStore.selectEvent(props.storyId, fallbackEventId)
     }
 
     await refreshValidation()
@@ -229,13 +294,13 @@ async function loadStory() {
 }
 
 function handleSelectEvent(eventId: string) {
-  projectStore.selectEvent(props.storyId, eventId)
+  projectStore.selectEvent(props.storyId, activeEventTab.value, eventId)
 }
 
 function handleEditEvent(eventId: string) {
   creatingFromEventId.value = null
   editingEventId.value = eventId
-  projectStore.selectEvent(props.storyId, eventId)
+  projectStore.selectEvent(props.storyId, activeEventTab.value, eventId)
 }
 
 function sanitizeIdSegment(value: string) {
@@ -246,10 +311,10 @@ function sanitizeIdSegment(value: string) {
     .replace(/^-+|-+$/g, "")
 }
 
-function createUniqueEventId(baseEventId: string) {
-  const events = storyDocument.value?.graphEvents ?? []
+function createUniqueEventId(baseId: string) {
+  const events = activeEvents.value
   const usedIds = new Set(events.map((event) => event.id))
-  const base = `${sanitizeIdSegment(baseEventId) || "event"}-child`
+  const base = sanitizeIdSegment(baseId) || "event"
 
   let candidate = base
   let index = 2
@@ -262,8 +327,8 @@ function createUniqueEventId(baseEventId: string) {
 }
 
 function buildNewEventFromParent(parentEventId: string): StoryEventFile {
-  const parentEvent = storyDocument.value?.graphEvents.find((event) => event.id === parentEventId)
-  const newId = createUniqueEventId(parentEventId)
+  const parentEvent = activeEvents.value.find((event) => event.id === parentEventId)
+  const newId = createUniqueEventId(`${parentEventId}-child`)
 
   return {
     id: newId,
@@ -286,18 +351,51 @@ function buildNewRootEvent(): StoryEventFile {
   }
 }
 
-function handleCreateEvent(parentEventId: string) {
+function buildNewStandaloneEvent(): StoryEventFile {
+  const defaultId =
+    activeEventTab.value === "bigOnce"
+      ? "big-once-event"
+      : activeEventTab.value === "loop"
+        ? "loop-event"
+        : "event"
+
+  return {
+    id: createUniqueEventId(defaultId),
+    title: "新事件",
+    kind: "scene",
+    body: "",
+    next: []
+  }
+}
+
+function handleCreateGraphEvent(parentEventId: string) {
   creatingFromEventId.value = parentEventId
   editingEventId.value = null
   creatingEventDraft.value = buildNewEventFromParent(parentEventId)
-  projectStore.selectEvent(props.storyId, parentEventId)
+  projectStore.selectEvent(props.storyId, activeEventTab.value, parentEventId)
 }
 
-function handleCreateRootEvent() {
+function handleCreateGraphRootEvent() {
   creatingFromEventId.value = null
   editingEventId.value = null
   creatingEventDraft.value = buildNewRootEvent()
-  projectStore.clearEvent(props.storyId)
+  projectStore.clearEvent(props.storyId, activeEventTab.value)
+}
+
+function handleCreateStandaloneEvent() {
+  creatingFromEventId.value = null
+  editingEventId.value = null
+  creatingEventDraft.value = buildNewStandaloneEvent()
+  projectStore.clearEvent(props.storyId, activeEventTab.value)
+}
+
+function handleSwitchEventTab(tab: EventCanvasTab) {
+  if (activeEventTab.value === tab) {
+    return
+  }
+
+  closeEditor()
+  activeEventTab.value = tab
 }
 
 async function handleSaveEvent(event: StoryEventFile) {
@@ -305,31 +403,36 @@ async function handleSaveEvent(event: StoryEventFile) {
   errorMessage.value = null
 
   try {
-    const isCreating = !!creatingFromEventId.value
-    const previousEventId = selectedEventId.value ?? event.id
-    const savedEvent = await saveEvent(props.storyId, event)
+    const collectionType = activeEventTab.value
+    const isCreatingDraft = isCreateMode.value
+    const parentEventId = collectionType === "graph" ? creatingFromEventId.value : null
+    const previousEventId = projectStore.getSelectedEventId(props.storyId, collectionType) ?? event.id
+    const currentEvents = getEventsByCollectionType(collectionType)
+    const savedEvent = await saveEvent(props.storyId, event, collectionType)
 
-    if (isCreating && creatingFromEventId.value) {
-      const sourceEvent = storyDocument.value?.graphEvents.find(
-        (currentEvent) => currentEvent.id === creatingFromEventId.value
-      )
+    if (parentEventId) {
+      const sourceEvent = currentEvents.find((currentEvent) => currentEvent.id === parentEventId)
 
       if (sourceEvent && !sourceEvent.next.includes(savedEvent.id)) {
-        const linkedSourceEvent = await saveEvent(props.storyId, {
-          ...sourceEvent,
-          next: [...sourceEvent.next, savedEvent.id]
-        })
+        const linkedSourceEvent = await saveEvent(
+          props.storyId,
+          {
+            ...sourceEvent,
+            next: [...sourceEvent.next, savedEvent.id]
+          },
+          collectionType
+        )
 
-        replaceEventInDocument(linkedSourceEvent, sourceEvent.id)
+        replaceEventInDocument(collectionType, linkedSourceEvent, sourceEvent.id)
       }
 
-      replaceEventInDocument(savedEvent)
+      replaceEventInDocument(collectionType, savedEvent)
     } else {
-      replaceEventInDocument(savedEvent, previousEventId)
+      replaceEventInDocument(collectionType, savedEvent, previousEventId)
     }
 
-    if (savedEvent.id !== previousEventId) {
-      projectStore.selectEvent(props.storyId, savedEvent.id)
+    if (isCreatingDraft || savedEvent.id !== previousEventId) {
+      projectStore.selectEvent(props.storyId, collectionType, savedEvent.id)
     }
 
     editingEventId.value = savedEvent.id
@@ -464,7 +567,14 @@ async function handleToggleLink(payload: {
   errorMessage.value = null
 
   try {
-    const sourceEvent = storyDocument.value.graphEvents.find((event) => event.id === payload.sourceEventId)
+    const collectionType = activeEventTab.value
+    if (collectionType !== "graph") {
+      return
+    }
+
+    const sourceEvent = getEventsByCollectionType(collectionType).find(
+      (event) => event.id === payload.sourceEventId
+    )
 
     if (!sourceEvent) {
       return
@@ -474,12 +584,16 @@ async function handleToggleLink(payload: {
       ? sourceEvent.next.filter((eventId) => eventId !== payload.targetEventId)
       : [...sourceEvent.next, payload.targetEventId]
 
-    const savedEvent = await saveEvent(props.storyId, {
-      ...sourceEvent,
-      next
-    })
+    const savedEvent = await saveEvent(
+      props.storyId,
+      {
+        ...sourceEvent,
+        next
+      },
+      collectionType
+    )
 
-    replaceEventInDocument(savedEvent, payload.sourceEventId)
+    replaceEventInDocument(collectionType, savedEvent, payload.sourceEventId)
     await refreshValidation()
   } catch (error) {
     errorMessage.value =
@@ -613,15 +727,49 @@ watch(
     </section>
 
     <section v-if="storyDocument" class="editor-canvas-band">
+      <div class="editor-event-tabs" role="tablist" aria-label="剧情事件类型">
+        <button
+          v-for="tab in eventTabOptions"
+          :key="tab.key"
+          class="editor-event-tabs__button"
+          :class="{ 'editor-event-tabs__button--active': activeEventTab === tab.key }"
+          type="button"
+          role="tab"
+          :aria-selected="activeEventTab === tab.key"
+          @click="handleSwitchEventTab(tab.key)"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+
       <StoryGraphCanvas
-        :entry-event-id="storyDocument.story.startEventId ?? storyDocument.graphEvents[0]?.id ?? null"
-        :events="storyDocument.graphEvents"
+        v-if="activeEventTab === 'graph'"
+        :entry-event-id="storyDocument.story.startEventId ?? activeEvents[0]?.id ?? null"
+        :events="activeEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
-        @create="handleCreateEvent"
-        @create-root="handleCreateRootEvent"
+        @create="handleCreateGraphEvent"
+        @create-root="handleCreateGraphRootEvent"
         @toggle-link="handleToggleLink"
+      />
+
+      <StoryBigOnceCanvas
+        v-else-if="activeEventTab === 'bigOnce'"
+        :events="activeEvents"
+        :selected-event-id="selectedEventId"
+        @select="handleSelectEvent"
+        @edit="handleEditEvent"
+        @create="handleCreateStandaloneEvent"
+      />
+
+      <StoryLoopEventCanvas
+        v-else
+        :events="activeEvents"
+        :selected-event-id="selectedEventId"
+        @select="handleSelectEvent"
+        @edit="handleEditEvent"
+        @create="handleCreateStandaloneEvent"
       />
     </section>
 
@@ -640,7 +788,9 @@ watch(
             </button>
             <EventDetailPanel
               :event="activeDraftEvent"
+              :event-type="activeEventTab"
               :mode="isCreateMode ? 'create' : 'edit'"
+              :mode-label="activeEventTabLabel"
               :parent-event-id="creatingFromEventId"
               :saving="isSaving"
               @save="handleSaveEvent"
@@ -798,11 +948,71 @@ watch(
 
 .editor-canvas-band {
   display: flex;
+  flex-direction: column;
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
   width: 100%;
   margin: 4px 0 0;
+}
+
+.editor-event-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 0;
+  padding: 8px 8px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+    rgba(5, 12, 20, 0.86);
+  flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.editor-event-tabs__button {
+  position: relative;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.editor-event-tabs__button:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.editor-event-tabs__button--active {
+  color: var(--text-main);
+  border-color: rgba(124, 227, 195, 0.42);
+  background:
+    linear-gradient(180deg, rgba(124, 227, 195, 0.18), rgba(124, 227, 195, 0.08)),
+    rgba(8, 18, 29, 0.98);
+  transform: translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(124, 227, 195, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.editor-canvas-band :deep(.graph-panel),
+.editor-canvas-band :deep(.big-once-board),
+.editor-canvas-band :deep(.loop-board) {
+  border-top-left-radius: 0;
+  border-top-right-radius: 18px;
+  margin-top: -1px;
 }
 
 .editor-validation-row {
@@ -964,6 +1174,10 @@ watch(
   .editor-header__title,
   .editor-header__tools {
     white-space: normal;
+  }
+
+  .editor-event-tabs {
+    flex-wrap: wrap;
   }
 
   .issues {

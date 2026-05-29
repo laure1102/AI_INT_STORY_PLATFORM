@@ -1,0 +1,267 @@
+<script setup lang="ts">
+import type { StoryEventFile } from "@story-mgr/core"
+
+defineProps<{
+  events: StoryEventFile[]
+  selectedEventId: string | null
+}>()
+
+const emit = defineEmits<{
+  select: [eventId: string]
+  edit: [eventId: string]
+  create: []
+}>()
+
+function handleEdit(eventId: string) {
+  emit("select", eventId)
+  emit("edit", eventId)
+}
+</script>
+
+<template>
+  <section class="loop-board glass-panel">
+    <div class="loop-board__header">
+      <div class="loop-board__copy">
+        <span class="eyebrow">循环事件画布</span>
+        <h2 class="section-title">定时循环事件管理</h2>
+        <p class="loop-board__summary">
+          循环事件以独立列表维护，不提供连接点或连接线。
+        </p>
+      </div>
+
+      <div class="loop-board__actions">
+        <span class="pill">{{ events.length }} 个事件</span>
+        <button class="btn-secondary loop-board__button" type="button" @click="emit('create')">
+          创建事件
+        </button>
+      </div>
+    </div>
+
+    <div v-if="events.length" class="loop-board__lane">
+      <article
+        v-for="event in events"
+        :key="event.id"
+        class="loop-card"
+        :class="{ 'loop-card--active': event.id === selectedEventId }"
+      >
+        <div class="loop-card__rail" aria-hidden="true" />
+
+        <button class="loop-card__body" type="button" @click="emit('select', event.id)">
+          <div class="loop-card__top">
+            <strong class="loop-card__title">{{ event.title }}</strong>
+            <span class="loop-card__badge">{{ event.kind }}</span>
+          </div>
+          <span class="loop-card__id">{{ event.id }}</span>
+          <p class="loop-card__text">
+            {{ event.body?.trim() || "暂无正文内容。" }}
+          </p>
+        </button>
+
+        <div class="loop-card__actions">
+          <span class="loop-card__hint">
+            {{ event.id === selectedEventId ? "当前已选中" : "独立循环事件" }}
+          </span>
+          <button class="btn-secondary loop-card__edit" type="button" @click="handleEdit(event.id)">
+            编辑
+          </button>
+        </div>
+      </article>
+    </div>
+
+    <div v-else class="loop-board__empty">
+      <strong class="loop-board__empty-title">还没有循环事件</strong>
+      <p class="loop-board__empty-copy">
+        循环事件会单独存在于这个画布里，先创建一个事件作为起点即可。
+      </p>
+      <button class="btn-primary" type="button" @click="emit('create')">创建事件</button>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.loop-board {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(124, 227, 195, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+}
+
+.loop-board__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.loop-board__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.loop-board__summary {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.loop-board__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.loop-board__button {
+  min-height: 32px;
+}
+
+.loop-board__lane {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.loop-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) max-content;
+  align-items: stretch;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(124, 227, 195, 0.14);
+  border-radius: 24px;
+  background: rgba(8, 18, 29, 0.9);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.loop-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(124, 227, 195, 0.32);
+}
+
+.loop-card--active {
+  border-color: rgba(124, 227, 195, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(124, 227, 195, 0.2),
+    0 20px 30px rgba(0, 0, 0, 0.22);
+}
+
+.loop-card__rail {
+  width: 6px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(124, 227, 195, 0.95), rgba(135, 183, 255, 0.55));
+}
+
+.loop-card__body {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.loop-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.loop-card__title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.loop-card__badge {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(124, 227, 195, 0.1);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.loop-card__id,
+.loop-card__hint {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.loop-card__text {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.loop-card__actions {
+  display: grid;
+  align-content: space-between;
+  justify-items: end;
+  gap: 12px;
+}
+
+.loop-card__edit {
+  min-height: 30px;
+}
+
+.loop-board__empty {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  padding: 24px;
+  border: 1px dashed rgba(124, 227, 195, 0.34);
+  border-radius: 24px;
+  background: rgba(124, 227, 195, 0.05);
+  text-align: center;
+}
+
+.loop-board__empty-title {
+  font-size: 1.02rem;
+}
+
+.loop-board__empty-copy {
+  max-width: 420px;
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .loop-board {
+    padding: 12px;
+  }
+
+  .loop-board__header,
+  .loop-card {
+    grid-template-columns: 1fr;
+  }
+
+  .loop-board__actions,
+  .loop-card__actions {
+    justify-content: flex-start;
+    justify-items: start;
+  }
+
+  .loop-card__rail {
+    width: 100%;
+    height: 6px;
+  }
+}
+</style>

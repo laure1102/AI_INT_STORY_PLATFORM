@@ -5,12 +5,9 @@
     kind: 'scene',
     meta: {
       chapter: 1,
-      tone: 'tense',
     },
     next: [
       'market_choice',
-      'old_guard',
-      'arrival-child',
     ],
     title: '抵达裂笺城',
   },

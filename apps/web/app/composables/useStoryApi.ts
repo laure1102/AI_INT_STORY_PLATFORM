@@ -1,5 +1,6 @@
 import type {
   AppSettingsFile,
+  StoryEventCollectionType,
   StoryDocument,
   StoryEventFile,
   StoryEventLocationFile,
@@ -58,19 +59,33 @@ export function useStoryApi() {
     return response.settings
   }
 
-  async function getEvent(storyId: string, eventId: string): Promise<StoryEventFile> {
+  async function getEvent(
+    storyId: string,
+    eventId: string,
+    collectionType: StoryEventCollectionType = "graph"
+  ): Promise<StoryEventFile> {
     const response = await $fetch<StoryEventResponse>(
-      `${apiBase}/stories/${storyId}/events/${eventId}`
+      `${apiBase}/stories/${storyId}/events/${eventId}`,
+      {
+        query: {
+          collectionType
+        }
+      }
     )
     return response.event
   }
 
-  async function saveEvent(storyId: string, event: StoryEventFile): Promise<StoryEventFile> {
+  async function saveEvent(
+    storyId: string,
+    event: StoryEventFile,
+    collectionType: StoryEventCollectionType = "graph"
+  ): Promise<StoryEventFile> {
     const response = await $fetch<StoryEventResponse>(
       `${apiBase}/stories/${storyId}/events/${event.id}`,
       {
         method: "PUT",
         body: {
+          collectionType,
           event
         } satisfies SaveEventRequest
       }

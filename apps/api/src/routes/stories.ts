@@ -3,7 +3,7 @@ import path from "node:path"
 import multer from "@koa/multer"
 import Router from "@koa/router"
 import { compileStory } from "@story-mgr/compiler"
-import { validateStoryDocument } from "@story-mgr/core"
+import { validateStoryDocument, type StoryEventCollectionType } from "@story-mgr/core"
 import { FileStoreError, type StoryFileStore } from "@story-mgr/file-store"
 import type {
   AppSettingsResponse,
@@ -55,6 +55,14 @@ function requireQueryString(value: unknown, name: string) {
   return value
 }
 
+function normalizeEventCollectionType(value: unknown): StoryEventCollectionType {
+  if (value === "bigOnce" || value === "loop") {
+    return value
+  }
+
+  return "graph"
+}
+
 export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
   const router = new Router({ prefix: "/api" })
 
@@ -92,8 +100,9 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
   router.get("/stories/:storyId/events/:eventId", async (context) => {
     const storyId = requireParam(context.params.storyId, "storyId")
     const eventId = requireParam(context.params.eventId, "eventId")
+    const collectionType = normalizeEventCollectionType(context.query.collectionType)
     context.body = {
-      event: await store.readEvent(storyId, eventId)
+      event: await store.readEvent(storyId, eventId, collectionType)
     }
   })
 
@@ -103,7 +112,12 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     const body = context.request.body as SaveEventRequest
 
     context.body = {
-      event: await store.writeEvent(storyId, eventId, body.event)
+      event: await store.writeEvent(
+        storyId,
+        eventId,
+        body.event,
+        normalizeEventCollectionType(body.collectionType)
+      )
     }
   })
 

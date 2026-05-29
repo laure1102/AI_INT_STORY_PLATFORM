@@ -2,6 +2,7 @@ import type {
   AppSettingsFile,
   CompiledStory,
   StoryDocument,
+  StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
   StoryRolesFile,
@@ -29,6 +30,7 @@ export interface StoryEventResponse {
 }
 
 export interface SaveEventRequest {
+  collectionType: StoryEventCollectionType
   event: StoryEventFile
 }
 

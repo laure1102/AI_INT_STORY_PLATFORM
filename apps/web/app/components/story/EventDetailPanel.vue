@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive } from "vue"
-import type { StoryEventFile } from "@story-mgr/core"
+import type { StoryEventCollectionType, StoryEventFile } from "@story-mgr/core"
 
 interface EventDraft {
   id: string
@@ -12,7 +12,9 @@ interface EventDraft {
 
 const props = defineProps<{
   event: StoryEventFile | null
+  eventType?: StoryEventCollectionType
   mode?: "create" | "edit"
+  modeLabel?: string
   parentEventId?: string | null
   saving: boolean
 }>()
@@ -28,6 +30,8 @@ const draft = reactive<EventDraft>({
   body: "",
   nextText: ""
 })
+
+const supportsLinks = computed(() => props.eventType === "graph")
 
 function syncDraft(event: StoryEventFile | null) {
   draft.id = event?.id ?? ""
@@ -48,15 +52,29 @@ function submitDraft() {
     title: draft.title.trim(),
     kind: draft.kind.trim(),
     body: draft.body.trim() || undefined,
-    next: draft.nextText
-      .split(/\r?\n|,/)
-      .map((item) => item.trim())
-      .filter(Boolean)
+    next: supportsLinks.value
+      ? draft.nextText
+          .split(/\r?\n|,/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : []
   })
 }
 
 const panelEyebrow = computed(() => {
   return props.mode === "create" ? "新事件" : "事件编辑"
+})
+
+const eventTypeDescription = computed(() => {
+  if (props.eventType === "bigOnce") {
+    return "当前编辑的是一次性大事件，它与其他事件相互独立。"
+  }
+
+  if (props.eventType === "loop") {
+    return "当前编辑的是定时循环事件，它与其他事件相互独立。"
+  }
+
+  return "当前编辑的是普通剧情推进事件，可以配置后续事件连接。"
 })
 
 const panelTitle = computed(() => {
@@ -75,6 +93,22 @@ const submitLabel = computed(() => {
   return props.mode === "create" ? "创建事件" : "保存事件"
 })
 
+const createCallout = computed(() => {
+  if (props.mode !== "create") {
+    return ""
+  }
+
+  if (supportsLinks.value && props.parentEventId) {
+    return `这个新事件会从 ${props.parentEventId} 连出。`
+  }
+
+  if (supportsLinks.value) {
+    return "这个新事件会作为一个没有父节点的根事件创建。"
+  }
+
+  return "这个新事件会作为独立事件创建。"
+})
+
 watch(
   () => props.event,
   (event) => {
@@ -91,6 +125,9 @@ watch(
         <div>
           <span class="eyebrow">{{ panelEyebrow }}</span>
           <h2 class="detail-panel__title">{{ panelTitle }}</h2>
+          <p class="detail-panel__subtitle">
+            {{ props.modeLabel || "普通剧情推进事件" }} · {{ eventTypeDescription }}
+          </p>
         </div>
         <button class="btn-primary" type="button" :disabled="saving" @click="submitDraft">
           {{ submitLabel }}
@@ -107,16 +144,15 @@ watch(
             :readonly="props.mode !== 'create'"
           />
           <span v-if="props.mode !== 'create'" class="detail-panel__hint">
-            事件 ID 当前为只读，后续可以再补充安全重命名能力。
+            事件 ID 当前为只读，后续如果需要再单独设计重命名能力。
           </span>
-          <span v-else class="detail-panel__hint">请为新节点填写一个唯一的事件 ID。</span>
+          <span v-else class="detail-panel__hint">
+            请为新事件填写一个唯一的事件 ID。
+          </span>
         </label>
 
-        <p v-if="props.mode === 'create' && props.parentEventId" class="detail-panel__callout">
-          这个新节点会从 <code>{{ props.parentEventId }}</code> 连出。
-        </p>
-        <p v-else-if="props.mode === 'create'" class="detail-panel__callout">
-          这个新节点会作为一个没有父节点的根事件创建。
+        <p v-if="createCallout" class="detail-panel__callout">
+          {{ createCallout }}
         </p>
 
         <div class="detail-panel__row">
@@ -136,7 +172,7 @@ watch(
           <textarea v-model="draft.body" class="text-area detail-panel__body" />
         </label>
 
-        <label class="field">
+        <label v-if="supportsLinks" class="field">
           <span class="field-label">后续事件 ID</span>
           <textarea
             v-model="draft.nextText"
@@ -147,7 +183,9 @@ watch(
       </div>
     </template>
 
-    <div v-else class="detail-panel__empty">请先在画布中选择一个事件再开始编辑。</div>
+    <div v-else class="detail-panel__empty">
+      请先在画布中选择一个事件再开始编辑。
+    </div>
   </section>
 </template>
 
@@ -168,6 +206,12 @@ watch(
   margin: 14px 0 0;
   font-family: "Space Grotesk", sans-serif;
   font-size: 1.8rem;
+}
+
+.detail-panel__subtitle {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  line-height: 1.6;
 }
 
 .detail-panel__form {

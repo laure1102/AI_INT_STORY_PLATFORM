@@ -152,6 +152,8 @@ export interface StoryEventTrigger {
   none?: Record<string, unknown>[]
 }
 
+export type StoryEventCollectionType = "graph" | "bigOnce" | "loop"
+
 export type StoryGraphEventsFile = StoryEventFile[]
 
 export interface StoryBigOnceEventFile extends Omit<StoryEventFile, "next"> {

@@ -4,11 +4,13 @@ import JSON5 from "json5"
 import sharp from "sharp"
 import {
   appSettingsSchema,
+  storyBigOnceEventSchema,
   storyBigOnceEventsSchema,
   storyEventLocationSchema,
   storyEventSchema,
   storyGraphEventsSchema,
   storyImportantRolesDataFileSchema,
+  storyLoopEventSchema,
   storyLoopEventsSchema,
   storyMetaSchema,
   storyNormalRolesDataFileSchema,
@@ -18,6 +20,7 @@ import {
   type AppSettingsFile,
   type StoryBigOnceEventFile,
   type StoryBigOnceEventsFile,
+  type StoryEventCollectionType,
   type StoryDocument,
   type StoryEventLocationFile,
   type StoryEventFile,
@@ -54,9 +57,18 @@ export interface StoryFileStore {
   readAppSettings(): Promise<AppSettingsFile>
   listStorySummaries(): Promise<StorySummary[]>
   readStoryDocument(storyId: string): Promise<StoryDocument>
-  readEvent(storyId: string, eventId: string): Promise<StoryEventFile>
+  readEvent(
+    storyId: string,
+    eventId: string,
+    collectionType?: StoryEventCollectionType
+  ): Promise<StoryEventFile>
   writeAppSettings(settings: AppSettingsFile): Promise<AppSettingsFile>
-  writeEvent(storyId: string, eventId: string, event: StoryEventFile): Promise<StoryEventFile>
+  writeEvent(
+    storyId: string,
+    eventId: string,
+    event: StoryEventFile,
+    collectionType?: StoryEventCollectionType
+  ): Promise<StoryEventFile>
   writeRoles(storyId: string, roles: StoryRolesFile): Promise<StoryRolesFile>
   writeEventLocations(
     storyId: string,
@@ -785,6 +797,16 @@ async function ensureStoryExists(dataDir: string, storyId: string) {
   await readStoryMeta(dataDir, storyId)
 }
 
+function normalizeEventCollectionType(
+  collectionType: StoryEventCollectionType | undefined
+): StoryEventCollectionType {
+  if (collectionType === "bigOnce" || collectionType === "loop") {
+    return collectionType
+  }
+
+  return "graph"
+}
+
 export function createStoryFileStore(dataDir: string): StoryFileStore {
   async function readAppSettings(): Promise<AppSettingsFile> {
     return readAppSettingsFile(dataDir)
@@ -837,12 +859,30 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     }
   }
 
-  async function readEvent(storyId: string, eventId: string): Promise<StoryEventFile> {
-    const graphEvents = await readStoryGraphEvents(dataDir, storyId)
-    const event = graphEvents.find((currentEvent) => currentEvent.id === eventId)
+  async function readEvent(
+    storyId: string,
+    eventId: string,
+    collectionType: StoryEventCollectionType = "graph"
+  ): Promise<StoryEventFile> {
+    const normalizedCollectionType = normalizeEventCollectionType(collectionType)
+    const events =
+      normalizedCollectionType === "bigOnce"
+        ? await readStoryBigOnceEvents(dataDir, storyId)
+        : normalizedCollectionType === "loop"
+          ? await readStoryLoopEvents(dataDir, storyId)
+          : await readStoryGraphEvents(dataDir, storyId)
+    const event = events.find((currentEvent) => currentEvent.id === eventId)
 
     if (!event) {
       throw new FileStoreError(`Event not found: ${eventId}`, 404, "event.not-found")
+    }
+
+    if (normalizedCollectionType === "bigOnce") {
+      return storyBigOnceEventSchema.parse(event)
+    }
+
+    if (normalizedCollectionType === "loop") {
+      return storyLoopEventSchema.parse(event)
     }
 
     return storyEventSchema.parse(event)
@@ -851,14 +891,53 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   async function writeEvent(
     storyId: string,
     eventId: string,
-    event: StoryEventFile
+    event: StoryEventFile,
+    collectionType: StoryEventCollectionType = "graph"
   ): Promise<StoryEventFile> {
     if (event.id !== eventId) {
       throw new FileStoreError("Event id in path and payload must match.", 400, "event.id-mismatch")
     }
 
-    const parsedEvent = storyEventSchema.parse(event)
     const paths = createStoryPaths(dataDir, storyId)
+    const normalizedCollectionType = normalizeEventCollectionType(collectionType)
+
+    if (normalizedCollectionType === "bigOnce") {
+      const parsedEvent = storyBigOnceEventSchema.parse(event)
+      const bigOnceEvents = await readStoryBigOnceEvents(dataDir, storyId)
+      const hasExistingEvent = bigOnceEvents.some((currentEvent) => currentEvent.id === eventId)
+      const nextBigOnceEvents = hasExistingEvent
+        ? bigOnceEvents.map((currentEvent) =>
+            currentEvent.id === eventId ? parsedEvent : currentEvent
+          )
+        : [...bigOnceEvents, parsedEvent]
+
+      await writeJson5File(
+        paths.bigOnceEventsFile,
+        nextBigOnceEvents satisfies StoryBigOnceEventsFile
+      )
+
+      return parsedEvent
+    }
+
+    if (normalizedCollectionType === "loop") {
+      const parsedEvent = storyLoopEventSchema.parse(event)
+      const loopEvents = await readStoryLoopEvents(dataDir, storyId)
+      const hasExistingEvent = loopEvents.some((currentEvent) => currentEvent.id === eventId)
+      const nextLoopEvents = hasExistingEvent
+        ? loopEvents.map((currentEvent) =>
+            currentEvent.id === eventId ? parsedEvent : currentEvent
+          )
+        : [...loopEvents, parsedEvent]
+
+      await writeJson5File(
+        paths.loopEventsFile,
+        nextLoopEvents satisfies StoryLoopEventsFile
+      )
+
+      return parsedEvent
+    }
+
+    const parsedEvent = storyEventSchema.parse(event)
     const graphEvents = await readStoryGraphEvents(dataDir, storyId)
     const hasExistingEvent = graphEvents.some((currentEvent) => currentEvent.id === eventId)
     const nextGraphEvents = hasExistingEvent
