@@ -767,7 +767,7 @@ function handleConnectorClick(eventId: string) {
 }
 
 function getConnectorStyle(nodeKind: GraphNodeKind, kind: "input" | "output"): CSSProperties {
-  const nodeWidth = getNodeWidthByKind(nodeKind)
+  const scaledNodeWidth = getNodeWidthByKind(nodeKind) * canvasScale.value
 
   if (isHorizontalDirection.value) {
     return kind === "input"
@@ -777,7 +777,7 @@ function getConnectorStyle(nodeKind: GraphNodeKind, kind: "input" | "output"): C
           transform: "translateX(-50%)"
         }
       : {
-          left: `${nodeWidth}px`,
+          left: `${scaledNodeWidth}px`,
           top: "calc(50% - 2.5px)",
           transform: "translateX(-50%)"
         }
