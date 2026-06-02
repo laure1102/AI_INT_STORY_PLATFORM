@@ -99,6 +99,8 @@ const initScriptFieldRef = useTemplateRef<HTMLDivElement>("initScriptField")
 const initScriptTextareaRef = useTemplateRef<HTMLTextAreaElement>("initScriptTextarea")
 const endScriptFieldRef = useTemplateRef<HTMLDivElement>("endScriptField")
 const endScriptTextareaRef = useTemplateRef<HTMLTextAreaElement>("endScriptTextarea")
+const dialogueContentFieldRef = useTemplateRef<HTMLElement>("dialogueContentField")
+const dialogueContentTextareaRef = useTemplateRef<HTMLTextAreaElement>("dialogueContentTextarea")
 const isTriggerHelpOpen = shallowRef(false)
 const isInitScriptHelpOpen = shallowRef(false)
 const isEndScriptHelpOpen = shallowRef(false)
@@ -121,6 +123,13 @@ const initScriptAutocompleteState = reactive<ScriptAutocompleteState>({
   activeIndex: 0
 })
 const endScriptAutocompleteState = reactive<ScriptAutocompleteState>({
+  open: false,
+  query: "",
+  replaceStart: 0,
+  replaceEnd: 0,
+  activeIndex: 0
+})
+const dialogueContentAutocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
   query: "",
   replaceStart: 0,
@@ -265,6 +274,9 @@ const initScriptAutocompleteItems = computed(() => {
 const endScriptAutocompleteItems = computed(() => {
   return filterScriptAutocompleteItems(endScriptAutocompleteState.query)
 })
+const dialogueContentAutocompleteItems = computed(() => {
+  return filterScriptAutocompleteItems(dialogueContentAutocompleteState.query)
+})
 const highlightedInitScriptTokens = computed(() => {
   return buildScriptHighlightTokens(draft.initScript)
 })
@@ -274,6 +286,7 @@ const highlightedEndScriptTokens = computed(() => {
 const isTriggerAutocompleteOpen = computed(() => triggerAutocompleteState.open)
 const isInitScriptAutocompleteOpen = computed(() => initScriptAutocompleteState.open)
 const isEndScriptAutocompleteOpen = computed(() => endScriptAutocompleteState.open)
+const isDialogueContentAutocompleteOpen = computed(() => dialogueContentAutocompleteState.open)
 const activeTriggerAutocompleteItem = computed(() => {
   if (!isTriggerAutocompleteOpen.value || triggerAutocompleteItems.value.length === 0) {
     return null
@@ -299,6 +312,18 @@ const activeEndScriptAutocompleteItem = computed(() => {
 
   return endScriptAutocompleteItems.value[
     endScriptAutocompleteState.activeIndex % endScriptAutocompleteItems.value.length
+  ]
+})
+const activeDialogueContentAutocompleteItem = computed(() => {
+  if (
+    !isDialogueContentAutocompleteOpen.value ||
+    dialogueContentAutocompleteItems.value.length === 0
+  ) {
+    return null
+  }
+
+  return dialogueContentAutocompleteItems.value[
+    dialogueContentAutocompleteState.activeIndex % dialogueContentAutocompleteItems.value.length
   ]
 })
 
@@ -389,6 +414,7 @@ function createDialogueEditorDraft(dialogue?: StoryBigOnceDialogueDefinition): D
 }
 
 function openCreateDialogueEditor() {
+  closeDialogueContentAutocomplete()
   dialogueEditorState.open = true
   dialogueEditorState.mode = "create"
   dialogueEditorState.dialogueId = ""
@@ -402,6 +428,7 @@ function openEditDialogueEditor(dialogueId: string) {
     return
   }
 
+  closeDialogueContentAutocomplete()
   dialogueEditorState.open = true
   dialogueEditorState.mode = "edit"
   dialogueEditorState.dialogueId = dialogueId
@@ -409,6 +436,7 @@ function openEditDialogueEditor(dialogueId: string) {
 }
 
 function closeDialogueEditor() {
+  closeDialogueContentAutocomplete()
   dialogueEditorState.open = false
   dialogueEditorState.mode = "create"
   dialogueEditorState.dialogueId = ""
@@ -732,6 +760,111 @@ function onEndScriptScroll(event: Event) {
   syncScriptEditorScroll("endScript", event)
 }
 
+function closeDialogueContentAutocomplete() {
+  dialogueContentAutocompleteState.open = false
+  dialogueContentAutocompleteState.query = ""
+  dialogueContentAutocompleteState.replaceStart = 0
+  dialogueContentAutocompleteState.replaceEnd = 0
+  dialogueContentAutocompleteState.activeIndex = 0
+}
+
+function updateDialogueContentAutocompleteFromCaret() {
+  const textarea = dialogueContentTextareaRef.value
+  const fieldValue = dialogueEditorState.draft.content
+
+  if (!textarea) {
+    closeDialogueContentAutocomplete()
+    return
+  }
+
+  const caret = textarea.selectionStart ?? fieldValue.length
+  const beforeCaret = fieldValue.slice(0, caret)
+  const openBraceIndex = beforeCaret.lastIndexOf("{")
+
+  if (openBraceIndex < 0 || beforeCaret.slice(openBraceIndex + 1).includes("}")) {
+    closeDialogueContentAutocomplete()
+    return
+  }
+
+  dialogueContentAutocompleteState.open = true
+  dialogueContentAutocompleteState.query = beforeCaret.slice(openBraceIndex + 1)
+  dialogueContentAutocompleteState.replaceStart = openBraceIndex
+  dialogueContentAutocompleteState.replaceEnd = caret
+
+  if (dialogueContentAutocompleteItems.value.length === 0) {
+    dialogueContentAutocompleteState.activeIndex = 0
+    return
+  }
+
+  if (dialogueContentAutocompleteState.activeIndex >= dialogueContentAutocompleteItems.value.length) {
+    dialogueContentAutocompleteState.activeIndex = 0
+  }
+}
+
+function insertDialogueContentAutocompleteItem(itemName: string) {
+  const replaceStart = dialogueContentAutocompleteState.replaceStart
+
+  dialogueEditorState.draft.content =
+    dialogueEditorState.draft.content.slice(0, replaceStart + 1) +
+    itemName +
+    "}" +
+    dialogueEditorState.draft.content.slice(dialogueContentAutocompleteState.replaceEnd)
+
+  closeDialogueContentAutocomplete()
+
+  requestAnimationFrame(() => {
+    const nextCaret = replaceStart + itemName.length + 2
+    dialogueContentTextareaRef.value?.focus()
+    dialogueContentTextareaRef.value?.setSelectionRange(nextCaret, nextCaret)
+  })
+}
+
+function onDialogueContentInput() {
+  updateDialogueContentAutocompleteFromCaret()
+}
+
+function onDialogueContentKeydown(event: KeyboardEvent) {
+  if (!dialogueContentAutocompleteState.open) {
+    if (event.key === "Escape") {
+      closeDialogueContentAutocomplete()
+    }
+    return
+  }
+
+  if (event.key === "Escape") {
+    event.preventDefault()
+    closeDialogueContentAutocomplete()
+    return
+  }
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault()
+    const length = Math.max(dialogueContentAutocompleteItems.value.length, 1)
+    dialogueContentAutocompleteState.activeIndex =
+      (dialogueContentAutocompleteState.activeIndex + 1) % length
+    return
+  }
+
+  if (event.key === "ArrowUp") {
+    event.preventDefault()
+    const length = Math.max(dialogueContentAutocompleteItems.value.length, 1)
+    dialogueContentAutocompleteState.activeIndex =
+      (dialogueContentAutocompleteState.activeIndex - 1 + length) % length
+    return
+  }
+
+  if (event.key === "Enter" || event.key === "Tab") {
+    const item = activeDialogueContentAutocompleteItem.value
+
+    if (!item) {
+      return
+    }
+
+    event.preventDefault()
+    insertDialogueContentAutocompleteItem(item.name)
+  }
+}
+
 function onScriptFieldKeydown(field: ScriptFieldKey, event: KeyboardEvent) {
   const state = getScriptAutocompleteState(field)
   const items = getScriptAutocompleteItems(field)
@@ -857,6 +990,7 @@ watch(
   (event) => {
     syncDraft(event)
     closeAllScriptAutocomplete()
+    closeDialogueContentAutocomplete()
     closeTriggerHelp()
   },
   { immediate: true }
@@ -945,13 +1079,13 @@ function handleDocumentPointerDown(event: MouseEvent) {
     }
   }
 
-  if (!isTriggerAutocompleteOpen.value) {
-    if (
-      !isInitScriptAutocompleteOpen.value &&
-      !isEndScriptAutocompleteOpen.value
-    ) {
-      return
-    }
+  if (
+    !isTriggerAutocompleteOpen.value &&
+    !isInitScriptAutocompleteOpen.value &&
+    !isEndScriptAutocompleteOpen.value &&
+    !isDialogueContentAutocompleteOpen.value
+  ) {
+    return
   }
 
   for (const field of ["triggerExpr", "initScript", "endScript"] as const) {
@@ -968,6 +1102,13 @@ function handleDocumentPointerDown(event: MouseEvent) {
     }
 
     closeScriptAutocomplete(field)
+  }
+
+  if (
+    isDialogueContentAutocompleteOpen.value &&
+    (!dialogueContentFieldRef.value || !target || !dialogueContentFieldRef.value.contains(target))
+  ) {
+    closeDialogueContentAutocomplete()
   }
 }
 </script>
@@ -1418,12 +1559,51 @@ function handleDocumentPointerDown(event: MouseEvent) {
             </label>
           </div>
 
-          <label class="field">
+          <label ref="dialogueContentField" class="field">
             <span class="field-label">对白</span>
-            <textarea
-              v-model="dialogueEditorState.draft.content"
-              class="text-area dialogue-editor__content"
-            />
+            <div class="detail-panel__expression-wrap">
+              <textarea
+                ref="dialogueContentTextarea"
+                v-model="dialogueEditorState.draft.content"
+                class="text-area dialogue-editor__content"
+                @input="onDialogueContentInput"
+                @click="updateDialogueContentAutocompleteFromCaret"
+                @keyup="updateDialogueContentAutocompleteFromCaret"
+                @keydown="onDialogueContentKeydown"
+              />
+
+              <div
+                v-if="isDialogueContentAutocompleteOpen"
+                class="detail-panel__autocomplete"
+              >
+                <button
+                  v-for="(item, index) in dialogueContentAutocompleteItems"
+                  :key="item.name"
+                  class="detail-panel__autocomplete-item"
+                  :class="{
+                    'detail-panel__autocomplete-item--active':
+                      index === dialogueContentAutocompleteState.activeIndex
+                  }"
+                  type="button"
+                  @mousedown.prevent="insertDialogueContentAutocompleteItem(item.name)"
+                >
+                  <span class="detail-panel__autocomplete-name">{{ item.name }}</span>
+                  <span
+                    v-if="item.description"
+                    class="detail-panel__autocomplete-description"
+                  >
+                    {{ item.description }}
+                  </span>
+                </button>
+
+                <div
+                  v-if="!dialogueContentAutocompleteItems.length"
+                  class="detail-panel__autocomplete-empty"
+                >
+                  没有匹配的变量
+                </div>
+              </div>
+            </div>
           </label>
 
           <div class="detail-panel__dialogue-modal-actions">

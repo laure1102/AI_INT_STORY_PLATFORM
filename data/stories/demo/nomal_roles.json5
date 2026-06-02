@@ -25,5 +25,14 @@
       prompt: '',
       zhiye: '娱乐场所大妈',
     },
+    {
+      descr: '一张麻将八筒',
+      img_compress_1: '',
+      img_compress_2: '',
+      img_raw: '',
+      name: 'xitong',
+      prompt: '',
+      zhiye: '统子',
+    },
   ],
 }

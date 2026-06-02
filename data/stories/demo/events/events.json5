@@ -11,6 +11,61 @@
         speaker_key: 'player',
         speaker_type: 'player',
       },
+      {
+        content: '这些年过去了，{county.name_full}县还是老样子，一点没变。\n老旧的矮楼，破烂的街道……',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+      {
+        content: '接下来，我做些什么呢？',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+      {
+        content: '叮……',
+        speaker_key: 'normal:xitong',
+        speaker_type: 'object',
+      },
+      {
+        content: '刚才我脑袋里的那是什么声音？',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+      {
+        content: '恭喜宿主，你的系统还有3秒抵达……',
+        speaker_key: 'normal:xitong',
+        speaker_type: 'object',
+      },
+      {
+        content: '3……2……1\n系统绑定成功。',
+        speaker_key: 'normal:xitong',
+        speaker_type: 'object',
+      },
+      {
+        content: '统子哥？！！',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+      {
+        content: '竟然是统子哥！！\n那本大爷岂不是起飞了！',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+      {
+        content: '统子哥，快介绍一下你的功能！',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+      {
+        content: '本统的功能很简单。',
+        speaker_key: 'normal:xitong',
+        speaker_type: 'object',
+      },
+      {
+        content: '每天0点，本统会自动xxxxllkjd',
+        speaker_key: 'normal:xitong',
+        speaker_type: 'object',
+      },
     ],
     id: 'back_county',
     init_script: '',
@@ -19,6 +74,7 @@
     node_type: 'event',
     object_keys: [
       'player',
+      'normal:xitong',
     ],
     title: '回到县城',
     trigger_expr: '',
