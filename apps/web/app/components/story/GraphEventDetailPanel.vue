@@ -40,6 +40,11 @@ interface RoleOption {
   label: string
 }
 
+const PLAYER_OBJECT_OPTION: RoleOption = {
+  key: "player",
+  label: "主角"
+}
+
 interface TriggerAutocompleteItem {
   name: string
   description: string
@@ -181,8 +186,11 @@ const normalRoleOptions = computed<RoleOption[]>(() => {
   }))
 })
 
+const specialObjectOptions = computed<RoleOption[]>(() => [PLAYER_OBJECT_OPTION])
+
 const roleOptionMap = computed(() => {
   const entries: Array<[string, RoleOption]> = [
+    ...specialObjectOptions.value,
     ...importantRoleOptions.value,
     ...normalRoleOptions.value
   ].map((option) => [option.key, option])
@@ -943,6 +951,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
             <div class="detail-grid detail-grid--event-config">
               <StoryEventObjectField
                 v-model="draft.selectedObjectKeys"
+                :special-options="specialObjectOptions"
                 :important-options="importantRoleOptions"
                 :normal-options="normalRoleOptions"
                 placeholder="搜索并选择对象角色"
@@ -1110,65 +1119,89 @@ function handleDocumentPointerDown(event: MouseEvent) {
           </div>
 
           <div v-if="draft.dialogues.length" class="dialogue-list">
-            <div
-              v-for="(dialogue, index) in draft.dialogues"
-              :key="dialogue.id"
-              class="dialogue-list__row"
-            >
-              <div class="dialogue-list__sort">
-                <button
-                  class="btn-secondary dialogue-list__arrow"
-                  type="button"
-                  title="上移"
-                  :disabled="index === 0"
-                  @click="moveDialogue(dialogue.id, -1)"
-                >
-                  ↑
-                </button>
-                <button
-                  class="btn-secondary dialogue-list__arrow"
-                  type="button"
-                  title="下移"
-                  :disabled="index === draft.dialogues.length - 1"
-                  @click="moveDialogue(dialogue.id, 1)"
-                >
-                  ↓
-                </button>
+            <div class="dialogue-list__table">
+              <div class="dialogue-list__table-head">
+                <span>排序</span>
+                <span>说话人</span>
+                <span>对白</span>
+                <span>操作</span>
               </div>
 
-              <button
-                class="dialogue-list__main"
-                type="button"
-                @click="openEditDialogueEditor(dialogue.id)"
+              <div
+                v-for="(dialogue, index) in draft.dialogues"
+                :key="dialogue.id"
+                class="dialogue-list__row"
               >
-                <span class="dialogue-list__index">对白 {{ index + 1 }}</span>
-                <span class="dialogue-list__speaker">
-                  {{
-                    dialogue.speaker_type === "player"
-                      ? "主角"
-                      : (roleOptionMap.get(dialogue.speaker_key)?.label ?? dialogue.speaker_key)
-                  }}
-                </span>
-                <span class="dialogue-list__content">
-                  {{ dialogue.content.trim() || "点击编辑对白内容" }}
-                </span>
-              </button>
+                <div class="dialogue-list__sort">
+                  <button
+                    class="btn-secondary dialogue-list__icon-btn"
+                    type="button"
+                    title="上移"
+                    :disabled="index === 0"
+                    @click="moveDialogue(dialogue.id, -1)"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    class="btn-secondary dialogue-list__icon-btn"
+                    type="button"
+                    title="下移"
+                    :disabled="index === draft.dialogues.length - 1"
+                    @click="moveDialogue(dialogue.id, 1)"
+                  >
+                    ↓
+                  </button>
+                </div>
 
-              <div class="dialogue-list__actions">
+                <div class="dialogue-list__speaker-cell">
+                  <span class="dialogue-list__index">{{ index + 1 }}</span>
+                  <span class="dialogue-list__speaker">
+                    {{
+                      dialogue.speaker_type === "player"
+                        ? "主角"
+                        : (roleOptionMap.get(dialogue.speaker_key)?.label ?? dialogue.speaker_key)
+                    }}
+                  </span>
+                </div>
+
                 <button
-                  class="btn-secondary dialogue-list__action"
+                  class="dialogue-list__content-button"
                   type="button"
                   @click="openEditDialogueEditor(dialogue.id)"
                 >
-                  编辑
+                  <span class="dialogue-list__content">
+                    {{ dialogue.content.trim() || "点击编辑对白内容" }}
+                  </span>
                 </button>
-                <button
-                  class="btn-secondary dialogue-list__action"
-                  type="button"
-                  @click="removeDialogue(dialogue.id)"
-                >
-                  删除
-                </button>
+
+                <div class="dialogue-list__actions">
+                  <button
+                    class="btn-secondary dialogue-list__icon-btn"
+                    type="button"
+                    title="编辑"
+                    @click="openEditDialogueEditor(dialogue.id)"
+                  >
+                    <svg class="dialogue-list__icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1.003 1.003 0 0 0 0-1.42l-2.5-2.5a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.99-1.66Z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    class="btn-secondary dialogue-list__icon-btn dialogue-list__icon-btn--danger"
+                    type="button"
+                    title="删除"
+                    @click="removeDialogue(dialogue.id)"
+                  >
+                    <svg class="dialogue-list__icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v8h-2V9Zm4 0h2v8h-2V9ZM7 9h2v8H7V9Zm-1 11h12a2 2 0 0 0 2-2V8H4v10a2 2 0 0 0 2 2Z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1730,72 +1763,106 @@ function handleDocumentPointerDown(event: MouseEvent) {
 .dialogue-list {
   min-height: 0;
   overflow-y: auto;
-  display: grid;
-  gap: 12px;
   padding-right: 6px;
 }
 
+.dialogue-list__table {
+  display: grid;
+  gap: 6px;
+}
+
+.dialogue-list__table-head,
 .dialogue-list__row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 72px minmax(120px, 180px) minmax(0, 1fr) 88px;
   gap: 10px;
-  align-items: stretch;
-  padding: 12px;
+  align-items: center;
+}
+
+.dialogue-list__table-head {
+  padding: 0 10px 6px;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+}
+
+.dialogue-list__row {
+  padding: 8px 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .dialogue-list__sort {
-  display: grid;
-  gap: 8px;
-  align-content: start;
-}
-
-.dialogue-list__arrow {
-  min-width: 38px;
-  min-height: 34px;
-  padding: 0;
-  font-size: 1rem;
-}
-
-.dialogue-list__main {
-  display: grid;
+  display: inline-flex;
   gap: 6px;
+  align-items: center;
+}
+
+.dialogue-list__icon-btn {
+  min-width: 30px;
+  width: 30px;
+  min-height: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  font-size: 0.92rem;
+}
+
+.dialogue-list__icon-btn--danger {
+  color: rgba(255, 191, 182, 0.96);
+  background: rgba(255, 139, 123, 0.12);
+}
+
+.dialogue-list__speaker-cell {
+  display: grid;
+  gap: 4px;
   min-width: 0;
-  padding: 4px 6px;
+}
+
+.dialogue-list__content-button {
+  min-width: 0;
+  padding: 6px 8px;
   border: none;
-  background: transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
   color: var(--text);
   text-align: left;
+  cursor: pointer;
 }
 
 .dialogue-list__index {
   font-weight: 700;
+  font-size: 0.76rem;
+  color: var(--text-dim);
 }
 
 .dialogue-list__speaker {
   color: var(--accent);
-  font-size: 0.88rem;
+  font-size: 0.84rem;
 }
 
 .dialogue-list__content {
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
 }
 
 .dialogue-list__actions {
-  display: grid;
-  gap: 8px;
-  align-content: start;
+  display: inline-flex;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
-.dialogue-list__action {
-  min-width: 68px;
-  min-height: 34px;
+.dialogue-list__icon {
+  width: 14px;
+  height: 14px;
 }
 
 .detail-panel__dialogue-modal {
@@ -1900,9 +1967,12 @@ function handleDocumentPointerDown(event: MouseEvent) {
     grid-template-columns: 1fr;
   }
 
+  .dialogue-list__table-head {
+    display: none;
+  }
+
   .dialogue-list__sort,
   .dialogue-list__actions {
-    grid-auto-flow: column;
     justify-content: start;
   }
 }

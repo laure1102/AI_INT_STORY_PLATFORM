@@ -1,91 +1,15 @@
 [
   {
     dialogues: [],
-    id: 'arrival',
+    id: 'back_county',
     init_script: '',
-    location: '',
-    meta: {
-      chapter: 1,
-    },
-    next: [
-      'market_choice',
-    ],
-    node_type: 'event',
-    object_keys: [],
-    title: '抵达裂笛城',
-    trigger_expr: '',
-  },
-  {
-    dialogues: [],
-    id: 'arrival-child',
-    init_script: '',
-    location: '',
-    next: [
-      'north_tower',
-      'arrival-child-action',
-    ],
-    node_type: 'event',
-    object_keys: [],
-    title: '护士的安抚',
-    trigger_expr: '',
-  },
-  {
-    exec_script: '',
-    id: 'arrival-child-action',
-    next: [
-      'north_tower',
-    ],
-    node_type: 'action',
-    title: 'V我50块',
-    vars: [],
-  },
-  {
-    dialogues: [],
-    id: 'market_choice',
-    init_script: '',
-    location: '',
-    meta: {
-      chapter: 1,
-      tone: 'busy',
-    },
-    next: [
-      'north_tower',
-    ],
-    node_type: 'event',
-    object_keys: [],
-    title: '喧闹的市集',
-    trigger_expr: '',
-  },
-  {
-    dialogues: [],
-    id: 'north_tower',
-    init_script: '',
-    location: '',
-    meta: {
-      chapter: 1,
-      tone: 'mystery',
-    },
+    location: 'qichezhan_lvl1',
     next: [],
     node_type: 'event',
-    object_keys: [],
-    title: '北塔脚下',
-    trigger_expr: '',
-  },
-  {
-    dialogues: [],
-    id: 'old_guard',
-    init_script: '',
-    location: '',
-    meta: {
-      chapter: 1,
-      tone: 'ominous',
-    },
-    next: [
-      'north_tower',
+    object_keys: [
+      'player',
     ],
-    node_type: 'event',
-    object_keys: [],
-    title: '老卫兵的警告',
+    title: '回到县城',
     trigger_expr: '',
   },
 ]

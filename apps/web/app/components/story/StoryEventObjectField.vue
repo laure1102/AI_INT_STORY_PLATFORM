@@ -7,6 +7,7 @@ interface RoleOption {
 }
 
 const props = defineProps<{
+  specialOptions?: RoleOption[]
   importantOptions: RoleOption[]
   normalOptions: RoleOption[]
   placeholder?: string
@@ -34,6 +35,7 @@ const emit = defineEmits<{
 
     <StoryRoleMultiSelect
       v-model="model"
+      :special-options="props.specialOptions ?? []"
       :important-options="importantOptions"
       :normal-options="normalOptions"
       :placeholder="props.placeholder ?? '搜索并选择对象角色'"

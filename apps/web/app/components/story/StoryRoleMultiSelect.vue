@@ -5,6 +5,7 @@ interface RoleMultiSelectOption {
 }
 
 const props = withDefaults(defineProps<{
+  specialOptions?: RoleMultiSelectOption[]
   importantOptions: RoleMultiSelectOption[]
   normalOptions: RoleMultiSelectOption[]
   placeholder?: string
@@ -20,7 +21,7 @@ const isOpen = shallowRef(false)
 const searchQuery = shallowRef("")
 
 const allOptions = computed<RoleMultiSelectOption[]>(() => {
-  return [...props.importantOptions, ...props.normalOptions]
+  return [...(props.specialOptions ?? []), ...props.importantOptions, ...props.normalOptions]
 })
 
 const optionMap = computed(() => {
@@ -46,6 +47,16 @@ const filteredImportantOptions = computed(() => {
   })
 })
 
+const filteredSpecialOptions = computed(() => {
+  if (!normalizedSearchQuery.value) {
+    return props.specialOptions ?? []
+  }
+
+  return (props.specialOptions ?? []).filter((option) => {
+    return option.label.toLowerCase().includes(normalizedSearchQuery.value)
+  })
+})
+
 const filteredNormalOptions = computed(() => {
   if (!normalizedSearchQuery.value) {
     return props.normalOptions
@@ -57,7 +68,11 @@ const filteredNormalOptions = computed(() => {
 })
 
 const hasMatches = computed(() => {
-  return filteredImportantOptions.value.length > 0 || filteredNormalOptions.value.length > 0
+  return (
+    filteredSpecialOptions.value.length > 0 ||
+    filteredImportantOptions.value.length > 0 ||
+    filteredNormalOptions.value.length > 0
+  )
 })
 
 function focusSearchInput() {
@@ -218,6 +233,21 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="role-multi-select__results">
+        <section v-if="filteredSpecialOptions.length" class="role-multi-select__group">
+          <label
+            v-for="option in filteredSpecialOptions"
+            :key="option.key"
+            class="role-multi-select__option"
+          >
+            <input
+              :checked="selectedSet.has(option.key)"
+              type="checkbox"
+              @change="toggleOption(option.key)"
+            />
+            <span>{{ option.label }}</span>
+          </label>
+        </section>
+
         <section v-if="filteredImportantOptions.length" class="role-multi-select__group">
           <header class="role-multi-select__group-title">重要角色</header>
           <label

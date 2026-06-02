@@ -23,5 +23,13 @@
       name: 'jiedao_renshao',
       prompt: '',
     },
+    {
+      descr: '县城汽车站门口',
+      img_compress_1: '',
+      img_compress_2: '',
+      img_raw: '',
+      name: 'qichezhan_lvl1',
+      prompt: '',
+    },
   ],
 }
