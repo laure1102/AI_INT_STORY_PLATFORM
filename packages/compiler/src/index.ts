@@ -8,13 +8,28 @@ export function compileStory(document: StoryDocument): {
   const graphEvents = Object.fromEntries(
     document.graphEvents.map((event) => [
       event.id,
-      {
-        id: event.id,
-        title: event.title,
-        kind: event.kind,
-        body: event.body,
-        next: event.next
-      }
+      "exec_script" in event
+        ? {
+            node_type: "action" as const,
+            id: event.id,
+            title: event.title,
+            vars: event.vars,
+            exec_script: event.exec_script,
+            next: event.next,
+            meta: event.meta
+          }
+        : {
+            node_type: "event" as const,
+            id: event.id,
+            title: event.title,
+            trigger_expr: event.trigger_expr,
+            init_script: event.init_script,
+            object_keys: event.object_keys,
+            dialogues: event.dialogues,
+            location: event.location,
+            next: event.next,
+            meta: event.meta
+          }
     ])
   )
 

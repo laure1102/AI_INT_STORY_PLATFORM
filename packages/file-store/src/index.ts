@@ -4,6 +4,7 @@ import JSON5 from "json5"
 import sharp from "sharp"
 import {
   appSettingsSchema,
+  storyActionSchema,
   storyBigOnceEventSchema,
   storyBigOnceEventsSchema,
   storyEventLocationSchema,
@@ -19,6 +20,7 @@ import {
   storyValsSchema,
   type AppSettingsFile,
   type StoryAnyEventFile,
+  type StoryActionFile,
   type StoryBigOnceEventFile,
   type StoryBigOnceEventsFile,
   type StoryEventCollectionType,
@@ -761,12 +763,26 @@ async function readStoryGraphEvents(
   storyId: string
 ): Promise<StoryGraphEventsFile> {
   const paths = createStoryPaths(dataDir, storyId)
-  const graphEvents = await readOptionalJson5File<StoryGraphEventsFile | { events: StoryEventFile[] }>(
+  const graphEvents = await readOptionalJson5File<StoryGraphEventsFile | { events: StoryAnyEventFile[] }>(
     paths.graphEventsFile,
     []
   )
   const normalizedGraphEvents = Array.isArray(graphEvents) ? graphEvents : graphEvents.events
-  return storyGraphEventsSchema.parse(normalizedGraphEvents)
+  return storyGraphEventsSchema.parse(
+    normalizedGraphEvents.map((event) => {
+      if ("exec_script" in event) {
+        return {
+          node_type: "action" as const,
+          ...event
+        }
+      }
+
+      return {
+        node_type: "event" as const,
+        ...event
+      }
+    })
+  )
 }
 
 async function readStoryBigOnceEvents(
@@ -891,7 +907,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       return storyLoopEventSchema.parse(event)
     }
 
-    return storyEventSchema.parse(event)
+    return "exec_script" in event ? storyActionSchema.parse(event) : storyEventSchema.parse(event)
   }
 
   async function writeEvent(
@@ -943,7 +959,9 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       return parsedEvent
     }
 
-    const parsedEvent = storyEventSchema.parse(event)
+    const parsedEvent = "exec_script" in event
+      ? storyActionSchema.parse(event)
+      : storyEventSchema.parse(event)
     const graphEvents = await readStoryGraphEvents(dataDir, storyId)
     const hasExistingEvent = graphEvents.some((currentEvent) => currentEvent.id === eventId)
     const nextGraphEvents = hasExistingEvent

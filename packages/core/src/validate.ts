@@ -1,8 +1,10 @@
 import type {
   StoryAnyEventFile,
+  StoryActionFile,
   StoryBigOnceEventFile,
   StoryDocument,
   StoryEventFile,
+  StoryGraphNodeFile,
   StoryLoopEventFile,
   ValidationIssue,
   ValidationResult
@@ -29,13 +31,19 @@ function buildEventMap(events: StoryEventFile[]) {
 }
 
 function buildAllEventMap(
-  graphEvents: StoryEventFile[],
+  graphEvents: StoryGraphNodeFile[],
   bigOnceEvents: StoryBigOnceEventFile[],
   loopEvents: StoryLoopEventFile[]
 ) {
-  return new Map(
-    [...graphEvents, ...bigOnceEvents, ...loopEvents].map((event) => [event.id, event])
-  )
+  return new Map([...graphEvents, ...bigOnceEvents, ...loopEvents].map((event) => [event.id, event]))
+}
+
+function isGraphActionNode(event: StoryGraphNodeFile): event is StoryActionFile {
+  return "exec_script" in event
+}
+
+function isGraphEventNode(event: StoryGraphNodeFile): event is StoryEventFile {
+  return "next" in event && !("exec_script" in event)
 }
 
 function collectLocationNames(document: StoryDocument) {
@@ -167,10 +175,170 @@ function validateLoopEvent(
   }
 }
 
-function collectReachableEvents(
-  startEventId: string,
-  eventMap: Map<string, StoryEventFile>
+function validateGraphEvent(
+  event: StoryEventFile,
+  eventIndex: number,
+  document: StoryDocument,
+  issues: ValidationIssue[]
 ) {
+  const locationNames = collectLocationNames(document)
+  const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
+
+  try {
+    evaluateStoryBooleanExpression(document.vals, event.trigger_expr)
+  } catch (error) {
+    pushIssue(
+      issues,
+      "error",
+      "graph.trigger-expr-invalid",
+      `Graph event "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
+      ["graphEvents", String(eventIndex), "trigger_expr"]
+    )
+  }
+
+  for (const issue of validateStoryScript(document.vals, event.init_script)) {
+    pushIssue(
+      issues,
+      "error",
+      "graph.init-script-invalid",
+      `Graph event "${event.id}" init_script is invalid at line ${issue.lineNumber}: ${issue.message}`,
+      ["graphEvents", String(eventIndex), "init_script"]
+    )
+  }
+
+  for (const [objectIndex, objectKey] of event.object_keys.entries()) {
+    if (!findStoryRoleReference(document.roles, objectKey)) {
+      pushIssue(
+        issues,
+        "error",
+        "graph.missing-object",
+        `Graph event "${event.id}" references missing object "${objectKey}".`,
+        ["graphEvents", String(eventIndex), "object_keys", String(objectIndex)]
+      )
+    }
+  }
+
+  if (event.location && !locationNames.has(event.location)) {
+    pushIssue(
+      issues,
+      "error",
+      "graph.missing-location",
+      `Graph event "${event.id}" references missing location "${event.location}".`,
+      ["graphEvents", String(eventIndex), "location"]
+    )
+  }
+
+  for (const [dialogueIndex, dialogue] of event.dialogues.entries()) {
+    if (dialogue.speaker_type === "player") {
+      if (dialogue.speaker_key !== "player") {
+        pushIssue(
+          issues,
+          "error",
+          "graph.invalid-player-speaker",
+          `Graph event "${event.id}" player dialogue must use speaker_key "player".`,
+          ["graphEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+        )
+      }
+      continue
+    }
+
+    if (!allowedSpeakerKeys.has(dialogue.speaker_key)) {
+      pushIssue(
+        issues,
+        "error",
+        "graph.invalid-object-speaker",
+        `Graph event "${event.id}" dialogue speaker "${dialogue.speaker_key}" is not in the current event objects.`,
+        ["graphEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+      )
+    }
+  }
+}
+
+function validateGraphAction(
+  action: StoryActionFile,
+  actionIndex: number,
+  document: StoryDocument,
+  issues: ValidationIssue[],
+  graphEvents: StoryEventFile[],
+  graphActions: StoryActionFile[]
+) {
+  const incomingGraphEvents = graphEvents.filter((event) => event.next.includes(action.id))
+  const incomingGraphActions = graphActions.filter((event) => event.next.includes(action.id))
+  const graphEventIds = new Set(graphEvents.map((event) => event.id))
+  const graphActionIds = new Set(graphActions.map((event) => event.id))
+
+  if (incomingGraphEvents.length > 1) {
+      pushIssue(
+        issues,
+        "error",
+        "graph-action.multiple-parents",
+        `Graph action "${action.id}" can only have one parent event.`,
+        ["graphEvents", String(actionIndex), "id"]
+      )
+  }
+
+  if (incomingGraphActions.length > 0) {
+      pushIssue(
+        issues,
+        "error",
+        "graph-action.invalid-parent",
+        `Graph action "${action.id}" cannot be linked from another action.`,
+        ["graphEvents", String(actionIndex), "id"]
+      )
+  }
+
+  if (action.next.length > 1) {
+      pushIssue(
+        issues,
+        "error",
+        "graph-action.multiple-next",
+        `Graph action "${action.id}" can only point to one next event.`,
+        ["graphEvents", String(actionIndex), "next"]
+      )
+  }
+
+  for (const [nextIndex, nextId] of action.next.entries()) {
+    if (graphActionIds.has(nextId)) {
+        pushIssue(
+          issues,
+          "error",
+          "graph-action.invalid-next-target",
+          `Graph action "${action.id}" cannot point to another action "${nextId}".`,
+          ["graphEvents", String(actionIndex), "next", String(nextIndex)]
+        )
+    }
+
+    if (!graphEventIds.has(nextId) && !graphActionIds.has(nextId)) {
+      continue
+    }
+  }
+
+  for (const [varIndex, actionVar] of action.vars.entries()) {
+    if (
+      action.vars.findIndex((currentVar) => currentVar.name.trim() === actionVar.name.trim()) !== varIndex
+    ) {
+      pushIssue(
+        issues,
+        "error",
+        "graph-action.duplicate-var",
+        `Graph action "${action.id}" has duplicate variable "${actionVar.name}".`,
+        ["graphEvents", String(actionIndex), "vars", String(varIndex), "name"]
+      )
+    }
+  }
+
+  for (const issue of validateStoryScript(document.vals, action.exec_script)) {
+    pushIssue(
+      issues,
+      "error",
+      "graph-action.exec-script-invalid",
+      `Graph action "${action.id}" exec_script is invalid at line ${issue.lineNumber}: ${issue.message}`,
+      ["graphEvents", String(actionIndex), "exec_script"]
+    )
+  }
+}
+
+function collectReachableGraphNodes(startEventId: string, eventMap: Map<string, StoryAnyEventFile>) {
   const visited = new Set<string>()
   const stack = [startEventId]
 
@@ -183,7 +351,7 @@ function collectReachableEvents(
     visited.add(eventId)
 
     const event = eventMap.get(eventId)
-    if (!event) {
+    if (!event || !("next" in event)) {
       continue
     }
 
@@ -197,11 +365,14 @@ function collectReachableEvents(
 
 export function validateStoryDocument(document: StoryDocument): ValidationResult {
   const issues: ValidationIssue[] = []
-  const graphEvents = document.graphEvents
+  const graphNodes = document.graphEvents
+  const graphEvents = graphNodes.filter(isGraphEventNode)
+  const graphActions = graphNodes.filter(isGraphActionNode)
   const bigOnceEvents = document.bigOnceEvents
   const loopEvents = document.loopEvents
   const graphEventMap = buildEventMap(graphEvents)
-  const eventMap = buildAllEventMap(graphEvents, bigOnceEvents, loopEvents)
+  const graphNodeMap = new Map(graphNodes.map((event) => [event.id, event]))
+  const eventMap = buildAllEventMap(graphNodes, bigOnceEvents, loopEvents)
   const seenIds = new Set<string>()
 
   if (graphEvents.length === 0) {
@@ -215,7 +386,7 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
   }
 
   const eventGroups = [
-    { key: "graphEvents", events: graphEvents },
+    { key: "graphEvents", events: graphNodes },
     { key: "bigOnceEvents", events: bigOnceEvents },
     { key: "loopEvents", events: loopEvents }
   ] as const satisfies Array<{
@@ -259,6 +430,21 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
       if (group.key === "loopEvents") {
         validateLoopEvent(event as StoryLoopEventFile, eventIndex, document, issues)
       }
+
+      if (group.key === "graphEvents" && isGraphEventNode(event as StoryGraphNodeFile)) {
+        validateGraphEvent(event as StoryEventFile, eventIndex, document, issues)
+      }
+
+      if (group.key === "graphEvents" && isGraphActionNode(event as StoryGraphNodeFile)) {
+        validateGraphAction(
+          event as StoryActionFile,
+          eventIndex,
+          document,
+          issues,
+          graphEvents,
+          graphActions
+        )
+      }
     }
   }
 
@@ -272,7 +458,7 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
         ["story", "startEventId"]
       )
     } else {
-      const reachable = collectReachableEvents(document.story.startEventId, graphEventMap)
+      const reachable = collectReachableGraphNodes(document.story.startEventId, graphNodeMap)
 
       for (const event of graphEvents) {
         if (!reachable.has(event.id)) {
@@ -282,6 +468,18 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
             "event.unreachable",
             `Event "${event.id}" cannot be reached from the configured start event.`,
             ["graphEvents", event.id]
+          )
+        }
+      }
+
+      for (const action of graphActions) {
+        if (!reachable.has(action.id)) {
+          pushIssue(
+            issues,
+            "warning",
+            "graph-action.unreachable",
+            `Graph action "${action.id}" cannot be reached from the configured start event.`,
+            ["graphEvents", action.id]
           )
         }
       }

@@ -2,6 +2,7 @@
 import type {
   AppSettingsFile,
   StoryAnyEventFile,
+  StoryActionFile,
   StoryBigOnceEventFile,
   StoryDocument,
   StoryEventCollectionType,
@@ -18,7 +19,8 @@ import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
 import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
 import AppSettingsDialog from "./AppSettingsDialog.vue"
 import BigOnceEventDetailPanel from "./BigOnceEventDetailPanel.vue"
-import EventDetailPanel from "./EventDetailPanel.vue"
+import GraphActionDetailPanel from "./GraphActionDetailPanel.vue"
+import GraphEventDetailPanel from "./GraphEventDetailPanel.vue"
 import LoopEventDetailPanel from "./LoopEventDetailPanel.vue"
 import StoryBigOnceCanvas from "./StoryBigOnceCanvas.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
@@ -94,7 +96,27 @@ function getEventsByCollectionType(collectionType: EventCanvasTab) {
   return storyDocument.value.graphEvents
 }
 
+function getGraphNodes() {
+  if (!storyDocument.value) {
+    return []
+  }
+
+  return storyDocument.value.graphEvents
+}
+
+function isGraphActionNode(event: StoryAnyEventFile): event is StoryActionFile {
+  return "exec_script" in event
+}
+
+function isGraphEventNode(event: StoryAnyEventFile): event is StoryEventFile {
+  return "next" in event && !("exec_script" in event) && !("bgm" in event)
+}
+
 const activeEvents = computed<StoryAnyEventFile[]>(() => {
+  if (activeEventTab.value === "graph") {
+    return getGraphNodes()
+  }
+
   return getEventsByCollectionType(activeEventTab.value)
 })
 
@@ -142,16 +164,64 @@ const activeDraftEvent = computed(() => {
   return editingEvent.value
 })
 
-const activeRegularDraftEvent = computed<StoryEventFile | null>(() => {
-  if (activeEventTab.value === "bigOnce") {
+const activeGraphParentNodeId = computed<string | null>(() => {
+  if (activeEventTab.value !== "graph") {
     return null
   }
 
-  if (activeEventTab.value === "loop") {
+  if (creatingFromEventId.value) {
+    return creatingFromEventId.value
+  }
+
+  const currentEventId = activeDraftEvent.value?.id
+
+  if (!currentEventId) {
     return null
   }
 
-  return activeDraftEvent.value as StoryEventFile | null
+  const parentNode = getGraphNodes().find((event) => "next" in event && event.next.includes(currentEventId))
+
+  return parentNode?.id ?? null
+})
+
+const activeGraphDraftEvent = computed<StoryEventFile | null>(() => {
+  if (activeEventTab.value !== "graph") {
+    return null
+  }
+
+  const draft = activeDraftEvent.value
+
+  if (!draft || "exec_script" in draft || "bgm" in draft) {
+    return null
+  }
+
+  return draft as StoryEventFile
+})
+
+const activeGraphDraftAction = computed<StoryActionFile | null>(() => {
+  if (activeEventTab.value !== "graph") {
+    return null
+  }
+
+  const draft = activeDraftEvent.value
+
+  if (!draft || !isGraphActionNode(draft)) {
+    return null
+  }
+
+  return draft
+})
+
+const graphNodeOptions = computed(() => {
+  if (activeEventTab.value !== "graph") {
+    return []
+  }
+
+  return getGraphNodes().map((node) => ({
+    id: node.id,
+    title: node.title,
+    type: (isGraphActionNode(node) ? "action" : "event") as "action" | "event"
+  }))
 })
 
 const isCreateMode = computed(() => !!creatingEventDraft.value)
@@ -212,6 +282,22 @@ function replaceEventInDocument(
   }
 
   const sourceEvents = storyDocument.value.graphEvents
+  if ("exec_script" in savedEvent) {
+    const typedSavedAction = savedEvent as StoryActionFile
+    const hasExistingAction = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
+    const nextEvents = hasExistingAction
+      ? sourceEvents.map((currentEvent) =>
+          currentEvent.id === matchEventId ? typedSavedAction : currentEvent
+        )
+      : [...sourceEvents, typedSavedAction]
+
+    storyDocument.value = {
+      ...storyDocument.value,
+      graphEvents: nextEvents
+    }
+    return
+  }
+
   const typedSavedEvent = savedEvent as StoryEventFile
   const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
   const nextEvents = hasExistingEvent
@@ -431,14 +517,28 @@ function createUniqueEventId(baseId: string) {
 }
 
 function buildNewEventFromParent(parentEventId: string): StoryEventFile {
-  const parentEvent = activeGraphEvents.value.find((event) => event.id === parentEventId)
   const newId = createUniqueEventId(`${parentEventId}-child`)
 
   return {
     id: newId,
     title: "新事件",
-    kind: parentEvent?.kind ?? "scene",
-    body: "",
+    trigger_expr: "",
+    init_script: "",
+    object_keys: [],
+    dialogues: [],
+    location: "",
+    next: []
+  }
+}
+
+function buildNewActionFromParent(parentEventId: string): StoryActionFile {
+  const newId = createUniqueEventId(`${parentEventId}-action`)
+
+  return {
+    id: newId,
+    title: "新操作",
+    vars: [],
+    exec_script: "",
     next: []
   }
 }
@@ -449,8 +549,11 @@ function buildNewRootEvent(): StoryEventFile {
   return {
     id: newId,
     title: "新根事件",
-    kind: "scene",
-    body: "",
+    trigger_expr: "",
+    init_script: "",
+    object_keys: [],
+    dialogues: [],
+    location: "",
     next: []
   }
 }
@@ -496,8 +599,11 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
   return {
     id: createUniqueEventId(defaultId),
     title: "新事件",
-    kind: "scene",
-    body: "",
+    trigger_expr: "",
+    init_script: "",
+    object_keys: [],
+    dialogues: [],
+    location: "",
     next: []
   }
 }
@@ -506,6 +612,13 @@ function handleCreateGraphEvent(parentEventId: string) {
   creatingFromEventId.value = parentEventId
   editingEventId.value = null
   creatingEventDraft.value = buildNewEventFromParent(parentEventId)
+  projectStore.selectEvent(props.storyId, activeEventTab.value, parentEventId)
+}
+
+function handleCreateGraphAction(parentEventId: string) {
+  creatingFromEventId.value = parentEventId
+  editingEventId.value = null
+  creatingEventDraft.value = buildNewActionFromParent(parentEventId)
   projectStore.selectEvent(props.storyId, activeEventTab.value, parentEventId)
 }
 
@@ -532,6 +645,17 @@ function handleSwitchEventTab(tab: EventCanvasTab) {
   activeEventTab.value = tab
 }
 
+async function handleDeleteGraphNode(eventId: string) {
+  const targetEvent = activeEvents.value.find((event) => event.id === eventId)
+  const label = targetEvent && "exec_script" in targetEvent ? "这个操作节点" : "这个事件节点"
+
+  if (!window.confirm(`确认删除${label}吗？`)) {
+    return
+  }
+
+  await handleDeleteEvent(eventId)
+}
+
 async function handleSaveEvent(event: StoryAnyEventFile) {
   isSaving.value = true
   errorMessage.value = null
@@ -541,7 +665,8 @@ async function handleSaveEvent(event: StoryAnyEventFile) {
     const isCreatingDraft = isCreateMode.value
     const parentEventId = collectionType === "graph" ? creatingFromEventId.value : null
     const previousEventId = projectStore.getSelectedEventId(props.storyId, collectionType) ?? event.id
-    const currentEvents = getEventsByCollectionType(collectionType)
+    const currentEvents =
+      collectionType === "graph" ? getGraphNodes() : getEventsByCollectionType(collectionType)
     const savedEvent = await saveEvent(props.storyId, event, collectionType)
 
     if (parentEventId) {
@@ -768,11 +893,9 @@ async function handleToggleLink(payload: {
       return
     }
 
-    const sourceEvent = activeGraphEvents.value.find(
-      (event) => event.id === payload.sourceEventId
-    )
+    const sourceEvent = getGraphNodes().find((event) => event.id === payload.sourceEventId)
 
-    if (!sourceEvent) {
+    if (!sourceEvent || !("next" in sourceEvent)) {
       return
     }
 
@@ -941,11 +1064,13 @@ watch(
       <StoryGraphCanvas
         v-if="activeEventTab === 'graph'"
         :entry-event-id="storyDocument.story.startEventId ?? activeGraphEvents[0]?.id ?? null"
-        :events="activeGraphEvents"
+        :events="activeEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
+        @delete="handleDeleteGraphNode"
         @create="handleCreateGraphEvent"
+        @create-action="handleCreateGraphAction"
         @create-root="handleCreateGraphRootEvent"
         @toggle-link="handleToggleLink"
       />
@@ -979,24 +1104,29 @@ watch(
           @click.self="closeEditor"
         >
           <div class="editor-modal__panel">
-            <button
-              v-if="activeEventTab === 'graph'"
-              class="editor-modal__close"
-              type="button"
-              aria-label="关闭编辑窗口"
-              title="关闭"
-              @click="closeEditor"
-            >
-              ×
-            </button>
-            <EventDetailPanel
-              v-if="activeEventTab === 'graph'"
-              :event="activeRegularDraftEvent"
-              :event-type="activeEventTab"
+            <GraphEventDetailPanel
+              v-if="activeEventTab === 'graph' && activeGraphDraftEvent"
+              :event="activeGraphDraftEvent"
+              :event-locations="storyDocument.eventLocations"
+              :graph-node-options="graphNodeOptions"
               :mode="isCreateMode ? 'create' : 'edit'"
-              :mode-label="activeEventTabLabel"
-              :parent-event-id="creatingFromEventId"
+              :parent-event-id="activeGraphParentNodeId"
+              :roles="storyDocument.roles"
               :saving="isSaving"
+              :vals="storyDocument.vals"
+              @close="closeEditor"
+              @quick-create-location="handleQuickCreateLocation"
+              @quick-create-role="handleQuickCreateRole"
+              @save="handleSaveEvent"
+            />
+            <GraphActionDetailPanel
+              v-else-if="activeEventTab === 'graph' && activeGraphDraftAction"
+              :action="activeGraphDraftAction"
+              :graph-node-options="graphNodeOptions"
+              :mode="isCreateMode ? 'create' : 'edit'"
+              :saving="isSaving"
+              :vals="storyDocument.vals"
+              @close="closeEditor"
               @save="handleSaveEvent"
             />
             <BigOnceEventDetailPanel

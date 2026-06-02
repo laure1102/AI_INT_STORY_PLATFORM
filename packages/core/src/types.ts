@@ -138,10 +138,30 @@ export interface AppAiSettings {
 }
 
 export interface StoryEventFile {
+  node_type?: "event"
   id: string
   title: string
-  kind: string
-  body?: string
+  trigger_expr: string
+  init_script: string
+  object_keys: string[]
+  dialogues: StoryBigOnceDialogueDefinition[]
+  location: string
+  next: string[]
+  meta?: Record<string, unknown>
+}
+
+export interface StoryActionVarDefinition {
+  name: string
+  descr?: string
+  initial_value: string
+}
+
+export interface StoryActionFile {
+  node_type?: "action"
+  id: string
+  title: string
+  vars: StoryActionVarDefinition[]
+  exec_script: string
   next: string[]
   meta?: Record<string, unknown>
 }
@@ -154,7 +174,8 @@ export interface StoryEventTrigger {
 
 export type StoryEventCollectionType = "graph" | "bigOnce" | "loop"
 
-export type StoryGraphEventsFile = StoryEventFile[]
+export type StoryGraphNodeFile = StoryEventFile | StoryActionFile
+export type StoryGraphEventsFile = StoryGraphNodeFile[]
 
 export type StoryBigOnceSpeakerType = "player" | "object"
 
@@ -195,6 +216,7 @@ export type StoryLoopEventsFile = StoryLoopEventFile[]
 
 export type StoryAnyEventFile =
   | StoryEventFile
+  | StoryActionFile
   | StoryBigOnceEventFile
   | StoryLoopEventFile
 
@@ -230,11 +252,26 @@ export interface ValidationResult {
 }
 
 export interface CompiledEvent {
+  node_type?: "event"
   id: string
   title: string
-  kind: string
-  body?: string
+  trigger_expr: string
+  init_script: string
+  object_keys: string[]
+  dialogues: StoryBigOnceDialogueDefinition[]
+  location: string
   next: string[]
+  meta?: Record<string, unknown>
+}
+
+export interface CompiledAction {
+  node_type?: "action"
+  id: string
+  title: string
+  vars: StoryActionVarDefinition[]
+  exec_script: string
+  next: string[]
+  meta?: Record<string, unknown>
 }
 
 export interface CompiledStory {
@@ -246,7 +283,7 @@ export interface CompiledStory {
   scenes: StorySceneFile
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
-  graphEvents: Record<string, CompiledEvent>
+  graphEvents: Record<string, CompiledEvent | CompiledAction>
   bigOnceEvents: StoryBigOnceEventsFile
   loopEvents: StoryLoopEventsFile
 }

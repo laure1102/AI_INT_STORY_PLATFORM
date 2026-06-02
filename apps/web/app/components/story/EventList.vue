@@ -22,7 +22,7 @@ const emit = defineEmits<{
       @click="emit('select', event.id)"
     >
       <div class="event-item__meta">
-        <span>{{ event.kind }}</span>
+        <span>{{ event.location || "未设置地点" }}</span>
         <span>{{ event.next.length }} links</span>
       </div>
       <strong class="event-item__title">{{ event.title }}</strong>

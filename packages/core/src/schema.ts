@@ -229,19 +229,39 @@ export const appSettingsSchema = z.object({
   })
 })
 
-export const storyEventSchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1),
-  kind: z.string().min(1),
-  body: z.string().optional(),
-  next: z.array(z.string()),
-  meta: z.record(z.unknown()).optional()
-})
-
 export const storyBigOnceDialogueSchema = z.object({
   speaker_type: z.enum(["player", "object"]).default("object"),
   speaker_key: z.string().default(""),
   content: z.string().default("")
+})
+
+export const storyEventSchema = z.object({
+  node_type: z.literal("event").optional(),
+  id: z.string().min(1),
+  title: z.string().min(1),
+  trigger_expr: z.string().default(""),
+  init_script: z.string().default(""),
+  object_keys: z.array(z.string()).default([]),
+  dialogues: z.array(storyBigOnceDialogueSchema).default([]),
+  location: z.string().default(""),
+  next: z.array(z.string()),
+  meta: z.record(z.unknown()).optional()
+})
+
+export const storyActionVarSchema = z.object({
+  name: z.string().min(1),
+  descr: z.string().optional(),
+  initial_value: z.string().default("")
+})
+
+export const storyActionSchema = z.object({
+  node_type: z.literal("action").optional(),
+  id: z.string().min(1),
+  title: z.string().min(1),
+  vars: z.array(storyActionVarSchema).default([]),
+  exec_script: z.string().default(""),
+  next: z.array(z.string()).default([]),
+  meta: z.record(z.unknown()).optional()
 })
 
 export const storyEventTriggerSchema = z.object({
@@ -250,7 +270,8 @@ export const storyEventTriggerSchema = z.object({
   none: z.array(looseMetaSchema).optional()
 })
 
-export const storyGraphEventsSchema = z.array(storyEventSchema).default([])
+export const storyGraphNodeSchema = z.union([storyEventSchema, storyActionSchema])
+export const storyGraphEventsSchema = z.array(storyGraphNodeSchema).default([])
 
 export const storyBigOnceEventSchema = storyEventSchema.extend({
   id: z.string().min(1),
@@ -263,8 +284,6 @@ export const storyBigOnceEventSchema = storyEventSchema.extend({
   bgm: z.string().default(""),
   end_script: z.string().default("")
 }).omit({
-  body: true,
-  kind: true,
   next: true
 })
 

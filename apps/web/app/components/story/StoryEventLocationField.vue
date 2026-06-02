@@ -16,13 +16,13 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <label class="field">
+  <div class="field">
     <div class="story-event-location-field__label-row">
       <span class="field-label">地点</span>
       <button
         class="btn-secondary story-event-location-field__button"
         type="button"
-        @click="emit('quickCreate')"
+        @click.stop="emit('quickCreate')"
       >
         创建地点
       </button>
@@ -38,7 +38,7 @@ const emit = defineEmits<{
         {{ location.label }}
       </option>
     </select>
-  </label>
+  </div>
 </template>
 
 <style scoped>
