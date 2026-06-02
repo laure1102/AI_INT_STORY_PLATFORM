@@ -14,6 +14,8 @@ import type {
   ValidationIssue,
   ValidationResult
 } from "@story-mgr/core"
+import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
+import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
 import AppSettingsDialog from "./AppSettingsDialog.vue"
 import BigOnceEventDetailPanel from "./BigOnceEventDetailPanel.vue"
 import EventDetailPanel from "./EventDetailPanel.vue"
@@ -25,6 +27,8 @@ import StoryLocationsDialog from "./StoryLocationsDialog.vue"
 import StoryRolesDialog from "./StoryRolesDialog.vue"
 import StoryScenesDialog from "./StoryScenesDialog.vue"
 import StoryValsDialog from "./StoryValsDialog.vue"
+import { appendQuickLocationToEventLocations } from "./storyQuickLocation"
+import { appendQuickRoleToRoles } from "./storyQuickRole"
 
 type EventCanvasTab = StoryEventCollectionType
 
@@ -715,6 +719,24 @@ async function handleSaveRoles(roles: StoryRolesFile) {
   }
 }
 
+async function handleQuickCreateRole(payload: StoryQuickCreateRolePayload) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  await handleSaveRoles(appendQuickRoleToRoles(storyDocument.value.roles, payload))
+}
+
+async function handleQuickCreateLocation(payload: StoryQuickCreateLocationPayload) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  await handleSaveEventLocations(
+    appendQuickLocationToEventLocations(storyDocument.value.eventLocations, payload)
+  )
+}
+
 async function handleSaveAppSettings(settings: AppSettingsFile) {
   isSaving.value = true
   errorMessage.value = null
@@ -987,6 +1009,8 @@ watch(
               :scenes="storyDocument.scenes"
               :vals="storyDocument.vals"
               @close="closeEditor"
+              @quick-create-location="handleQuickCreateLocation"
+              @quick-create-role="handleQuickCreateRole"
               @save="handleSaveEvent"
             />
             <LoopEventDetailPanel
@@ -999,6 +1023,8 @@ watch(
               :scenes="storyDocument.scenes"
               :vals="storyDocument.vals"
               @close="closeEditor"
+              @quick-create-location="handleQuickCreateLocation"
+              @quick-create-role="handleQuickCreateRole"
               @save="handleSaveEvent"
             />
           </div>

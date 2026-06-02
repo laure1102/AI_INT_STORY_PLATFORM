@@ -10,7 +10,12 @@ import {
   type StorySceneFile,
   type StoryValsFile
 } from "@story-mgr/core"
-import StoryRoleMultiSelect from "./StoryRoleMultiSelect.vue"
+import StoryEventLocationField from "./StoryEventLocationField.vue"
+import StoryEventObjectField from "./StoryEventObjectField.vue"
+import StoryQuickLocationCreateDialog from "./StoryQuickLocationCreateDialog.vue"
+import StoryQuickRoleCreateDialog from "./StoryQuickRoleCreateDialog.vue"
+import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
+import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
 
 interface DialogueDraft extends StoryBigOnceDialogueDefinition {
   id: string
@@ -80,6 +85,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  quickCreateLocation: [payload: StoryQuickCreateLocationPayload]
+  quickCreateRole: [payload: StoryQuickCreateRolePayload]
   save: [event: StoryLoopEventFile]
 }>()
 
@@ -95,6 +102,10 @@ const endScriptTextareaRef = useTemplateRef<HTMLTextAreaElement>("endScriptTexta
 const isTriggerHelpOpen = shallowRef(false)
 const isInitScriptHelpOpen = shallowRef(false)
 const isEndScriptHelpOpen = shallowRef(false)
+const isQuickLocationDialogOpen = shallowRef(false)
+const pendingQuickLocationName = shallowRef<string | null>(null)
+const isQuickRoleDialogOpen = shallowRef(false)
+const pendingQuickRoleKey = shallowRef<string | null>(null)
 const triggerAutocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
   query: "",
@@ -828,6 +839,46 @@ function submitDraft() {
   })
 }
 
+function requestQuickCreateRole() {
+  isQuickRoleDialogOpen.value = true
+}
+
+function requestQuickCreateLocation() {
+  isQuickLocationDialogOpen.value = true
+}
+
+function closeQuickLocationDialog() {
+  if (props.saving) {
+    return
+  }
+
+  isQuickLocationDialogOpen.value = false
+}
+
+function submitQuickCreateLocation(payload: StoryQuickCreateLocationPayload) {
+  pendingQuickLocationName.value = payload.name
+  emit("quickCreateLocation", payload)
+}
+
+function closeQuickRoleDialog() {
+  if (props.saving) {
+    return
+  }
+
+  isQuickRoleDialogOpen.value = false
+}
+
+function submitQuickCreateRole(payload: StoryQuickCreateRolePayload) {
+  pendingQuickRoleKey.value = payload.roleKey
+  emit("quickCreateRole", payload)
+}
+
+function applyQuickCreatedRole(roleKey: string) {
+  const nextKeys = new Set(draft.selectedObjectKeys)
+  nextKeys.add(roleKey)
+  draft.selectedObjectKeys = Array.from(nextKeys)
+}
+
 watch(
   () => props.event,
   (event) => {
@@ -848,6 +899,28 @@ watch(
         dialogue.speaker_key =
           findStoryRoleReference(props.roles, dialogue.speaker_key)?.key ?? dialogue.speaker_key
       }
+    }
+
+    if (pendingQuickRoleKey.value && findStoryRoleReference(props.roles, pendingQuickRoleKey.value)) {
+      applyQuickCreatedRole(pendingQuickRoleKey.value)
+      pendingQuickRoleKey.value = null
+      isQuickRoleDialogOpen.value = false
+    }
+  },
+  { deep: true }
+)
+
+watch(
+  locationOptions,
+  (options) => {
+    if (!pendingQuickLocationName.value) {
+      return
+    }
+
+    if (options.some((option) => option.value === pendingQuickLocationName.value)) {
+      draft.location = pendingQuickLocationName.value
+      pendingQuickLocationName.value = null
+      isQuickLocationDialogOpen.value = false
     }
   },
   { deep: true }
@@ -956,19 +1029,11 @@ function handleDocumentPointerDown(event: MouseEvent) {
                 <input v-model="draft.title" class="text-input" type="text" />
               </label>
 
-              <label class="field">
-                <span class="field-label">地点</span>
-                <select v-model="draft.location" class="select-input">
-                  <option value="">不设置地点</option>
-                  <option
-                    v-for="location in locationOptions"
-                    :key="location.value"
-                    :value="location.value"
-                  >
-                    {{ location.label }}
-                  </option>
-                </select>
-              </label>
+              <StoryEventLocationField
+                v-model="draft.location"
+                :options="locationOptions"
+                @quick-create="requestQuickCreateLocation"
+              />
 
               <label class="field">
                 <span class="field-label">背景音乐</span>
@@ -1052,15 +1117,13 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
           <section class="detail-card">
             <div class="detail-grid detail-grid--event-config">
-              <div class="field">
-                <span class="field-label">对象</span>
-                <StoryRoleMultiSelect
-                  v-model="draft.selectedObjectKeys"
-                  :important-options="importantRoleOptions"
-                  :normal-options="normalRoleOptions"
-                  placeholder="搜索并选择对象角色"
-                />
-              </div>
+              <StoryEventObjectField
+                v-model="draft.selectedObjectKeys"
+                :important-options="importantRoleOptions"
+                :normal-options="normalRoleOptions"
+                placeholder="搜索并选择对象角色"
+                @quick-create="requestQuickCreateRole"
+              />
 
               <div ref="triggerExprField" class="field">
                 <div class="detail-panel__label-row">
@@ -1441,6 +1504,22 @@ function handleDocumentPointerDown(event: MouseEvent) {
           </div>
         </section>
       </div>
+
+      <StoryQuickRoleCreateDialog
+        v-if="isQuickRoleDialogOpen"
+        :roles="props.roles"
+        :saving="props.saving"
+        @close="closeQuickRoleDialog"
+        @create="submitQuickCreateRole"
+      />
+
+      <StoryQuickLocationCreateDialog
+        v-if="isQuickLocationDialogOpen"
+        :event-locations="props.eventLocations"
+        :saving="props.saving"
+        @close="closeQuickLocationDialog"
+        @create="submitQuickCreateLocation"
+      />
     </template>
 
     <div v-else class="detail-panel__empty">

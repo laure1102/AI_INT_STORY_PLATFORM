@@ -15,5 +15,13 @@
       name: 'office_small',
       prompt: 'a brand-new yet simple small office interior, clean minimalist workspace, plain desks and chairs, modest storage shelves, neat arrangement, modern but understated design, neutral color palette, smooth painted walls, laminate flooring, subtle reflections, soft daylight streaming through windows, gentle ambient lighting, realistic materials, tidy and quiet atmosphere, game environment background, wide-angle view, architectural interior scene, no people, no close-up, highly detailed, cinematic composition, soft shadows, immersive atmosphere',
     },
+    {
+      descr: '人少的街道',
+      img_compress_1: '',
+      img_compress_2: '',
+      img_raw: '',
+      name: 'jiedao_renshao',
+      prompt: '',
+    },
   ],
 }
