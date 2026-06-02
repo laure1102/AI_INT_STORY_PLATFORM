@@ -745,7 +745,7 @@ function submitDraft() {
   }
 
   emit("save", {
-    ...props.event,
+    node_type: "event",
     id: draft.id.trim(),
     title: draft.title.trim(),
     trigger_expr: draft.triggerExpr.trim(),
@@ -757,7 +757,8 @@ function submitDraft() {
       content: dialogue.content.trim()
     })),
     location: draft.location.trim(),
-    next: props.event.next
+    next: [...props.event.next],
+    meta: props.event.meta
   })
 }
 

@@ -1,6 +1,17 @@
 [
   {
-    dialogues: [],
+    dialogues: [
+      {
+        content: '10个小时的高铁加2个小时的大巴……\n终于是回来了。',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+      {
+        content: '累死大爷了。',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+    ],
     id: 'back_county',
     init_script: '',
     location: 'qichezhan_lvl1',
