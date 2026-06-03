@@ -298,8 +298,8 @@ loop: {
 - 只用于 `vals.json5` 里 `value_type = "calc"` 的变量
 
 语法规则：
-- 引用格式：`{rowName}`
-- 只能引用“当前变量组”里的其他变量，不能跨组
+- 引用当前组变量：`{rowName}`
+- 引用其他组变量：`{group.row}`
 - 返回值必须是有限数字
 - 支持递归计算，最大嵌套深度是 `5`
 - 支持常见 `Math` 函数和常量
@@ -307,17 +307,21 @@ loop: {
 示例：
 ```txt
 {population} / 10000
+{county.population} / 10000
 Math.floor({gdp} / {population})
 max({level}, 1)
 ```
 
 注意：
-- `calc_rule` 不支持 `{group.row}`
+- 同组内旧写法 `{rowName}` 继续有效
+- 跨组时必须写完整 `{group.row}`
 - 被引用的普通变量必须能转成数字
 - 循环引用会报错
 
 代码提示：
-- `calc_rule` 编辑器只提示当前组内的变量名
+- `calc_rule` 编辑器会同时提示：
+- 当前组变量：`{rowName}`
+- 其他组变量：`{group.row}`
 
 ### 6.2 事件触发条件 `trigger_expr`
 适用字段：

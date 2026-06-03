@@ -72,6 +72,10 @@ function normalizeRowName(value: unknown) {
   return normalizeText(value).trim()
 }
 
+function normalizeGroupName(value: unknown) {
+  return normalizeText(value).trim()
+}
+
 const editingCalcGroup = computed(() => {
   return draft.variables.find((group) => group.draftKey === calcEditorState.groupKey) ?? null
 })
@@ -89,20 +93,42 @@ const calcAutocompleteItems = computed(() => {
 
   const currentRowName = normalizeRowName(editingCalcRow.value.name)
   const seen = new Set<string>()
-  const candidates = editingCalcGroup.value.vals
-    .map((row) => ({
-      name: normalizeRowName(row.name),
-      description: normalizeText(row.description)
-    }))
-    .filter((item) => item.name && item.name !== currentRowName)
-    .filter((item) => {
-      if (seen.has(item.name)) {
-        return false
-      }
+  const candidates = draft.variables.flatMap((group) => {
+    const groupName = normalizeGroupName(group.name)
 
-      seen.add(item.name)
-      return true
-    })
+    return group.vals
+      .map((row) => {
+        const rowName = normalizeRowName(row.name)
+
+        if (!rowName) {
+          return null
+        }
+
+        const isCurrentGroup = group.draftKey === editingCalcGroup.value?.draftKey
+        const isCurrentRow = isCurrentGroup && rowName === currentRowName
+
+        if (isCurrentRow) {
+          return null
+        }
+
+        return {
+          name: isCurrentGroup ? rowName : `${groupName}.${rowName}`,
+          description: isCurrentGroup
+            ? normalizeText(row.description)
+            : [groupName, normalizeText(row.description)].filter(Boolean).join(" / ")
+        }
+      })
+      .filter((item): item is { name: string; description: string } => {
+        return !!item?.name && (!!groupName || group.draftKey === editingCalcGroup.value?.draftKey)
+      })
+  }).filter((item) => {
+    if (seen.has(item.name)) {
+      return false
+    }
+
+    seen.add(item.name)
+    return true
+  })
 
   const query = calcAutocompleteState.query.trim().toLowerCase()
 
@@ -410,6 +436,12 @@ function buildCoreRow(row: StoryValRowDraft): StoryValEntryDefinition {
   }
 }
 
+function buildCoreValsFile(): StoryValsFile {
+  return {
+    variables: draft.variables.map((group) => buildCoreGroup(group))
+  }
+}
+
 const calcPreview = computed<CalcEvaluationResult>(() => {
   if (!editingCalcGroup.value || !editingCalcRow.value) {
     return {
@@ -430,17 +462,20 @@ const calcPreview = computed<CalcEvaluationResult>(() => {
   }
 
   const rowName = normalizeRowName(editingCalcRow.value.name)
+  const groupName = normalizeGroupName(editingCalcGroup.value.name)
   const visited = new Set<string>()
+  const fullVals = buildCoreValsFile()
 
   if (rowName) {
-    visited.add(rowName)
+    visited.add(groupName ? `${groupName}.${rowName}` : rowName)
   }
 
   try {
     const preview = evaluateStoryValCalcRule(buildCoreGroup(editingCalcGroup.value), calcRule, {
       visited,
       depth: 1,
-      maxDepth: MAX_CALC_NESTING_DEPTH
+      maxDepth: MAX_CALC_NESTING_DEPTH,
+      valsFile: fullVals
     })
 
     return {
@@ -460,17 +495,20 @@ const calcPreview = computed<CalcEvaluationResult>(() => {
 function getRowCalcDisplay(group: StoryValGroupDraft, row: StoryValRowDraft): CalcValueDisplay {
   const calcRule = normalizeText(row.calcRule).trim()
   const rowName = normalizeRowName(row.name)
+  const groupName = normalizeGroupName(group.name)
   const visited = new Set<string>()
+  const fullVals = buildCoreValsFile()
 
   if (rowName) {
-    visited.add(rowName)
+    visited.add(groupName ? `${groupName}.${rowName}` : rowName)
   }
 
   try {
     const preview = evaluateStoryValCalcRule(buildCoreGroup(group), calcRule, {
       visited,
       depth: 1,
-      maxDepth: MAX_CALC_NESTING_DEPTH
+      maxDepth: MAX_CALC_NESTING_DEPTH,
+      valsFile: fullVals
     })
 
     return {
@@ -542,7 +580,7 @@ watch(
           &#x4e00;&#x7ea7;&#x662f;&#x53d8;&#x91cf;&#x5206;&#x7ec4;&#xff0c;&#x4e8c;&#x7ea7;&#x662f;&#x5206;&#x7ec4;&#x5185;&#x53d8;&#x91cf;&#x8868;&#x3002;
         </p>
         <p class="vals-dialog__hint">
-          `calc_rule` &#x4f7f;&#x7528; `{a}` &#x8fd9;&#x79cd;&#x5199;&#x6cd5;&#x5f15;&#x7528;&#x5f53;&#x524d;&#x4e00;&#x7ea7;&#x5206;&#x7ec4;&#x5185;&#x7684;&#x4e8c;&#x7ea7;&#x53d8;&#x91cf;&#xff0c;&#x4f8b;&#x5982;&#xff1a;`{a}+{b}+{c}`&#x3002;
+          `calc_rule` &#x652f;&#x6301; `{a}` &#x5f15;&#x7528;&#x5f53;&#x524d;&#x5206;&#x7ec4;&#x53d8;&#x91cf;&#xff0c;&#x4e5f;&#x652f;&#x6301; `{group.row}` &#x8de8;&#x5206;&#x7ec4;&#x5f15;&#x7528;&#xff0c;&#x4f8b;&#x5982;&#xff1a;`{a}+{other.score}`&#x3002;
         </p>
         <p v-if="hasInvalidDraft" class="vals-dialog__warning">
           &#x5206;&#x7ec4;&#x540d;&#x79f0;&#x3001;&#x53d8;&#x91cf;&#x540d;&#x79f0;&#x4e0d;&#x80fd;&#x4e3a;&#x7a7a;&#xff0c;`calc` &#x6a21;&#x5f0f;&#x5fc5;&#x987b;&#x586b;&#x5199; `calc_rule`&#x3002;
@@ -704,7 +742,7 @@ watch(
                 ref="calcRuleTextarea"
                 v-model="editingCalcRow.calcRule"
                 class="text-area vals-dialog__calc-editor-area"
-                placeholder="{a}+{b}+{c}"
+                placeholder="{a}+{other.score}"
                 @input="onCalcRuleInput"
                 @click="updateCalcAutocompleteFromCaret"
                 @keyup="updateCalcAutocompleteFromCaret"
@@ -754,7 +792,7 @@ watch(
             </div>
 
             <p class="vals-dialog__calc-preview-tip">
-              &#x4f7f;&#x7528; `{a}` &#x5f15;&#x7528;&#x5f53;&#x524d;&#x5206;&#x7ec4;&#x5185;&#x7684;&#x5176;&#x4ed6;&#x53d8;&#x91cf;&#x3002;
+              &#x4f7f;&#x7528; `{a}` &#x5f15;&#x7528;&#x5f53;&#x524d;&#x5206;&#x7ec4;&#x7684;&#x5176;&#x4ed6;&#x53d8;&#x91cf;&#xff0c;&#x4f7f;&#x7528; `{group.row}` &#x8de8;&#x5206;&#x7ec4;&#x5f15;&#x7528;&#x3002;
             </p>
             <p class="vals-dialog__calc-preview-tip">
               &#x652f;&#x6301; `Math.floor`、`Math.min`、`Math.max` &#x7b49;&#x5e38;&#x7528;&#x6570;&#x5b66;&#x51fd;&#x6570;&#x3002;

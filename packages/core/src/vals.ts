@@ -39,6 +39,11 @@ interface StoryValueEntryReference {
   rowName: string
 }
 
+interface StoryCalcEntryReference extends StoryValueEntryReference {
+  displayLabel: string
+  referenceKey: string
+}
+
 interface StoryScriptStatement {
   kind: "declareLocal" | "assignLocal" | "assignGlobal"
   lineNumber: number
@@ -66,6 +71,10 @@ function normalizeGroupName(value: unknown) {
 
 function normalizeRowName(value: unknown) {
   return normalizeText(value).trim()
+}
+
+function createStoryValueReferenceKey(groupName: string, rowName: string) {
+  return groupName ? `${groupName}.${rowName}` : rowName
 }
 
 function isCalcRow(row: Pick<StoryValEntryDefinition, "value_type">) {
@@ -446,30 +455,30 @@ function evaluateBooleanExpression(
 }
 
 function resolveCalcEntryValue(
-  group: StoryValDefinition,
-  rowName: string,
+  valsFile: StoryValsFile,
+  currentGroup: StoryValDefinition,
+  token: string,
   visited: Set<string>,
   depth: number,
   maxDepth: number
 ): number {
+  const reference = getStoryCalcEntryReference(valsFile, currentGroup, token)
+  const { group, row, referenceKey, displayLabel, groupName } = reference
+
   if (depth > maxDepth) {
     throw new Error(`Calculation nesting exceeds the max depth of ${maxDepth}.`)
   }
 
-  if (visited.has(rowName)) {
-    throw new Error(`Circular calc reference detected: ${[...visited, rowName].join(" -> ")}`)
-  }
-
-  const row = group.vals.find((item) => normalizeRowName(item.name) === rowName)
-
-  if (!row) {
-    throw new Error(`Referenced variable was not found: {${rowName}}`)
+  if (visited.has(referenceKey)) {
+    throw new Error(
+      `Circular calc reference detected: ${[...visited, referenceKey].join(" -> ")}`
+    )
   }
 
   if (!isCalcRow(row)) {
     const numericValue = toNumericValue(row.value)
     if (numericValue === null) {
-      throw new Error(`Referenced variable is not numeric: {${rowName}}`)
+      throw new Error(`Referenced variable is not numeric: {${displayLabel}}`)
     }
 
     return numericValue
@@ -477,16 +486,18 @@ function resolveCalcEntryValue(
 
   const nestedRule = normalizeText(row.calc_rule).trim()
   if (!nestedRule) {
-    throw new Error(`calc_rule is required for {${rowName}}`)
+    throw new Error(`calc_rule is required for {${displayLabel}}`)
   }
 
   const nextVisited = new Set(visited)
-  nextVisited.add(rowName)
+  nextVisited.add(referenceKey)
 
   return evaluateStoryValCalcRule(group, nestedRule, {
     visited: nextVisited,
     depth: depth + 1,
-    maxDepth
+    maxDepth,
+    valsFile,
+    currentGroupName: groupName
   }).result
 }
 
@@ -500,18 +511,67 @@ function resolveStoryValueReference(
 
   if (isCalcRow(row)) {
     const visited = new Set<string>()
-    if (rowName) {
-      visited.add(rowName)
+    const referenceKey = createStoryValueReferenceKey(groupName, rowName)
+
+    if (referenceKey) {
+      visited.add(referenceKey)
     }
 
     return evaluateStoryValCalcRule(group, normalizeText(row.calc_rule), {
       visited,
       depth: 1,
-      maxDepth
+      maxDepth,
+      valsFile,
+      currentGroupName: groupName
     }).result
   }
 
   return toExpressionValue(row.value)
+}
+
+function getStoryCalcEntryReference(
+  valsFile: StoryValsFile,
+  currentGroup: StoryValDefinition,
+  token: string
+): StoryCalcEntryReference {
+  const parts = token.split(".")
+
+  if (parts.length === 1) {
+    const rowName = normalizeRowName(parts[0])
+
+    if (!rowName) {
+      throw new Error(`Invalid calc reference: {${token}}. Use {row} or {group.row}.`)
+    }
+
+    const row = currentGroup.vals.find((item) => normalizeRowName(item.name) === rowName)
+
+    if (!row) {
+      throw new Error(`Referenced variable was not found: {${rowName}}`)
+    }
+
+    const groupName = normalizeGroupName(currentGroup.name)
+
+    return {
+      group: currentGroup,
+      row,
+      groupName,
+      rowName,
+      displayLabel: rowName,
+      referenceKey: createStoryValueReferenceKey(groupName, rowName)
+    }
+  }
+
+  if (parts.length === 2) {
+    const reference = getStoryValueEntryReference(valsFile, token)
+
+    return {
+      ...reference,
+      displayLabel: `${reference.groupName}.${reference.rowName}`,
+      referenceKey: createStoryValueReferenceKey(reference.groupName, reference.rowName)
+    }
+  }
+
+  throw new Error(`Invalid calc reference: {${token}}. Use {row} or {group.row}.`)
 }
 
 function getStoryValueEntryReference(
@@ -580,11 +640,16 @@ export function evaluateStoryValCalcRule(
     visited?: Set<string>
     depth?: number
     maxDepth?: number
+    valsFile?: StoryValsFile
+    currentGroupName?: string
   }
 ): StoryValCalcEvaluation {
   const depth = options?.depth ?? 1
   const maxDepth = options?.maxDepth ?? DEFAULT_MAX_CALC_NESTING_DEPTH
   const visited = options?.visited ?? new Set<string>()
+  const valsFile = options?.valsFile ?? {
+    variables: [group]
+  }
 
   if (depth > maxDepth) {
     throw new Error(`Calculation nesting exceeds the max depth of ${maxDepth}.`)
@@ -596,7 +661,7 @@ export function evaluateStoryValCalcRule(
   }
 
   const preparedExpression = prepareExpressionTemplate(trimmedRule, (token) =>
-    resolveCalcEntryValue(group, token, visited, depth, maxDepth)
+    resolveCalcEntryValue(valsFile, group, token, visited, depth, maxDepth)
   )
 
   return {
@@ -851,22 +916,27 @@ export function validateStoryScript(
 }
 
 export function getStoryValCalcDisplay(
+  valsFile: StoryValsFile,
   group: StoryValDefinition,
   row: StoryValEntryDefinition,
   maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH
 ): StoryValCalcDisplay {
   const rowName = normalizeRowName(row.name)
+  const groupName = normalizeGroupName(group.name)
   const visited = new Set<string>()
+  const referenceKey = createStoryValueReferenceKey(groupName, rowName)
 
-  if (rowName) {
-    visited.add(rowName)
+  if (referenceKey) {
+    visited.add(referenceKey)
   }
 
   try {
     const preview = evaluateStoryValCalcRule(group, normalizeText(row.calc_rule), {
       visited,
       depth: 1,
-      maxDepth
+      maxDepth,
+      valsFile,
+      currentGroupName: groupName
     })
 
     return {
@@ -895,16 +965,20 @@ export function validateStoryValsCalcRules(
 
       try {
         const rowName = normalizeRowName(row.name)
+        const groupName = normalizeGroupName(group.name)
         const visited = new Set<string>()
+        const referenceKey = createStoryValueReferenceKey(groupName, rowName)
 
-        if (rowName) {
-          visited.add(rowName)
+        if (referenceKey) {
+          visited.add(referenceKey)
         }
 
         evaluateStoryValCalcRule(group, normalizeText(row.calc_rule), {
           visited,
           depth: 1,
-          maxDepth
+          maxDepth,
+          valsFile,
+          currentGroupName: groupName
         })
 
         return []
