@@ -196,14 +196,19 @@ function validateGraphEvent(
     )
   }
 
-  for (const issue of validateStoryScript(document.vals, event.init_script)) {
-    pushIssue(
-      issues,
-      "error",
-      "graph.init-script-invalid",
-      `Graph event "${event.id}" init_script is invalid at line ${issue.lineNumber}: ${issue.message}`,
-      ["graphEvents", String(eventIndex), "init_script"]
-    )
+  for (const scriptField of [
+    { key: "init_script", value: event.init_script, code: "graph.init-script-invalid" },
+    { key: "end_script", value: event.end_script, code: "graph.end-script-invalid" }
+  ] as const) {
+    for (const issue of validateStoryScript(document.vals, scriptField.value)) {
+      pushIssue(
+        issues,
+        "error",
+        scriptField.code,
+        `Graph event "${event.id}" ${scriptField.key} is invalid at line ${issue.lineNumber}: ${issue.message}`,
+        ["graphEvents", String(eventIndex), scriptField.key]
+      )
+    }
   }
 
   for (const [objectIndex, objectKey] of event.object_keys.entries()) {
@@ -501,6 +506,16 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
       "vals.calc-rule-invalid",
       `Variable "${calcIssue.groupName}" / "${calcIssue.rowName}" calc_rule is invalid: ${calcIssue.message}`,
       ["vals", String(calcIssue.groupIndex), String(calcIssue.rowIndex), "calc_rule"]
+    )
+  }
+
+  for (const calcIssue of validateStoryValsCalcRules(document.systemVals)) {
+    pushIssue(
+      issues,
+      "error",
+      "system-vals.calc-rule-invalid",
+      `System variable "${calcIssue.groupName}" / "${calcIssue.rowName}" calc_rule is invalid: ${calcIssue.message}`,
+      ["systemVals", String(calcIssue.groupIndex), String(calcIssue.rowIndex), "calc_rule"]
     )
   }
 

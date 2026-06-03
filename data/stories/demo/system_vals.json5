@@ -1,0 +1,45 @@
+{
+  variables: [
+    {
+      description: '系统变量',
+      name: 'system',
+      vals: [
+        {
+          calc_rule: '',
+          description: '游戏时间_第几天',
+          name: 'now_day',
+          value: 0,
+          value_type: 'value',
+        },
+        {
+          calc_rule: '',
+          description: '游戏时间_小时',
+          name: 'now_hour',
+          value: 0,
+          value_type: 'value',
+        },
+        {
+          calc_rule: '',
+          description: '游戏时间_分钟(10分钟一跳)',
+          name: 'now_minute',
+          value: 0,
+          value_type: 'value',
+        },
+        {
+          calc_rule: '',
+          description: '游戏时间暂停',
+          name: 'time_pause',
+          value: true,
+          value_type: 'value',
+        },
+        {
+          calc_rule: '',
+          description: '游戏时间流失速度(现实1分钟对应游戏？分钟)',
+          name: 'time_speed',
+          value: 120,
+          value_type: 'value',
+        },
+        ],
+    },
+  ],
+}

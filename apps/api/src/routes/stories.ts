@@ -23,9 +23,11 @@ import type {
   SaveEventLocationsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
+  SaveSystemValsRequest,
   StoryDeleteEventResponse,
   StoryRolesResponse,
   SaveValsRequest,
+  StorySystemValsResponse,
   StoryAssetResponse
 } from "@story-mgr/shared"
 import type { ApiConfig } from "../config"
@@ -141,6 +143,15 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       vals: await store.writeVals(storyId, body.vals)
     }
+  })
+
+  router.put("/stories/:storyId/system-vals", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as SaveSystemValsRequest
+
+    context.body = {
+      systemVals: await store.writeSystemVals(storyId, body.systemVals)
+    } satisfies StorySystemValsResponse
   })
 
   router.put("/stories/:storyId/scenes", async (context) => {

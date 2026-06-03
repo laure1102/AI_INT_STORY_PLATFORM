@@ -30,6 +30,7 @@ interface GraphEventDraft {
   title: string
   triggerExpr: string
   initScript: string
+  endScript: string
   dialogues: DialogueDraft[]
   selectedObjectKeys: string[]
   location: string
@@ -56,7 +57,8 @@ interface GraphNodeOption {
   type: "event" | "action"
 }
 
-type ScriptFieldKey = "triggerExpr" | "initScript"
+type ScriptFieldKey = "triggerExpr" | "initScript" | "endScript"
+type ScriptEditorFieldKey = Exclude<ScriptFieldKey, "triggerExpr">
 
 interface ScriptAutocompleteState {
   open: boolean
@@ -97,14 +99,18 @@ const activeTab = shallowRef<"basic" | "next">("basic")
 
 const triggerHelpRef = useTemplateRef<HTMLDivElement>("triggerHelp")
 const initScriptHelpRef = useTemplateRef<HTMLDivElement>("initScriptHelp")
+const endScriptHelpRef = useTemplateRef<HTMLDivElement>("endScriptHelp")
 const triggerExprFieldRef = useTemplateRef<HTMLDivElement>("triggerExprField")
 const triggerExprTextareaRef = useTemplateRef<HTMLTextAreaElement>("triggerExprTextarea")
 const initScriptFieldRef = useTemplateRef<HTMLDivElement>("initScriptField")
 const initScriptTextareaRef = useTemplateRef<HTMLTextAreaElement>("initScriptTextarea")
+const endScriptFieldRef = useTemplateRef<HTMLDivElement>("endScriptField")
+const endScriptTextareaRef = useTemplateRef<HTMLTextAreaElement>("endScriptTextarea")
 const dialogueContentFieldRef = useTemplateRef<HTMLElement>("dialogueContentField")
 const dialogueContentTextareaRef = useTemplateRef<HTMLTextAreaElement>("dialogueContentTextarea")
 const isTriggerHelpOpen = shallowRef(false)
 const isInitScriptHelpOpen = shallowRef(false)
+const isEndScriptHelpOpen = shallowRef(false)
 const isQuickLocationDialogOpen = shallowRef(false)
 const pendingQuickLocationName = shallowRef<string | null>(null)
 const isQuickRoleDialogOpen = shallowRef(false)
@@ -118,6 +124,14 @@ const triggerAutocompleteState = reactive<ScriptAutocompleteState>({
   placement: "bottom"
 })
 const initScriptAutocompleteState = reactive<ScriptAutocompleteState>({
+  open: false,
+  query: "",
+  replaceStart: 0,
+  replaceEnd: 0,
+  activeIndex: 0,
+  placement: "bottom"
+})
+const endScriptAutocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
   query: "",
   replaceStart: 0,
@@ -155,6 +169,7 @@ const draft = reactive<GraphEventDraft>({
   title: "",
   triggerExpr: "",
   initScript: "",
+  endScript: "",
   dialogues: [],
   selectedObjectKeys: [],
   location: ""
@@ -256,14 +271,21 @@ const triggerAutocompleteItems = computed(() => {
 const initScriptAutocompleteItems = computed(() => {
   return filterScriptAutocompleteItems(initScriptAutocompleteState.query)
 })
+const endScriptAutocompleteItems = computed(() => {
+  return filterScriptAutocompleteItems(endScriptAutocompleteState.query)
+})
 const dialogueContentAutocompleteItems = computed(() => {
   return filterScriptAutocompleteItems(dialogueContentAutocompleteState.query)
 })
 const highlightedInitScriptTokens = computed(() => {
   return buildScriptHighlightTokens(draft.initScript)
 })
+const highlightedEndScriptTokens = computed(() => {
+  return buildScriptHighlightTokens(draft.endScript)
+})
 const isTriggerAutocompleteOpen = computed(() => triggerAutocompleteState.open)
 const isInitScriptAutocompleteOpen = computed(() => initScriptAutocompleteState.open)
+const isEndScriptAutocompleteOpen = computed(() => endScriptAutocompleteState.open)
 const isDialogueContentAutocompleteOpen = computed(() => dialogueContentAutocompleteState.open)
 const activeTriggerAutocompleteItem = computed(() => {
   if (!isTriggerAutocompleteOpen.value || triggerAutocompleteItems.value.length === 0) {
@@ -281,6 +303,15 @@ const activeInitScriptAutocompleteItem = computed(() => {
 
   return initScriptAutocompleteItems.value[
     initScriptAutocompleteState.activeIndex % initScriptAutocompleteItems.value.length
+  ]
+})
+const activeEndScriptAutocompleteItem = computed(() => {
+  if (!isEndScriptAutocompleteOpen.value || endScriptAutocompleteItems.value.length === 0) {
+    return null
+  }
+
+  return endScriptAutocompleteItems.value[
+    endScriptAutocompleteState.activeIndex % endScriptAutocompleteItems.value.length
   ]
 })
 const activeDialogueContentAutocompleteItem = computed(() => {
@@ -370,6 +401,7 @@ function syncDraft(event: StoryEventFile | null) {
   draft.title = event?.title ?? ""
   draft.triggerExpr = event?.trigger_expr ?? ""
   draft.initScript = event?.init_script ?? ""
+  draft.endScript = event?.end_script ?? ""
   draft.location = event?.location ?? ""
   draft.selectedObjectKeys = normalizeStoredObjectKeys(event?.object_keys ?? [])
   draft.dialogues = (event?.dialogues ?? []).map((dialogue) => {
@@ -544,6 +576,14 @@ function closeInitScriptHelp() {
   isInitScriptHelpOpen.value = false
 }
 
+function toggleEndScriptHelp() {
+  isEndScriptHelpOpen.value = !isEndScriptHelpOpen.value
+}
+
+function closeEndScriptHelp() {
+  isEndScriptHelpOpen.value = false
+}
+
 function escapeScriptHighlightHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -592,31 +632,75 @@ function buildScriptHighlightTokens(value: string): ScriptHighlightToken[] {
 }
 
 function getScriptAutocompleteState(field: ScriptFieldKey) {
-  return field === "triggerExpr" ? triggerAutocompleteState : initScriptAutocompleteState
+  if (field === "triggerExpr") {
+    return triggerAutocompleteState
+  }
+
+  if (field === "initScript") {
+    return initScriptAutocompleteState
+  }
+
+  return endScriptAutocompleteState
 }
 
 function getScriptAutocompleteItems(field: ScriptFieldKey) {
-  return field === "triggerExpr"
-    ? triggerAutocompleteItems.value
-    : initScriptAutocompleteItems.value
+  if (field === "triggerExpr") {
+    return triggerAutocompleteItems.value
+  }
+
+  if (field === "initScript") {
+    return initScriptAutocompleteItems.value
+  }
+
+  return endScriptAutocompleteItems.value
 }
 
 function getActiveScriptAutocompleteItem(field: ScriptFieldKey) {
-  return field === "triggerExpr"
-    ? activeTriggerAutocompleteItem.value
-    : activeInitScriptAutocompleteItem.value
+  if (field === "triggerExpr") {
+    return activeTriggerAutocompleteItem.value
+  }
+
+  if (field === "initScript") {
+    return activeInitScriptAutocompleteItem.value
+  }
+
+  return activeEndScriptAutocompleteItem.value
 }
 
 function getScriptTextareaRef(field: ScriptFieldKey) {
-  return field === "triggerExpr" ? triggerExprTextareaRef.value : initScriptTextareaRef.value
+  if (field === "triggerExpr") {
+    return triggerExprTextareaRef.value
+  }
+
+  if (field === "initScript") {
+    return initScriptTextareaRef.value
+  }
+
+  return endScriptTextareaRef.value
 }
 
 function getScriptFieldRef(field: ScriptFieldKey) {
-  return field === "triggerExpr" ? triggerExprFieldRef.value : initScriptFieldRef.value
+  if (field === "triggerExpr") {
+    return triggerExprFieldRef.value
+  }
+
+  if (field === "initScript") {
+    return initScriptFieldRef.value
+  }
+
+  return endScriptFieldRef.value
 }
 
 function getScriptFieldValue(field: ScriptFieldKey) {
-  return field === "triggerExpr" ? draft.triggerExpr : draft.initScript
+  if (field === "triggerExpr") {
+    return draft.triggerExpr
+  }
+
+  if (field === "initScript") {
+    return draft.initScript
+  }
+
+  return draft.endScript
 }
 
 function setScriptFieldValue(field: ScriptFieldKey, value: string) {
@@ -625,7 +709,12 @@ function setScriptFieldValue(field: ScriptFieldKey, value: string) {
     return
   }
 
-  draft.initScript = value
+  if (field === "initScript") {
+    draft.initScript = value
+    return
+  }
+
+  draft.endScript = value
 }
 
 function resolveAutocompletePlacement(element: HTMLElement | null) {
@@ -654,6 +743,7 @@ function closeScriptAutocomplete(field: ScriptFieldKey) {
 function closeAllScriptAutocomplete() {
   closeScriptAutocomplete("triggerExpr")
   closeScriptAutocomplete("initScript")
+  closeScriptAutocomplete("endScript")
 }
 
 function updateScriptAutocompleteFromCaret(field: ScriptFieldKey) {
@@ -727,7 +817,19 @@ function onInitScriptKeydown(event: KeyboardEvent) {
 }
 
 function onInitScriptScroll(event: Event) {
-  syncScriptEditorScroll(event)
+  syncScriptEditorScroll("initScript", event)
+}
+
+function onEndScriptInput() {
+  updateScriptAutocompleteFromCaret("endScript")
+}
+
+function onEndScriptKeydown(event: KeyboardEvent) {
+  onScriptFieldKeydown("endScript", event)
+}
+
+function onEndScriptScroll(event: Event) {
+  syncScriptEditorScroll("endScript", event)
 }
 
 function closeDialogueContentAutocomplete() {
@@ -881,9 +983,10 @@ function onScriptFieldKeydown(field: ScriptFieldKey, event: KeyboardEvent) {
   }
 }
 
-function syncScriptEditorScroll(event: Event) {
+function syncScriptEditorScroll(field: ScriptEditorFieldKey, event: Event) {
   const textarea = event.target as HTMLTextAreaElement | null
-  const highlightElement = initScriptFieldRef.value?.querySelector<HTMLElement>("[data-script-highlight]")
+  const fieldElement = getScriptFieldRef(field)
+  const highlightElement = fieldElement?.querySelector<HTMLElement>("[data-script-highlight]")
 
   if (!textarea || !highlightElement) {
     return
@@ -904,6 +1007,7 @@ function submitDraft() {
     title: draft.title.trim(),
     trigger_expr: draft.triggerExpr.trim(),
     init_script: draft.initScript.trim(),
+    end_script: draft.endScript.trim(),
     object_keys: normalizeObjectKeys(draft.selectedObjectKeys),
     dialogues: draft.dialogues.map((dialogue) => ({
       speaker_type: dialogue.speaker_type,
@@ -939,6 +1043,7 @@ watch(
     closeDialogueContentAutocomplete()
     closeTriggerHelp()
     closeInitScriptHelp()
+    closeEndScriptHelp()
     activeTab.value = "basic"
   },
   { immediate: true }
@@ -1019,15 +1124,24 @@ function handleDocumentPointerDown(event: MouseEvent) {
     }
   }
 
+  if (isEndScriptHelpOpen.value) {
+    const helpElement = endScriptHelpRef.value
+
+    if (helpElement && target && !helpElement.contains(target)) {
+      closeEndScriptHelp()
+    }
+  }
+
   if (
     !isTriggerAutocompleteOpen.value &&
     !isInitScriptAutocompleteOpen.value &&
+    !isEndScriptAutocompleteOpen.value &&
     !isDialogueContentAutocompleteOpen.value
   ) {
     return
   }
 
-  for (const field of ["triggerExpr", "initScript"] as const) {
+  for (const field of ["triggerExpr", "initScript", "endScript"] as const) {
     const state = getScriptAutocompleteState(field)
 
     if (!state.open) {
@@ -1194,7 +1308,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                 </div>
               </div>
 
-              <label ref="initScriptField" class="field field--full">
+              <label ref="initScriptField" class="field">
                 <div class="detail-panel__label-row">
                   <span class="field-label">初始化脚本</span>
                   <div ref="initScriptHelp" class="detail-panel__help">
@@ -1213,8 +1327,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       @click.stop
                     >
                       <p>
-                        支持多行、`let` 临时变量、`Math` 函数；可读取 `calc`
-                        变量，但不能给 `calc` 变量赋值。
+                        支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
                       </p>
                     </div>
                   </div>
@@ -1275,6 +1388,94 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
                     <div
                       v-if="!initScriptAutocompleteItems.length"
+                      class="detail-panel__autocomplete-empty"
+                    >
+                      没有匹配的变量
+                    </div>
+                  </div>
+                </div>
+              </label>
+
+              <label ref="endScriptField" class="field">
+                <div class="detail-panel__label-row">
+                  <span class="field-label">结束脚本</span>
+                  <div ref="endScriptHelp" class="detail-panel__help">
+                    <button
+                      class="detail-panel__help-button"
+                      type="button"
+                      aria-label="查看结束脚本说明"
+                      :aria-expanded="isEndScriptHelpOpen"
+                      @click.stop="toggleEndScriptHelp"
+                    >
+                      ?
+                    </button>
+                    <div
+                      v-if="isEndScriptHelpOpen"
+                      class="detail-panel__help-popover"
+                      @click.stop
+                    >
+                      <p>
+                        支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div class="detail-panel__script-wrap">
+                  <div class="detail-panel__script-editor">
+                    <pre class="detail-panel__script-highlight" data-script-highlight aria-hidden="true"><code><template
+                          v-for="(token, index) in highlightedEndScriptTokens"
+                          :key="`end-${index}`"
+                        ><span
+                            :class="[
+                              'detail-panel__script-token',
+                              token.highlighted ? 'detail-panel__script-token--keyword' : ''
+                            ]"
+                            v-html="token.text || '&nbsp;'"
+                          /></template></code></pre>
+                    <textarea
+                      ref="endScriptTextarea"
+                      v-model="draft.endScript"
+                      class="text-area detail-panel__script detail-panel__script--overlay"
+                      placeholder="{county.exp} += 10"
+                      spellcheck="false"
+                      @input="onEndScriptInput"
+                      @scroll="onEndScriptScroll"
+                      @click="updateScriptAutocompleteFromCaret('endScript')"
+                      @keyup="updateScriptAutocompleteFromCaret('endScript')"
+                      @keydown="onEndScriptKeydown"
+                    />
+                  </div>
+
+                  <div
+                    v-if="isEndScriptAutocompleteOpen"
+                    class="detail-panel__autocomplete"
+                    :class="{
+                      'detail-panel__autocomplete--top':
+                        endScriptAutocompleteState.placement === 'top'
+                    }"
+                  >
+                    <button
+                      v-for="(item, index) in endScriptAutocompleteItems"
+                      :key="item.name"
+                      class="detail-panel__autocomplete-item"
+                      :class="{
+                        'detail-panel__autocomplete-item--active':
+                          index === endScriptAutocompleteState.activeIndex
+                      }"
+                      type="button"
+                      @mousedown.prevent="insertScriptAutocompleteItem('endScript', item.name)"
+                    >
+                      <span class="detail-panel__autocomplete-name">{{ item.name }}</span>
+                      <span
+                        v-if="item.description"
+                        class="detail-panel__autocomplete-description"
+                      >
+                        {{ item.description }}
+                      </span>
+                    </button>
+
+                    <div
+                      v-if="!endScriptAutocompleteItems.length"
                       class="detail-panel__autocomplete-empty"
                     >
                       没有匹配的变量

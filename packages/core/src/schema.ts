@@ -241,6 +241,7 @@ export const storyEventSchema = z.object({
   title: z.string().min(1),
   trigger_expr: z.string().default(""),
   init_script: z.string().default(""),
+  end_script: z.string().default(""),
   object_keys: z.array(z.string()).default([]),
   dialogues: z.array(storyBigOnceDialogueSchema).default([]),
   location: z.string().default(""),
@@ -305,6 +306,7 @@ export const storyLoopEventsSchema = z.array(storyLoopEventSchema).default([])
 export const storyDocumentSchema = z.object({
   story: storyMetaSchema,
   vals: storyValsSchema,
+  systemVals: storyValsSchema,
   scenes: storySceneSchema,
   roles: storyRolesSchema,
   eventLocations: storyEventLocationSchema,

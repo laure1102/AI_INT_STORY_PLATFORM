@@ -83,6 +83,7 @@ export interface StoryFileStore {
     eventLocations: StoryEventLocationFile
   ): Promise<StoryEventLocationFile>
   writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile>
+  writeSystemVals(storyId: string, systemVals: StoryValsFile): Promise<StoryValsFile>
   writeScenes(storyId: string, scenes: StorySceneFile): Promise<StorySceneFile>
   writeSceneBackgroundSource(
     storyId: string,
@@ -246,6 +247,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
     storyDir,
     metaFile: path.join(storyDir, "story.json5"),
     valsFile: path.join(storyDir, "vals.json5"),
+    systemValsFile: path.join(storyDir, "system_vals.json5"),
     sceneFile: path.join(storyDir, "scene.json5"),
     rolesLegacyFile: path.join(storyDir, "roles.json5"),
     normalRolesFile: path.join(storyDir, "nomal_roles.json5"),
@@ -691,6 +693,14 @@ async function readStoryVals(dataDir: string, storyId: string): Promise<StoryVal
   return storyValsSchema.parse(vals)
 }
 
+async function readStorySystemVals(dataDir: string, storyId: string): Promise<StoryValsFile> {
+  const paths = createStoryPaths(dataDir, storyId)
+  const systemVals = await readOptionalJson5File<StoryValsFile>(paths.systemValsFile, {
+    variables: []
+  })
+  return storyValsSchema.parse(systemVals)
+}
+
 async function readStoryScenes(dataDir: string, storyId: string): Promise<StorySceneFile> {
   const paths = createStoryPaths(dataDir, storyId)
   const scenes = await readOptionalJson5File<StorySceneFile>(paths.sceneFile, {
@@ -857,10 +867,11 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   }
 
   async function readStoryDocument(storyId: string): Promise<StoryDocument> {
-    const [story, vals, scenes, roles, eventLocations, graphEvents, bigOnceEvents, loopEvents] =
+    const [story, vals, systemVals, scenes, roles, eventLocations, graphEvents, bigOnceEvents, loopEvents] =
       await Promise.all([
       readStoryMeta(dataDir, storyId),
       readStoryVals(dataDir, storyId),
+      readStorySystemVals(dataDir, storyId),
       readStoryScenes(dataDir, storyId),
       readStoryRoles(dataDir, storyId),
       readStoryEventLocations(dataDir, storyId),
@@ -872,6 +883,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return {
       story,
       vals,
+      systemVals,
       scenes,
       roles,
       eventLocations,
@@ -1049,6 +1061,15 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     await writeJson5File(paths.valsFile, parsedVals satisfies StoryValsFile)
 
     return parsedVals
+  }
+
+  async function writeSystemVals(storyId: string, systemVals: StoryValsFile): Promise<StoryValsFile> {
+    const parsedSystemVals = storyValsSchema.parse(systemVals)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(paths.systemValsFile, parsedSystemVals satisfies StoryValsFile)
+
+    return parsedSystemVals
   }
 
   async function writeRoles(storyId: string, roles: StoryRolesFile): Promise<StoryRolesFile> {
@@ -1282,6 +1303,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     writeRoles,
     writeEventLocations,
     writeVals,
+    writeSystemVals,
     writeScenes,
     writeSceneBackgroundSource,
     compressSceneBackground,

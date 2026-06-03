@@ -1385,8 +1385,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       @click.stop
                     >
                       <p>
-                        支持多行、`let` 临时变量、`Math` 函数；可读取 `calc`
-                        变量，但不能给 `calc` 变量赋值。
+                        支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
                       </p>
                     </div>
                   </div>
@@ -1454,7 +1453,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                   </div>
                 </div>
                 <span class="detail-panel__script-hint">
-                  支持多行、`let` 临时变量、`Math` 函数；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
+                  支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
                 </span>
               </label>
 
@@ -1477,8 +1476,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       @click.stop
                     >
                       <p>
-                        支持多行、`let` 临时变量、`Math` 函数；可读取 `calc`
-                        变量，但不能给 `calc` 变量赋值。
+                        支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
                       </p>
                     </div>
                   </div>
@@ -1546,7 +1544,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                   </div>
                 </div>
                 <span class="detail-panel__script-hint">
-                  支持多行、`let` 临时变量、`Math` 函数；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
+                  支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
                 </span>
               </label>
             </div>

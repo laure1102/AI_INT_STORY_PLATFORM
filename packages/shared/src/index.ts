@@ -47,6 +47,14 @@ export interface SaveValsRequest {
   vals: StoryValsFile
 }
 
+export interface StorySystemValsResponse {
+  systemVals: StoryValsFile
+}
+
+export interface SaveSystemValsRequest {
+  systemVals: StoryValsFile
+}
+
 export interface StoryScenesResponse {
   scenes: StorySceneFile
 }

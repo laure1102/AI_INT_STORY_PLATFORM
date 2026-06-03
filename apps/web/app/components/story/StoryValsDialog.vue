@@ -28,10 +28,15 @@ interface StoryValGroupDraft {
   vals: StoryValRowDraft[]
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
+  eyebrow?: string
+  title?: string
   vals: StoryValsFile
   saving: boolean
-}>()
+}>(), {
+  eyebrow: "\u5168\u5c40\u53d8\u91cf",
+  title: "\u5168\u5c40\u53d8\u91cf\u8bbe\u7f6e"
+})
 
 const emit = defineEmits<{
   close: []
@@ -557,8 +562,8 @@ watch(
       <section class="vals-dialog__panel glass-panel">
         <div class="vals-dialog__header">
           <div>
-            <span class="eyebrow">&#x5168;&#x5c40;&#x53d8;&#x91cf;</span>
-            <h2 class="vals-dialog__title">&#x5168;&#x5c40;&#x53d8;&#x91cf;&#x8bbe;&#x7f6e;</h2>
+            <span class="eyebrow">{{ props.eyebrow }}</span>
+            <h2 class="vals-dialog__title">{{ props.title }}</h2>
           </div>
 
           <div class="vals-dialog__actions">

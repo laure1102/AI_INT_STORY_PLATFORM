@@ -143,6 +143,7 @@ export interface StoryEventFile {
   title: string
   trigger_expr: string
   init_script: string
+  end_script: string
   object_keys: string[]
   dialogues: StoryBigOnceDialogueDefinition[]
   location: string
@@ -223,6 +224,7 @@ export type StoryAnyEventFile =
 export interface StoryDocument {
   story: StoryMetaFile
   vals: StoryValsFile
+  systemVals: StoryValsFile
   scenes: StorySceneFile
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
@@ -257,6 +259,7 @@ export interface CompiledEvent {
   title: string
   trigger_expr: string
   init_script: string
+  end_script: string
   object_keys: string[]
   dialogues: StoryBigOnceDialogueDefinition[]
   location: string
@@ -280,6 +283,7 @@ export interface CompiledStory {
   generatedAt: string
   entryEventId?: string
   vals: StoryValsFile
+  systemVals: StoryValsFile
   scenes: StorySceneFile
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile

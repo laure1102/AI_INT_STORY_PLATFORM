@@ -49,6 +49,7 @@ const {
   saveEventLocations,
   saveRoles,
   saveScenes,
+  saveSystemVals,
   saveVals,
   validateStory
 } = useStoryApi()
@@ -65,6 +66,7 @@ const editingEventId = shallowRef<string | null>(null)
 const creatingFromEventId = shallowRef<string | null>(null)
 const creatingEventDraft = shallowRef<StoryAnyEventFile | null>(null)
 const isValsDialogOpen = shallowRef(false)
+const isSystemValsDialogOpen = shallowRef(false)
 const isScenesDialogOpen = shallowRef(false)
 const isLocationsDialogOpen = shallowRef(false)
 const isRolesDialogOpen = shallowRef(false)
@@ -367,6 +369,7 @@ function openValsDialog() {
   }
 
   closeEditor()
+  isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isRolesDialogOpen.value = false
@@ -377,6 +380,23 @@ function closeValsDialog() {
   isValsDialogOpen.value = false
 }
 
+function openSystemValsDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  closeEditor()
+  isValsDialogOpen.value = false
+  isScenesDialogOpen.value = false
+  isLocationsDialogOpen.value = false
+  isRolesDialogOpen.value = false
+  isSystemValsDialogOpen.value = true
+}
+
+function closeSystemValsDialog() {
+  isSystemValsDialogOpen.value = false
+}
+
 function openScenesDialog() {
   if (!storyDocument.value) {
     return
@@ -384,6 +404,7 @@ function openScenesDialog() {
 
   closeEditor()
   isValsDialogOpen.value = false
+  isSystemValsDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isRolesDialogOpen.value = false
   scenesSaveSuccessMessage.value = null
@@ -402,6 +423,7 @@ function openLocationsDialog() {
 
   closeEditor()
   isValsDialogOpen.value = false
+  isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isRolesDialogOpen.value = false
   locationsSaveSuccessMessage.value = null
@@ -420,6 +442,7 @@ function openRolesDialog() {
 
   closeEditor()
   isValsDialogOpen.value = false
+  isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
   rolesSaveSuccessMessage.value = null
@@ -524,6 +547,7 @@ function buildNewEventFromParent(parentEventId: string): StoryEventFile {
     title: "新事件",
     trigger_expr: "",
     init_script: "",
+    end_script: "",
     object_keys: [],
     dialogues: [],
     location: "",
@@ -551,6 +575,7 @@ function buildNewRootEvent(): StoryEventFile {
     title: "新根事件",
     trigger_expr: "",
     init_script: "",
+    end_script: "",
     object_keys: [],
     dialogues: [],
     location: "",
@@ -601,6 +626,7 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
     title: "新事件",
     trigger_expr: "",
     init_script: "",
+    end_script: "",
     object_keys: [],
     dialogues: [],
     location: "",
@@ -767,6 +793,29 @@ async function handleSaveVals(vals: StoryValsFile) {
     await refreshValidation()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "保存全局变量失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function handleSaveSystemVals(systemVals: StoryValsFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    const savedSystemVals = await saveSystemVals(props.storyId, systemVals)
+    storyDocument.value = {
+      ...storyDocument.value,
+      systemVals: savedSystemVals
+    }
+    isSystemValsDialogOpen.value = false
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存系统变量失败。"
   } finally {
     isSaving.value = false
   }
@@ -948,6 +997,7 @@ watch(
     creatingFromEventId.value = null
     creatingEventDraft.value = null
     isValsDialogOpen.value = false
+    isSystemValsDialogOpen.value = false
     isScenesDialogOpen.value = false
     isLocationsDialogOpen.value = false
     isRolesDialogOpen.value = false
@@ -971,6 +1021,9 @@ watch(
         <div class="editor-header__tools" aria-label="故事配置入口">
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openValsDialog">
             全局变量
+          </button>
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openSystemValsDialog">
+            系统变量
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openScenesDialog">
             场景
@@ -1168,6 +1221,16 @@ watch(
       :vals="storyDocument.vals"
       @close="closeValsDialog"
       @save="handleSaveVals"
+    />
+
+    <StoryValsDialog
+      v-if="storyDocument && isSystemValsDialogOpen"
+      eyebrow="系统变量"
+      title="系统变量设置"
+      :saving="isSaving"
+      :vals="storyDocument.systemVals"
+      @close="closeSystemValsDialog"
+      @save="handleSaveSystemVals"
     />
 
     <StoryScenesDialog

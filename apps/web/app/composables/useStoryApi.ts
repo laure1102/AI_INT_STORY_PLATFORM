@@ -27,6 +27,7 @@ import type {
   SaveEventLocationsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
+  SaveSystemValsRequest,
   SaveValsRequest,
   StoryAssetMetadata,
   StoryDocumentResponse,
@@ -37,6 +38,7 @@ import type {
   StoryListResponse,
   StoryAssetResponse,
   StoryScenesResponse,
+  StorySystemValsResponse,
   StoryValsResponse,
   ValidationResponse
 } from "@story-mgr/shared"
@@ -117,6 +119,23 @@ export function useStoryApi() {
     })
 
     return response.vals
+  }
+
+  async function saveSystemVals(
+    storyId: string,
+    systemVals: StoryValsFile
+  ): Promise<StoryValsFile> {
+    const response = await $fetch<StorySystemValsResponse>(
+      `${apiBase}/stories/${storyId}/system-vals`,
+      {
+        method: "PUT",
+        body: {
+          systemVals
+        } satisfies SaveSystemValsRequest
+      }
+    )
+
+    return response.systemVals
   }
 
   async function saveScenes(storyId: string, scenes: StorySceneFile): Promise<StorySceneFile> {
@@ -336,6 +355,7 @@ export function useStoryApi() {
     saveEventLocations,
     saveRoles,
     saveScenes,
+    saveSystemVals,
     saveVals,
     uploadStoryAsset,
     validateStory
