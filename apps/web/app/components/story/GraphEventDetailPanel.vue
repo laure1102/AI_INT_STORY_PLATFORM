@@ -64,6 +64,7 @@ interface ScriptAutocompleteState {
   replaceStart: number
   replaceEnd: number
   activeIndex: number
+  placement: "top" | "bottom"
 }
 
 interface ScriptHighlightToken {
@@ -113,21 +114,24 @@ const triggerAutocompleteState = reactive<ScriptAutocompleteState>({
   query: "",
   replaceStart: 0,
   replaceEnd: 0,
-  activeIndex: 0
+  activeIndex: 0,
+  placement: "bottom"
 })
 const initScriptAutocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
   query: "",
   replaceStart: 0,
   replaceEnd: 0,
-  activeIndex: 0
+  activeIndex: 0,
+  placement: "bottom"
 })
 const dialogueContentAutocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
   query: "",
   replaceStart: 0,
   replaceEnd: 0,
-  activeIndex: 0
+  activeIndex: 0,
+  placement: "bottom"
 })
 
 let dialogueIdSeed = 0
@@ -624,6 +628,19 @@ function setScriptFieldValue(field: ScriptFieldKey, value: string) {
   draft.initScript = value
 }
 
+function resolveAutocompletePlacement(element: HTMLElement | null) {
+  if (!element || typeof window === "undefined") {
+    return "bottom" as const
+  }
+
+  const rect = element.getBoundingClientRect()
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
+  const spaceBelow = viewportHeight - rect.bottom
+  const spaceAbove = rect.top
+
+  return spaceBelow < 260 && spaceAbove > spaceBelow ? "top" : "bottom"
+}
+
 function closeScriptAutocomplete(field: ScriptFieldKey) {
   const state = getScriptAutocompleteState(field)
   state.open = false
@@ -631,6 +648,7 @@ function closeScriptAutocomplete(field: ScriptFieldKey) {
   state.replaceStart = 0
   state.replaceEnd = 0
   state.activeIndex = 0
+  state.placement = "bottom"
 }
 
 function closeAllScriptAutocomplete() {
@@ -661,6 +679,7 @@ function updateScriptAutocompleteFromCaret(field: ScriptFieldKey) {
   state.query = beforeCaret.slice(openBraceIndex + 1)
   state.replaceStart = openBraceIndex
   state.replaceEnd = caret
+  state.placement = resolveAutocompletePlacement(textarea)
 
   const items = getScriptAutocompleteItems(field)
 
@@ -717,6 +736,7 @@ function closeDialogueContentAutocomplete() {
   dialogueContentAutocompleteState.replaceStart = 0
   dialogueContentAutocompleteState.replaceEnd = 0
   dialogueContentAutocompleteState.activeIndex = 0
+  dialogueContentAutocompleteState.placement = "bottom"
 }
 
 function updateDialogueContentAutocompleteFromCaret() {
@@ -741,6 +761,7 @@ function updateDialogueContentAutocompleteFromCaret() {
   dialogueContentAutocompleteState.query = beforeCaret.slice(openBraceIndex + 1)
   dialogueContentAutocompleteState.replaceStart = openBraceIndex
   dialogueContentAutocompleteState.replaceEnd = caret
+  dialogueContentAutocompleteState.placement = resolveAutocompletePlacement(textarea)
 
   if (dialogueContentAutocompleteItems.value.length === 0) {
     dialogueContentAutocompleteState.activeIndex = 0
@@ -1135,7 +1156,14 @@ function handleDocumentPointerDown(event: MouseEvent) {
                     @keydown="onTriggerExprKeydown"
                   />
 
-                  <div v-if="isTriggerAutocompleteOpen" class="detail-panel__autocomplete">
+                  <div
+                    v-if="isTriggerAutocompleteOpen"
+                    class="detail-panel__autocomplete"
+                    :class="{
+                      'detail-panel__autocomplete--top':
+                        triggerAutocompleteState.placement === 'top'
+                    }"
+                  >
                     <button
                       v-for="(item, index) in triggerAutocompleteItems"
                       :key="item.name"
@@ -1217,7 +1245,14 @@ function handleDocumentPointerDown(event: MouseEvent) {
                     />
                   </div>
 
-                  <div v-if="isInitScriptAutocompleteOpen" class="detail-panel__autocomplete">
+                  <div
+                    v-if="isInitScriptAutocompleteOpen"
+                    class="detail-panel__autocomplete"
+                    :class="{
+                      'detail-panel__autocomplete--top':
+                        initScriptAutocompleteState.placement === 'top'
+                    }"
+                  >
                     <button
                       v-for="(item, index) in initScriptAutocompleteItems"
                       :key="item.name"
@@ -1454,6 +1489,10 @@ function handleDocumentPointerDown(event: MouseEvent) {
               <div
                 v-if="isDialogueContentAutocompleteOpen"
                 class="detail-panel__autocomplete"
+                :class="{
+                  'detail-panel__autocomplete--top':
+                    dialogueContentAutocompleteState.placement === 'top'
+                }"
               >
                 <button
                   v-for="(item, index) in dialogueContentAutocompleteItems"
@@ -1910,6 +1949,11 @@ function handleDocumentPointerDown(event: MouseEvent) {
   border-radius: 14px;
   background: rgba(10, 24, 37, 0.98);
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+}
+
+.detail-panel__autocomplete--top {
+  top: auto;
+  bottom: calc(100% + 8px);
 }
 
 .detail-panel__autocomplete-item {

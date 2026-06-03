@@ -51,6 +51,8 @@ interface StoryScriptStatement {
   expression: string
 }
 
+type StoryScriptCompoundAssignmentOperator = "+=" | "-=" | "*=" | "/=" | "%="
+
 class StoryScriptError extends Error {
   lineNumber: number
 
@@ -714,6 +716,32 @@ function assertScriptLocalIdentifier(identifier: string) {
   }
 }
 
+function getStoryScriptBinaryOperator(
+  operator: StoryScriptCompoundAssignmentOperator
+) {
+  switch (operator) {
+    case "+=":
+      return "+"
+    case "-=":
+      return "-"
+    case "*=":
+      return "*"
+    case "/=":
+      return "/"
+    case "%=":
+      return "%"
+  }
+}
+
+function createStoryScriptCompoundAssignmentExpression(
+  targetReference: string,
+  operator: StoryScriptCompoundAssignmentOperator,
+  expression: string
+) {
+  const binaryOperator = getStoryScriptBinaryOperator(operator)
+  return `${targetReference} ${binaryOperator} (${expression.trim()})`
+}
+
 function parseStoryScript(script: string) {
   const statements: StoryScriptStatement[] = []
   const lines = normalizeText(script).split(/\r?\n/)
@@ -747,6 +775,28 @@ function parseStoryScript(script: string) {
       continue
     }
 
+    const globalCompoundAssignMatch =
+      line.match(/^\{([^{}]+)\}\s*(\+=|-=|\*=|\/=|%=)\s*(.+)$/)
+    if (globalCompoundAssignMatch) {
+      const token = globalCompoundAssignMatch[1] ?? ""
+      const operator =
+        (globalCompoundAssignMatch[2] as StoryScriptCompoundAssignmentOperator | undefined)
+        ?? "+="
+      const expression = globalCompoundAssignMatch[3] ?? ""
+      const normalizedToken = token.trim()
+      statements.push({
+        kind: "assignGlobal",
+        lineNumber,
+        target: normalizedToken,
+        expression: createStoryScriptCompoundAssignmentExpression(
+          `{${normalizedToken}}`,
+          operator,
+          expression
+        )
+      })
+      continue
+    }
+
     const globalAssignMatch = line.match(/^\{([^{}]+)\}\s*=\s*(.+)$/)
     if (globalAssignMatch) {
       const token = globalAssignMatch[1] ?? ""
@@ -756,6 +806,26 @@ function parseStoryScript(script: string) {
         lineNumber,
         target: token.trim(),
         expression: expression.trim()
+      })
+      continue
+    }
+
+    const localCompoundAssignMatch =
+      line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(\+=|-=|\*=|\/=|%=)\s*(.+)$/)
+    if (localCompoundAssignMatch) {
+      const identifier = localCompoundAssignMatch[1] ?? ""
+      const operator =
+        (localCompoundAssignMatch[2] as StoryScriptCompoundAssignmentOperator | undefined) ?? "+="
+      const expression = localCompoundAssignMatch[3] ?? ""
+      statements.push({
+        kind: "assignLocal",
+        lineNumber,
+        target: identifier,
+        expression: createStoryScriptCompoundAssignmentExpression(
+          identifier,
+          operator,
+          expression
+        )
       })
       continue
     }

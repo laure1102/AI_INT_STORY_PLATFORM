@@ -356,11 +356,21 @@ Math.floor({county.level}) > 0 && {county.name_full} !== ""
 
 当前脚本不是完整 JavaScript，而是“多行脚本子集”。
 
-当前仅支持三种语句：
+当前支持普通赋值和复合赋值语句：
 ```txt
 let temp = expression
 temp = expression
+temp += expression
+temp -= expression
+temp *= expression
+temp /= expression
+temp %= expression
 {group.row} = expression
+{group.row} += expression
+{group.row} -= expression
+{group.row} *= expression
+{group.row} /= expression
+{group.row} %= expression
 ```
 
 支持特性：
@@ -385,7 +395,9 @@ temp = expression
 ```txt
 let income = {county.gdp} / 100
 income = Math.floor(income)
+income += 5
 {county.money} = income
+{county.tax} += Math.floor(income / 10)
 ```
 
 代码提示：
