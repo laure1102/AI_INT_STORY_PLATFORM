@@ -1,0 +1,13 @@
+{
+  "name": "@story-mgr/command-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@story-mgr/runtime": "workspace:*",
+    "@story-mgr/shared": "workspace:*"
+  }
+}

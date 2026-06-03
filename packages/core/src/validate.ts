@@ -14,7 +14,7 @@ import {
   evaluateStoryBooleanExpression,
   validateStoryScript,
   validateStoryValsCalcRules
-} from "./vals"
+} from "@story-mgr/runtime"
 
 function pushIssue(
   issues: ValidationIssue[],
