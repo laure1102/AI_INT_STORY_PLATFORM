@@ -1,5 +1,5 @@
 {
-  "name": "@story-mgr/command-client",
+  "name": "@story-mgr/tui-client",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -1,14 +1,14 @@
 import { DEFAULT_MAX_CALC_NESTING_DEPTH } from "@story-mgr/runtime"
 
-export interface CommandClientPlaceholderConfig {
+export interface TuiClientPlaceholderConfig {
   storyId?: string
 }
 
-export function createCommandClientPlaceholder(
-  config: CommandClientPlaceholderConfig = {}
+export function createTuiClientPlaceholder(
+  config: TuiClientPlaceholderConfig = {}
 ) {
   return {
-    platform: "command-client" as const,
+    platform: "tui-client" as const,
     storyId: config.storyId ?? null,
     runtimeMaxCalcDepth: DEFAULT_MAX_CALC_NESTING_DEPTH
   }

@@ -25,7 +25,7 @@
 当前明确方向：
 
 - 先用故事编辑器完成内容生产
-- 先用 `Node.js` 命令行客户端验证运行时逻辑
+- 先用 `Node.js` 文本交互界面命令行客户端验证运行时逻辑
 - 后续再接 `Cocos` 客户端
 
 ## 2. 技术栈
@@ -43,7 +43,7 @@
 
 - `apps/web`：故事编辑器前端
 - `apps/api`：文件读写、导出、图片与 AI 接口
-- `apps/command-client`：命令行客户端占位目录，后续用于验证运行时逻辑
+- `apps/tui-client`：文本交互界面命令行客户端占位目录，后续用于验证运行时逻辑
 - `apps/cocos-client`：Cocos 客户端占位目录，后续复用共享运行时
 
 ### 3.2 `packages`
@@ -539,11 +539,11 @@ temp %= expression
 
 ## 10. 当前客户端规划
 
-### 10.1 `apps/command-client`
+### 10.1 `apps/tui-client`
 
 定位：
 
-- 本地 `Node.js` 命令行客户端
+- 本地 `Node.js` 文本交互界面命令行客户端
 - 用来验证运行时逻辑
 - 未来应直接依赖 `packages/runtime`
 
@@ -566,7 +566,7 @@ temp %= expression
 
 - 编辑器负责内容生产
 - `runtime` 负责剧情语义
-- `command-client` 负责命令行验证与回归测试
+- `tui-client` 负责文本交互验证与回归测试
 - `cocos-client` 负责最终游戏展示与交互
 
 ## 11. 当前开发进度
@@ -581,7 +581,7 @@ temp %= expression
 - 脚本复合赋值 `+=` / `-=` / `*=` / `/=` / `%=` 
 - 系统变量文件、API、编辑入口、保存、校验、导出
 - `apps/cocos-client` 占位目录
-- `apps/command-client` 占位目录
+- `apps/tui-client` 占位目录
 - `packages/runtime` 第一阶段抽离
 
 ### 当前已完成的 runtime 抽离范围
@@ -596,7 +596,7 @@ temp %= expression
 
 - 操作节点连接变量运行时语义
 - 系统变量是否并入事件脚本 / 触发条件 / 对白引用
-- `command-client` 的真实剧情执行流程
+- `tui-client` 的真实剧情执行流程
 - 更完整的剧情运行时协议
 
 ## 12. 已知限制与风险
@@ -610,7 +610,7 @@ temp %= expression
 
 ### 短期
 
-- 在 `command-client` 中跑通最小故事执行链路
+- 在 `tui-client` 中跑通最小故事执行链路
 - 定义事件运行时上下文
 - 明确系统变量是否参与脚本 / 触发条件 / 对白
 
@@ -624,7 +624,7 @@ temp %= expression
 
 - 形成稳定剧情 DSL
 - 形成稳定运行时协议
-- 让编辑器、CLI、Cocos 三端共用同一套剧情语义
+- 让编辑器、TUI、Cocos 三端共用同一套剧情语义
 
 ## 14. 协作约定
 

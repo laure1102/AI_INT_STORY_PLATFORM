@@ -11,7 +11,7 @@
 
 这部分逻辑后续会被：
 
-- `apps/command-client`
+- `apps/tui-client`
 - `apps/cocos-client`
 - `packages/core` 的校验层
 
