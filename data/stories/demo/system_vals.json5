@@ -39,7 +39,14 @@
           value: 120,
           value_type: 'value',
         },
-        ],
+        {
+          calc_rule: '',
+          description: '游戏时间_日期',
+          name: 'now_date',
+          value: '1990-1-1',
+          value_type: 'value',
+        },
+      ],
     },
   ],
 }
