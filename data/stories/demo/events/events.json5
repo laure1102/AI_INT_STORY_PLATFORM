@@ -57,12 +57,12 @@
         speaker_type: 'player',
       },
       {
-        content: '本统的功能很简单。\n就是以{county.name_full}县常驻人口为基数，每天百倍为宿主发放资金。',
+        content: '本统的功能很简单。\n就是以{county.name_full}县常驻人口为基数，每天百倍为宿主发放资金。\n每天发放时间: 0点\n当前本县常驻人口数：{county.renkou}\n今日应发放金额：{player.day_give_money}',
         speaker_key: 'normal:xitong',
         speaker_type: 'object',
       },
       {
-        content: '每天发放时间: 0点\n当前本县常驻人口数：{county.renkou}\n今日应发放金额：',
+        content: '由于今天是系统第一次激活，特给予宿主新手礼包：\n奖励翻倍！！！\n今日发放金额：{player.first_day_give_money}',
         speaker_key: 'normal:xitong',
         speaker_type: 'object',
       },

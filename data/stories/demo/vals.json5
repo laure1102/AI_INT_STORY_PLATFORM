@@ -437,6 +437,12 @@
           name: 'day_give_money',
           value_type: 'calc',
         },
+        {
+          calc_rule: '{day_give_money} * 2',
+          description: '首次给钱',
+          name: 'first_day_give_money',
+          value_type: 'calc',
+        },
       ],
     },
   ],
