@@ -1,6 +1,6 @@
 # Story Manager Agent Guide
 
-Last updated: `2026-06-03`
+Last updated: `2026-06-04`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -186,6 +186,7 @@ Both use the same structure:
   entries: [
     {
       var_key: "player.name_xing",
+      group_no: 1,
       need_player_override: true,
       tips: "请输入主角的姓"
     }
@@ -197,8 +198,27 @@ Rules:
 
 - only references `vals.json5`, not `system_vals.json5`
 - row order is meaningful and must be preserved
+- `group_no` controls grouped input screens in clients; rows with the same number should be entered on the same screen step
 - `need_player_override: true` means the client should ask the player to fill this field during profile creation
 - `tips` is the client-side prompt / helper text
+
+### `story.json5`
+
+Current minimal shape:
+
+```json5
+{
+  id: "demo",
+  title: "示例故事",
+  description: "",
+  tags: []
+}
+```
+
+Notes:
+
+- `startEventId` has been removed from `story.json5`
+- automatic start-event discovery is not implemented yet and should be designed later
 
 ## 5. Event model
 
@@ -333,6 +353,7 @@ Restrictions:
 - no `if`, `else`, `for`, `while`, or function declarations
 - temporary variables must be declared with `let`
 - `branch.xxx` is only available when runtime provides action-branch context
+- runtime currently allows script writes into merged global/system values except `calc` rows; the long-term design intent is stricter: system time variables should be runtime-owned and eventually read-only to story scripts
 
 ### dialogue content
 
@@ -397,6 +418,62 @@ Compression:
 - graph-event runtime session progression
 - event dialogue playback
 - action-node branch execution and branch-variable propagation
+- runtime clock state and system-time synchronization
+
+### Runtime clock model
+
+Implemented in `packages/runtime/src/session.ts`.
+
+Core state:
+
+```ts
+interface RuntimeClockState {
+  base_date: string
+  base_day: number
+  total_minutes: number
+  pending_minutes: number
+  step_minutes: number
+}
+```
+
+Current design:
+
+- `system_vals.json5` is the source for initial clock defaults
+- default game start is day `1`, not day `0`
+- current default base date is `1990-1-1`
+- time advances in stepped chunks, currently `10` in-game minutes per step
+- `pending_minutes` accumulates scaled real time until it crosses a step boundary
+- every completed step syncs derived system fields back into `system_vals`
+
+Fields currently synchronized by runtime:
+
+- `system.now_day`
+- `system.now_date`
+- `system.now_hour`
+- `system.now_minute`
+- `system.now_weekday`
+- `system.now_shiduan`
+- `system.now_jieqi`
+- `system.now_jieri`
+
+Control semantics:
+
+- `system.time_pause === true` means the game clock does not advance
+- `system.time_speed` means "real 1 minute corresponds to how many in-game minutes"
+- non-positive or invalid `time_speed` effectively stops time progression
+- `tick(deltaMs)` only advances time; it does not yet schedule `big_once_events` or `loop_events`
+
+Public runtime control surface:
+
+- `tick(deltaMs: number)`
+- `setTimePause(paused: boolean)`
+- `setTimeSpeed(speed: number)`
+
+Important current boundary:
+
+- time progression is already part of the shared runtime and must remain reusable by both `tui-client` and future `cocos-client`
+- loop-event scheduling is intentionally not connected yet
+- the current runtime session may have `current_event_id === null`; no automatic start-node discovery exists yet
 
 `packages/core/src/vals.ts` now re-exports the runtime implementation for compatibility.
 
@@ -418,6 +495,10 @@ Implemented:
 - action-node branch selection
 - branch-variable summary display
 - debug-panel toggle inside the TUI game screen
+- runtime time controls wired through shared session APIs
+- compact phone-like header / game area / footer layout
+- overlay pager for message flow and global variables without growing overall TUI height
+- next-day debug advance
 
 Current TUI local layout:
 
@@ -439,6 +520,7 @@ Profile creation rules:
 
 - the editor controls player-input fields through `player_override_vals.json5`
 - the TUI asks only rows where `need_player_override === true`
+- prompts are grouped by `group_no`
 - answers are written to `custom_values[var_key]`
 - if common player/county fields exist, `player_setup` is inferred from `custom_values`
 - runtime still consumes `custom_values` as the true override layer
@@ -464,6 +546,41 @@ Notes:
 - the current runtime gameplay loop is focused on `events/events.json5`
 - `big_once_events.json5` and `loop_events.json5` are not yet scheduled into the live runtime flow
 
+### Current TUI game-screen behavior
+
+Layout:
+
+- header: left shows `第N天 HH:MM 时段` and paused state; right shows `县名县({county.level})`
+- middle game area: only runtime content, overlays, dialogue, branch options, or empty-state text
+- footer: left shows `角色名  金钱: <格式化金额>`; right shows `下一天`
+- footer extra hint row: keyboard shortcuts
+
+Current keyboard shortcuts:
+
+- `h`: return to profile menu
+- `t`: open settings menu
+- `space`: pause / resume time
+- `l`: show or hide message-flow overlay
+- `i`: show or hide global-values overlay
+- `n`: advance to next day `00:00` for debugging
+
+Overlay behavior:
+
+- message flow and global variables render inside the game area, not below the screen
+- overlay paging preserves the previous game-area state and restores it after closing
+- overlay content can be scrolled without changing the overall shell height
+
+Current TUI money/header formatting:
+
+- county header appends global county level as `XX县({county.level})`
+- footer money display is humanized with `千 / 万 / 亿` formatting
+
+Current TUI time loop:
+
+- `apps/tui-client/src/cli.tsx` calls `app.tick(1000)` every real second while a session exists
+- pause and speed changes are delegated to the shared runtime instead of local UI-only state
+- `n` temporarily normalizes time controls, advances to the next day boundary, then restores previous pause/speed state
+
 ## 11. Cocos client status
 
 `apps/cocos-client` exists only as a placeholder shell right now.
@@ -476,25 +593,31 @@ The intended rule is:
 
 ## 12. Current known gaps
 
+- `story.json5` no longer has `startEventId`, but automatic start-event discovery is still not implemented
 - `big_once_events` are not yet integrated into runtime scheduling
 - `loop_events` are not yet integrated into runtime scheduling
 - save snapshots do not yet persist transient cursor state such as current dialogue index, pending action list, and branch context
 - loading a save currently restores values and `current_event_id`, but does not resume mid-dialogue
 - `player_setup` inference is still convention-based for known fields such as `player.name_xing`, `player.name_ming`, `county.name_full`, `county.name_short`, `county.parent_city`, and `county.province`
 - scene/background presentation and audio are not yet represented in the TUI runtime
+- `system.now_jieqi` is still a placeholder and currently resolves to an empty string
+- long-term rule "system variables are runtime-owned and script read-only" is not fully enforced yet
 
 ## 13. Next recommended steps
 
+- design and implement automatic graph start-event discovery
 - stabilize the long-term variable contract for player creation
 - reuse the same player-creation contract in the future Cocos onboarding flow
 - persist transient runtime session state so save/load resumes mid-event correctly
 - integrate `big_once_events` into the shared runtime scheduler
 - integrate `loop_events` into the shared runtime scheduler
+- enforce runtime-owned system-variable write protection where appropriate
 - add regression tests around:
   bundle -> custom -> save layering
   branch-variable read/write semantics
   dialogue placeholder rendering
   save/load resume behavior
+  time progression and system-time synchronization
 
 ## 14. Collaboration rules
 

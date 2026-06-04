@@ -2,11 +2,8 @@ import { fileURLToPath } from "node:url"
 import React, { useEffect, useMemo, useState } from "react"
 import { Alert, ConfirmInput, Spinner, StatusMessage, TextInput } from "@inkjs/ui"
 import { Box, render, Text, useApp, useInput } from "ink"
-import type {
-  RuntimePlayerProfileSetup,
-  RuntimeStorySessionAction,
-  RuntimeStoryViewModel
-} from "@story-mgr/runtime"
+import type { RuntimeStorySessionAction, RuntimeStoryViewModel } from "@story-mgr/runtime"
+import { formatStoryValInput, getStoryValCalcDisplay } from "@story-mgr/runtime"
 import {
   createTuiClientApp,
   type CreateTuiClientAppOptions,
@@ -25,6 +22,9 @@ interface MenuOption {
 interface MenuSelectProps {
   options: MenuOption[]
   visibleOptionCount?: number
+  activeIndex?: number
+  onActiveIndexChange?: (nextIndex: number) => void
+  disabled?: boolean
   onSubmit: (value: string) => void
 }
 
@@ -47,6 +47,7 @@ type ScreenState =
   | { kind: "profile-menu" }
   | { kind: "create-player"; groupIndex: number; promptIndex: number; fieldState: CreatePlayerFieldState }
   | { kind: "save-menu" }
+  | { kind: "settings-menu" }
   | { kind: "save-input"; defaultSlotId: string }
   | { kind: "game" }
   | { kind: "confirm-quit" }
@@ -55,6 +56,15 @@ interface AsyncTaskState {
   label: string
   error: string | null
 }
+
+interface GameUiState {
+  overlay: "notifications" | "globalVals" | null
+  overlayOffset: number
+  interactionActiveIndex: number
+  interactionInputDraft: string
+}
+
+type ThemeColor = "blue" | "cyan" | "green" | "magenta" | "yellow" | "gray" | "red" | "white"
 
 // CLI 只解析少量启动参数，其余交互都交给 Ink 界面处理。
 function parseArgs(argv: string[]): CreateTuiClientAppOptions {
@@ -206,28 +216,28 @@ function saveSlotToOption(saveSlot: TuiSaveSlotSummary): MenuOption {
 }
 
 function createInteractionOptions(
-  view: RuntimeStoryViewModel,
-  saveSlotCount: number
+  view: RuntimeStoryViewModel
 ): MenuOption[] {
-  const interactionOptions = view.interaction?.kind === "select"
+  return view.interaction?.kind === "select"
     ? view.interaction.options.map((option) => ({
         value: `action:${option.id}`,
         label: option.description ? `${option.label} · ${option.description}` : option.label
       }))
     : []
+}
 
+function buildSettingsOptions(view: RuntimeStoryViewModel): MenuOption[] {
   return [
-    ...interactionOptions,
     {
-      value: "meta:debug",
+      value: "settings:save",
+      label: "保存进度"
+    },
+    {
+      value: "settings:debug",
       label: view.screen === "debug" ? "返回游戏" : "查看调试信息"
     },
     {
-      value: "meta:save",
-      label: `保存进度${saveSlotCount > 0 ? `（已有 ${saveSlotCount} 个存档）` : ""}`
-    },
-    {
-      value: "meta:quit",
+      value: "settings:quit",
       label: "退出客户端"
     }
   ]
@@ -274,6 +284,210 @@ function findLocationLabel(state: TuiClientAppState) {
   ].filter(Boolean).join("/")
 }
 
+function findSystemValue(state: TuiClientAppState, token: string) {
+  const [groupName, rowName] = token.split(".")
+  if (!groupName || !rowName) {
+    return undefined
+  }
+
+  const snapshot = state.session?.getSnapshot()
+  if (!snapshot) {
+    return undefined
+  }
+
+  const matchedGroups = [
+    ...snapshot.system_vals.variables,
+    ...snapshot.vals.variables
+  ]
+  const group = matchedGroups.find((item) => item.name.trim() === groupName.trim())
+  const row = group?.vals.find((item) => item.name.trim() === rowName.trim())
+  return row?.value
+}
+
+function findGameTimeLabel(state: TuiClientAppState) {
+  const nowDate = findSystemValue(state, "system.now_date")
+  const nowHour = findSystemValue(state, "system.now_hour")
+  const nowMinute = findSystemValue(state, "system.now_minute")
+  const nowShiduan = findSystemValue(state, "system.now_shiduan")
+  const timePause = findSystemValue(state, "system.time_pause")
+  const timeSpeed = findSystemValue(state, "system.time_speed")
+
+  if (typeof nowDate !== "string" || typeof nowHour !== "number" || typeof nowMinute !== "number") {
+    return "未初始化"
+  }
+
+  const clockText = `${nowDate} ${String(nowHour).padStart(2, "0")}:${String(nowMinute).padStart(2, "0")}`
+  const shiduanText = typeof nowShiduan === "string" && nowShiduan ? ` ${nowShiduan}` : ""
+  const pauseText = timePause === true ? "暂停" : "运行中"
+  const speedText = typeof timeSpeed === "number" ? ` x${timeSpeed}` : ""
+
+  return `${clockText}${shiduanText} · ${pauseText}${speedText}`
+}
+
+function findGameDayLabel(state: TuiClientAppState) {
+  const nowDay = findSystemValue(state, "system.now_day")
+  return typeof nowDay === "number" && Number.isFinite(nowDay) ? `第 ${nowDay} 天` : "未初始化"
+}
+
+function findGameDayNumber(state: TuiClientAppState) {
+  const nowDay = findSystemValue(state, "system.now_day")
+  return typeof nowDay === "number" && Number.isFinite(nowDay) ? nowDay : null
+}
+
+function findCompactClockLabel(state: TuiClientAppState) {
+  const nowHour = findSystemValue(state, "system.now_hour")
+  const nowMinute = findSystemValue(state, "system.now_minute")
+
+  if (typeof nowHour !== "number" || typeof nowMinute !== "number") {
+    return "--:--"
+  }
+
+  return `${String(nowHour).padStart(2, "0")}:${String(nowMinute).padStart(2, "0")}`
+}
+
+function findHeaderTimeLabel(state: TuiClientAppState) {
+  const dayNumber = findGameDayNumber(state)
+  const clockLabel = findCompactClockLabel(state)
+  const shiduan = findSystemValue(state, "system.now_shiduan")
+  const paused = findTimePause(state)
+  const pausedLabel = paused ? " 暂停" : ""
+  const shiduanLabel = typeof shiduan === "string" && shiduan.trim() ? ` ${shiduan.trim()}` : ""
+
+  if (dayNumber === null) {
+    return `未初始化 ${clockLabel}${pausedLabel}`
+  }
+
+  return `第${dayNumber}天 ${clockLabel}${shiduanLabel}${pausedLabel}`
+}
+
+function findCountyLabel(state: TuiClientAppState) {
+  const countyName = findSystemValue(state, "county.name_full")
+  const countyLevel = findSystemValue(state, "county.level")
+
+  if (typeof countyName === "string" && countyName.trim()) {
+    const levelText = countyLevel === null || countyLevel === undefined || countyLevel === ""
+      ? ""
+      : `(${String(countyLevel).trim()})`
+    return `${countyName.trim()}县${levelText}`
+  }
+
+  return "未设县名"
+}
+
+function formatHumanizedAmount(amount: unknown) {
+  // 先清洗字符串，再交给 BigInt 做精确格式化，避免金钱显示丢精度。
+  const cleanAmount = String(amount).replace(/\s+/g, "")
+  if (!cleanAmount || Number.isNaN(Number(cleanAmount))) {
+    return "0"
+  }
+
+  let num = BigInt(cleanAmount)
+  if (num === 0n) {
+    return "0"
+  }
+
+  if (num < 10000n) {
+    return `${num}`
+  }
+
+  num = (num / 1000n) * 1000n
+
+  const ONE_YI = 100000000n
+  const ONE_WAN = 10000n
+  const ONE_QIAN = 1000n
+
+  const yi = num / ONE_YI
+  let remainder = num % ONE_YI
+
+  const wan = remainder / ONE_WAN
+  remainder %= ONE_WAN
+
+  const qian = remainder / ONE_QIAN
+
+  let result = ""
+  if (yi > 0n) {
+    result += `${yi}亿`
+  }
+  if (wan > 0n) {
+    result += `${wan}万`
+  }
+  if (qian > 0n) {
+    result += `${qian}千`
+  }
+
+  return result
+}
+
+function findPlayerMoneyLabel(state: TuiClientAppState) {
+  const money = findSystemValue(state, "player.money")
+  if (typeof money === "number" && Number.isFinite(money)) {
+    return formatHumanizedAmount(money)
+  }
+
+  if (typeof money === "string" && money.trim()) {
+    return formatHumanizedAmount(money.trim())
+  }
+
+  return "0"
+}
+
+function findLatestNotification(notifications: string[]) {
+  return notifications.length > 0
+    ? notifications[notifications.length - 1] ?? ""
+    : ""
+}
+
+function buildGlobalValueLines(state: TuiClientAppState) {
+  const snapshot = state.session?.getSnapshot()
+  if (!snapshot) {
+    return []
+  }
+
+  return snapshot.vals.variables.flatMap((group) => {
+    const groupName = group.name.trim()
+
+    return group.vals.map((row) => {
+      const rowName = row.name.trim()
+      const token = groupName ? `${groupName}.${rowName}` : rowName
+      const displayValue = row.value_type === "calc"
+        ? getStoryValCalcDisplay(snapshot.vals, group, row).text
+        : formatStoryValInput(row.value)
+
+      return `${token}: ${displayValue}`
+    })
+  })
+}
+
+function findTimePause(state: TuiClientAppState) {
+  return findSystemValue(state, "system.time_pause") === true
+}
+
+function findTimeSpeed(state: TuiClientAppState) {
+  const value = findSystemValue(state, "system.time_speed")
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+function formatStageLabel(stage: TuiClientAppState["stage"]) {
+  switch (stage) {
+    case "boot":
+      return "启动"
+    case "sync-story-bundle":
+      return "同步剧情"
+    case "select-or-create-profile":
+      return "角色入口"
+    case "load-profile-custom":
+      return "读取角色"
+    case "select-save-or-new-game":
+      return "选择存档"
+    case "create-session":
+      return "创建会话"
+    case "enter-game":
+      return "进入游戏"
+    default:
+      return stage
+  }
+}
+
 async function handleDispatchAction(
   app: TuiClientApp,
   action: RuntimeStorySessionAction,
@@ -286,38 +500,51 @@ async function handleDispatchAction(
 function MenuSelect({
   options,
   visibleOptionCount = 8,
+  activeIndex: controlledActiveIndex,
+  onActiveIndexChange,
+  disabled = false,
   onSubmit
 }: MenuSelectProps) {
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [internalActiveIndex, setInternalActiveIndex] = useState(0)
+  const activeIndex = controlledActiveIndex ?? internalActiveIndex
+
+  function updateActiveIndex(nextIndex: number) {
+    if (onActiveIndexChange) {
+      onActiveIndexChange(nextIndex)
+      return
+    }
+
+    setInternalActiveIndex(nextIndex)
+  }
 
   useEffect(() => {
-    setActiveIndex((currentIndex) => {
+    const nextIndex = (() => {
       if (options.length === 0) {
         return 0
       }
 
-      return Math.min(currentIndex, options.length - 1)
-    })
-  }, [options])
+      return Math.min(activeIndex, options.length - 1)
+    })()
+
+    updateActiveIndex(nextIndex)
+    // 这里故意只在选项变化时校正索引，避免正常操作时重复写状态。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.length])
 
   useInput((input, key) => {
-    if (options.length === 0) {
+    if (disabled || options.length === 0) {
       return
     }
 
     const lowerInput = input.toLowerCase()
 
     if (key.upArrow || lowerInput === "w" || lowerInput === "k") {
-      setActiveIndex((currentIndex) => {
-        return currentIndex > 0 ? currentIndex - 1 : options.length - 1
-      })
+      updateActiveIndex(activeIndex > 0 ? activeIndex - 1 : options.length - 1)
       return
     }
 
     if (key.downArrow || lowerInput === "s" || lowerInput === "j") {
-      setActiveIndex((currentIndex) => {
-        return currentIndex < options.length - 1 ? currentIndex + 1 : 0
-      })
+      updateActiveIndex(activeIndex < options.length - 1 ? activeIndex + 1 : 0)
       return
     }
 
@@ -351,39 +578,161 @@ function MenuSelect({
 
   return (
     <Box flexDirection="column" gap={0}>
-      <Text color="gray">操作：↑/↓、W/S、J/K 移动，Enter 确认，数字键 1-9 快捷选择。</Text>
       {visibleOptions.map((option, visibleIndex) => {
         const actualIndex = windowStart + visibleIndex
         const isActive = actualIndex === activeIndex
         const shortcutLabel = actualIndex < 9 ? `${actualIndex + 1}. ` : "   "
 
         return (
-          <Text key={option.value} color={isActive ? "green" : undefined}>
-            {isActive ? "> " : "  "}
-            {shortcutLabel}
-            {option.label}
-          </Text>
+          <Box
+            key={option.value}
+            borderStyle="round"
+            borderColor={isActive ? "green" : "gray"}
+            paddingX={1}
+            marginBottom={0}
+          >
+            <Text color={isActive ? "green" : undefined}>
+              {isActive ? "[*] " : "[ ] "}
+              {shortcutLabel}
+              {option.label}
+            </Text>
+          </Box>
         )
       })}
+      <Text color="gray">上/下、W/S、J/K 移动；Enter 确认；1-9 快捷选择。</Text>
+    </Box>
+  )
+}
+
+function SectionCard({
+  title,
+  accentColor = "white",
+  badge,
+  children
+}: {
+  title: string
+  accentColor?: ThemeColor
+  badge?: string
+  children: React.ReactNode
+}) {
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={accentColor} paddingX={1} paddingY={1}>
+      <Box flexDirection="row" justifyContent="space-between">
+        <Text color={accentColor} bold>{title}</Text>
+        {badge ? <Text color="gray">{badge}</Text> : null}
+      </Box>
+      <Box flexDirection="column" marginTop={1}>
+        {children}
+      </Box>
+    </Box>
+  )
+}
+
+function StatusChip({
+  label,
+  value,
+  color = "gray"
+}: {
+  label: string
+  value: string | number
+  color?: ThemeColor
+}) {
+  return (
+    <Box borderStyle="round" borderColor={color} paddingX={1} marginRight={1} marginBottom={1}>
+      <Text color={color}>
+        {label}: {value}
+      </Text>
+    </Box>
+  )
+}
+
+function PhoneStatusBar({ state }: { state: TuiClientAppState }) {
+  const syncLabel = state.bundle ? "SYNC" : "LOCAL"
+
+  return (
+    <Box borderStyle="round" borderColor="gray" paddingX={1}>
+      <Text color="gray">
+        StoryOS Mobile | {findGameDayLabel(state)} | {findCompactClockLabel(state)} | {syncLabel}
+      </Text>
+    </Box>
+  )
+}
+
+function PhoneShell({
+  state,
+  title,
+  subtitle,
+  accentColor = "cyan",
+  footerText,
+  children
+}: {
+  state: TuiClientAppState
+  title: string
+  subtitle?: string
+  accentColor?: ThemeColor
+  footerText?: string
+  children: React.ReactNode
+}) {
+  return (
+    <Box flexDirection="column" width={72}>
+      <Box flexDirection="column" borderStyle="round" borderColor={accentColor} paddingX={1} paddingY={1}>
+        <Box justifyContent="center">
+          <Text color="gray">[ Story Phone ]</Text>
+        </Box>
+        <PhoneStatusBar state={state} />
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color={accentColor}>{title}</Text>
+          {subtitle ? <Text color="gray">{subtitle}</Text> : null}
+        </Box>
+        <Box flexDirection="column" marginTop={1} gap={1}>
+          {children}
+        </Box>
+        {footerText ? (
+          <Box marginTop={1}>
+            <Text color="gray">{footerText}</Text>
+          </Box>
+        ) : null}
+        <Box justifyContent="center" marginTop={1}>
+          <Text color="gray">[ home ]</Text>
+        </Box>
+      </Box>
     </Box>
   )
 }
 
 function SummaryPanel({ state }: { state: TuiClientAppState }) {
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="blue" paddingX={1} paddingY={1}>
-      <Text color="cyan">故事：{state.storyId}</Text>
-      <Text>阶段：{state.stage}</Text>
-      <Text>Bundle：{state.bundle ? "已同步" : "未同步"}</Text>
-      <Text>本地角色：{state.profiles.length}</Text>
+    <SectionCard title="状态总览" accentColor="blue" badge={formatStageLabel(state.stage)}>
+      <Box flexDirection="row" flexWrap="wrap">
+        <StatusChip label="故事" value={state.storyId} color="cyan" />
+        <StatusChip label="角色数" value={state.profiles.length} color="green" />
+        <StatusChip label="存档" value={state.saveSlots.length} color="yellow" />
+        <StatusChip label="Bundle" value={state.bundle ? "已同步" : "未同步"} color="magenta" />
+      </Box>
       <Text>当前角色：{state.profile?.profile_name ?? "未选择"}</Text>
-      <Text>存档数：{state.saveSlots.length}</Text>
-      <Text>当前事件：{state.view?.activeEventId ?? "无"}</Text>
-    </Box>
+      <Text>当前事件：{state.view?.activeEventTitle ?? state.view?.activeEventId ?? "无"}</Text>
+      <Text>游戏时间：{findGameTimeLabel(state)}</Text>
+    </SectionCard>
   )
 }
 
 function NotificationPanel({ notifications }: { notifications: string[] }) {
+  const recentNotifications = notifications.slice(-4)
+
+  if (recentNotifications.length === 0) {
+    return null
+  }
+
+  return (
+    <SectionCard title="消息流" accentColor="gray" badge={`${recentNotifications.length} 条`}>
+      {recentNotifications.map((message, index) => (
+        <Text key={`${message}-${index}`}>- {message}</Text>
+      ))}
+    </SectionCard>
+  )
+}
+
+function CompactNotificationPanel({ notifications }: { notifications: string[] }) {
   const recentNotifications = notifications.slice(-6)
 
   if (recentNotifications.length === 0) {
@@ -391,23 +740,124 @@ function NotificationPanel({ notifications }: { notifications: string[] }) {
   }
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} paddingY={1}>
-      <Text color="yellow">最近消息</Text>
+    <SectionCard title="消息流" accentColor="gray" badge={`${recentNotifications.length} 条`}>
       {recentNotifications.map((message, index) => (
         <Text key={`${message}-${index}`}>- {message}</Text>
       ))}
+    </SectionCard>
+  )
+}
+
+function GlobalValsPanel({ state }: { state: TuiClientAppState }) {
+  const lines = buildGlobalValueLines(state)
+
+  if (lines.length === 0) {
+    return null
+  }
+
+  return (
+    <SectionCard title="全局变量" accentColor="yellow" badge={`${lines.length} 项`}>
+      {lines.map((line) => (
+        <Text key={line}>{line}</Text>
+      ))}
+    </SectionCard>
+  )
+}
+
+function OverlayPager({
+  title,
+  badge,
+  lines,
+  offset
+}: {
+  title: string
+  badge?: string
+  lines: string[]
+  offset: number
+}) {
+  const pageSize = 10
+  const maxOffset = Math.max(0, lines.length - pageSize)
+  const safeOffset = Math.max(0, Math.min(offset, maxOffset))
+  const visibleLines = lines.slice(safeOffset, safeOffset + pageSize)
+  const pageLabel = lines.length === 0
+    ? "0/0"
+    : `${Math.floor(safeOffset / pageSize) + 1}/${Math.max(1, Math.ceil(lines.length / pageSize))}`
+
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
+      <Box flexDirection="row" justifyContent="space-between">
+        <Text color="yellow" bold>{title}</Text>
+        <Text color="gray">{badge ? `${badge} · ${pageLabel}` : pageLabel}</Text>
+      </Box>
+      {visibleLines.length === 0 ? (
+        <Text color="gray">当前没有可显示内容。</Text>
+      ) : (
+        visibleLines.map((line, index) => (
+          <Text key={`${safeOffset}-${index}-${line}`}>{line}</Text>
+        ))
+      )}
+      <Text color="gray">↑/↓ 或 J/K 翻行；再次按对应快捷键关闭。</Text>
     </Box>
+  )
+}
+
+function TimeControlPanel({
+  state,
+  onSelect
+}: {
+  state: TuiClientAppState
+  onSelect: (value: string) => void
+}) {
+  const paused = findTimePause(state)
+  const speed = findTimeSpeed(state)
+  const options = useMemo<MenuOption[]>(() => {
+    return [
+      {
+        value: paused ? "meta:time-resume" : "meta:time-pause",
+        label: paused ? "继续时间" : "暂停时间"
+      },
+      { value: "meta:time-speed:0.5", label: "倍率 x0.5" },
+      { value: "meta:time-speed:1", label: "倍率 x1" },
+      { value: "meta:time-speed:2", label: "倍率 x2" },
+      { value: "meta:time-speed:4", label: "倍率 x4" },
+      { value: "meta:time-speed:8", label: "倍率 x8" }
+    ]
+  }, [paused])
+
+  return (
+    <SectionCard
+      title="时间调试"
+      accentColor="yellow"
+      badge={paused ? "暂停中" : "运行中"}
+    >
+      <Box flexDirection="row" flexWrap="wrap">
+        <StatusChip label="天数" value={findGameDayLabel(state)} color="yellow" />
+        <StatusChip label="倍率" value={`x${speed}`} color="cyan" />
+      </Box>
+      <MenuSelect
+        options={options}
+        visibleOptionCount={5}
+        onSubmit={onSelect}
+      />
+    </SectionCard>
   )
 }
 
 function BootScreen({ state, task }: { state: TuiClientAppState; task: AsyncTaskState | null }) {
   return (
-    <Box flexDirection="column" gap={1}>
-      <Text bold color="green">Story Manager TUI Client</Text>
+    <PhoneShell
+      state={state}
+      title="Story Manager"
+      subtitle="正在把剧情编辑器运行成一部掌上故事机"
+      accentColor="green"
+      footerText="Ctrl+C 退出"
+    >
       <SummaryPanel state={state} />
-      {task ? <Spinner label={task.label} /> : null}
+      <SectionCard title="启动面板" accentColor="green" badge={task ? "进行中" : "待命"}>
+        {task ? <Spinner label={task.label} /> : <Text>等待下一步操作。</Text>}
+      </SectionCard>
       <NotificationPanel notifications={state.notifications} />
-    </Box>
+    </PhoneShell>
   )
 }
 
@@ -429,20 +879,28 @@ function ProfileMenuScreen({
   }, [state.profiles])
 
   return (
-    <Box flexDirection="column" gap={1}>
-      <Text bold color="green">选择角色</Text>
+    <PhoneShell
+      state={state}
+      title="角色入口"
+      subtitle="先挑一个身份，再进入你的故事世界"
+      accentColor="green"
+      footerText="像手机游戏选角色一样，用方向键移动、回车确认"
+    >
       <SummaryPanel state={state} />
-      <MenuSelect
-        options={options}
-        visibleOptionCount={8}
-        onSubmit={onSelect}
-      />
+      <SectionCard title="角色列表" accentColor="green" badge={`${options.length} 项`}>
+        <MenuSelect
+          options={options}
+          visibleOptionCount={6}
+          onSubmit={onSelect}
+        />
+      </SectionCard>
       <NotificationPanel notifications={state.notifications} />
-    </Box>
+    </PhoneShell>
   )
 }
 
 function CreatePlayerScreen({
+  state,
   fieldState,
   groupIndex,
   promptIndex,
@@ -451,6 +909,7 @@ function CreatePlayerScreen({
   onSubmit,
   onCancel
 }: {
+  state: TuiClientAppState
   fieldState: CreatePlayerFieldState
   groupIndex: number
   promptIndex: number
@@ -481,21 +940,39 @@ function CreatePlayerScreen({
 
   if (!currentPrompt) {
     return (
-      <Box flexDirection="column" gap={1}>
-        <Text bold color="green">创建角色</Text>
+      <PhoneShell
+        state={state}
+        title="创建角色"
+        subtitle="当前没有可填写的玩家字段"
+        accentColor="green"
+        footerText="Esc 返回上一层"
+      >
         <Alert variant="warning">当前没有可填写的玩家覆盖字段。</Alert>
         <Text color="gray">请先回到编辑器配置玩家覆盖变量，或者取消当前流程。</Text>
-      </Box>
+      </PhoneShell>
     )
   }
 
   return (
-    <Box flexDirection="column" gap={1}>
-      <Text bold color="green">创建角色</Text>
-      <Text color="gray">Esc 返回上一层；同分组字段会在同一个界面连续录入。</Text>
-      <Box flexDirection="column" borderStyle="round" borderColor="blue" paddingX={1} paddingY={1}>
-        <Text>分组 {groupIndex + 1}/{totalGroupCount} · 分组编号 {currentGroup?.groupNo ?? 1}</Text>
-        <Text>字段 {promptIndex + 1}/{currentGroup?.prompts.length ?? 1} · 总进度 {completedPromptCount + 1}/{totalPromptCount}</Text>
+    <PhoneShell
+      state={state}
+      title="创建角色"
+      subtitle="像填写手机游戏开局资料卡一样，逐步录入信息"
+      accentColor="blue"
+      footerText={isLastStep ? "回车完成创建；Esc 返回上一层" : "回车进入下一个字段；Esc 返回上一层"}
+    >
+      <SectionCard
+        title="录入进度"
+        accentColor="blue"
+        badge={`${completedPromptCount + 1}/${totalPromptCount}`}
+      >
+        <Box flexDirection="row" flexWrap="wrap">
+          <StatusChip label="分组" value={`${groupIndex + 1}/${totalGroupCount}`} color="cyan" />
+          <StatusChip label="组号" value={currentGroup?.groupNo ?? 1} color="magenta" />
+          <StatusChip label="字段" value={`${promptIndex + 1}/${currentGroup?.prompts.length ?? 1}`} color="yellow" />
+        </Box>
+      </SectionCard>
+      <SectionCard title="当前字段" accentColor="green" badge={currentPrompt.label}>
         <Text>{currentPrompt.label}</Text>
         {currentPrompt.tips ? <Text color="gray">{currentPrompt.tips}</Text> : null}
         {currentGroup && currentGroup.prompts.length > 1 ? (
@@ -527,19 +1004,15 @@ function CreatePlayerScreen({
           }}
           onSubmit={onSubmit}
         />
-      </Box>
-      <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} paddingY={1}>
-        <Text>当前汇总</Text>
+      </SectionCard>
+      <SectionCard title="角色预览" accentColor="gray" badge={profileName || "未命名"}>
         {summaryLines.map((line) => (
           <Text key={line.key}>{line.label}: {line.value || "待输入"}</Text>
         ))}
         {profileName ? <Text>角色名: {profileName}</Text> : null}
-      </Box>
-      {validationError ? (
-        <Alert variant="error">{validationError}</Alert>
-      ) : null}
-      <Text color="gray">{isLastStep ? "按回车完成最后一个字段并创建角色。" : "按回车保存当前字段并进入下一个字段。"}</Text>
-    </Box>
+      </SectionCard>
+      {validationError ? <Alert variant="error">{validationError}</Alert> : null}
+    </PhoneShell>
   )
 }
 
@@ -561,28 +1034,35 @@ function SaveMenuScreen({
   }, [state.saveSlots])
 
   return (
-    <Box flexDirection="column" gap={1}>
-      <Text bold color="green">进入游戏</Text>
+    <PhoneShell
+      state={state}
+      title="进入故事"
+      subtitle={`${findPlayerName(state)} · ${findLocationLabel(state)}`}
+      accentColor="magenta"
+      footerText="先选旧存档，或直接开始新游戏"
+    >
       <SummaryPanel state={state} />
-      <Text>当前角色：{findPlayerName(state)}</Text>
-      <Text>所在地：{findLocationLabel(state)}</Text>
-      <Text color="gray">先选择继续旧存档，或直接开始新游戏。</Text>
-      <MenuSelect
-        options={options}
-        visibleOptionCount={8}
-        onSubmit={onSelect}
-      />
+      <SectionCard title="存档选择" accentColor="magenta" badge={findPlayerName(state)}>
+        <Text>所在地：{findLocationLabel(state)}</Text>
+        <MenuSelect
+          options={options}
+          visibleOptionCount={6}
+          onSubmit={onSelect}
+        />
+      </SectionCard>
       <NotificationPanel notifications={state.notifications} />
-    </Box>
+    </PhoneShell>
   )
 }
 
 function SaveInputScreen({
+  state,
   defaultSlotId,
   error,
   onSubmit,
   onCancel
 }: {
+  state: TuiClientAppState
   defaultSlotId: string
   error: string | null
   onSubmit: (value: string) => void
@@ -595,153 +1075,233 @@ function SaveInputScreen({
   })
 
   return (
-    <Box flexDirection="column" gap={1}>
-      <Text bold color="green">保存进度</Text>
-      <Text color="gray">输入存档 ID，回车保存；Esc 返回游戏。</Text>
-      <TextInput
-        key={defaultSlotId}
-        defaultValue={defaultSlotId}
-        placeholder="请输入存档 ID"
-        onSubmit={onSubmit}
-      />
-      {error ? (
-        <Alert variant="error">{error}</Alert>
-      ) : null}
-    </Box>
+    <PhoneShell
+      state={state}
+      title="保存进度"
+      subtitle="给这次故事进程起一个存档名"
+      accentColor="yellow"
+      footerText="回车保存；Esc 返回游戏"
+    >
+      <SectionCard title="存档输入" accentColor="yellow" badge={defaultSlotId}>
+        <TextInput
+          key={defaultSlotId}
+          defaultValue={defaultSlotId}
+          placeholder="请输入存档 ID"
+          onSubmit={onSubmit}
+        />
+      </SectionCard>
+      {error ? <Alert variant="error">{error}</Alert> : null}
+    </PhoneShell>
+  )
+}
+
+function SettingsMenuScreen({
+  state,
+  onSelect
+}: {
+  state: TuiClientAppState
+  onSelect: (value: string) => void
+}) {
+  const options = useMemo<MenuOption[]>(() => {
+    return [
+      { value: "settings:save", label: "保存进度" },
+      { value: "settings:debug", label: "查看调试信息" },
+      { value: "settings:quit", label: "退出客户端" }
+    ]
+  }, [state.view])
+
+  return (
+    <PhoneShell
+      state={state}
+      title="设置"
+      subtitle="保存 / 调试 / 退出"
+      accentColor="magenta"
+      footerText="t 进入/返回设置"
+    >
+      <SectionCard title="设置菜单" accentColor="magenta" badge="系统入口">
+        <MenuSelect
+          options={options}
+          visibleOptionCount={5}
+          onSubmit={onSelect}
+        />
+      </SectionCard>
+    </PhoneShell>
   )
 }
 
 function GameScreen({
   state,
+  uiState,
   onSelectOption,
   onSubmitText,
-  onConfirmContinue
+  onConfirmContinue,
+  onSelectDebugTime
 }: {
   state: TuiClientAppState
+  uiState: GameUiState
   onSelectOption: (value: string) => void
   onSubmitText: (value: string) => void
   onConfirmContinue: () => void
+  onSelectDebugTime: (value: string) => void
 }) {
   const view = state.view
 
   if (!view) {
     return (
-      <Box flexDirection="column" gap={1}>
-        <Text bold color="green">游戏界面</Text>
+      <PhoneShell
+        state={state}
+        title="游戏界面"
+        subtitle="当前还没有运行时视图"
+        accentColor="red"
+        footerText="等待运行时初始化"
+      >
         <Alert variant="warning">当前还没有运行时视图。</Alert>
-      </Box>
+      </PhoneShell>
     )
   }
 
-  const interactionOptions = createInteractionOptions(view, state.saveSlots.length)
+  const interactionOptions = createInteractionOptions(view)
   const mergedNotifications = [...state.notifications, ...view.notifications]
+  const footerHint = "h 主界面  t 设置  空格 暂停/继续  l 消息流  i 全局变量"
+  const overlayLines = uiState.overlay === "notifications"
+    ? mergedNotifications.slice().reverse()
+    : uiState.overlay === "globalVals"
+      ? buildGlobalValueLines(state)
+      : []
+  const overlayTitle = uiState.overlay === "notifications" ? "消息流" : "全局变量"
+  const overlayBadge = uiState.overlay === "notifications"
+    ? `${mergedNotifications.length} 条`
+    : `${overlayLines.length} 项`
 
   return (
-    <Box flexDirection="column" gap={1}>
-      <Text bold color="green">{view.storyTitle}</Text>
-      <SummaryPanel state={state} />
-      <Box flexDirection="column" borderStyle="round" borderColor="blue" paddingX={1} paddingY={1}>
-        <Text>当前事件：{view.activeEventTitle ?? view.activeEventId ?? "无"}</Text>
-        {view.activeEventId ? <Text color="gray">ID: {view.activeEventId}</Text> : null}
-        {view.currentLocationName ? <Text>地点：{view.currentLocationName}</Text> : null}
+    <Box flexDirection="column" width={78}>
+      <Box borderStyle="round" borderColor="cyan" paddingX={1}>
+        <Box flexDirection="row" justifyContent="space-between" width={74}>
+          <Text color="cyan">{findHeaderTimeLabel(state)}</Text>
+          <Text color="cyan">{findCountyLabel(state)}</Text>
+        </Box>
       </Box>
-      {view.currentDialogue ? (
-        <Box flexDirection="column" borderStyle="round" borderColor="green" paddingX={1} paddingY={1}>
-          <Text color="cyan">
-            {view.currentDialogue.speakerLabel}
-            {" "}
-            <Text color="gray">
-              {view.currentDialogue.index}/{view.currentDialogue.total}
+
+      <Box borderStyle="round" borderColor={view.screen === "debug" ? "yellow" : "blue"} paddingX={1} paddingY={1} flexDirection="column">
+        <Text bold color={view.screen === "debug" ? "yellow" : "green"}>
+          {view.activeEventTitle ?? view.activeEventId ?? "该干点什么好呢？"}
+        </Text>
+        {uiState.overlay ? (
+          <Box flexDirection="column" marginTop={1}>
+            <OverlayPager
+              title={overlayTitle}
+              badge={overlayBadge}
+              lines={overlayLines}
+              offset={uiState.overlayOffset}
+            />
+          </Box>
+        ) : null}
+        {!uiState.overlay && view.currentDialogue ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text color="cyan">
+              {view.currentDialogue.speakerLabel}
+              {" "}
+              <Text color="gray">
+                {view.currentDialogue.index}/{view.currentDialogue.total}
+              </Text>
             </Text>
+            <Text>「{view.currentDialogue.content}」</Text>
+          </Box>
+        ) : null}
+        {!uiState.overlay && view.availableBranches.length > 0 ? (
+          <Box flexDirection="column" marginTop={1}>
+            {view.availableBranches.map((branch) => (
+              <Text key={branch.id}>
+                - {branch.title}{branch.nextEventId ? ` -> ${branch.nextEventId}` : ""}
+              </Text>
+            ))}
+          </Box>
+        ) : null}
+        {!uiState.overlay && view.branchContextSummary.length > 0 ? (
+          <Box flexDirection="column" marginTop={1}>
+            {view.branchContextSummary.map((entry) => (
+              <Text key={entry.key}>{entry.key}: {entry.value || "(空)"}</Text>
+            ))}
+          </Box>
+        ) : null}
+        {!uiState.overlay && view.interaction?.kind === "select" ? (
+          <Box flexDirection="column" marginTop={1}>
+            <MenuSelect
+              options={interactionOptions}
+              visibleOptionCount={6}
+              activeIndex={uiState.interactionActiveIndex}
+              onActiveIndexChange={(nextIndex) => onSelectDebugTime(`meta:interaction-index:${nextIndex}`)}
+              onSubmit={onSelectOption}
+            />
+          </Box>
+        ) : null}
+        {!uiState.overlay && view.interaction?.kind === "text-input" ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text color="magenta">{view.interaction.prompt}</Text>
+            <TextInput
+              defaultValue={uiState.interactionInputDraft || (view.interaction.initialValue ?? "")}
+              placeholder={view.interaction.placeholder ?? "请输入内容"}
+              onChange={(value) => onSelectDebugTime(`meta:interaction-input:${encodeURIComponent(value)}`)}
+              onSubmit={onSubmitText}
+            />
+          </Box>
+        ) : null}
+        {!uiState.overlay && view.interaction?.kind === "confirm" ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text color="magenta">{view.interaction.prompt}</Text>
+            <ConfirmInput
+              onConfirm={onConfirmContinue}
+              onCancel={() => undefined}
+            />
+          </Box>
+        ) : null}
+      </Box>
+
+      <Box borderStyle="round" borderColor="green" paddingX={1} flexDirection="column">
+        <Box flexDirection="row" justifyContent="space-between" width={74}>
+          <Text color="green">
+            {findPlayerName(state)}  金钱: {findPlayerMoneyLabel(state)}
           </Text>
-          <Text>{view.currentDialogue.content}</Text>
+          <Text color="green">下一天</Text>
         </Box>
-      ) : null}
-      {view.availableBranches.length > 0 ? (
-        <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={1} paddingY={1}>
-          <Text color="magenta">可选操作</Text>
-          {view.availableBranches.map((branch) => (
-            <Box key={branch.id} flexDirection="column" marginTop={1}>
-              <Text>{branch.title}</Text>
-              <Text color="gray">ID: {branch.id}</Text>
-              {branch.nextEventId ? <Text color="gray">下一事件：{branch.nextEventId}</Text> : null}
-            </Box>
-          ))}
-        </Box>
-      ) : null}
-      {view.branchContextSummary.length > 0 ? (
-        <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} paddingY={1}>
-          <Text color="yellow">当前分支变量</Text>
-          {view.branchContextSummary.map((entry) => (
-            <Text key={entry.key}>
-              {entry.key}: {entry.value || "(空)"}
-            </Text>
-          ))}
-        </Box>
-      ) : null}
-      {view.interaction?.kind === "select" ? (
-        <Box flexDirection="column" gap={1}>
-          <Text>{view.interaction.prompt}</Text>
-          <MenuSelect
-            options={interactionOptions}
-            visibleOptionCount={8}
-            onSubmit={onSelectOption}
-          />
-        </Box>
-      ) : null}
-      {view.interaction?.kind === "text-input" ? (
-        <Box flexDirection="column" gap={1}>
-          <Text>{view.interaction.prompt}</Text>
-          <TextInput
-            defaultValue={view.interaction.initialValue ?? ""}
-            placeholder={view.interaction.placeholder ?? "请输入内容"}
-            onSubmit={onSubmitText}
-          />
-        </Box>
-      ) : null}
-      {view.interaction?.kind === "confirm" ? (
-        <Box flexDirection="column" gap={1}>
-          <Text>{view.interaction.prompt}</Text>
-          <ConfirmInput
-            onConfirm={onConfirmContinue}
-            onCancel={() => undefined}
-          />
-        </Box>
-      ) : null}
-      {view.screen === "debug" ? (
-        <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} paddingY={1}>
-          <Text color="cyan">调试信息</Text>
-          <Text>全局变量组数：{view.debugSummary.globalGroupCount}</Text>
-          <Text>系统变量组数：{view.debugSummary.systemGroupCount}</Text>
-          <Text>历史记录：{view.debugSummary.historyCount}</Text>
-          <Text>已触发大事件：{view.debugSummary.triggeredBigOnceCount}</Text>
-          <StatusMessage variant="info">
-            调试视图已打开，可继续选择其他操作。
-          </StatusMessage>
-        </Box>
-      ) : null}
-      <NotificationPanel notifications={mergedNotifications} />
+        <Text color="gray">{`最新消息：${findLatestNotification(mergedNotifications) || "无"}`}</Text>
+      </Box>
+
+      <Box>
+        <Text color="gray">{`${footerHint}  n 下一天`}</Text>
+      </Box>
     </Box>
   )
 }
 
 function ConfirmQuitScreen({
+  state,
   onConfirm,
   onCancel
 }: {
+  state: TuiClientAppState
   onConfirm: () => void
   onCancel: () => void
 }) {
   return (
-    <Box flexDirection="column" gap={1}>
-      <Text bold color="yellow">确认退出</Text>
-      <Text>是否退出当前客户端？未保存进度将会丢失。</Text>
-      <ConfirmInput
-        defaultChoice="cancel"
-        onConfirm={onConfirm}
-        onCancel={onCancel}
-      />
-    </Box>
+    <PhoneShell
+      state={state}
+      title="确认退出"
+      subtitle="像手机应用关闭前那样再确认一次"
+      accentColor="red"
+      footerText="Y 确认退出；N 返回游戏"
+    >
+      <SectionCard title="退出提示" accentColor="red" badge="危险操作">
+        <Text>是否退出当前客户端？未保存进度将会丢失。</Text>
+      </SectionCard>
+      <SectionCard title="确认操作" accentColor="yellow">
+        <ConfirmInput
+          defaultChoice="cancel"
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />
+      </SectionCard>
+    </PhoneShell>
   )
 }
 
@@ -750,6 +1310,12 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
   const [app] = useState(() => createTuiClientApp(options))
   const [state, setState] = useState<TuiClientAppState>(app.getState())
   const [screen, setScreen] = useState<ScreenState>({ kind: "boot" })
+  const [gameUiState, setGameUiState] = useState<GameUiState>({
+    overlay: null,
+    overlayOffset: 0,
+    interactionActiveIndex: 0,
+    interactionInputDraft: ""
+  })
   const [task, setTask] = useState<AsyncTaskState | null>({
     label: "正在启动并同步故事数据...",
     error: null
@@ -801,9 +1367,110 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
     }
   }, [app])
 
+  useEffect(() => {
+    if (!state.session || task) {
+      return
+    }
+
+    const interval = setInterval(() => {
+      try {
+        app.tick(1000)
+        setState(app.getState())
+      } catch {
+        // 会话尚未就绪或已释放时，下一轮 effect 会自行停止。
+      }
+    }, 1000)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [app, state.session, task])
+
   useInput((input, key) => {
     if (key.ctrl && input.toLowerCase() === "c") {
       exit()
+      return
+    }
+
+    if (!state.session || screen.kind !== "game") {
+      return
+    }
+
+    const lowerInput = input.toLowerCase()
+    if (lowerInput === "h") {
+      setValidationError(null)
+      setScreen({ kind: "profile-menu" })
+      return
+    }
+
+    if (lowerInput === "t") {
+      setScreen({ kind: "settings-menu" })
+      return
+    }
+
+    if (gameUiState.overlay) {
+      if (lowerInput === "l" && gameUiState.overlay === "notifications") {
+        setGameUiState((currentState) => ({
+          ...currentState,
+          overlay: null,
+          overlayOffset: 0
+        }))
+        return
+      }
+
+      if (lowerInput === "i" && gameUiState.overlay === "globalVals") {
+        setGameUiState((currentState) => ({
+          ...currentState,
+          overlay: null,
+          overlayOffset: 0
+        }))
+        return
+      }
+
+      if (key.upArrow || lowerInput === "k") {
+        setGameUiState((currentState) => ({
+          ...currentState,
+          overlayOffset: Math.max(0, currentState.overlayOffset - 1)
+        }))
+        return
+      }
+
+      if (key.downArrow || lowerInput === "j") {
+        setGameUiState((currentState) => ({
+          ...currentState,
+          overlayOffset: currentState.overlayOffset + 1
+        }))
+        return
+      }
+    }
+
+    if (input === " ") {
+      app.setTimePause(!findTimePause(state))
+      setState(app.getState())
+      return
+    }
+
+    if (lowerInput === "l") {
+      setGameUiState((currentState) => ({
+        ...currentState,
+        overlay: currentState.overlay === "notifications" ? null : "notifications",
+        overlayOffset: 0
+      }))
+      return
+    }
+
+    if (lowerInput === "i") {
+      setGameUiState((currentState) => ({
+        ...currentState,
+        overlay: currentState.overlay === "globalVals" ? null : "globalVals",
+        overlayOffset: 0
+      }))
+      return
+    }
+
+    if (lowerInput === "n") {
+      advanceToNextDay()
+      return
     }
   })
 
@@ -996,14 +1663,15 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
   }
 
   async function handleGameSelect(value: string) {
-    if (value === "meta:debug") {
-      await handleDispatchAction(app, {
-        type: state.view?.screen === "debug" ? "close-debug" : "open-debug"
-      }, setState)
-      return
-    }
+    const optionId = value.replace(/^action:/, "")
+    await handleDispatchAction(app, {
+      type: optionId === "continue" ? "continue" : "select-option",
+      ...(optionId === "continue" ? {} : { optionId })
+    } as RuntimeStorySessionAction, setState)
+  }
 
-    if (value === "meta:save") {
+  async function handleSettingsSelect(value: string) {
+    if (value === "settings:save") {
       setValidationError(null)
       setScreen({
         kind: "save-input",
@@ -1012,16 +1680,106 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
       return
     }
 
-    if (value === "meta:quit") {
-      setScreen({ kind: "confirm-quit" })
+    if (value === "settings:debug") {
+      await handleDispatchAction(app, {
+        type: state.view?.screen === "debug" ? "close-debug" : "open-debug"
+      }, setState)
+      setScreen({ kind: "game" })
       return
     }
 
-    const optionId = value.replace(/^action:/, "")
-    await handleDispatchAction(app, {
-      type: optionId === "continue" ? "continue" : "select-option",
-      ...(optionId === "continue" ? {} : { optionId })
-    } as RuntimeStorySessionAction, setState)
+    if (value === "settings:quit") {
+      setScreen({ kind: "confirm-quit" })
+    }
+  }
+
+  async function handleTimeDebugSelect(value: string) {
+    if (!state.session) {
+      if (value.startsWith("meta:interaction-index:")) {
+        const indexText = value.slice("meta:interaction-index:".length)
+        const nextIndex = Number.parseInt(indexText, 10)
+        if (Number.isFinite(nextIndex)) {
+          setGameUiState((currentState) => ({
+            ...currentState,
+            interactionActiveIndex: Math.max(0, nextIndex)
+          }))
+        }
+      }
+
+      if (value.startsWith("meta:interaction-input:")) {
+        const encoded = value.slice("meta:interaction-input:".length)
+        setGameUiState((currentState) => ({
+          ...currentState,
+          interactionInputDraft: decodeURIComponent(encoded)
+        }))
+      }
+
+      return
+    }
+
+    if (value.startsWith("meta:interaction-index:")) {
+      const indexText = value.slice("meta:interaction-index:".length)
+      const nextIndex = Number.parseInt(indexText, 10)
+      if (Number.isFinite(nextIndex)) {
+        setGameUiState((currentState) => ({
+          ...currentState,
+          interactionActiveIndex: Math.max(0, nextIndex)
+        }))
+      }
+      return
+    }
+
+    if (value.startsWith("meta:interaction-input:")) {
+      const encoded = value.slice("meta:interaction-input:".length)
+      setGameUiState((currentState) => ({
+        ...currentState,
+        interactionInputDraft: decodeURIComponent(encoded)
+      }))
+      return
+    }
+
+    if (value === "meta:time-pause") {
+      app.setTimePause(true)
+      setState(app.getState())
+      return
+    }
+
+    if (value === "meta:time-resume") {
+      app.setTimePause(false)
+      setState(app.getState())
+      return
+    }
+
+    if (value.startsWith("meta:time-speed:")) {
+      const speedText = value.slice("meta:time-speed:".length)
+      const speed = Number.parseFloat(speedText)
+      if (Number.isFinite(speed)) {
+        app.setTimeSpeed(speed)
+        setState(app.getState())
+      }
+    }
+  }
+
+  function advanceToNextDay() {
+    if (!state.session) {
+      return
+    }
+
+    const nowHour = findSystemValue(state, "system.now_hour")
+    const nowMinute = findSystemValue(state, "system.now_minute")
+    const hourValue = typeof nowHour === "number" && Number.isFinite(nowHour) ? nowHour : 0
+    const minuteValue = typeof nowMinute === "number" && Number.isFinite(nowMinute) ? nowMinute : 0
+    const minutesUntilNextDay = Math.max(1, (24 * 60) - (hourValue * 60 + minuteValue))
+    const restorePaused = findTimePause(state)
+    const currentSpeed = findTimeSpeed(state)
+    const restoreSpeed = currentSpeed > 0 ? currentSpeed : 1
+
+    app.setTimePause(false)
+    app.setTimeSpeed(1)
+    app.tick(minutesUntilNextDay * 60000)
+    app.setTimeSpeed(restoreSpeed)
+    app.setTimePause(restorePaused)
+    setState(app.getState())
   }
 
   async function submitTextInput(value: string) {
@@ -1035,6 +1793,10 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
       field: interaction.field,
       value
     }, setState)
+    setGameUiState((currentState) => ({
+      ...currentState,
+      interactionInputDraft: ""
+    }))
   }
 
   async function confirmInteraction() {
@@ -1055,11 +1817,16 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
   const currentView = (() => {
     if (task?.error) {
       return (
-        <Box flexDirection="column" gap={1}>
+        <PhoneShell
+          state={state}
+          title="启动失败"
+          subtitle="需要先处理错误后才能继续"
+          accentColor="red"
+          footerText="按 Ctrl+C 退出，或修正问题后重新启动"
+        >
           <BootScreen state={state} task={task} />
           <Alert variant="error">{task.error}</Alert>
-          <Text color="gray">按 Ctrl+C 退出，或修正问题后重新启动。</Text>
-        </Box>
+        </PhoneShell>
       )
     }
 
@@ -1078,6 +1845,7 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
     if (screen.kind === "create-player") {
       return (
         <CreatePlayerScreen
+          state={state}
           fieldState={screen.fieldState}
           groupIndex={screen.groupIndex}
           promptIndex={screen.promptIndex}
@@ -1093,9 +1861,14 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
       return <SaveMenuScreen state={state} onSelect={(value) => void selectSaveOption(value)} />
     }
 
+    if (screen.kind === "settings-menu") {
+      return <SettingsMenuScreen state={state} onSelect={(value) => void handleSettingsSelect(value)} />
+    }
+
     if (screen.kind === "save-input") {
       return (
         <SaveInputScreen
+          state={state}
           defaultSlotId={screen.defaultSlotId}
           error={validationError}
           onSubmit={(value) => void submitSaveSlot(value)}
@@ -1107,6 +1880,7 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
     if (screen.kind === "confirm-quit") {
       return (
         <ConfirmQuitScreen
+          state={state}
           onConfirm={() => exit()}
           onCancel={() => setScreen({ kind: "game" })}
         />
@@ -1116,15 +1890,17 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
     return (
       <GameScreen
         state={state}
+        uiState={gameUiState}
         onSelectOption={(value) => void handleGameSelect(value)}
         onSubmitText={(value) => void submitTextInput(value)}
         onConfirmContinue={() => void confirmInteraction()}
+        onSelectDebugTime={(value) => void handleTimeDebugSelect(value)}
       />
     )
   })()
 
   return (
-    <Box flexDirection="column" paddingX={1} paddingY={1}>
+    <Box flexDirection="column" alignItems="center" paddingX={1} paddingY={1}>
       {currentView}
     </Box>
   )

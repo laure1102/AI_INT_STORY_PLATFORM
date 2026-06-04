@@ -102,6 +102,9 @@ export interface TuiClientApp {
   loadSave(slotId: string): Promise<RuntimeStorySession>
   saveToSlot(slotId: string): Promise<RuntimeStorySaveState>
   dispatch(action: RuntimeStorySessionAction): void
+  tick(deltaMs: number): void
+  setTimePause(paused: boolean): void
+  setTimeSpeed(speed: number): void
 }
 
 class TuiClientError extends Error {
@@ -870,6 +873,21 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
       const session = assertSession(state.session)
       session.dispatch(action)
       // 每次动作派发后立即刷新视图模型，保持 UI 壳层尽量薄。
+      state.view = session.getViewModel()
+    },
+    tick(deltaMs) {
+      const session = assertSession(state.session)
+      session.tick(deltaMs)
+      state.view = session.getViewModel()
+    },
+    setTimePause(paused) {
+      const session = assertSession(state.session)
+      session.setTimePause(paused)
+      state.view = session.getViewModel()
+    },
+    setTimeSpeed(speed) {
+      const session = assertSession(state.session)
+      session.setTimeSpeed(speed)
       state.view = session.getViewModel()
     }
   }

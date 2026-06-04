@@ -108,10 +108,19 @@ export interface RuntimeHistoryEntry {
   timestamp: string
 }
 
+export interface RuntimeClockState {
+  base_date: string
+  base_day: number
+  total_minutes: number
+  pending_minutes: number
+  step_minutes: number
+}
+
 export interface RuntimeStorySessionSnapshot {
   current_event_id: string | null
   vals: StoryValsFile
   system_vals: StoryValsFile
+  clock: RuntimeClockState
   triggered_big_once_events: RuntimeTriggeredBigOnceState[]
   loop_event_states: RuntimeLoopEventState[]
   history: RuntimeHistoryEntry[]
@@ -215,6 +224,9 @@ export interface CreateStorySessionOptions {
 
 export interface RuntimeStorySession {
   dispatch(action: RuntimeStorySessionAction): void
+  tick(deltaMs: number): void
+  setTimePause(paused: boolean): void
+  setTimeSpeed(speed: number): void
   getViewModel(): RuntimeStoryViewModel
   getSnapshot(): RuntimeStorySessionSnapshot
 }
@@ -243,6 +255,14 @@ interface RuntimeDialogueNodeState {
 type RuntimeGraphNode = CompiledEvent | CompiledAction
 
 const DEFAULT_MAX_CALC_NESTING_DEPTH = 5
+const DEFAULT_CLOCK_STEP_MINUTES = 10
+const MINUTES_PER_DAY = 24 * 60
+
+interface RuntimeDateParts {
+  year: number
+  month: number
+  day: number
+}
 
 function cloneValue<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -272,6 +292,84 @@ function cloneValsFile(vals: StoryValsFile): StoryValsFile {
       }))
     }))
   }
+}
+
+function padTwoDigits(value: number) {
+  return String(value).padStart(2, "0")
+}
+
+function parseStoryDate(value: string): RuntimeDateParts | null {
+  const trimmedValue = value.trim()
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmedValue)
+
+  if (!match) {
+    return null
+  }
+
+  const year = Number.parseInt(match[1]!, 10)
+  const month = Number.parseInt(match[2]!, 10)
+  const day = Number.parseInt(match[3]!, 10)
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null
+  }
+
+  const candidate = new Date(Date.UTC(year, month - 1, day))
+  if (
+    candidate.getUTCFullYear() !== year
+    || candidate.getUTCMonth() !== month - 1
+    || candidate.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  return { year, month, day }
+}
+
+function formatStoryDate(parts: RuntimeDateParts) {
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+function datePartsToUtcDayNumber(parts: RuntimeDateParts) {
+  return Math.floor(Date.UTC(parts.year, parts.month - 1, parts.day) / 86400000)
+}
+
+function utcDayNumberToDateParts(utcDayNumber: number): RuntimeDateParts {
+  const date = new Date(utcDayNumber * 86400000)
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate()
+  }
+}
+
+function clampInteger(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.trunc(value)
+    : fallback
+}
+
+function clampNumber(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : fallback
+}
+
+function snapMinuteToStep(minute: number, stepMinutes: number) {
+  if (!Number.isFinite(minute)) {
+    return 0
+  }
+
+  const normalizedMinute = Math.max(0, Math.min(59, Math.trunc(minute)))
+  if (stepMinutes <= 1) {
+    return normalizedMinute
+  }
+
+  return Math.floor(normalizedMinute / stepMinutes) * stepMinutes
 }
 
 function createCombinedValsFile(snapshot: RuntimeStorySessionSnapshot): StoryValsFile {
@@ -362,15 +460,172 @@ function applyCustomValuesToValsFile(valsFile: StoryValsFile, customValues: Reco
   }
 }
 
-function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnapshot {
+function readValEntryValue(snapshotVals: StoryValsFile, token: string) {
+  return findValEntry(snapshotVals, token)?.row.value
+}
+
+function readSystemNumber(snapshotVals: StoryValsFile, token: string, fallback = 0) {
+  const value = readValEntryValue(snapshotVals, token)
+  return clampNumber(value, fallback)
+}
+
+function readSystemBoolean(snapshotVals: StoryValsFile, token: string, fallback = false) {
+  const value = readValEntryValue(snapshotVals, token)
+  return typeof value === "boolean" ? value : fallback
+}
+
+function readSystemString(snapshotVals: StoryValsFile, token: string, fallback = "") {
+  const value = readValEntryValue(snapshotVals, token)
+  return typeof value === "string" ? value : fallback
+}
+
+function writeSystemValue(snapshotVals: StoryValsFile, token: string, value: unknown) {
+  const match = findValEntry(snapshotVals, token)
+  if (!match || match.row.value_type === "calc") {
+    return
+  }
+
+  match.row.value = cloneValue(value)
+}
+
+function resolveShiduan(hour: number) {
+  return hour >= 12 ? "下午" : "上午"
+}
+
+function resolveWeekday(dayNumberUtc: number) {
+  const weekday = ((dayNumberUtc + 3) % 7 + 7) % 7
+  return weekday + 1
+}
+
+function resolveJieqi(_date: RuntimeDateParts) {
+  return ""
+}
+
+function resolveJieri(date: RuntimeDateParts) {
+  const key = `${padTwoDigits(date.month)}-${padTwoDigits(date.day)}`
+  const festivalMap: Record<string, string> = {
+    "01-01": "元旦",
+    "02-14": "情人节",
+    "03-08": "妇女节",
+    "05-01": "劳动节",
+    "06-01": "儿童节",
+    "10-01": "国庆节",
+    "12-25": "圣诞节"
+  }
+
+  return festivalMap[key] ?? ""
+}
+
+function createDefaultClockState(systemVals: StoryValsFile): RuntimeClockState {
+  const nowDate = readSystemString(systemVals, "system.now_date", "1990-1-1")
+  const parsedNowDate = parseStoryDate(nowDate) ?? { year: 1990, month: 1, day: 1 }
+  const nowDay = Math.max(1, clampInteger(readSystemNumber(systemVals, "system.now_day", 1), 1))
+  const nowHour = Math.max(0, Math.min(23, clampInteger(readSystemNumber(systemVals, "system.now_hour", 0), 0)))
+  const rawMinute = clampInteger(readSystemNumber(systemVals, "system.now_minute", 0), 0)
+  const snappedMinute = snapMinuteToStep(rawMinute, DEFAULT_CLOCK_STEP_MINUTES)
+
   return {
+    base_date: formatStoryDate(parsedNowDate),
+    base_day: nowDay,
+    total_minutes: nowHour * 60 + snappedMinute,
+    pending_minutes: 0,
+    step_minutes: DEFAULT_CLOCK_STEP_MINUTES
+  }
+}
+
+function normalizeClockState(snapshot: RuntimeStorySessionSnapshot) {
+  const clock = snapshot.clock
+  const parsedBaseDate = parseStoryDate(clock.base_date) ?? { year: 1990, month: 1, day: 1 }
+
+  clock.base_date = formatStoryDate(parsedBaseDate)
+  clock.base_day = clampInteger(clock.base_day, 0)
+  clock.total_minutes = Math.max(0, clampInteger(clock.total_minutes, 0))
+  clock.pending_minutes = Math.max(0, clampNumber(clock.pending_minutes, 0))
+  clock.step_minutes = Math.max(1, clampInteger(clock.step_minutes, DEFAULT_CLOCK_STEP_MINUTES))
+}
+
+function syncSystemTimeFieldsFromClock(snapshot: RuntimeStorySessionSnapshot) {
+  normalizeClockState(snapshot)
+
+  const { clock } = snapshot
+  const baseDate = parseStoryDate(clock.base_date) ?? { year: 1990, month: 1, day: 1 }
+  const baseDayNumberUtc = datePartsToUtcDayNumber(baseDate)
+  const dayOffset = Math.floor(clock.total_minutes / MINUTES_PER_DAY)
+  const minuteOfDay = ((clock.total_minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+  const currentDayNumberUtc = baseDayNumberUtc + dayOffset
+  const currentDate = utcDayNumberToDateParts(currentDayNumberUtc)
+  const currentHour = Math.floor(minuteOfDay / 60)
+  const currentMinute = minuteOfDay % 60
+  const currentDay = clock.base_day + dayOffset
+
+  writeSystemValue(snapshot.system_vals, "system.now_day", currentDay)
+  writeSystemValue(snapshot.system_vals, "system.now_date", formatStoryDate(currentDate))
+  writeSystemValue(snapshot.system_vals, "system.now_hour", currentHour)
+  writeSystemValue(snapshot.system_vals, "system.now_minute", currentMinute)
+  writeSystemValue(snapshot.system_vals, "system.now_weekday", resolveWeekday(currentDayNumberUtc))
+  writeSystemValue(snapshot.system_vals, "system.now_shiduan", resolveShiduan(currentHour))
+  writeSystemValue(snapshot.system_vals, "system.now_jieqi", resolveJieqi(currentDate))
+  writeSystemValue(snapshot.system_vals, "system.now_jieri", resolveJieri(currentDate))
+}
+
+function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnapshot {
+  const systemVals = cloneValsFile(bundle.systemVals)
+  const snapshot: RuntimeStorySessionSnapshot = {
     current_event_id: null,
     vals: cloneValsFile(bundle.vals),
-    system_vals: cloneValsFile(bundle.systemVals),
+    system_vals: systemVals,
+    clock: createDefaultClockState(systemVals),
     triggered_big_once_events: [],
     loop_event_states: [],
     history: []
   }
+
+  syncSystemTimeFieldsFromClock(snapshot)
+
+  return snapshot
+}
+
+function advanceClock(snapshot: RuntimeStorySessionSnapshot, deltaMs: number) {
+  if (!Number.isFinite(deltaMs) || deltaMs <= 0) {
+    return false
+  }
+
+  if (readSystemBoolean(snapshot.system_vals, "system.time_pause", false)) {
+    return false
+  }
+
+  const timeSpeed = readSystemNumber(snapshot.system_vals, "system.time_speed", 0)
+  if (!Number.isFinite(timeSpeed) || timeSpeed <= 0) {
+    return false
+  }
+
+  normalizeClockState(snapshot)
+
+  const scaledMinutes = deltaMs / 60000 * timeSpeed
+  if (!Number.isFinite(scaledMinutes) || scaledMinutes <= 0) {
+    return false
+  }
+
+  snapshot.clock.pending_minutes += scaledMinutes
+
+  let stepped = false
+
+  while (snapshot.clock.pending_minutes >= snapshot.clock.step_minutes) {
+    snapshot.clock.pending_minutes -= snapshot.clock.step_minutes
+    snapshot.clock.total_minutes += snapshot.clock.step_minutes
+    syncSystemTimeFieldsFromClock(snapshot)
+    stepped = true
+  }
+
+  return stepped
+}
+
+function setSystemBoolean(snapshot: RuntimeStorySessionSnapshot, token: string, value: boolean) {
+  writeSystemValue(snapshot.system_vals, token, value)
+}
+
+function setSystemNumber(snapshot: RuntimeStorySessionSnapshot, token: string, value: number) {
+  writeSystemValue(snapshot.system_vals, token, value)
 }
 
 function isCompiledEvent(node: RuntimeGraphNode | null | undefined): node is CompiledEvent {
@@ -953,9 +1208,17 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     lastAction: null
   }
 
+  if (!runtimeState.snapshot.clock) {
+    runtimeState.snapshot.clock = createDefaultClockState(runtimeState.snapshot.system_vals)
+  }
+
+  syncSystemTimeFieldsFromClock(runtimeState.snapshot)
+
   if (!options.saveState && options.customOverrides) {
     applyCustomValuesToValsFile(runtimeState.snapshot.vals, options.customOverrides.custom_values)
     applyCustomValuesToValsFile(runtimeState.snapshot.system_vals, options.customOverrides.custom_values)
+    runtimeState.snapshot.clock = createDefaultClockState(runtimeState.snapshot.system_vals)
+    syncSystemTimeFieldsFromClock(runtimeState.snapshot)
     notifications.push(`已加载角色自定义变量：${options.customOverrides.profile_name}`)
   }
 
@@ -1035,6 +1298,16 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
         executeAction(options.bundle, runtimeState, action.optionId, notifications)
       }
+    },
+    tick(deltaMs) {
+      advanceClock(runtimeState.snapshot, deltaMs)
+    },
+    setTimePause(paused: boolean) {
+      setSystemBoolean(runtimeState.snapshot, "system.time_pause", Boolean(paused))
+    },
+    setTimeSpeed(speed: number) {
+      const normalizedSpeed = Number.isFinite(speed) ? Math.max(0, speed) : 0
+      setSystemNumber(runtimeState.snapshot, "system.time_speed", normalizedSpeed)
     },
     getViewModel() {
       return buildViewModel(options.bundle, runtimeState, screen, [...notifications])
