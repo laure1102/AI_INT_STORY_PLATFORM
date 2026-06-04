@@ -38,6 +38,17 @@ export const storyValsSchema = z.object({
   variables: z.array(storyValSchema).default([])
 })
 
+export const storyPlayerOverrideValEntrySchema = z.object({
+  var_key: z.string().min(1),
+  need_player_override: z.boolean().default(false),
+  tips: z.string().default(""),
+  group_no: z.number().int().min(1).default(1)
+})
+
+export const storyPlayerOverrideValsSchema = z.object({
+  entries: z.array(storyPlayerOverrideValEntrySchema).default([])
+})
+
 export const storySceneEntrySchema = z.object({
   level: z.number().int().min(1),
   description: z.string().default(""),
@@ -306,6 +317,7 @@ export const storyLoopEventsSchema = z.array(storyLoopEventSchema).default([])
 export const storyDocumentSchema = z.object({
   story: storyMetaSchema,
   vals: storyValsSchema,
+  playerOverrideVals: storyPlayerOverrideValsSchema,
   systemVals: storyValsSchema,
   scenes: storySceneSchema,
   roles: storyRolesSchema,

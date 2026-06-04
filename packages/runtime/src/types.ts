@@ -17,3 +17,14 @@ export interface StoryValDefinition {
 export interface StoryValsFile {
   variables: StoryValDefinition[]
 }
+
+export interface StoryPlayerOverrideValEntry {
+  var_key: string
+  need_player_override: boolean
+  tips: string
+  group_no: number
+}
+
+export interface StoryPlayerOverrideValsFile {
+  entries: StoryPlayerOverrideValEntry[]
+}

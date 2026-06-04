@@ -26,6 +26,17 @@ export interface StoryValsFile {
   variables: StoryValDefinition[]
 }
 
+export interface StoryPlayerOverrideValEntry {
+  var_key: string
+  need_player_override: boolean
+  tips: string
+  group_no: number
+}
+
+export interface StoryPlayerOverrideValsFile {
+  entries: StoryPlayerOverrideValEntry[]
+}
+
 export interface StorySceneDefinition {
   level: number
   description: string
@@ -224,6 +235,7 @@ export type StoryAnyEventFile =
 export interface StoryDocument {
   story: StoryMetaFile
   vals: StoryValsFile
+  playerOverrideVals: StoryPlayerOverrideValsFile
   systemVals: StoryValsFile
   scenes: StorySceneFile
   roles: StoryRolesFile
@@ -283,6 +295,7 @@ export interface CompiledStory {
   generatedAt: string
   entryEventId?: string
   vals: StoryValsFile
+  playerOverrideVals: StoryPlayerOverrideValsFile
   systemVals: StoryValsFile
   scenes: StorySceneFile
   roles: StoryRolesFile

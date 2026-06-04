@@ -4,6 +4,7 @@ import type {
   StoryEventCollectionType,
   StoryDocument,
   StoryEventLocationFile,
+  StoryPlayerOverrideValsFile,
   StoryRolesFile,
   StorySceneFile,
   StoryValsFile
@@ -25,6 +26,7 @@ import type {
   SaveAppSettingsRequest,
   SaveEventRequest,
   SaveEventLocationsRequest,
+  SavePlayerOverrideValsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
   SaveSystemValsRequest,
@@ -34,6 +36,7 @@ import type {
   StoryDeleteEventResponse,
   StoryEventResponse,
   StoryEventLocationsResponse,
+  StoryPlayerOverrideValsResponse,
   StoryRolesResponse,
   StoryListResponse,
   StoryAssetResponse,
@@ -136,6 +139,23 @@ export function useStoryApi() {
     )
 
     return response.systemVals
+  }
+
+  async function savePlayerOverrideVals(
+    storyId: string,
+    playerOverrideVals: StoryPlayerOverrideValsFile
+  ): Promise<StoryPlayerOverrideValsFile> {
+    const response = await $fetch<StoryPlayerOverrideValsResponse>(
+      `${apiBase}/stories/${storyId}/player-override-vals`,
+      {
+        method: "PUT",
+        body: {
+          playerOverrideVals
+        } satisfies SavePlayerOverrideValsRequest
+      }
+    )
+
+    return response.playerOverrideVals
   }
 
   async function saveScenes(storyId: string, scenes: StorySceneFile): Promise<StorySceneFile> {
@@ -353,6 +373,7 @@ export function useStoryApi() {
     saveAppSettings,
     saveEvent,
     saveEventLocations,
+    savePlayerOverrideVals,
     saveRoles,
     saveScenes,
     saveSystemVals,

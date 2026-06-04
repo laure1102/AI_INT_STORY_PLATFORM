@@ -6,6 +6,7 @@
     "dev": "concurrently \"pnpm dev:api\" \"pnpm dev:web\"",
     "dev:api": "pnpm --filter @story-mgr/api dev",
     "dev:web": "pnpm --filter @story-mgr/web dev",
+    "tui": "powershell -NoProfile -Command \"$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); chcp 65001 > $null; pnpm --filter @story-mgr/tui-client dev\"",
     "build": "pnpm --filter @story-mgr/api build && pnpm --filter @story-mgr/web build",
     "typecheck": "pnpm -r typecheck"
   },

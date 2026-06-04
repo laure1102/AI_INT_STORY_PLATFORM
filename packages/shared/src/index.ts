@@ -6,6 +6,7 @@ import type {
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryPlayerOverrideValsFile,
   StoryRolesFile,
   StorySceneBackgroundVariant,
   StorySceneFile,
@@ -13,6 +14,11 @@ import type {
   StorySummary,
   ValidationResult
 } from "@story-mgr/core"
+import type {
+  RuntimeProfileCustomFile,
+  RuntimeStorySaveState,
+  RuntimeStorySessionSnapshot
+} from "@story-mgr/runtime"
 
 export interface HealthResponse {
   ok: true
@@ -53,6 +59,14 @@ export interface StorySystemValsResponse {
 
 export interface SaveSystemValsRequest {
   systemVals: StoryValsFile
+}
+
+export interface StoryPlayerOverrideValsResponse {
+  playerOverrideVals: StoryPlayerOverrideValsFile
+}
+
+export interface SavePlayerOverrideValsRequest {
+  playerOverrideVals: StoryPlayerOverrideValsFile
 }
 
 export interface StoryScenesResponse {
@@ -186,3 +200,7 @@ export interface ApiErrorResponse {
     code?: string
   }
 }
+
+export type StoryProfileCustomFile = RuntimeProfileCustomFile
+export type StorySaveStateFile = RuntimeStorySaveState
+export type StorySessionSnapshot = RuntimeStorySessionSnapshot

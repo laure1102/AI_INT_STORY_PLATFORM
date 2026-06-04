@@ -21,10 +21,12 @@ import type {
   SaveAppSettingsRequest,
   SaveEventRequest,
   SaveEventLocationsRequest,
+  SavePlayerOverrideValsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
   SaveSystemValsRequest,
   StoryDeleteEventResponse,
+  StoryPlayerOverrideValsResponse,
   StoryRolesResponse,
   SaveValsRequest,
   StorySystemValsResponse,
@@ -152,6 +154,15 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       systemVals: await store.writeSystemVals(storyId, body.systemVals)
     } satisfies StorySystemValsResponse
+  })
+
+  router.put("/stories/:storyId/player-override-vals", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as SavePlayerOverrideValsRequest
+
+    context.body = {
+      playerOverrideVals: await store.writePlayerOverrideVals(storyId, body.playerOverrideVals)
+    } satisfies StoryPlayerOverrideValsResponse
   })
 
   router.put("/stories/:storyId/scenes", async (context) => {

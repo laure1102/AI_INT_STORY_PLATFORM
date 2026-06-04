@@ -50,6 +50,26 @@ function collectLocationNames(document: StoryDocument) {
   return new Set(document.eventLocations.assignments.map((assignment) => assignment.name))
 }
 
+function collectGlobalValKeys(document: StoryDocument) {
+  const keys = new Set<string>()
+
+  for (const group of document.vals.variables) {
+    const groupName = group.name.trim()
+
+    for (const row of group.vals) {
+      const rowName = row.name.trim()
+
+      if (!groupName || !rowName) {
+        continue
+      }
+
+      keys.add(`${groupName}.${rowName}`)
+    }
+  }
+
+  return keys
+}
+
 function validateBigOnceEvent(
   event: StoryBigOnceEventFile,
   eventIndex: number,
@@ -517,6 +537,45 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
       `System variable "${calcIssue.groupName}" / "${calcIssue.rowName}" calc_rule is invalid: ${calcIssue.message}`,
       ["systemVals", String(calcIssue.groupIndex), String(calcIssue.rowIndex), "calc_rule"]
     )
+  }
+
+  const availableGlobalValKeys = collectGlobalValKeys(document)
+  const seenPlayerOverrideKeys = new Set<string>()
+
+  for (const [entryIndex, entry] of document.playerOverrideVals.entries.entries()) {
+    const normalizedVarKey = entry.var_key.trim()
+
+    if (!availableGlobalValKeys.has(normalizedVarKey)) {
+      pushIssue(
+        issues,
+        "error",
+        "player-override.missing-global-var",
+        `Player override variable "${normalizedVarKey}" does not exist in global vals.`,
+        ["playerOverrideVals", "entries", String(entryIndex), "var_key"]
+      )
+    }
+
+    if (seenPlayerOverrideKeys.has(normalizedVarKey)) {
+      pushIssue(
+        issues,
+        "warning",
+        "player-override.duplicate-var",
+        `Player override variable "${normalizedVarKey}" appears more than once.`,
+        ["playerOverrideVals", "entries", String(entryIndex), "var_key"]
+      )
+    } else {
+      seenPlayerOverrideKeys.add(normalizedVarKey)
+    }
+
+    if (!Number.isInteger(entry.group_no) || entry.group_no < 1) {
+      pushIssue(
+        issues,
+        "error",
+        "player-override.invalid-group-no",
+        `Player override variable "${normalizedVarKey}" has invalid group_no "${entry.group_no}".`,
+        ["playerOverrideVals", "entries", String(entryIndex), "group_no"]
+      )
+    }
   }
 
   return {

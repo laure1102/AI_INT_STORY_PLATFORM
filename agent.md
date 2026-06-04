@@ -1,149 +1,89 @@
 # Story Manager Agent Guide
 
-最后更新：`2026-06-03`
+Last updated: `2026-06-03`
 
-这份文档是给后续协作 Agent / 开发者看的“当前真实状态说明”。
-如果文档和代码冲突，以这些文件为准：
+This file is the current high-signal project map for future agents and developers.
+If this guide conflicts with code, trust the code in these files first:
 
 - `packages/core/src/types.ts`
 - `packages/core/src/schema.ts`
-- `packages/core/src/validate.ts`
 - `packages/runtime/src/vals.ts`
+- `packages/runtime/src/session.ts`
 - `packages/file-store/src/index.ts`
 - `apps/api/src/routes/stories.ts`
 
-## 1. 项目定位
+## 1. Project direction
 
-这是一个用 `Node.js + Nuxt 3 + Koa2 + JSON5` 开发的剧情编辑器与剧情运行时原型工程。
+Story Manager is no longer only an editor.
 
-当前项目已经不再只是“编辑器”：
+It is becoming a full content-authoring plus runtime prototype stack:
 
-- 编辑器负责创作、校验、资源管理、导出
-- 运行时负责变量计算、脚本执行、事件推进
-- 后续会有多个客户端复用同一套运行时
+- the editor creates and validates story content
+- the shared runtime executes variables, expressions, and scripts
+- the TUI client validates gameplay/runtime flow locally
+- the future Cocos client should reuse the same runtime semantics
 
-当前明确方向：
+## 2. Monorepo structure
 
-- 先用故事编辑器完成内容生产
-- 先用 `Node.js` 文本交互界面命令行客户端验证运行时逻辑
-- 后续再接 `Cocos` 客户端
+### Apps
 
-## 2. 技术栈
+- `apps/web`: Nuxt 3 story editor
+- `apps/api`: Koa API for files, assets, AI generation, and export
+- `apps/tui-client`: text-based runtime shell over the shared runtime
+- `apps/cocos-client`: placeholder for the future game client shell
 
-- 前端：`Nuxt 3` + `Vue 3` + `TypeScript`
-- 后端：`Koa2` + `TypeScript`
-- 校验：`zod`
-- 存储：`JSON5`
-- 图片处理：`sharp`
-- 工作区：`pnpm workspace`
+### Packages
 
-## 3. 当前仓库分层
+- `packages/core`: story data types, schema, validation contracts
+- `packages/runtime`: shared runtime logic
+- `packages/compiler`: compiles a story document into runtime bundle JSON
+- `packages/file-store`: JSON5 persistence and local asset handling
+- `packages/shared`: cross-app request/response and shared transport types
 
-### 3.1 `apps`
+## 3. Story data layout
 
-- `apps/web`：故事编辑器前端
-- `apps/api`：文件读写、导出、图片与 AI 接口
-- `apps/tui-client`：文本交互界面命令行客户端占位目录，后续用于验证运行时逻辑
-- `apps/cocos-client`：Cocos 客户端占位目录，后续复用共享运行时
+Each story lives under `data/stories/<storyId>/`.
 
-### 3.2 `packages`
-
-- `packages/core`：数据类型、schema、静态校验、编辑期契约
-- `packages/runtime`：运行时共享能力
-- `packages/compiler`：把故事文档编译成运行时 JSON
-- `packages/file-store`：JSON5 读写、资源落盘、图片压缩、资源清理
-- `packages/shared`：前后端共享请求/响应类型
-
-### 3.3 当前分层原则
-
-`core` 负责：
-
-- 数据结构
-- schema
-- 静态校验入口
-- 给编辑器 / API / compiler 提供统一类型契约
-
-`runtime` 负责：
-
-- `calc_rule`
-- `trigger_expr`
-- 事件脚本执行
-- 脚本校验
-- 变量输入值解析
-
-这一步已经开始落地。
-
-当前状态：
-
-- `packages/runtime` 已创建
-- `packages/core/src/vals.ts` 现在作为对 `runtime` 的兼容转发层
-- 现有编辑器和校验逻辑还可以继续通过 `@story-mgr/core` 使用这些能力
-
-## 4. 当前故事目录结构
-
-每个故事目录位于 `data/stories/<storyId>/`。
-
-### 4.1 故事级文件
+Core files:
 
 - `story.json5`
 - `vals.json5`
+- `player_override_vals.json5`
 - `system_vals.json5`
 - `scene.json5`
 - `nomal_roles.json5`
 - `import_roles.json5`
 - `event_location.json5`
 
-注意：
+Event files:
 
-- 当前文件名就是 `nomal_roles.json5` 和 `import_roles.json5`，虽然拼写不标准，但这是现行契约，不要擅自改名。
-- `roles.json5`、`roles_setting.json5` 属于旧结构，不要恢复。
+- `events/events.json5`
+- `events/big_once_events.json5`
+- `events/loop_events.json5`
 
-### 4.2 事件级文件
+Notes:
 
-- `events/events.json5`：普通剧情推进事件画布数据，内部同时包含 `event` 节点和 `action` 节点
-- `events/big_once_events.json5`：一次性大事件
-- `events/loop_events.json5`：循环事件
+- `nomal_roles.json5` and `import_roles.json5` are the active file names, even though `nomal` is misspelled.
+- Old `roles.json5` and `roles_setting.json5` should not be restored.
+- Graph events and action nodes now live together in `events/events.json5`.
 
-### 4.3 资产目录
+## 4. Current story data contracts
 
-- `assets/background`
-- `assets/background/raw`
-- `assets/roles`
-- `assets/roles/raw`
-- `assets/event_location`
-- `assets/event_location/raw`
+### `vals.json5` and `system_vals.json5`
 
-## 5. 当前核心数据结构
-
-### 5.1 `story.json5`
-
-至少包含：
-
-- `id`
-- `title`
-- `description`
-- `startEventId`
-- `tags`
-
-规则：
-
-- `startEventId` 必须指向普通剧情图里的一个事件节点，不能指向操作节点。
-
-### 5.2 `vals.json5`
-
-结构：
+Both use the same structure:
 
 ```json5
 {
   variables: [
     {
       name: "county",
-      description: "县域",
+      description: "",
       vals: [
         {
           name: "level",
-          description: "县域等级",
-          value_type: "value",
+          description: "",
+          value_type: "value" | "calc",
           value: 1,
           calc_rule: ""
         }
@@ -153,47 +93,7 @@
 }
 ```
 
-### 5.3 `system_vals.json5`
-
-系统变量与全局变量使用同一套结构：
-
-```json5
-{
-  variables: []
-}
-```
-
-当前状态：
-
-- 已有独立文件：`system_vals.json5`
-- 编辑入口在“全局变量”按钮右侧
-- 已支持读取、保存、校验、导出
-- 当前还没有正式并入事件脚本 / 触发条件 / 对白引用与补全体系
-
-### 5.4 `scene.json5`
-
-结构：
-
-```json5
-{
-  ai: {
-    compress_quality: 60
-  },
-  scenes: [
-    {
-      level: 1,
-      description: "",
-      music: "",
-      day_img: "",
-      night_img: ""
-    }
-  ]
-}
-```
-
-### 5.5 `nomal_roles.json5`
-
-结构：
+### `nomal_roles.json5`
 
 ```json5
 {
@@ -207,7 +107,7 @@
   roles: [
     {
       name: "start_suanming",
-      zhiye: "算命先生",
+      zhiye: "",
       descr: "",
       prompt: "",
       img_raw: "",
@@ -218,14 +118,7 @@
 }
 ```
 
-说明：
-
-- 普通角色不区分性别
-- `zhiye` 只是标记字段，不参与提示词生成和生图逻辑
-
-### 5.6 `import_roles.json5`
-
-结构：
+### `import_roles.json5`
 
 ```json5
 {
@@ -239,7 +132,7 @@
   roles: [
     {
       name: "zhuli",
-      zhiye: "助理",
+      zhiye: "",
       xingge: "",
       qufen_xingbie: true,
       descr: "",
@@ -262,9 +155,7 @@
 }
 ```
 
-### 5.7 `event_location.json5`
-
-结构：
+### `event_location.json5`
 
 ```json5
 {
@@ -288,38 +179,61 @@
 }
 ```
 
-### 5.8 普通剧情事件 `events/events.json5`
+### `player_override_vals.json5`
 
-这里是一个数组，元素有两种：
+```json5
+{
+  entries: [
+    {
+      var_key: "player.name_xing",
+      need_player_override: true,
+      tips: "请输入主角的姓"
+    }
+  ]
+}
+```
 
-#### 事件节点 `event`
+Rules:
+
+- only references `vals.json5`, not `system_vals.json5`
+- row order is meaningful and must be preserved
+- `need_player_override: true` means the client should ask the player to fill this field during profile creation
+- `tips` is the client-side prompt / helper text
+
+## 5. Event model
+
+### Graph events: `events/events.json5`
+
+This file contains two node types.
+
+Event node:
 
 ```json5
 {
   node_type: "event",
-  id: "back_county",
-  title: "回到县城",
+  id: "arrival",
+  title: "Arrival",
   trigger_expr: "",
   init_script: "",
   end_script: "",
-  object_keys: ["player", "normal:xitong"],
+  object_keys: ["player"],
   dialogues: [],
   location: "",
   next: []
 }
 ```
 
-#### 操作节点 `action`
+Action node:
 
 ```json5
 {
   node_type: "action",
-  id: "back_county-action-1",
-  title: "询问系统",
+  id: "arrival-action-1",
+  title: "Ask about the county",
   vars: [
     {
       name: "mood",
-      descr: "分支心情",
+      descr: "branch-local value",
       initial_value: "calm"
     }
   ],
@@ -328,14 +242,21 @@
 }
 ```
 
-### 5.9 一次性大事件 `events/big_once_events.json5`
+Graph rules:
 
-结构：
+- `event -> event` is allowed
+- `event -> action` is allowed
+- `action -> event` is allowed
+- `action -> action` is not allowed
+- an action node should have at most one outgoing `next`
+- story `startEventId` must point to an event node, not an action node
+
+### Big-once events: `events/big_once_events.json5`
 
 ```json5
 {
-  id: "test1",
-  title: "测试大事件",
+  id: "opening",
+  title: "Opening Event",
   trigger_expr: "",
   init_script: "",
   object_keys: [],
@@ -346,9 +267,9 @@
 }
 ```
 
-### 5.10 循环事件 `events/loop_events.json5`
+### Loop events: `events/loop_events.json5`
 
-在一次性大事件基础上增加：
+Loop events extend big-once events with:
 
 ```json5
 {
@@ -356,53 +277,34 @@
     mode: "daily" | "weekly" | "monthly" | "interval_days",
     weekday?: 1..7,
     month_day?: 1..31,
-    interval_days?: >= 1
+    interval_days?: number
   }
 }
 ```
 
-## 6. 变量、表达式、脚本、补全规则
+## 6. Variable and script rules
 
-这一节很重要，后续改动必须与 `packages/runtime/src/vals.ts` 保持一致。
+These rules must stay aligned with `packages/runtime/src/vals.ts`.
 
-### 6.1 全局变量 `calc_rule`
+### `calc_rule`
 
-用途：
+- supports same-group references with `{row}`
+- supports cross-group references with `{group.row}`
+- supports recursive calc resolution up to max depth `5`
+- supports common `Math` functions and constants
+- result must be a finite number
 
-- 用于 `vals.json5` 或 `system_vals.json5` 中 `value_type = "calc"` 的变量
+### `trigger_expr`
 
-规则：
+- supports `{group.row}`
+- calc variables are resolved before comparison
+- supports common `Math` functions
+- result must be `boolean`
+- empty string means `true`
 
-- 支持同组引用：`{rowName}`
-- 支持跨组引用：`{group.row}`
-- 结果必须返回有限数字
-- 支持递归计算，最大嵌套深度是 `5`
-- 支持常见 `Math` 函数与常量
+### event scripts
 
-### 6.2 事件触发条件 `trigger_expr`
-
-适用字段：
-
-- 普通剧情事件 `trigger_expr`
-- 一次性大事件 `trigger_expr`
-- 循环事件 `trigger_expr`
-
-规则：
-
-- 引用格式：`{group.row}`
-- 如果引用到 `calc` 变量，会先计算再参与表达式
-- 结果必须返回 `boolean`
-- 空字符串视为 `true`
-
-### 6.3 事件脚本 `init_script / end_script`
-
-适用字段：
-
-- 普通剧情事件：`init_script`、`end_script`
-- 一次性大事件：`init_script`、`end_script`
-- 循环事件：`init_script`、`end_script`
-
-当前支持：
+Supported syntax:
 
 ```txt
 let temp = expression
@@ -418,224 +320,188 @@ temp %= expression
 {group.row} *= expression
 {group.row} /= expression
 {group.row} %= expression
+{branch.xxx} = expression
+{branch.xxx} += expression
+{branch.xxx} -= expression
+{branch.xxx} *= expression
+{branch.xxx} /= expression
+{branch.xxx} %= expression
 ```
 
-限制：
+Restrictions:
 
-- 不能给 `calc` 变量赋值
-- 不能使用 `if / else / for / while / function`
-- 临时变量必须先 `let`
+- cannot assign to `calc` variables
+- no `if`, `else`, `for`, `while`, or function declarations
+- temporary variables must be declared with `let`
+- `branch.xxx` is only available when runtime provides action-branch context
 
-### 6.4 操作节点脚本 `exec_script`
+### dialogue content
 
-当前状态：
+- dialogue content may include `{group.row}` placeholders
+- dialogue content may include `{branch.xxx}` placeholders
+- editor-side autocomplete exists
+- runtime text substitution is implemented in `packages/runtime`
 
-- 数据结构已支持 `vars` 与 `exec_script`
-- UI 已支持连接变量编辑
-- 运行时对 `branch.xxx` 连接变量语义还没有完整落地
+## 7. Object and location rules
 
-### 6.5 对白内容 `dialogues[].content`
+### event objects
 
-当前支持：
-
-- 写 `{group.row}` 占位符
-- 编辑器中自动补全
-- 保存时原样进入 JSON5
-
-当前不负责：
-
-- 最终运行时插值替换
-
-## 7. 对象、说话人、地点规则
-
-### 7.1 事件对象 `object_keys`
-
-统一使用唯一键：
+`object_keys` uses unique keys:
 
 - `player`
-- `normal:<角色名>`
-- `important:<角色名>`
+- `normal:<roleName>`
+- `important:<roleName>`
 
-前端规则：
+The editor intentionally allows duplicate role names across normal and important roles because the stored key includes the namespace.
 
-- 支持搜索
-- 支持多选
-- 默认内置第一个选项：`player / 主角`
-
-### 7.2 对白说话人
-
-结构：
+### dialogue speaker
 
 ```json5
 {
   speaker_type: "player" | "object",
   speaker_key: "player" | "normal:xxx" | "important:xxx",
-  content: "..."
+  content: ""
 }
 ```
 
-### 7.3 地点
+### location field
 
-- 保存的是地点 `name`
-- UI 里显示 `name - descr`
-- 地点允许为空
+- stored value is the location `name`
+- editor displays `name - descr`
+- empty location is allowed
 
-## 8. 普通剧情图规则
+## 8. Asset and AI rules
 
-### 8.1 节点类型
+App-level provider config lives in `data/setting.json5`.
 
-- `event`
-- `action`
+Image generation:
 
-### 8.2 连线规则
+- prompts use `global_prompt + item.prompt`
+- location and role generation use `width` and `height`
 
-- `event -> event` 允许
-- `event -> action` 允许
-- `action -> event` 允许
-- `action -> action` 不允许
+Compression:
 
-### 8.3 操作节点约束
+- original image is preserved
+- compressed variants use `compress_quality_1` and `compress_quality_2`
+- current UI mainly previews the original image thumbnail
 
-- 一个 `action` 只能有一个父事件
-- `action` 不能从另一个 `action` 连入
-- `action.next` 最多只能有一个目标
+## 9. Shared runtime status
 
-## 9. AI 与图片规则
+`packages/runtime` currently owns:
 
-### 9.1 应用级 AI 设置
+- value parsing / formatting
+- calc evaluation
+- boolean trigger evaluation
+- script execution and validation
+- runtime text-template rendering
+- merged global/system variable evaluation
+- graph-event runtime session progression
+- event dialogue playback
+- action-node branch execution and branch-variable propagation
 
-文件：`data/setting.json5`
+`packages/core/src/vals.ts` now re-exports the runtime implementation for compatibility.
 
-结构：
+## 10. TUI client status
 
-```json5
-{
-  ai: {
-    image: { apiKey, baseUrl, model },
-    text: { apiKey, baseUrl, model }
-  }
-}
+`apps/tui-client` now has a working Ink-based runtime shell for graph-event flow verification.
+
+Implemented:
+
+- local story bundle sync by reading `data/stories/<storyId>` through `@story-mgr/file-store` and compiling through `@story-mgr/compiler`
+- local runtime storage layout under `.tui-client/stories/<storyId>/`
+- profile storage via `custom.json5`
+- player-creation flow driven by `player_override_vals.json5`
+- save slots via `*.json5`
+- runtime controller API in `apps/tui-client/src/index.ts`
+- Ink-based interactive TUI shell in `apps/tui-client/src/cli.tsx`
+- real graph-event runtime playback through `packages/runtime`
+- event title / location / dialogue display
+- action-node branch selection
+- branch-variable summary display
+- debug-panel toggle inside the TUI game screen
+
+Current TUI local layout:
+
+```txt
+.tui-client/
+  stories/
+    <storyId>/
+      bundle.json
+      profiles/
+        <profileId>/
+          custom.json5
+          saves/
+            <slotId>.json5
 ```
 
-### 9.2 生图
+Profile `custom.json5` may now also include `player_setup`, while `custom_values` remains the actual override layer applied to the runtime bundle.
 
-地点和角色生图时：
+Profile creation rules:
 
-- 真正传给图片模型的是 `global_prompt + 当前行 prompt`
-- 尺寸参数来自各自配置中的 `width` / `height`
+- the editor controls player-input fields through `player_override_vals.json5`
+- the TUI asks only rows where `need_player_override === true`
+- answers are written to `custom_values[var_key]`
+- if common player/county fields exist, `player_setup` is inferred from `custom_values`
+- runtime still consumes `custom_values` as the true override layer
 
-### 9.3 图片压缩
+Bootstrap flow:
 
-地点与角色当前都保留：
+1. sync story bundle
+2. select or create profile
+3. load profile custom values
+4. select save or start new game
+5. create runtime session
+6. enter game
 
-- 原图：`img_raw`
-- 压缩图 1：`img_compress_1`
-- 压缩图 2：`img_compress_2`
+Command:
 
-规则：
+```bash
+pnpm tui -- --story demo
+```
 
-- 压缩后不删除原图
-- UI 主要展示原图缩略图
+Notes:
 
-## 10. 当前客户端规划
+- the TUI must run in a real interactive TTY terminal because Ink needs raw keyboard input
+- the current runtime gameplay loop is focused on `events/events.json5`
+- `big_once_events.json5` and `loop_events.json5` are not yet scheduled into the live runtime flow
 
-### 10.1 `apps/tui-client`
+## 11. Cocos client status
 
-定位：
+`apps/cocos-client` exists only as a placeholder shell right now.
 
-- 本地 `Node.js` 文本交互界面命令行客户端
-- 用来验证运行时逻辑
-- 未来应直接依赖 `packages/runtime`
+The intended rule is:
 
-目标不是临时试玩器，而是：
+- `tui-client` validates runtime semantics
+- `cocos-client` focuses on presentation and platform integration
+- both should reuse `packages/runtime`
 
-- 跑通剧情推进
-- 跑通变量系统
-- 跑通脚本与条件表达式
-- 承担自动化回归测试入口
+## 12. Current known gaps
 
-### 10.2 `apps/cocos-client`
+- `big_once_events` are not yet integrated into runtime scheduling
+- `loop_events` are not yet integrated into runtime scheduling
+- save snapshots do not yet persist transient cursor state such as current dialogue index, pending action list, and branch context
+- loading a save currently restores values and `current_event_id`, but does not resume mid-dialogue
+- `player_setup` inference is still convention-based for known fields such as `player.name_xing`, `player.name_ming`, `county.name_full`, `county.name_short`, `county.parent_city`, and `county.province`
+- scene/background presentation and audio are not yet represented in the TUI runtime
 
-定位：
+## 13. Next recommended steps
 
-- 未来 Cocos 客户端占位目录
-- 后续只做展示层与平台层接入
-- 应复用 `packages/runtime`
+- stabilize the long-term variable contract for player creation
+- reuse the same player-creation contract in the future Cocos onboarding flow
+- persist transient runtime session state so save/load resumes mid-event correctly
+- integrate `big_once_events` into the shared runtime scheduler
+- integrate `loop_events` into the shared runtime scheduler
+- add regression tests around:
+  bundle -> custom -> save layering
+  branch-variable read/write semantics
+  dialogue placeholder rendering
+  save/load resume behavior
 
-### 10.3 长期分层目标
+## 14. Collaboration rules
 
-- 编辑器负责内容生产
-- `runtime` 负责剧情语义
-- `tui-client` 负责文本交互验证与回归测试
-- `cocos-client` 负责最终游戏展示与交互
-
-## 11. 当前开发进度
-
-### 已完成
-
-- 故事列表与编辑页
-- 三类事件编辑入口
-- 普通剧情图支持 `event` / `action`
-- 变量系统、触发条件、脚本编辑
-- `calc_rule` 跨分组引用
-- 脚本复合赋值 `+=` / `-=` / `*=` / `/=` / `%=` 
-- 系统变量文件、API、编辑入口、保存、校验、导出
-- `apps/cocos-client` 占位目录
-- `apps/tui-client` 占位目录
-- `packages/runtime` 第一阶段抽离
-
-### 当前已完成的 runtime 抽离范围
-
-- `calc_rule`
-- `trigger_expr`
-- 事件脚本执行
-- 事件脚本校验
-- 变量值文本解析 / 格式化
-
-### 进行中 / 待补完
-
-- 操作节点连接变量运行时语义
-- 系统变量是否并入事件脚本 / 触发条件 / 对白引用
-- `tui-client` 的真实剧情执行流程
-- 更完整的剧情运行时协议
-
-## 12. 已知限制与风险
-
-- `action.exec_script` 的连接变量运行时支持还没有完全落到 `runtime`
-- 系统变量当前还没有正式并入脚本 / 触发条件 / 对白补全
-- 对白里的 `{group.row}` 当前只是在编辑数据里保留原文
-- 这个项目以前出现过中文编码污染，改中文文案时必须确认 UTF-8
-
-## 13. 下一阶段建议
-
-### 短期
-
-- 在 `tui-client` 中跑通最小故事执行链路
-- 定义事件运行时上下文
-- 明确系统变量是否参与脚本 / 触发条件 / 对白
-
-### 中期
-
-- 补完操作节点连接变量 `branch.xxx` 语义
-- 让 `compiler` 导出更适合运行时消费的结构
-- 让 `cocos-client` 吃同一套运行时
-
-### 长期
-
-- 形成稳定剧情 DSL
-- 形成稳定运行时协议
-- 让编辑器、TUI、Cocos 三端共用同一套剧情语义
-
-## 14. 协作约定
-
-- 优先直接改代码，不要只停在方案
-- 改数据结构时，同时检查：
-  - `packages/core`
-  - `packages/runtime`
-  - `packages/compiler`
-  - `packages/file-store`
-  - `apps/api`
-  - `apps/web`
-- 前端默认使用 `<script setup lang="ts">`
-- 修改文件优先使用 `apply_patch`
-- 不要回滚用户没有要求回滚的内容
+- prefer direct code changes over discussion-only responses
+- when changing data contracts, check `core`, `runtime`, `compiler`, `file-store`, `api`, and `web`
+- prefer ASCII in edited files unless non-ASCII is necessary
+- 新增代码注释统一使用中文，保持简洁，优先解释关键逻辑与边界
+- use `apply_patch` for manual file edits
+- do not revert unrelated user changes

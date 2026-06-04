@@ -25,11 +25,20 @@ export interface StoryValCalcDisplay {
 export interface StoryScriptExecutionResult {
   vals: StoryValsFile
   locals: Record<string, unknown>
+  externalValues: Record<string, unknown>
 }
 
 export interface StoryScriptValidationIssue {
   lineNumber: number
   message: string
+}
+
+export interface StoryExpressionContext {
+  values?: Record<string, unknown>
+}
+
+export interface StoryScriptExecutionContext extends StoryExpressionContext {
+  assignableValues?: Record<string, unknown>
 }
 
 interface StoryValueEntryReference {
@@ -360,6 +369,59 @@ function toExpressionValue(value: unknown) {
   throw new Error("Referenced value type is not supported in trigger expressions.")
 }
 
+function formatTemplateValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return ""
+  }
+
+  if (typeof value === "string") {
+    return value
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value)
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function getStoryContextValue(
+  token: string,
+  contextValues?: Record<string, unknown>
+) {
+  if (
+    contextValues &&
+    Object.prototype.hasOwnProperty.call(contextValues, token)
+  ) {
+    return {
+      found: true,
+      value: contextValues[token]
+    }
+  }
+
+  return {
+    found: false,
+    value: undefined
+  }
+}
+
+function buildStoryReadableContextValues(
+  context?: StoryExpressionContext | StoryScriptExecutionContext
+) {
+  const assignableValues = context && "assignableValues" in context
+    ? (context.assignableValues ?? {})
+    : {}
+
+  return {
+    ...(context?.values ?? {}),
+    ...assignableValues
+  }
+}
+
 function buildExpressionEvaluator(
   expression: string,
   extraContext: Array<{ key: string; value: unknown }>
@@ -506,8 +568,14 @@ function resolveCalcEntryValue(
 function resolveStoryValueReference(
   valsFile: StoryValsFile,
   token: string,
-  maxDepth: number
+  maxDepth: number,
+  contextValues?: Record<string, unknown>
 ) {
+  const contextValue = getStoryContextValue(token, contextValues)
+  if (contextValue.found) {
+    return toExpressionValue(contextValue.value)
+  }
+
   const reference = getStoryValueEntryReference(valsFile, token)
   const { group, row, groupName, rowName } = reference
 
@@ -678,7 +746,8 @@ export function evaluateStoryValCalcRule(
 export function evaluateStoryBooleanExpression(
   valsFile: StoryValsFile,
   expression: string,
-  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH
+  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH,
+  context?: StoryExpressionContext
 ): StoryBooleanExpressionEvaluation {
   const trimmedExpression = normalizeText(expression).trim()
 
@@ -689,8 +758,9 @@ export function evaluateStoryBooleanExpression(
     }
   }
 
+  const contextValues = buildStoryReadableContextValues(context)
   const preparedExpression = prepareExpressionTemplate(trimmedExpression, (token) =>
-    resolveStoryValueReference(valsFile, token, maxDepth)
+    resolveStoryValueReference(valsFile, token, maxDepth, contextValues)
   )
 
   return {
@@ -853,7 +923,8 @@ function evaluateStoryScriptExpression(
   valsFile: StoryValsFile,
   expression: string,
   locals: Record<string, unknown>,
-  maxDepth: number
+  maxDepth: number,
+  context?: StoryScriptExecutionContext
 ) {
   const trimmedExpression = normalizeText(expression).trim()
 
@@ -861,8 +932,9 @@ function evaluateStoryScriptExpression(
     throw new Error("Script expression is required.")
   }
 
+  const contextValues = buildStoryReadableContextValues(context)
   const preparedExpression = prepareExpressionTemplate(trimmedExpression, (token) =>
-    resolveStoryValueReference(valsFile, token, maxDepth)
+    resolveStoryValueReference(valsFile, token, maxDepth, contextValues)
   )
 
   return {
@@ -877,8 +949,17 @@ function evaluateStoryScriptExpression(
 function assignStoryScriptGlobalValue(
   valsFile: StoryValsFile,
   token: string,
-  value: unknown
+  value: unknown,
+  context?: StoryScriptExecutionContext
 ) {
+  if (
+    context?.assignableValues &&
+    Object.prototype.hasOwnProperty.call(context.assignableValues, token)
+  ) {
+    context.assignableValues[token] = value
+    return
+  }
+
   const reference = getStoryValueEntryReference(valsFile, token)
 
   if (isCalcRow(reference.row)) {
@@ -891,10 +972,15 @@ function assignStoryScriptGlobalValue(
 export function executeStoryScript(
   valsFile: StoryValsFile,
   script: string,
-  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH
+  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH,
+  context?: StoryScriptExecutionContext
 ): StoryScriptExecutionResult {
   const nextVals = cloneStoryValsFile(valsFile)
   const locals: Record<string, unknown> = {}
+  const executionContext: StoryScriptExecutionContext = {
+    values: { ...(context?.values ?? {}) },
+    assignableValues: { ...(context?.assignableValues ?? {}) }
+  }
 
   for (const statement of parseStoryScript(script)) {
     try {
@@ -909,7 +995,8 @@ export function executeStoryScript(
           nextVals,
           statement.expression,
           locals,
-          maxDepth
+          maxDepth,
+          executionContext
         ).result
         continue
       }
@@ -925,7 +1012,8 @@ export function executeStoryScript(
           nextVals,
           statement.expression,
           locals,
-          maxDepth
+          maxDepth,
+          executionContext
         ).result
         continue
       }
@@ -934,10 +1022,11 @@ export function executeStoryScript(
         nextVals,
         statement.expression,
         locals,
-        maxDepth
+        maxDepth,
+        executionContext
       ).result
 
-      assignStoryScriptGlobalValue(nextVals, statement.target, nextValue)
+      assignStoryScriptGlobalValue(nextVals, statement.target, nextValue, executionContext)
     } catch (error) {
       if (error instanceof StoryScriptError) {
         throw error
@@ -952,14 +1041,16 @@ export function executeStoryScript(
 
   return {
     vals: nextVals,
-    locals: { ...locals }
+    locals: { ...locals },
+    externalValues: { ...(executionContext.assignableValues ?? {}) }
   }
 }
 
 export function validateStoryScript(
   valsFile: StoryValsFile,
   script: string,
-  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH
+  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH,
+  context?: StoryScriptExecutionContext
 ): StoryScriptValidationIssue[] {
   const trimmedScript = normalizeText(script).trim()
 
@@ -968,7 +1059,7 @@ export function validateStoryScript(
   }
 
   try {
-    executeStoryScript(valsFile, script, maxDepth)
+    executeStoryScript(valsFile, script, maxDepth, context)
     return []
   } catch (error) {
     if (error instanceof StoryScriptError) {
@@ -983,6 +1074,32 @@ export function validateStoryScript(
       message: error instanceof Error ? error.message : "Script validation failed."
     }]
   }
+}
+
+export function renderStoryTextTemplate(
+  valsFile: StoryValsFile,
+  template: string,
+  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH,
+  context?: StoryExpressionContext
+) {
+  const contextValues = buildStoryReadableContextValues(context)
+
+  return normalizeText(template).replace(/\{([^{}]+)\}/g, (_match, token: string) => {
+    const trimmedToken = token.trim()
+
+    if (!trimmedToken) {
+      return ""
+    }
+
+    const resolvedValue = resolveStoryValueReference(
+      valsFile,
+      trimmedToken,
+      maxDepth,
+      contextValues
+    )
+
+    return formatTemplateValue(resolvedValue)
+  })
 }
 
 export function getStoryValCalcDisplay(

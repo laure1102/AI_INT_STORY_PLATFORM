@@ -1,23 +1,74 @@
 # Runtime
 
-这个包用于承载故事运行时共享能力。
-
-当前第一步已经放入：
-
-- 变量值解析
-- `calc_rule` 计算
-- `trigger_expr` 布尔表达式计算
-- 事件脚本执行与校验
-
-这部分逻辑后续会被：
+`packages/runtime` contains shared runtime behavior that should be reused by:
 
 - `apps/tui-client`
 - `apps/cocos-client`
-- `packages/core` 的校验层
+- editor-side validation paths that need the same semantics
 
-共同复用。
+## Current responsibilities
 
-当前说明：
+- value parsing and formatting
+- `calc_rule` evaluation
+- boolean trigger expression evaluation
+- simple event script execution and validation
+- runtime session bootstrapping
 
-- 这是第一步抽离
-- 数据契约类型暂时保持最小化，后续再继续与 `core` 进一步收敛
+## Implemented rules
+
+### `calc_rule`
+
+- supports same-group references with `{row}`
+- supports cross-group references with `{group.row}`
+- resolves nested calc values recursively
+- supports common `Math` functions and constants
+- must return a finite number
+
+### `trigger_expr`
+
+- supports `{group.row}` placeholders
+- resolves calc variables before comparison
+- supports common `Math` functions
+- must return `boolean`
+- empty expression is treated as `true`
+
+### event scripts
+
+Currently supported statements:
+
+```txt
+let temp = expression
+temp = expression
+temp += expression
+temp -= expression
+temp *= expression
+temp /= expression
+temp %= expression
+{group.row} = expression
+{group.row} += expression
+{group.row} -= expression
+{group.row} *= expression
+{group.row} /= expression
+{group.row} %= expression
+```
+
+Restrictions:
+
+- cannot assign to `calc` variables
+- no `if`, `for`, `while`, or function declarations
+- temporary variables must use `let`
+
+## Runtime session
+
+`src/session.ts` currently provides:
+
+- profile custom file type
+- save-state type
+- session snapshot type
+- `createStorySession()`
+
+Layering order:
+
+1. compiled story bundle
+2. profile `custom.json5` overrides
+3. save snapshot overrides both

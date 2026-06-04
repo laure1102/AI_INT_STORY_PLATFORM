@@ -15,6 +15,7 @@ import {
   storyLoopEventsSchema,
   storyMetaSchema,
   storyNormalRolesDataFileSchema,
+  storyPlayerOverrideValsSchema,
   storyRolesSchema,
   storySceneSchema,
   storyValsSchema,
@@ -32,6 +33,7 @@ import {
   type StoryLoopEventsFile,
   type StoryMetaFile,
   type StoryNormalRolesDataFile,
+  type StoryPlayerOverrideValsFile,
   type StoryImportantRolesDataFile,
   type StoryRolesFile,
   type StorySceneBackgroundVariant,
@@ -83,6 +85,10 @@ export interface StoryFileStore {
     eventLocations: StoryEventLocationFile
   ): Promise<StoryEventLocationFile>
   writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile>
+  writePlayerOverrideVals(
+    storyId: string,
+    playerOverrideVals: StoryPlayerOverrideValsFile
+  ): Promise<StoryPlayerOverrideValsFile>
   writeSystemVals(storyId: string, systemVals: StoryValsFile): Promise<StoryValsFile>
   writeScenes(storyId: string, scenes: StorySceneFile): Promise<StorySceneFile>
   writeSceneBackgroundSource(
@@ -247,6 +253,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
     storyDir,
     metaFile: path.join(storyDir, "story.json5"),
     valsFile: path.join(storyDir, "vals.json5"),
+    playerOverrideValsFile: path.join(storyDir, "player_override_vals.json5"),
     systemValsFile: path.join(storyDir, "system_vals.json5"),
     sceneFile: path.join(storyDir, "scene.json5"),
     rolesLegacyFile: path.join(storyDir, "roles.json5"),
@@ -693,6 +700,20 @@ async function readStoryVals(dataDir: string, storyId: string): Promise<StoryVal
   return storyValsSchema.parse(vals)
 }
 
+async function readStoryPlayerOverrideVals(
+  dataDir: string,
+  storyId: string
+): Promise<StoryPlayerOverrideValsFile> {
+  const paths = createStoryPaths(dataDir, storyId)
+  const playerOverrideVals = await readOptionalJson5File<StoryPlayerOverrideValsFile>(
+    paths.playerOverrideValsFile,
+    {
+      entries: []
+    }
+  )
+  return storyPlayerOverrideValsSchema.parse(playerOverrideVals)
+}
+
 async function readStorySystemVals(dataDir: string, storyId: string): Promise<StoryValsFile> {
   const paths = createStoryPaths(dataDir, storyId)
   const systemVals = await readOptionalJson5File<StoryValsFile>(paths.systemValsFile, {
@@ -867,10 +888,22 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   }
 
   async function readStoryDocument(storyId: string): Promise<StoryDocument> {
-    const [story, vals, systemVals, scenes, roles, eventLocations, graphEvents, bigOnceEvents, loopEvents] =
+    const [
+      story,
+      vals,
+      playerOverrideVals,
+      systemVals,
+      scenes,
+      roles,
+      eventLocations,
+      graphEvents,
+      bigOnceEvents,
+      loopEvents
+    ] =
       await Promise.all([
       readStoryMeta(dataDir, storyId),
       readStoryVals(dataDir, storyId),
+      readStoryPlayerOverrideVals(dataDir, storyId),
       readStorySystemVals(dataDir, storyId),
       readStoryScenes(dataDir, storyId),
       readStoryRoles(dataDir, storyId),
@@ -883,6 +916,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return {
       story,
       vals,
+      playerOverrideVals,
       systemVals,
       scenes,
       roles,
@@ -1061,6 +1095,21 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     await writeJson5File(paths.valsFile, parsedVals satisfies StoryValsFile)
 
     return parsedVals
+  }
+
+  async function writePlayerOverrideVals(
+    storyId: string,
+    playerOverrideVals: StoryPlayerOverrideValsFile
+  ): Promise<StoryPlayerOverrideValsFile> {
+    const parsedPlayerOverrideVals = storyPlayerOverrideValsSchema.parse(playerOverrideVals)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(
+      paths.playerOverrideValsFile,
+      parsedPlayerOverrideVals satisfies StoryPlayerOverrideValsFile
+    )
+
+    return parsedPlayerOverrideVals
   }
 
   async function writeSystemVals(storyId: string, systemVals: StoryValsFile): Promise<StoryValsFile> {
@@ -1303,6 +1352,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     writeRoles,
     writeEventLocations,
     writeVals,
+    writePlayerOverrideVals,
     writeSystemVals,
     writeScenes,
     writeSceneBackgroundSource,

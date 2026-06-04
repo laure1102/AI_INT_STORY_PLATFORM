@@ -9,6 +9,7 @@ import type {
   StoryEventFile,
   StoryEventLocationFile,
   StoryLoopEventFile,
+  StoryPlayerOverrideValsFile,
   StoryRolesFile,
   StorySceneFile,
   StoryValsFile,
@@ -26,6 +27,7 @@ import StoryBigOnceCanvas from "./StoryBigOnceCanvas.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
 import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
 import StoryLocationsDialog from "./StoryLocationsDialog.vue"
+import StoryPlayerOverrideValsDialog from "./StoryPlayerOverrideValsDialog.vue"
 import StoryRolesDialog from "./StoryRolesDialog.vue"
 import StoryScenesDialog from "./StoryScenesDialog.vue"
 import StoryValsDialog from "./StoryValsDialog.vue"
@@ -47,6 +49,7 @@ const {
   saveAppSettings,
   saveEvent,
   saveEventLocations,
+  savePlayerOverrideVals,
   saveRoles,
   saveScenes,
   saveSystemVals,
@@ -66,6 +69,7 @@ const editingEventId = shallowRef<string | null>(null)
 const creatingFromEventId = shallowRef<string | null>(null)
 const creatingEventDraft = shallowRef<StoryAnyEventFile | null>(null)
 const isValsDialogOpen = shallowRef(false)
+const isPlayerOverrideValsDialogOpen = shallowRef(false)
 const isSystemValsDialogOpen = shallowRef(false)
 const isScenesDialogOpen = shallowRef(false)
 const isLocationsDialogOpen = shallowRef(false)
@@ -369,6 +373,7 @@ function openValsDialog() {
   }
 
   closeEditor()
+  isPlayerOverrideValsDialogOpen.value = false
   isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
@@ -380,6 +385,24 @@ function closeValsDialog() {
   isValsDialogOpen.value = false
 }
 
+function openPlayerOverrideValsDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  closeEditor()
+  isValsDialogOpen.value = false
+  isSystemValsDialogOpen.value = false
+  isScenesDialogOpen.value = false
+  isLocationsDialogOpen.value = false
+  isRolesDialogOpen.value = false
+  isPlayerOverrideValsDialogOpen.value = true
+}
+
+function closePlayerOverrideValsDialog() {
+  isPlayerOverrideValsDialogOpen.value = false
+}
+
 function openSystemValsDialog() {
   if (!storyDocument.value) {
     return
@@ -387,6 +410,7 @@ function openSystemValsDialog() {
 
   closeEditor()
   isValsDialogOpen.value = false
+  isPlayerOverrideValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isRolesDialogOpen.value = false
@@ -404,6 +428,7 @@ function openScenesDialog() {
 
   closeEditor()
   isValsDialogOpen.value = false
+  isPlayerOverrideValsDialogOpen.value = false
   isSystemValsDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isRolesDialogOpen.value = false
@@ -423,6 +448,7 @@ function openLocationsDialog() {
 
   closeEditor()
   isValsDialogOpen.value = false
+  isPlayerOverrideValsDialogOpen.value = false
   isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isRolesDialogOpen.value = false
@@ -442,6 +468,7 @@ function openRolesDialog() {
 
   closeEditor()
   isValsDialogOpen.value = false
+  isPlayerOverrideValsDialogOpen.value = false
   isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
@@ -821,6 +848,29 @@ async function handleSaveSystemVals(systemVals: StoryValsFile) {
   }
 }
 
+async function handleSavePlayerOverrideVals(playerOverrideVals: StoryPlayerOverrideValsFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    const savedPlayerOverrideVals = await savePlayerOverrideVals(props.storyId, playerOverrideVals)
+    storyDocument.value = {
+      ...storyDocument.value,
+      playerOverrideVals: savedPlayerOverrideVals
+    }
+    isPlayerOverrideValsDialogOpen.value = false
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存玩家覆盖变量失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
 async function handleSaveScenes(scenes: StorySceneFile) {
   if (!storyDocument.value) {
     return
@@ -997,6 +1047,7 @@ watch(
     creatingFromEventId.value = null
     creatingEventDraft.value = null
     isValsDialogOpen.value = false
+    isPlayerOverrideValsDialogOpen.value = false
     isSystemValsDialogOpen.value = false
     isScenesDialogOpen.value = false
     isLocationsDialogOpen.value = false
@@ -1021,6 +1072,13 @@ watch(
         <div class="editor-header__tools" aria-label="故事配置入口">
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openValsDialog">
             全局变量
+          </button>
+          <button
+            class="btn-secondary editor-header__tool-button"
+            type="button"
+            @click="openPlayerOverrideValsDialog"
+          >
+            玩家覆盖变量
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openSystemValsDialog">
             系统变量
@@ -1231,6 +1289,15 @@ watch(
       :vals="storyDocument.systemVals"
       @close="closeSystemValsDialog"
       @save="handleSaveSystemVals"
+    />
+
+    <StoryPlayerOverrideValsDialog
+      v-if="storyDocument && isPlayerOverrideValsDialogOpen"
+      :player-override-vals="storyDocument.playerOverrideVals"
+      :saving="isSaving"
+      :vals="storyDocument.vals"
+      @close="closePlayerOverrideValsDialog"
+      @save="handleSavePlayerOverrideVals"
     />
 
     <StoryScenesDialog
