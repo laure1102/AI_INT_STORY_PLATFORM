@@ -39,7 +39,6 @@ export function compileStory(document: StoryDocument): {
       storyId: document.story.id,
       title: document.story.title,
       generatedAt: new Date().toISOString(),
-      entryEventId: document.story.startEventId,
       vals: document.vals,
       playerOverrideVals: document.playerOverrideVals,
       systemVals: document.systemVals,

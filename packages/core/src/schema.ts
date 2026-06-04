@@ -6,7 +6,6 @@ export const storyMetaSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   description: z.string().optional(),
-  startEventId: z.string().min(1).optional(),
   tags: z.array(z.string()).optional()
 })
 

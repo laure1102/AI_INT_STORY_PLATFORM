@@ -37,7 +37,6 @@ interface PanState {
 }
 
 const props = defineProps<{
-  entryEventId?: string | null
   events: StoryAnyEventFile[]
   selectedEventId: string | null
 }>()
@@ -144,7 +143,7 @@ function createDefaultPosition(index: number, kind: GraphNodeKind, layoutDirecti
       }
 }
 
-function createRootOrder(events: StoryAnyEventFile[], entryEventId?: string | null) {
+function createRootOrder(events: StoryAnyEventFile[]) {
   const eventIds = events.map((event) => event.id)
   const eventSet = new Set(eventIds)
   const incomingCount = new Map(eventIds.map((eventId) => [eventId, 0]))
@@ -164,10 +163,6 @@ function createRootOrder(events: StoryAnyEventFile[], entryEventId?: string | nu
   }
 
   const rootIds: string[] = []
-
-  if (entryEventId && eventSet.has(entryEventId)) {
-    rootIds.push(entryEventId)
-  }
 
   for (const event of events) {
     if (getNodeKind(event) !== "event") {
@@ -190,7 +185,6 @@ function createRootOrder(events: StoryAnyEventFile[], entryEventId?: string | nu
 
 function buildAutoLayoutPositionMap(
   events: StoryAnyEventFile[],
-  entryEventId?: string | null,
   layoutDirection: GraphDirection = direction.value
 ) {
   const eventMap = new Map(events.map((event) => [event.id, event]))
@@ -224,7 +218,7 @@ function buildAutoLayoutPositionMap(
     }
   }
 
-  for (const rootId of createRootOrder(events, entryEventId)) {
+  for (const rootId of createRootOrder(events)) {
     if (assignedParent.has(rootId)) {
       continue
     }
@@ -341,7 +335,7 @@ function buildAutoLayoutPositionMap(
 }
 
 const localNodes = computed<GraphNodeView[]>(() => {
-  const positionMap = buildAutoLayoutPositionMap(props.events, props.entryEventId, direction.value)
+  const positionMap = buildAutoLayoutPositionMap(props.events, direction.value)
   let eventIndex = 0
   let actionIndex = 0
 

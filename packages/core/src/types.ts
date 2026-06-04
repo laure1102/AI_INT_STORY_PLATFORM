@@ -2,7 +2,6 @@ export interface StoryMetaFile {
   id: string
   title: string
   description?: string
-  startEventId?: string
   tags?: string[]
 }
 
@@ -293,7 +292,6 @@ export interface CompiledStory {
   storyId: string
   title: string
   generatedAt: string
-  entryEventId?: string
   vals: StoryValsFile
   playerOverrideVals: StoryPlayerOverrideValsFile
   systemVals: StoryValsFile

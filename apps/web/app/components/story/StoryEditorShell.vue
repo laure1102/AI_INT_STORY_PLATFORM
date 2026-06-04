@@ -1174,7 +1174,6 @@ watch(
 
       <StoryGraphCanvas
         v-if="activeEventTab === 'graph'"
-        :entry-event-id="storyDocument.story.startEventId ?? activeGraphEvents[0]?.id ?? null"
         :events="activeEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"

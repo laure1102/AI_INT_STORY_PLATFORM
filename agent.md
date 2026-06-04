@@ -249,7 +249,6 @@ Graph rules:
 - `action -> event` is allowed
 - `action -> action` is not allowed
 - an action node should have at most one outgoing `next`
-- story `startEventId` must point to an event node, not an action node
 
 ### Big-once events: `events/big_once_events.json5`
 

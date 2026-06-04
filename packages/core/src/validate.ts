@@ -363,31 +363,6 @@ function validateGraphAction(
   }
 }
 
-function collectReachableGraphNodes(startEventId: string, eventMap: Map<string, StoryAnyEventFile>) {
-  const visited = new Set<string>()
-  const stack = [startEventId]
-
-  while (stack.length > 0) {
-    const eventId = stack.pop()
-    if (!eventId || visited.has(eventId)) {
-      continue
-    }
-
-    visited.add(eventId)
-
-    const event = eventMap.get(eventId)
-    if (!event || !("next" in event)) {
-      continue
-    }
-
-    for (const nextId of event.next) {
-      stack.push(nextId)
-    }
-  }
-
-  return visited
-}
-
 export function validateStoryDocument(document: StoryDocument): ValidationResult {
   const issues: ValidationIssue[] = []
   const graphNodes = document.graphEvents
@@ -395,7 +370,6 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
   const graphActions = graphNodes.filter(isGraphActionNode)
   const bigOnceEvents = document.bigOnceEvents
   const loopEvents = document.loopEvents
-  const graphEventMap = buildEventMap(graphEvents)
   const graphNodeMap = new Map(graphNodes.map((event) => [event.id, event]))
   const eventMap = buildAllEventMap(graphNodes, bigOnceEvents, loopEvents)
   const seenIds = new Set<string>()
@@ -471,52 +445,6 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
         )
       }
     }
-  }
-
-  if (document.story.startEventId) {
-    if (!graphEventMap.has(document.story.startEventId)) {
-      pushIssue(
-        issues,
-        "error",
-        "story.invalid-start",
-        `Start event "${document.story.startEventId}" does not exist.`,
-        ["story", "startEventId"]
-      )
-    } else {
-      const reachable = collectReachableGraphNodes(document.story.startEventId, graphNodeMap)
-
-      for (const event of graphEvents) {
-        if (!reachable.has(event.id)) {
-          pushIssue(
-            issues,
-            "warning",
-            "event.unreachable",
-            `Event "${event.id}" cannot be reached from the configured start event.`,
-            ["graphEvents", event.id]
-          )
-        }
-      }
-
-      for (const action of graphActions) {
-        if (!reachable.has(action.id)) {
-          pushIssue(
-            issues,
-            "warning",
-            "graph-action.unreachable",
-            `Graph action "${action.id}" cannot be reached from the configured start event.`,
-            ["graphEvents", action.id]
-          )
-        }
-      }
-    }
-  } else {
-    pushIssue(
-      issues,
-      "warning",
-      "story.no-start-event",
-      "The story does not define a start event yet.",
-      ["story", "startEventId"]
-    )
   }
 
   for (const calcIssue of validateStoryValsCalcRules(document.vals)) {

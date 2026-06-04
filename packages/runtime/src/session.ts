@@ -121,7 +121,6 @@ export interface RuntimeStoryBundle {
   storyId: string
   title: string
   generatedAt: string
-  entryEventId?: string
   vals: StoryValsFile
   playerOverrideVals: StoryPlayerOverrideValsFile
   systemVals: StoryValsFile
@@ -365,7 +364,7 @@ function applyCustomValuesToValsFile(valsFile: StoryValsFile, customValues: Reco
 
 function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnapshot {
   return {
-    current_event_id: bundle.entryEventId ?? null,
+    current_event_id: null,
     vals: cloneValsFile(bundle.vals),
     system_vals: cloneValsFile(bundle.systemVals),
     triggered_big_once_events: [],
