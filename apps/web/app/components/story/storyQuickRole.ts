@@ -8,15 +8,15 @@ import {
 
 export interface StoryQuickCreateRolePayload {
   descr: string
+  id: string
   mingzi: string
-  name: string
   qufenXingbie: boolean
   roleKey: string
   scope: StoryRoleScope
   zhiye: string
 }
 
-export function sanitizeQuickRoleNameInput(value: string) {
+export function sanitizeQuickRoleIdInput(value: string) {
   return value
     .trim()
     .toLowerCase()
@@ -24,28 +24,28 @@ export function sanitizeQuickRoleNameInput(value: string) {
     .replace(/^_+|_+$/g, "")
 }
 
-export function hasQuickRoleNameConflict(
+export function hasQuickRoleIdConflict(
   roles: StoryRolesFile,
   scope: StoryRoleScope,
-  sanitizedName: string
+  sanitizedId: string
 ) {
-  if (!sanitizedName) {
+  if (!sanitizedId) {
     return false
   }
 
   const sourceRoles = scope === "important" ? roles.important.roles : roles.normal.roles
 
-  return sourceRoles.some((role) => role.name.trim() === sanitizedName)
+  return sourceRoles.some((role) => role.id.trim() === sanitizedId)
 }
 
 function createNormalQuickRole(payload: StoryQuickCreateRolePayload): StoryNormalRoleDefinition {
   return {
     descr: payload.descr.trim(),
+    id: payload.id,
     img_compress_1: "",
     img_compress_2: "",
     img_raw: "",
     mingzi: payload.mingzi.trim(),
-    name: payload.name,
     prompt: "",
     zhiye: payload.zhiye.trim()
   }
@@ -65,8 +65,8 @@ function createImportantQuickRole(payload: StoryQuickCreateRolePayload): StoryIm
     img_male_compress_2: "",
     img_male_raw: "",
     img_raw: "",
+    id: payload.id,
     mingzi: payload.mingzi.trim(),
-    name: payload.name,
     prompt: "",
     prompt_female: "",
     prompt_male: "",
@@ -103,24 +103,24 @@ export function appendQuickRoleToRoles(
 
 export function buildQuickCreateRolePayload(input: {
   descr: string
+  id: string
   mingzi: string
-  name: string
   qufenXingbie: boolean
   scope: StoryRoleScope
   zhiye: string
 }): StoryQuickCreateRolePayload | null {
-  const sanitizedName = sanitizeQuickRoleNameInput(input.name)
+  const sanitizedId = sanitizeQuickRoleIdInput(input.id)
 
-  if (!sanitizedName) {
+  if (!sanitizedId) {
     return null
   }
 
   return {
     descr: input.descr.trim(),
+    id: sanitizedId,
     mingzi: input.mingzi.trim(),
-    name: sanitizedName,
     qufenXingbie: input.scope === "important" ? input.qufenXingbie : false,
-    roleKey: buildStoryRoleKey(input.scope, sanitizedName),
+    roleKey: buildStoryRoleKey(input.scope, sanitizedId),
     scope: input.scope,
     zhiye: input.zhiye.trim()
   }

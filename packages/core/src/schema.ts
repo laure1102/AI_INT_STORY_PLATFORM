@@ -76,7 +76,8 @@ export const storyRoleAiConfigSchema = z.object({
 })
 
 export const storyNormalRoleSchema = z.object({
-  name: z.string().min(1),
+  id: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
   mingzi: z.string().default(""),
   zhiye: z.string().default(""),
   descr: z.string().default(""),
@@ -84,10 +85,28 @@ export const storyNormalRoleSchema = z.object({
   img_raw: z.string().default(""),
   img_compress_1: z.string().default(""),
   img_compress_2: z.string().default("")
-})
+}).superRefine((role, context) => {
+  if (!role.id?.trim() && !role.name?.trim()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "id is required.",
+      path: ["id"]
+    })
+  }
+}).transform((role) => ({
+  id: role.id ?? role.name ?? "",
+  mingzi: role.mingzi,
+  zhiye: role.zhiye,
+  descr: role.descr,
+  prompt: role.prompt,
+  img_raw: role.img_raw,
+  img_compress_1: role.img_compress_1,
+  img_compress_2: role.img_compress_2
+}))
 
 export const storyImportantRoleSchema = z.object({
-  name: z.string().min(1),
+  id: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
   mingzi: z.string().default(""),
   zhiye: z.string().default(""),
   descr: z.string().default(""),
@@ -107,10 +126,41 @@ export const storyImportantRoleSchema = z.object({
   img_female_raw: z.string().default(""),
   img_female_compress_1: z.string().default(""),
   img_female_compress_2: z.string().default("")
+}).superRefine((role, context) => {
+  if (!role.id?.trim() && !role.name?.trim()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "id is required.",
+      path: ["id"]
+    })
+  }
 }).transform((role) => {
+  const baseRole = {
+    id: role.id ?? role.name ?? "",
+    mingzi: role.mingzi,
+    zhiye: role.zhiye,
+    descr: role.descr,
+    descr_male: role.descr_male,
+    descr_female: role.descr_female,
+    prompt: role.prompt,
+    prompt_male: role.prompt_male,
+    prompt_female: role.prompt_female,
+    img_raw: role.img_raw,
+    img_compress_1: role.img_compress_1,
+    img_compress_2: role.img_compress_2,
+    xingge: role.xingge,
+    qufen_xingbie: role.qufen_xingbie,
+    img_male_raw: role.img_male_raw,
+    img_male_compress_1: role.img_male_compress_1,
+    img_male_compress_2: role.img_male_compress_2,
+    img_female_raw: role.img_female_raw,
+    img_female_compress_1: role.img_female_compress_1,
+    img_female_compress_2: role.img_female_compress_2
+  }
+
   if (role.qufen_xingbie) {
     return {
-      ...role,
+      ...baseRole,
       descr: "",
       prompt: "",
       img_raw: "",
@@ -120,7 +170,7 @@ export const storyImportantRoleSchema = z.object({
   }
 
   return {
-    ...role,
+    ...baseRole,
     descr_male: "",
     descr_female: "",
     prompt_male: "",
@@ -188,13 +238,29 @@ export const storyEventLocationAiConfigSchema = z.object({
 })
 
 export const storyEventLocationAssignmentSchema = z.object({
-  name: z.string().min(1),
+  id: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
   descr: z.string().default(""),
   prompt: z.string().default(""),
   img_raw: z.string().default(""),
   img_compress_1: z.string().default(""),
   img_compress_2: z.string().default("")
-})
+}).superRefine((assignment, context) => {
+  if (!assignment.id?.trim() && !assignment.name?.trim()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "id is required.",
+      path: ["id"]
+    })
+  }
+}).transform((assignment) => ({
+  id: assignment.id ?? assignment.name ?? "",
+  descr: assignment.descr,
+  prompt: assignment.prompt,
+  img_raw: assignment.img_raw,
+  img_compress_1: assignment.img_compress_1,
+  img_compress_2: assignment.img_compress_2
+}))
 
 export const storyEventLocationSchema = z.object({
   ai: storyEventLocationAiConfigSchema.default({

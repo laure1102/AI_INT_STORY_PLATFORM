@@ -12,7 +12,7 @@
       img_compress_1: 'assets/event_location/office_small_c1.webp',
       img_compress_2: 'assets/event_location/office_small_c2.webp',
       img_raw: 'assets/event_location/raw/mpp1id6l-office_small.png',
-      name: 'office_small',
+      id: 'office_small',
       prompt: 'a brand-new yet simple small office interior, clean minimalist workspace, plain desks and chairs, modest storage shelves, neat arrangement, modern but understated design, neutral color palette, smooth painted walls, laminate flooring, subtle reflections, soft daylight streaming through windows, gentle ambient lighting, realistic materials, tidy and quiet atmosphere, game environment background, wide-angle view, architectural interior scene, no people, no close-up, highly detailed, cinematic composition, soft shadows, immersive atmosphere',
     },
     {
@@ -20,7 +20,7 @@
       img_compress_1: '',
       img_compress_2: '',
       img_raw: '',
-      name: 'jiedao_renshao',
+      id: 'jiedao_renshao',
       prompt: '',
     },
     {
@@ -28,7 +28,7 @@
       img_compress_1: '',
       img_compress_2: '',
       img_raw: '',
-      name: 'qichezhan_lvl1',
+      id: 'qichezhan_lvl1',
       prompt: '',
     },
   ],

@@ -10,7 +10,7 @@ interface LocationDraft {
   img_compress_1: string
   img_compress_2: string
   img_raw: string
-  name: string
+  id: string
   prompt: string
   selected: boolean
 }
@@ -134,15 +134,15 @@ function parseImageDimensionInput(value: unknown) {
   return Number.isInteger(parsed) && parsed >= 1 ? parsed : null
 }
 
-function getNextDefaultName() {
-  const usedNames = new Set(
-    draft.assignments.map((assignment) => assignment.name.trim()).filter(Boolean)
+function getNextDefaultId() {
+  const usedIds = new Set(
+    draft.assignments.map((assignment) => assignment.id.trim()).filter(Boolean)
   )
 
   let index = draft.assignments.length + 1
   let candidate = `location_${index}`
 
-  while (usedNames.has(candidate)) {
+  while (usedIds.has(candidate)) {
     index += 1
     candidate = `location_${index}`
   }
@@ -220,7 +220,7 @@ function cloneAssignment(assignment: StoryEventLocationFile["assignments"][numbe
     img_compress_1: normalizeText(assignment.img_compress_1),
     img_compress_2: normalizeText(assignment.img_compress_2),
     img_raw: normalizeText(assignment.img_raw),
-    name: normalizeText(assignment.name),
+    id: normalizeText(assignment.id),
     prompt: normalizeText(assignment.prompt),
     selected: false
   }
@@ -406,19 +406,19 @@ const allSelected = computed({
   }
 })
 
-const duplicateNames = computed(() => {
+const duplicateIds = computed(() => {
   const counts = new Map<string, number>()
 
   for (const assignment of draft.assignments) {
-    const normalizedName = sanitizeNameInput(assignment.name)
-    if (!normalizedName) continue
-    counts.set(normalizedName, (counts.get(normalizedName) ?? 0) + 1)
+    const normalizedId = sanitizeNameInput(assignment.id)
+    if (!normalizedId) continue
+    counts.set(normalizedId, (counts.get(normalizedId) ?? 0) + 1)
   }
 
   return new Set(
     Array.from(counts.entries())
       .filter(([, count]) => count > 1)
-      .map(([name]) => name)
+      .map(([id]) => id)
   )
 })
 
@@ -428,8 +428,8 @@ const hasInvalidDraft = computed(() => {
   if (parseCompressQualityInput(draft.ai.compressQuality1Text) === null) return true
   if (parseCompressQualityInput(draft.ai.compressQuality2Text) === null) return true
 
-  return draft.assignments.some((assignment) => !sanitizeNameInput(assignment.name))
-    || duplicateNames.value.size > 0
+  return draft.assignments.some((assignment) => !sanitizeNameInput(assignment.id))
+    || duplicateIds.value.size > 0
 })
 
 const hasBatchSelection = computed(() => selectedCount.value > 0)
@@ -470,7 +470,7 @@ function addLocation() {
     img_compress_1: "",
     img_compress_2: "",
     img_raw: "",
-    name: getNextDefaultName(),
+    id: getNextDefaultId(),
     prompt: "",
     selected: false
   }
@@ -527,7 +527,7 @@ async function handleGeneratePrompt(assignment: LocationDraft) {
   try {
     assignment.prompt = await generateLocationPrompt(props.storyId, {
       descr: assignment.descr,
-      locationName: assignment.name,
+      locationName: assignment.id,
       storyTitle: props.storyTitle
     })
   } catch (error) {
@@ -548,7 +548,7 @@ async function handleGenerateImage(assignment: LocationDraft) {
       width: parseImageDimensionInput(draft.ai.imageWidthText) ?? 1536,
       height: parseImageDimensionInput(draft.ai.imageHeightText) ?? 1024,
       prompt: assignment.prompt,
-      targetName: sanitizeNameInput(assignment.name) || "location"
+      targetName: sanitizeNameInput(assignment.id) || "location"
     })
 
     assignment.img_raw = asset.assetPath
@@ -577,7 +577,7 @@ async function handleCompressImage(
         ) ?? (slot === 1 ? 60 : 80),
       slot,
       sourcePath: assignment.img_raw,
-      targetName: sanitizeNameInput(assignment.name) || "location"
+      targetName: sanitizeNameInput(assignment.id) || "location"
     })
 
     setAssetPath(assignment, variant, asset.assetPath)
@@ -677,7 +677,7 @@ function submitDraft() {
       img_compress_1: assignment.img_compress_1.trim(),
       img_compress_2: assignment.img_compress_2.trim(),
       img_raw: assignment.img_raw.trim(),
-      name: sanitizeNameInput(assignment.name),
+      id: sanitizeNameInput(assignment.id),
       prompt: assignment.prompt.trim()
     }))
   })
@@ -853,8 +853,8 @@ watch(
             </div>
           </div>
 
-          <div v-if="duplicateNames.size" class="locations-dialog__warning">
-            地点名称不能重复，请检查 `name`。
+          <div v-if="duplicateIds.size" class="locations-dialog__warning">
+            地点 ID 不能重复，请检查 `id`。
           </div>
 
           <div class="locations-dialog__table-wrap">
@@ -862,7 +862,7 @@ watch(
               <thead>
                 <tr>
                   <th class="locations-dialog__select-col">选择</th>
-                  <th>名称</th>
+                  <th>ID</th>
                   <th>描述</th>
                   <th>提示词</th>
                   <th>图片</th>
@@ -877,7 +877,7 @@ watch(
                   </td>
                   <td>
                     <input
-                      v-model="assignment.name"
+                      v-model="assignment.id"
                       class="text-input locations-dialog__cell-input"
                       type="text"
                       placeholder="office_small"
@@ -928,12 +928,12 @@ watch(
                           v-if="variant === 'raw' && getAssetPath(assignment, variant)"
                           class="locations-dialog__asset-thumb-button"
                           type="button"
-                          @click="openImagePreview(getImagePreviewTitle(assignment.name, variant), getAssetPath(assignment, variant))"
+                          @click="openImagePreview(getImagePreviewTitle(assignment.id, variant), getAssetPath(assignment, variant))"
                         >
                           <img
                             class="locations-dialog__asset-thumb"
                             :src="getAssetUrl(assignment, variant)"
-                            :alt="`${assignment.name || '地点'} ${getImageVariantLabel(variant)} 缩略图`"
+                            :alt="`${assignment.id || '地点'} ${getImageVariantLabel(variant)} 缩略图`"
                             loading="lazy"
                           />
                         </button>

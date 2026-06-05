@@ -2,8 +2,8 @@
 import type { StoryEventLocationFile } from "@story-mgr/core"
 import {
   buildQuickCreateLocationPayload,
-  hasQuickLocationNameConflict,
-  sanitizeQuickLocationNameInput
+  hasQuickLocationIdConflict,
+  sanitizeQuickLocationIdInput
 } from "./storyQuickLocation"
 
 const props = defineProps<{
@@ -15,40 +15,40 @@ const emit = defineEmits<{
   close: []
   create: [payload: {
     descr: string
-    name: string
+    id: string
   }]
 }>()
 
-const nameInputRef = useTemplateRef<HTMLInputElement>("nameInput")
+const idInputRef = useTemplateRef<HTMLInputElement>("idInput")
 
 const draft = reactive({
   descr: "",
-  name: ""
+  id: ""
 })
 
-const sanitizedName = computed(() => sanitizeQuickLocationNameInput(draft.name))
-const hasNameConflict = computed(() => {
-  return hasQuickLocationNameConflict(props.eventLocations, sanitizedName.value)
+const sanitizedId = computed(() => sanitizeQuickLocationIdInput(draft.id))
+const hasIdConflict = computed(() => {
+  return hasQuickLocationIdConflict(props.eventLocations, sanitizedId.value)
 })
-const nameError = computed(() => {
-  if (!draft.name.trim()) {
-    return "请填写名称"
+const idError = computed(() => {
+  if (!draft.id.trim()) {
+    return "请填写 ID"
   }
 
-  if (!sanitizedName.value) {
-    return "名称会自动规范成英文/数字/下划线"
+  if (!sanitizedId.value) {
+    return "ID 会自动规范成英文/数字/下划线"
   }
 
-  if (hasNameConflict.value) {
-    return "地点里已有同名条目"
+  if (hasIdConflict.value) {
+    return "地点里已存在同 ID 条目"
   }
 
   return ""
 })
-const canSubmit = computed(() => !nameError.value && !props.saving)
+const canSubmit = computed(() => !idError.value && !props.saving)
 
 onMounted(() => {
-  nameInputRef.value?.focus()
+  idInputRef.value?.focus()
 })
 
 function submit() {
@@ -58,7 +58,7 @@ function submit() {
 
   const payload = buildQuickCreateLocationPayload({
     descr: draft.descr,
-    name: draft.name
+    id: draft.id
   })
 
   if (!payload) {
@@ -74,7 +74,7 @@ function submit() {
     <section class="quick-location-dialog__panel glass-panel">
       <div class="quick-location-dialog__header">
         <div>
-          <span class="eyebrow">快捷创建</span>
+          <span class="eyebrow">快速创建</span>
           <h3 class="quick-location-dialog__title">创建地点</h3>
         </div>
         <button class="btn-secondary" type="button" @click="emit('close')">关闭</button>
@@ -82,19 +82,19 @@ function submit() {
 
       <div class="quick-location-dialog__body">
         <label class="quick-location-dialog__field">
-          <span class="quick-location-dialog__label">名称</span>
+          <span class="quick-location-dialog__label">ID</span>
           <input
-            ref="nameInput"
-            v-model="draft.name"
+            ref="idInput"
+            v-model="draft.id"
             class="text-input"
             type="text"
             placeholder="street_market"
           />
-          <span v-if="sanitizedName" class="quick-location-dialog__hint">
-            保存为：{{ sanitizedName }}
+          <span v-if="sanitizedId" class="quick-location-dialog__hint">
+            保存为：{{ sanitizedId }}
           </span>
-          <span v-if="nameError" class="quick-location-dialog__error">
-            {{ nameError }}
+          <span v-if="idError" class="quick-location-dialog__error">
+            {{ idError }}
           </span>
         </label>
 

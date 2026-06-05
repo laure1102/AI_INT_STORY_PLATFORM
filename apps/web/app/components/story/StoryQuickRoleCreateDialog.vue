@@ -2,8 +2,8 @@
 import type { StoryRoleScope, StoryRolesFile } from "@story-mgr/core"
 import {
   buildQuickCreateRolePayload,
-  hasQuickRoleNameConflict,
-  sanitizeQuickRoleNameInput
+  hasQuickRoleIdConflict,
+  sanitizeQuickRoleIdInput
 } from "./storyQuickRole"
 
 const props = defineProps<{
@@ -15,8 +15,8 @@ const emit = defineEmits<{
   close: []
   create: [payload: {
     descr: string
+    id: string
     mingzi: string
-    name: string
     qufenXingbie: boolean
     roleKey: string
     scope: StoryRoleScope
@@ -24,38 +24,38 @@ const emit = defineEmits<{
   }]
 }>()
 
-const nameInputRef = useTemplateRef<HTMLInputElement>("nameInput")
+const idInputRef = useTemplateRef<HTMLInputElement>("idInput")
 
 const draft = reactive({
   descr: "",
+  id: "",
   mingzi: "",
-  name: "",
   qufenXingbie: false,
   scope: "normal" as StoryRoleScope,
   zhiye: ""
 })
 
-const sanitizedName = computed(() => sanitizeQuickRoleNameInput(draft.name))
+const sanitizedId = computed(() => sanitizeQuickRoleIdInput(draft.id))
 const isImportantRole = computed(() => draft.scope === "important")
-const hasNameConflict = computed(() => {
-  return hasQuickRoleNameConflict(props.roles, draft.scope, sanitizedName.value)
+const hasIdConflict = computed(() => {
+  return hasQuickRoleIdConflict(props.roles, draft.scope, sanitizedId.value)
 })
-const nameError = computed(() => {
-  if (!draft.name.trim()) {
-    return "请填写名称"
+const idError = computed(() => {
+  if (!draft.id.trim()) {
+    return "请填写 ID"
   }
 
-  if (!sanitizedName.value) {
-    return "名称会自动规范成英文/数字/下划线"
+  if (!sanitizedId.value) {
+    return "ID 会自动规范成英文/数字/下划线"
   }
 
-  if (hasNameConflict.value) {
-    return isImportantRole.value ? "重要角色里已有同名角色" : "普通角色里已有同名角色"
+  if (hasIdConflict.value) {
+    return isImportantRole.value ? "重要角色里已存在同 ID 角色" : "普通角色里已存在同 ID 角色"
   }
 
   return ""
 })
-const canSubmit = computed(() => !nameError.value && !props.saving)
+const canSubmit = computed(() => !idError.value && !props.saving)
 
 watch(
   () => draft.scope,
@@ -67,7 +67,7 @@ watch(
 )
 
 onMounted(() => {
-  nameInputRef.value?.focus()
+  idInputRef.value?.focus()
 })
 
 function submit() {
@@ -77,8 +77,8 @@ function submit() {
 
   const payload = buildQuickCreateRolePayload({
     descr: draft.descr,
+    id: draft.id,
     mingzi: draft.mingzi,
-    name: draft.name,
     qufenXingbie: draft.qufenXingbie,
     scope: draft.scope,
     zhiye: draft.zhiye
@@ -97,7 +97,7 @@ function submit() {
     <section class="quick-role-dialog__panel glass-panel">
       <div class="quick-role-dialog__header">
         <div>
-          <span class="eyebrow">快捷创建</span>
+          <span class="eyebrow">快速创建</span>
           <h3 class="quick-role-dialog__title">创建角色</h3>
         </div>
         <button class="btn-secondary" type="button" @click="emit('close')">关闭</button>
@@ -125,19 +125,19 @@ function submit() {
         </label>
 
         <label class="quick-role-dialog__field">
-          <span class="quick-role-dialog__label">名称</span>
+          <span class="quick-role-dialog__label">ID</span>
           <input
-            ref="nameInput"
-            v-model="draft.name"
+            ref="idInput"
+            v-model="draft.id"
             class="text-input"
             type="text"
             placeholder="villager_old_man"
           />
-          <span v-if="sanitizedName" class="quick-role-dialog__hint">
-            保存为：{{ sanitizedName }}
+          <span v-if="sanitizedId" class="quick-role-dialog__hint">
+            保存为：{{ sanitizedId }}
           </span>
-          <span v-if="nameError" class="quick-role-dialog__error">
-            {{ nameError }}
+          <span v-if="idError" class="quick-role-dialog__error">
+            {{ idError }}
           </span>
         </label>
 

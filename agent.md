@@ -106,7 +106,7 @@ Both use the same structure:
   },
   roles: [
     {
-      name: "start_suanming",
+      id: "start_suanming",
       zhiye: "",
       descr: "",
       prompt: "",
@@ -131,7 +131,7 @@ Both use the same structure:
   },
   roles: [
     {
-      name: "zhuli",
+      id: "zhuli",
       zhiye: "",
       xingge: "",
       qufen_xingbie: true,
@@ -168,7 +168,7 @@ Both use the same structure:
   },
   assignments: [
     {
-      name: "office_small",
+      id: "office_small",
       descr: "",
       prompt: "",
       img_raw: "",

@@ -2,10 +2,10 @@ import type { StoryEventLocationAssignment, StoryEventLocationFile } from "@stor
 
 export interface StoryQuickCreateLocationPayload {
   descr: string
-  name: string
+  id: string
 }
 
-export function sanitizeQuickLocationNameInput(value: string) {
+export function sanitizeQuickLocationIdInput(value: string) {
   return value
     .trim()
     .toLowerCase()
@@ -13,30 +13,30 @@ export function sanitizeQuickLocationNameInput(value: string) {
     .replace(/^_+|_+$/g, "")
 }
 
-export function hasQuickLocationNameConflict(
+export function hasQuickLocationIdConflict(
   eventLocations: StoryEventLocationFile,
-  sanitizedName: string
+  sanitizedId: string
 ) {
-  if (!sanitizedName) {
+  if (!sanitizedId) {
     return false
   }
 
-  return eventLocations.assignments.some((assignment) => assignment.name.trim() === sanitizedName)
+  return eventLocations.assignments.some((assignment) => assignment.id.trim() === sanitizedId)
 }
 
 export function buildQuickCreateLocationPayload(input: {
   descr: string
-  name: string
+  id: string
 }): StoryQuickCreateLocationPayload | null {
-  const sanitizedName = sanitizeQuickLocationNameInput(input.name)
+  const sanitizedId = sanitizeQuickLocationIdInput(input.id)
 
-  if (!sanitizedName) {
+  if (!sanitizedId) {
     return null
   }
 
   return {
     descr: input.descr.trim(),
-    name: sanitizedName
+    id: sanitizedId
   }
 }
 
@@ -45,10 +45,10 @@ function createQuickLocationAssignment(
 ): StoryEventLocationAssignment {
   return {
     descr: payload.descr.trim(),
+    id: payload.id,
     img_compress_1: "",
     img_compress_2: "",
     img_raw: "",
-    name: payload.name,
     prompt: ""
   }
 }

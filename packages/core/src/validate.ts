@@ -47,7 +47,7 @@ function isGraphEventNode(event: StoryGraphNodeFile): event is StoryEventFile {
 }
 
 function collectLocationNames(document: StoryDocument) {
-  return new Set(document.eventLocations.assignments.map((assignment) => assignment.name))
+  return new Set(document.eventLocations.assignments.map((assignment) => assignment.id))
 }
 
 function collectGlobalValKeys(document: StoryDocument) {

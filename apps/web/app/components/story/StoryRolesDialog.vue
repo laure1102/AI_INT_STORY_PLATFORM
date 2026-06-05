@@ -21,11 +21,11 @@ interface RoleAiDraft {
 interface NormalRoleDraft {
   draftKey: string
   descr: string
+  id: string
   img_compress_1: string
   img_compress_2: string
   img_raw: string
   mingzi: string
-  name: string
   prompt: string
   selected: boolean
   zhiye: string
@@ -36,6 +36,7 @@ interface ImportantRoleDraft {
   descr: string
   descr_female: string
   descr_male: string
+  id: string
   img_compress_1: string
   img_compress_2: string
   img_female_compress_1: string
@@ -46,7 +47,6 @@ interface ImportantRoleDraft {
   img_male_raw: string
   img_raw: string
   mingzi: string
-  name: string
   prompt: string
   prompt_female: string
   prompt_male: string
@@ -271,11 +271,11 @@ function cloneNormalRole(role: StoryNormalRoleDefinition): NormalRoleDraft {
   const draftRole: NormalRoleDraft = {
     descr: normalizeText(role.descr),
     draftKey: createDraftKey("normal-role"),
+    id: normalizeText(role.id),
     img_compress_1: normalizeText(role.img_compress_1),
     img_compress_2: normalizeText(role.img_compress_2),
     img_raw: normalizeText(role.img_raw),
     mingzi: normalizeText(role.mingzi),
-    name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
     selected: false,
     zhiye: normalizeText(role.zhiye)
@@ -291,6 +291,7 @@ function cloneImportantRole(role: StoryImportantRoleDefinition): ImportantRoleDr
     descr_female: normalizeText(role.descr_female),
     descr_male: normalizeText(role.descr_male),
     draftKey: createDraftKey("important-role"),
+    id: normalizeText(role.id),
     img_compress_1: normalizeText(role.img_compress_1),
     img_compress_2: normalizeText(role.img_compress_2),
     img_female_compress_1: normalizeText(role.img_female_compress_1),
@@ -301,7 +302,6 @@ function cloneImportantRole(role: StoryImportantRoleDefinition): ImportantRoleDr
     img_male_raw: normalizeText(role.img_male_raw),
     img_raw: normalizeText(role.img_raw),
     mingzi: normalizeText(role.mingzi),
-    name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
     prompt_female: normalizeText(role.prompt_female),
     prompt_male: normalizeText(role.prompt_male),
@@ -620,15 +620,15 @@ function setImportantRolePrompt(
   role.prompt = prompt
 }
 
-function getNextDefaultName(target: RolesTab) {
+function getNextDefaultId(target: RolesTab) {
   const source = target === "normal" ? draft.normalRoles : draft.importantRoles
   const prefix = target === "normal" ? "normal_role" : "important_role"
-  const usedNames = new Set(source.map((role) => role.name.trim()).filter(Boolean))
+  const usedIds = new Set(source.map((role) => role.id.trim()).filter(Boolean))
 
   let index = source.length + 1
   let candidate = `${prefix}_${index}`
 
-  while (usedNames.has(candidate)) {
+  while (usedIds.has(candidate)) {
     index += 1
     candidate = `${prefix}_${index}`
   }
@@ -636,8 +636,8 @@ function getNextDefaultName(target: RolesTab) {
   return candidate
 }
 
-function getRoleDisplayName(role: { mingzi?: string; name: string }) {
-  return normalizeText(role.mingzi).trim() || normalizeText(role.name).trim() || "角色"
+function getRoleDisplayName(role: { mingzi?: string; id: string }) {
+  return normalizeText(role.mingzi).trim() || normalizeText(role.id).trim() || "角色"
 }
 
 function addNormalRole() {
@@ -648,7 +648,7 @@ function addNormalRole() {
     img_compress_2: "",
     img_raw: "",
     mingzi: "",
-    name: getNextDefaultName("normal"),
+    id: getNextDefaultId("normal"),
     prompt: "",
     selected: false,
     zhiye: ""
@@ -674,7 +674,7 @@ function addImportantRole() {
     img_male_raw: "",
     img_raw: "",
     mingzi: "",
-    name: getNextDefaultName("important"),
+    id: getNextDefaultId("important"),
     prompt: "",
     prompt_female: "",
     prompt_male: "",
@@ -775,7 +775,7 @@ const hasInvalidDraft = computed(() => {
   if (parseCompressQualityInput(draft.importantAi.compressQuality2Text) === null) return true
 
   return (
-    [...draft.normalRoles, ...draft.importantRoles].some((role) => !sanitizeNameInput(role.name))
+    [...draft.normalRoles, ...draft.importantRoles].some((role) => !sanitizeNameInput(role.id))
   )
 })
 
@@ -899,7 +899,7 @@ async function handleGenerateNormalPrompt(role: NormalRoleDraft) {
       gender: "common",
       important: false,
       qufenXingbie: false,
-      roleName: role.name,
+      roleName: role.id,
       storyTitle: props.storyTitle
     })
   } catch (error) {
@@ -926,7 +926,7 @@ async function handleGenerateImportantPrompt(role: ImportantRoleDraft) {
               gender: "male",
               important: true,
               qufenXingbie: true,
-              roleName: role.name,
+              roleName: role.id,
               storyTitle: props.storyTitle,
               xingge: role.xingge
             })
@@ -937,7 +937,7 @@ async function handleGenerateImportantPrompt(role: ImportantRoleDraft) {
               gender: "female",
               important: true,
               qufenXingbie: true,
-              roleName: role.name,
+              roleName: role.id,
               storyTitle: props.storyTitle,
               xingge: role.xingge
             })
@@ -955,7 +955,7 @@ async function handleGenerateImportantPrompt(role: ImportantRoleDraft) {
       gender: "common",
       important: true,
       qufenXingbie: false,
-      roleName: role.name,
+      roleName: role.id,
       storyTitle: props.storyTitle,
       xingge: role.xingge
     })
@@ -981,7 +981,7 @@ async function handleGenerateNormalImage(role: NormalRoleDraft) {
       width: parseImageDimensionInput(aiDraft.imageWidthText) ?? 1536,
       height: parseImageDimensionInput(aiDraft.imageHeightText) ?? 1024,
       prompt: role.prompt,
-      targetName: sanitizeNameInput(role.name) || "normal_role"
+      targetName: sanitizeNameInput(role.id) || "normal_role"
     })
 
     setNormalAssetPath(role, "raw", asset.assetPath)
@@ -1008,7 +1008,7 @@ async function handleCompressNormalImage(role: NormalRoleDraft, slot: 1 | 2) {
         ) ?? (slot === 1 ? 60 : 30),
       slot,
       sourcePath: role.img_raw,
-      targetName: sanitizeNameInput(role.name) || "normal_role"
+      targetName: sanitizeNameInput(role.id) || "normal_role"
     })
 
     setNormalAssetPath(role, variant, asset.assetPath)
@@ -1021,7 +1021,7 @@ async function handleCompressNormalImage(role: NormalRoleDraft, slot: 1 | 2) {
 }
 
 function getImportantImageTargetName(role: ImportantRoleDraft, mode: ImportantRoleImageMode) {
-  const baseName = sanitizeNameInput(role.name) || "important_role"
+  const baseName = sanitizeNameInput(role.id) || "important_role"
   if (mode === "male") return `${baseName}_male`
   if (mode === "female") return `${baseName}_female`
   return baseName
@@ -1320,7 +1320,7 @@ function submitDraft() {
           img_male_raw: isSplitByGender ? role.img_male_raw.trim() : "",
           img_raw: isSplitByGender ? "" : role.img_raw.trim(),
           mingzi: role.mingzi.trim(),
-          name: sanitizeNameInput(role.name),
+          id: sanitizeNameInput(role.id),
           prompt: isSplitByGender ? "" : role.prompt.trim(),
           prompt_female: isSplitByGender ? role.prompt_female.trim() : "",
           prompt_male: isSplitByGender ? role.prompt_male.trim() : "",
@@ -1344,7 +1344,7 @@ function submitDraft() {
         img_compress_2: role.img_compress_2.trim(),
         img_raw: role.img_raw.trim(),
         mingzi: role.mingzi.trim(),
-        name: sanitizeNameInput(role.name),
+        id: sanitizeNameInput(role.id),
         prompt: role.prompt.trim(),
         zhiye: role.zhiye.trim()
       }))
@@ -1536,7 +1536,7 @@ watch(
                 <thead>
                   <tr>
                     <th class="roles-dialog__select-col">选择</th>
-                    <th>名称</th>
+                    <th>ID</th>
                     <th>名字</th>
                     <th>职业</th>
                     <th>描述</th>
@@ -1552,7 +1552,7 @@ watch(
                       <input v-model="role.selected" type="checkbox" />
                     </td>
                     <td>
-                      <input v-model="role.name" class="text-input roles-dialog__cell-input" type="text" placeholder="villager_old_man" />
+                      <input v-model="role.id" class="text-input roles-dialog__cell-input" type="text" placeholder="villager_old_man" />
                     </td>
                     <td>
                       <input v-model="role.mingzi" class="text-input roles-dialog__cell-input" type="text" placeholder="老孙" />
@@ -1587,7 +1587,7 @@ watch(
                             v-if="variant === 'raw' && getNormalAssetPath(role, variant)"
                             class="roles-dialog__asset-thumb-button"
                             type="button"
-                            @click="openImagePreview(getImagePreviewTitle(role.name, variant), getNormalAssetPath(role, variant))"
+                            @click="openImagePreview(getImagePreviewTitle(role.id, variant), getNormalAssetPath(role, variant))"
                           >
                             <img
                               class="roles-dialog__asset-thumb"
@@ -1699,7 +1699,7 @@ watch(
                 <thead>
                   <tr>
                     <th class="roles-dialog__select-col">选择</th>
-                    <th>名称</th>
+                    <th>ID</th>
                     <th>名字</th>
                     <th>职业</th>
                     <th>描述</th>
@@ -1717,7 +1717,7 @@ watch(
                       <input v-model="role.selected" type="checkbox" />
                     </td>
                     <td>
-                      <input v-model="role.name" class="text-input roles-dialog__cell-input" type="text" placeholder="suanming_xiansheng" />
+                      <input v-model="role.id" class="text-input roles-dialog__cell-input" type="text" placeholder="suanming_xiansheng" />
                     </td>
                     <td>
                       <input v-model="role.mingzi" class="text-input roles-dialog__cell-input" type="text" placeholder="李助理" />
@@ -1806,7 +1806,7 @@ watch(
                                 v-if="variant === 'raw' && getImportantAssetPath(role, 'male', variant)"
                                 class="roles-dialog__asset-thumb-button"
                                 type="button"
-                                @click="openImagePreview(getImagePreviewTitle(role.name, variant, 'male'), getImportantAssetPath(role, 'male', variant))"
+                                @click="openImagePreview(getImagePreviewTitle(role.id, variant, 'male'), getImportantAssetPath(role, 'male', variant))"
                               >
                                 <img
                                   class="roles-dialog__asset-thumb"
@@ -1839,7 +1839,7 @@ watch(
                                 v-if="variant === 'raw' && getImportantAssetPath(role, 'female', variant)"
                                 class="roles-dialog__asset-thumb-button"
                                 type="button"
-                                @click="openImagePreview(getImagePreviewTitle(role.name, variant, 'female'), getImportantAssetPath(role, 'female', variant))"
+                                @click="openImagePreview(getImagePreviewTitle(role.id, variant, 'female'), getImportantAssetPath(role, 'female', variant))"
                               >
                                 <img
                                   class="roles-dialog__asset-thumb"
@@ -1873,7 +1873,7 @@ watch(
                               v-if="variant === 'raw' && getImportantAssetPath(role, 'common', variant)"
                               class="roles-dialog__asset-thumb-button"
                               type="button"
-                              @click="openImagePreview(getImagePreviewTitle(role.name, variant, 'common'), getImportantAssetPath(role, 'common', variant))"
+                              @click="openImagePreview(getImagePreviewTitle(role.id, variant, 'common'), getImportantAssetPath(role, 'common', variant))"
                             >
                               <img
                                 class="roles-dialog__asset-thumb"

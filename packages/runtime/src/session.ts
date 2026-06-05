@@ -18,18 +18,18 @@ interface RuntimeStoryDialogueDefinition {
 }
 
 interface RuntimeLocationAssignment {
-  name: string
+  id: string
   descr: string
 }
 
 interface RuntimeNormalRoleDefinition {
-  name: string
+  id: string
   mingzi?: string
   descr: string
 }
 
 interface RuntimeImportantRoleDefinition {
-  name: string
+  id: string
   mingzi?: string
   descr: string
 }
@@ -1556,36 +1556,36 @@ function findRoleLabel(bundle: RuntimeStoryBundle, roleKey: string) {
     return "主角"
   }
 
-  const [scope, roleName] = roleKey.split(":")
-  if (!scope || !roleName) {
+  const [scope, roleId] = roleKey.split(":")
+  if (!scope || !roleId) {
     return roleKey
   }
 
   const roles = getBundleRoles(bundle)
   const role = scope === "important"
-    ? roles.important.find((item) => item.name === roleName)
-    : roles.normal.find((item) => item.name === roleName)
+    ? roles.important.find((item) => item.id === roleId)
+    : roles.normal.find((item) => item.id === roleId)
 
   if (!role) {
     return roleKey
   }
 
-  return normalizeText(role.mingzi).trim() || role.descr.trim() || role.name
+  return normalizeText(role.mingzi).trim() || role.descr.trim() || role.id
 }
 
-function findLocationLabel(bundle: RuntimeStoryBundle, locationName: string) {
-  const trimmedLocationName = normalizeText(locationName)
-  if (!trimmedLocationName) {
+function findLocationLabel(bundle: RuntimeStoryBundle, locationId: string) {
+  const trimmedLocationId = normalizeText(locationId)
+  if (!trimmedLocationId) {
     return null
   }
 
-  const location = getBundleLocations(bundle).find((item) => item.name.trim() === trimmedLocationName)
+  const location = getBundleLocations(bundle).find((item) => item.id.trim() === trimmedLocationId)
   if (!location) {
-    return trimmedLocationName
+    return trimmedLocationId
   }
 
   const descr = location.descr.trim()
-  return descr ? `${location.name} - ${descr}` : location.name
+  return descr ? `${location.id} - ${descr}` : location.id
 }
 
 function buildRuntimeContextValues(

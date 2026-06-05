@@ -64,7 +64,7 @@ export interface StoryRoleAiConfig {
 }
 
 export interface StoryNormalRoleDefinition {
-  name: string
+  id: string
   mingzi: string
   zhiye: string
   descr: string
@@ -75,7 +75,7 @@ export interface StoryNormalRoleDefinition {
 }
 
 export interface StoryImportantRoleDefinition {
-  name: string
+  id: string
   mingzi: string
   zhiye: string
   descr: string
@@ -121,7 +121,7 @@ export interface StoryEventLocationAiConfig {
 }
 
 export interface StoryEventLocationAssignment {
-  name: string
+  id: string
   descr: string
   prompt: string
   img_raw: string

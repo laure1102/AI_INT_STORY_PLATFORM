@@ -111,7 +111,7 @@ const isTriggerHelpOpen = shallowRef(false)
 const isInitScriptHelpOpen = shallowRef(false)
 const isEndScriptHelpOpen = shallowRef(false)
 const isQuickLocationDialogOpen = shallowRef(false)
-const pendingQuickLocationName = shallowRef<string | null>(null)
+const pendingQuickLocationId = shallowRef<string | null>(null)
 const isQuickRoleDialogOpen = shallowRef(false)
 const pendingQuickRoleKey = shallowRef<string | null>(null)
 const triggerAutocompleteState = reactive<ScriptAutocompleteState>({
@@ -207,10 +207,10 @@ const dialogueEditorState = reactive<{
 
 const locationOptions = computed(() => {
   return props.eventLocations.assignments.map((assignment) => ({
-    value: assignment.name,
+    value: assignment.id,
     label: assignment.descr.trim()
-      ? `${assignment.name} - ${assignment.descr.trim()}`
-      : assignment.name
+      ? `${assignment.id} - ${assignment.descr.trim()}`
+      : assignment.id
   }))
 })
 
@@ -226,19 +226,19 @@ const bgmOptions = computed(() => {
 
 const importantRoleOptions = computed<RoleOption[]>(() => {
   return props.roles.important.roles.map((role) => ({
-    key: buildStoryRoleKey("important", role.name),
+    key: buildStoryRoleKey("important", role.id),
     label: role.zhiye.trim()
-      ? `${role.mingzi?.trim() || role.name} - ${role.zhiye.trim()}`
-      : role.mingzi?.trim() || role.name
+      ? `${role.mingzi?.trim() || role.id} - ${role.zhiye.trim()}`
+      : role.mingzi?.trim() || role.id
   }))
 })
 
 const normalRoleOptions = computed<RoleOption[]>(() => {
   return props.roles.normal.roles.map((role) => ({
-    key: buildStoryRoleKey("normal", role.name),
+    key: buildStoryRoleKey("normal", role.id),
     label: role.zhiye.trim()
-      ? `${role.mingzi?.trim() || role.name} - ${role.zhiye.trim()}`
-      : role.mingzi?.trim() || role.name
+      ? `${role.mingzi?.trim() || role.id} - ${role.zhiye.trim()}`
+      : role.mingzi?.trim() || role.id
   }))
 })
 
@@ -1023,7 +1023,7 @@ function closeQuickLocationDialog() {
 }
 
 function submitQuickCreateLocation(payload: StoryQuickCreateLocationPayload) {
-  pendingQuickLocationName.value = payload.name
+  pendingQuickLocationId.value = payload.id
   emit("quickCreateLocation", payload)
 }
 
@@ -1081,13 +1081,13 @@ watch(
 watch(
   locationOptions,
   (options) => {
-    if (!pendingQuickLocationName.value) {
+    if (!pendingQuickLocationId.value) {
       return
     }
 
-    if (options.some((option) => option.value === pendingQuickLocationName.value)) {
-      draft.location = pendingQuickLocationName.value
-      pendingQuickLocationName.value = null
+    if (options.some((option) => option.value === pendingQuickLocationId.value)) {
+      draft.location = pendingQuickLocationId.value
+      pendingQuickLocationId.value = null
       isQuickLocationDialogOpen.value = false
     }
   },

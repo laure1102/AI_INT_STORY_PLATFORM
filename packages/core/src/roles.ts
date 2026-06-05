@@ -8,13 +8,13 @@ export type StoryRoleScope = "normal" | "important"
 
 export interface StoryRoleReference {
   key: string
-  name: string
+  id: string
   scope: StoryRoleScope
   zhiye: string
 }
 
-function normalizeRoleName(name: string) {
-  return name.trim()
+function normalizeRoleId(id: string) {
+  return id.trim()
 }
 
 function createStoryRoleReference(
@@ -22,19 +22,19 @@ function createStoryRoleReference(
   role: StoryNormalRoleDefinition | StoryImportantRoleDefinition
 ): StoryRoleReference {
   return {
-    key: buildStoryRoleKey(scope, role.name),
-    name: normalizeRoleName(role.name),
+    key: buildStoryRoleKey(scope, role.id),
+    id: normalizeRoleId(role.id),
     scope,
     zhiye: role.zhiye.trim()
   }
 }
 
-export function buildStoryRoleKey(scope: StoryRoleScope, name: string) {
-  return `${scope}:${normalizeRoleName(name)}`
+export function buildStoryRoleKey(scope: StoryRoleScope, id: string) {
+  return `${scope}:${normalizeRoleId(id)}`
 }
 
 export function parseStoryRoleKey(roleKey: string): {
-  name: string
+  id: string
   scope: StoryRoleScope
 } | null {
   const trimmedRoleKey = roleKey.trim()
@@ -45,14 +45,14 @@ export function parseStoryRoleKey(roleKey: string): {
   }
 
   const scope = trimmedRoleKey.slice(0, separatorIndex)
-  const name = normalizeRoleName(trimmedRoleKey.slice(separatorIndex + 1))
+  const id = normalizeRoleId(trimmedRoleKey.slice(separatorIndex + 1))
 
-  if ((scope !== "normal" && scope !== "important") || !name) {
+  if ((scope !== "normal" && scope !== "important") || !id) {
     return null
   }
 
   return {
-    name,
+    id,
     scope
   }
 }
@@ -80,7 +80,7 @@ export function findStoryRoleReference(
     const sourceRoles =
       parsedRoleKey.scope === "important" ? roles.important.roles : roles.normal.roles
     const matchedRole = sourceRoles.find(
-      (role) => normalizeRoleName(role.name) === parsedRoleKey.name
+      (role) => normalizeRoleId(role.id) === parsedRoleKey.id
     )
 
     return matchedRole
@@ -89,7 +89,7 @@ export function findStoryRoleReference(
   }
 
   const legacyMatches = listStoryRoleReferences(roles).filter(
-    (roleReference) => roleReference.name === trimmedRoleKey
+    (roleReference) => roleReference.id === trimmedRoleKey
   )
 
   return legacyMatches.length === 1 ? (legacyMatches[0] ?? null) : null
