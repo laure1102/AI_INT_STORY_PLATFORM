@@ -15,6 +15,7 @@ const emit = defineEmits<{
   close: []
   create: [payload: {
     descr: string
+    mingzi: string
     name: string
     qufenXingbie: boolean
     roleKey: string
@@ -27,6 +28,7 @@ const nameInputRef = useTemplateRef<HTMLInputElement>("nameInput")
 
 const draft = reactive({
   descr: "",
+  mingzi: "",
   name: "",
   qufenXingbie: false,
   scope: "normal" as StoryRoleScope,
@@ -75,6 +77,7 @@ function submit() {
 
   const payload = buildQuickCreateRolePayload({
     descr: draft.descr,
+    mingzi: draft.mingzi,
     name: draft.name,
     qufenXingbie: draft.qufenXingbie,
     scope: draft.scope,
@@ -136,6 +139,16 @@ function submit() {
           <span v-if="nameError" class="quick-role-dialog__error">
             {{ nameError }}
           </span>
+        </label>
+
+        <label class="quick-role-dialog__field">
+          <span class="quick-role-dialog__label">名字</span>
+          <input
+            v-model="draft.mingzi"
+            class="text-input"
+            type="text"
+            placeholder="老孙"
+          />
         </label>
 
         <label class="quick-role-dialog__field">

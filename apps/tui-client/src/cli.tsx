@@ -58,7 +58,7 @@ interface AsyncTaskState {
 }
 
 interface GameUiState {
-  overlay: "notifications" | "globalVals" | null
+  overlay: "notifications" | "globalVals" | "scheduler" | null
   overlayOffset: number
   interactionActiveIndex: number
   interactionInputDraft: string
@@ -437,6 +437,19 @@ function findLatestNotification(notifications: string[]) {
     : ""
 }
 
+function formatGameMinuteLabel(gameMinute: number | null | undefined) {
+  if (typeof gameMinute !== "number" || !Number.isFinite(gameMinute) || gameMinute < 0) {
+    return "未定"
+  }
+
+  const safeMinute = Math.trunc(gameMinute)
+  const dayNumber = Math.floor(safeMinute / (24 * 60)) + 1
+  const minuteOfDay = safeMinute % (24 * 60)
+  const hour = Math.floor(minuteOfDay / 60)
+  const minute = minuteOfDay % 60
+  return `第${dayNumber}天 ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+}
+
 function buildGlobalValueLines(state: TuiClientAppState) {
   const snapshot = state.session?.getSnapshot()
   if (!snapshot) {
@@ -456,6 +469,202 @@ function buildGlobalValueLines(state: TuiClientAppState) {
       return `${token}: ${displayValue}`
     })
   })
+}
+
+function buildSchedulerDebugLines(state: TuiClientAppState) {
+  const snapshot = state.session?.getSnapshot()
+  if (!snapshot) {
+    return []
+  }
+
+  const lines: string[] = []
+  const scheduler = snapshot.scheduler
+
+  lines.push("--- 当前运行 ---")
+  lines.push(
+    scheduler.active
+      ? `${scheduler.active.source_type}/${scheduler.active.source_id} -> ${scheduler.active.entry_event_id}`
+      : "无"
+  )
+  lines.push(
+    scheduler.active
+      ? `触发时间: ${formatGameMinuteLabel(scheduler.active.due_game_minute)} [${scheduler.active.status}]`
+      : "触发时间: 无"
+  )
+
+  lines.push("--- 调度摘要 ---")
+  lines.push(`暂停: manual=${scheduler.manual_pause ? "Y" : "N"} event=${scheduler.event_pause ? "Y" : "N"}`)
+  lines.push(`就绪队列: ${scheduler.ready_queue.length}`)
+  lines.push(`未来调度: ${scheduler.scheduled.length}`)
+  lines.push(`已消费根事件: ${scheduler.consumed_graph_root_ids.length}`)
+  lines.push(`已消费大事件: ${scheduler.consumed_big_once_ids.length}`)
+  lines.push(`循环状态: ${scheduler.loop_states.length}`)
+
+  if (scheduler.ready_queue.length > 0) {
+    lines.push("--- 就绪队列 ---")
+    for (const item of scheduler.ready_queue) {
+      lines.push(
+        `${item.source_type}/${item.source_id} -> ${item.entry_event_id} · ${formatGameMinuteLabel(item.due_game_minute)} [${item.status}]`
+      )
+    }
+  }
+
+  if (scheduler.scheduled.length > 0) {
+    lines.push("--- 未来调度 ---")
+    for (const item of scheduler.scheduled) {
+      lines.push(
+        `${item.source_type}/${item.source_id} -> ${item.entry_event_id} · ${formatGameMinuteLabel(item.due_game_minute)} [${item.status}]`
+      )
+    }
+  }
+
+  if (scheduler.loop_states.length > 0) {
+    lines.push("--- 循环状态 ---")
+    for (const item of scheduler.loop_states) {
+      lines.push(
+        `${item.event_id}: next=${formatGameMinuteLabel(item.next_due_game_minute)} last=${formatGameMinuteLabel(item.last_triggered_game_minute)} count=${item.trigger_count}`
+      )
+    }
+  }
+
+  return lines
+}
+
+function formatSchedulerGameMinuteLabel(
+  gameMinute: number | null | undefined,
+  baseDay: number
+) {
+  if (typeof gameMinute !== "number" || !Number.isFinite(gameMinute) || gameMinute < 0) {
+    return "未定"
+  }
+
+  const safeMinute = Math.trunc(gameMinute)
+  const normalizedBaseDay = Number.isFinite(baseDay) ? Math.max(1, Math.trunc(baseDay)) : 1
+  const dayNumber = Math.floor(safeMinute / (24 * 60)) + normalizedBaseDay
+  const minuteOfDay = safeMinute % (24 * 60)
+  const hour = Math.floor(minuteOfDay / 60)
+  const minute = minuteOfDay % 60
+  return `第${dayNumber}天 ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+}
+
+function formatSchedulerSourceLabel(sourceType: string, sourceId: string, entryEventId: string) {
+  if (entryEventId && entryEventId !== sourceId) {
+    return `${sourceType}/${sourceId} -> ${entryEventId}`
+  }
+
+  return `${sourceType}/${sourceId}`
+}
+
+function formatSchedulerAuditKindLabel(kind: string) {
+  switch (kind) {
+    case "schedule-future":
+      return "未来排期"
+    case "queue-ready":
+      return "进入就绪"
+    case "promote-due":
+      return "到时晋升"
+    case "start-event":
+      return "开始执行"
+    case "skip-event":
+      return "跳过事件"
+    case "complete-event":
+      return "执行完成"
+    case "loop-reschedule":
+      return "循环重排"
+    default:
+      return kind
+  }
+}
+
+function buildSchedulerMonitorLines(state: TuiClientAppState) {
+  const snapshot = state.session?.getSnapshot()
+  if (!snapshot) {
+    return []
+  }
+
+  const lines: string[] = []
+  const scheduler = snapshot.scheduler
+  const baseDay = snapshot.clock.base_day
+  const pauseFlags = [
+    scheduler.manual_pause ? "手动暂停" : "",
+    scheduler.event_pause ? "事件暂停" : ""
+  ].filter(Boolean)
+  const auditLogs = scheduler.audit_logs.slice().reverse()
+
+  lines.push("[当前执行]")
+  if (scheduler.active) {
+    lines.push(
+      `${formatSchedulerSourceLabel(
+        scheduler.active.source_type,
+        scheduler.active.source_id,
+        scheduler.active.entry_event_id
+      )} · ${scheduler.active.status}`
+    )
+    lines.push(`到期 ${formatSchedulerGameMinuteLabel(scheduler.active.due_game_minute, baseDay)}`)
+  } else {
+    lines.push("当前没有正在执行的调度事件")
+  }
+
+  lines.push("")
+  lines.push("[队列概览]")
+  lines.push(
+    `就绪 ${scheduler.ready_queue.length} · 未来 ${scheduler.scheduled.length} · 循环 ${scheduler.loop_states.length} · 审计 ${scheduler.audit_logs.length}`
+  )
+  lines.push(`暂停状态 ${pauseFlags.length > 0 ? pauseFlags.join(" + ") : "无"}`)
+  lines.push(`已消费 根事件 ${scheduler.consumed_graph_root_ids.length} · 大事件 ${scheduler.consumed_big_once_ids.length}`)
+
+  lines.push("")
+  lines.push("[就绪队列]")
+  if (scheduler.ready_queue.length === 0) {
+    lines.push("空")
+  } else {
+    for (const item of scheduler.ready_queue) {
+      lines.push(
+        `${formatSchedulerSourceLabel(item.source_type, item.source_id, item.entry_event_id)} · ${formatSchedulerGameMinuteLabel(item.due_game_minute, baseDay)}`
+      )
+    }
+  }
+
+  lines.push("")
+  lines.push("[未来调度]")
+  if (scheduler.scheduled.length === 0) {
+    lines.push("空")
+  } else {
+    for (const item of scheduler.scheduled) {
+      lines.push(
+        `${formatSchedulerSourceLabel(item.source_type, item.source_id, item.entry_event_id)} · ${formatSchedulerGameMinuteLabel(item.due_game_minute, baseDay)}`
+      )
+    }
+  }
+
+  lines.push("")
+  lines.push("[循环状态]")
+  if (scheduler.loop_states.length === 0) {
+    lines.push("空")
+  } else {
+    for (const item of scheduler.loop_states) {
+      lines.push(
+        `${item.event_id} · next ${formatSchedulerGameMinuteLabel(item.next_due_game_minute, baseDay)} · last ${formatSchedulerGameMinuteLabel(item.last_triggered_game_minute, baseDay)} · x${item.trigger_count}`
+      )
+    }
+  }
+
+  lines.push("")
+  lines.push("[最近审计]")
+  if (auditLogs.length === 0) {
+    lines.push("暂无调度审计日志")
+  } else {
+    for (const item of auditLogs) {
+      const sourceLabel = item.source_type && item.source_id
+        ? ` · ${formatSchedulerSourceLabel(item.source_type, item.source_id, item.entry_event_id ?? "")}`
+        : ""
+      lines.push(
+        `${formatSchedulerGameMinuteLabel(item.game_minute, baseDay)} · ${formatSchedulerAuditKindLabel(item.kind)}${sourceLabel} · ${item.message}`
+      )
+    }
+  }
+
+  return lines
 }
 
 function findTimePause(state: TuiClientAppState) {
@@ -1162,16 +1371,24 @@ function GameScreen({
 
   const interactionOptions = createInteractionOptions(view)
   const mergedNotifications = [...state.notifications, ...view.notifications]
-  const footerHint = "h 主界面  t 设置  空格 暂停/继续  l 消息流  i 全局变量"
+  const footerHint = "h 主界面  t 设置  空格 暂停/继续  l 消息流  i 全局变量  e 调度器"
   const overlayLines = uiState.overlay === "notifications"
     ? mergedNotifications.slice().reverse()
     : uiState.overlay === "globalVals"
       ? buildGlobalValueLines(state)
+      : uiState.overlay === "scheduler"
+        ? buildSchedulerMonitorLines(state)
       : []
-  const overlayTitle = uiState.overlay === "notifications" ? "消息流" : "全局变量"
+  const overlayTitle = uiState.overlay === "notifications"
+    ? "消息流"
+    : uiState.overlay === "globalVals"
+      ? "全局变量"
+      : "调度器"
   const overlayBadge = uiState.overlay === "notifications"
     ? `${mergedNotifications.length} 条`
-    : `${overlayLines.length} 项`
+    : uiState.overlay === "scheduler"
+      ? "调试"
+      : `${overlayLines.length} 项`
 
   return (
     <Box flexDirection="column" width={78}>
@@ -1427,6 +1644,15 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
         return
       }
 
+      if (lowerInput === "e" && gameUiState.overlay === "scheduler") {
+        setGameUiState((currentState) => ({
+          ...currentState,
+          overlay: null,
+          overlayOffset: 0
+        }))
+        return
+      }
+
       if (key.upArrow || lowerInput === "k") {
         setGameUiState((currentState) => ({
           ...currentState,
@@ -1463,6 +1689,15 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
       setGameUiState((currentState) => ({
         ...currentState,
         overlay: currentState.overlay === "globalVals" ? null : "globalVals",
+        overlayOffset: 0
+      }))
+      return
+    }
+
+    if (lowerInput === "e") {
+      setGameUiState((currentState) => ({
+        ...currentState,
+        overlay: currentState.overlay === "scheduler" ? null : "scheduler",
         overlayOffset: 0
       }))
       return

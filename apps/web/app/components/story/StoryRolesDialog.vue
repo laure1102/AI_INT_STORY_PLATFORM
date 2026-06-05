@@ -24,6 +24,7 @@ interface NormalRoleDraft {
   img_compress_1: string
   img_compress_2: string
   img_raw: string
+  mingzi: string
   name: string
   prompt: string
   selected: boolean
@@ -44,6 +45,7 @@ interface ImportantRoleDraft {
   img_male_compress_2: string
   img_male_raw: string
   img_raw: string
+  mingzi: string
   name: string
   prompt: string
   prompt_female: string
@@ -272,6 +274,7 @@ function cloneNormalRole(role: StoryNormalRoleDefinition): NormalRoleDraft {
     img_compress_1: normalizeText(role.img_compress_1),
     img_compress_2: normalizeText(role.img_compress_2),
     img_raw: normalizeText(role.img_raw),
+    mingzi: normalizeText(role.mingzi),
     name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
     selected: false,
@@ -297,6 +300,7 @@ function cloneImportantRole(role: StoryImportantRoleDefinition): ImportantRoleDr
     img_male_compress_2: normalizeText(role.img_male_compress_2),
     img_male_raw: normalizeText(role.img_male_raw),
     img_raw: normalizeText(role.img_raw),
+    mingzi: normalizeText(role.mingzi),
     name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
     prompt_female: normalizeText(role.prompt_female),
@@ -632,6 +636,10 @@ function getNextDefaultName(target: RolesTab) {
   return candidate
 }
 
+function getRoleDisplayName(role: { mingzi?: string; name: string }) {
+  return normalizeText(role.mingzi).trim() || normalizeText(role.name).trim() || "角色"
+}
+
 function addNormalRole() {
   const role: NormalRoleDraft = {
     descr: "",
@@ -639,6 +647,7 @@ function addNormalRole() {
     img_compress_1: "",
     img_compress_2: "",
     img_raw: "",
+    mingzi: "",
     name: getNextDefaultName("normal"),
     prompt: "",
     selected: false,
@@ -664,6 +673,7 @@ function addImportantRole() {
     img_male_compress_2: "",
     img_male_raw: "",
     img_raw: "",
+    mingzi: "",
     name: getNextDefaultName("important"),
     prompt: "",
     prompt_female: "",
@@ -1309,6 +1319,7 @@ function submitDraft() {
           img_male_compress_2: isSplitByGender ? role.img_male_compress_2.trim() : "",
           img_male_raw: isSplitByGender ? role.img_male_raw.trim() : "",
           img_raw: isSplitByGender ? "" : role.img_raw.trim(),
+          mingzi: role.mingzi.trim(),
           name: sanitizeNameInput(role.name),
           prompt: isSplitByGender ? "" : role.prompt.trim(),
           prompt_female: isSplitByGender ? role.prompt_female.trim() : "",
@@ -1332,6 +1343,7 @@ function submitDraft() {
         img_compress_1: role.img_compress_1.trim(),
         img_compress_2: role.img_compress_2.trim(),
         img_raw: role.img_raw.trim(),
+        mingzi: role.mingzi.trim(),
         name: sanitizeNameInput(role.name),
         prompt: role.prompt.trim(),
         zhiye: role.zhiye.trim()
@@ -1525,6 +1537,7 @@ watch(
                   <tr>
                     <th class="roles-dialog__select-col">选择</th>
                     <th>名称</th>
+                    <th>名字</th>
                     <th>职业</th>
                     <th>描述</th>
                     <th>提示词</th>
@@ -1540,6 +1553,9 @@ watch(
                     </td>
                     <td>
                       <input v-model="role.name" class="text-input roles-dialog__cell-input" type="text" placeholder="villager_old_man" />
+                    </td>
+                    <td>
+                      <input v-model="role.mingzi" class="text-input roles-dialog__cell-input" type="text" placeholder="老孙" />
                     </td>
                     <td>
                       <input v-model="role.zhiye" class="text-input roles-dialog__cell-input" type="text" placeholder="算命先生" />
@@ -1576,7 +1592,7 @@ watch(
                             <img
                               class="roles-dialog__asset-thumb"
                               :src="getNormalAssetUrl(role, variant)"
-                              :alt="`${role.name || '角色'} ${getImageVariantLabel(variant)} 缩略图`"
+                              :alt="`${getRoleDisplayName(role)} ${getImageVariantLabel(variant)} 缩略图`"
                               loading="lazy"
                             />
                           </button>
@@ -1684,6 +1700,7 @@ watch(
                   <tr>
                     <th class="roles-dialog__select-col">选择</th>
                     <th>名称</th>
+                    <th>名字</th>
                     <th>职业</th>
                     <th>描述</th>
                     <th>性格</th>
@@ -1701,6 +1718,9 @@ watch(
                     </td>
                     <td>
                       <input v-model="role.name" class="text-input roles-dialog__cell-input" type="text" placeholder="suanming_xiansheng" />
+                    </td>
+                    <td>
+                      <input v-model="role.mingzi" class="text-input roles-dialog__cell-input" type="text" placeholder="李助理" />
                     </td>
                     <td>
                       <input v-model="role.zhiye" class="text-input roles-dialog__cell-input" type="text" placeholder="县长" />
@@ -1791,7 +1811,7 @@ watch(
                                 <img
                                   class="roles-dialog__asset-thumb"
                                   :src="getImportantAssetUrl(role, 'male', variant)"
-                                  :alt="`${role.name || '角色'} 男图 ${getImageVariantLabel(variant)} 缩略图`"
+                                  :alt="`${getRoleDisplayName(role)} 男图 ${getImageVariantLabel(variant)} 缩略图`"
                                   loading="lazy"
                                 />
                               </button>
@@ -1824,7 +1844,7 @@ watch(
                                 <img
                                   class="roles-dialog__asset-thumb"
                                   :src="getImportantAssetUrl(role, 'female', variant)"
-                                  :alt="`${role.name || '角色'} 女图 ${getImageVariantLabel(variant)} 缩略图`"
+                                  :alt="`${getRoleDisplayName(role)} 女图 ${getImageVariantLabel(variant)} 缩略图`"
                                   loading="lazy"
                                 />
                               </button>
@@ -1858,7 +1878,7 @@ watch(
                               <img
                                 class="roles-dialog__asset-thumb"
                                 :src="getImportantAssetUrl(role, 'common', variant)"
-                                :alt="`${role.name || '角色'} 通用图 ${getImageVariantLabel(variant)} 缩略图`"
+                                :alt="`${getRoleDisplayName(role)} 通用图 ${getImageVariantLabel(variant)} 缩略图`"
                                 loading="lazy"
                               />
                             </button>

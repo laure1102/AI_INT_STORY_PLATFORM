@@ -77,6 +77,7 @@ export const storyRoleAiConfigSchema = z.object({
 
 export const storyNormalRoleSchema = z.object({
   name: z.string().min(1),
+  mingzi: z.string().default(""),
   zhiye: z.string().default(""),
   descr: z.string().default(""),
   prompt: z.string().default(""),
@@ -87,6 +88,7 @@ export const storyNormalRoleSchema = z.object({
 
 export const storyImportantRoleSchema = z.object({
   name: z.string().min(1),
+  mingzi: z.string().default(""),
   zhiye: z.string().default(""),
   descr: z.string().default(""),
   descr_male: z.string().default(""),

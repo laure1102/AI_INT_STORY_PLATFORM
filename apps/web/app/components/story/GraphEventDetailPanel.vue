@@ -203,14 +203,18 @@ const locationOptions = computed(() => {
 const importantRoleOptions = computed<RoleOption[]>(() => {
   return props.roles.important.roles.map((role) => ({
     key: buildStoryRoleKey("important", role.name),
-    label: role.zhiye.trim() ? `${role.name} - ${role.zhiye.trim()}` : role.name
+    label: role.zhiye.trim()
+      ? `${role.mingzi?.trim() || role.name} - ${role.zhiye.trim()}`
+      : role.mingzi?.trim() || role.name
   }))
 })
 
 const normalRoleOptions = computed<RoleOption[]>(() => {
   return props.roles.normal.roles.map((role) => ({
     key: buildStoryRoleKey("normal", role.name),
-    label: role.zhiye.trim() ? `${role.name} - ${role.zhiye.trim()}` : role.name
+    label: role.zhiye.trim()
+      ? `${role.mingzi?.trim() || role.name} - ${role.zhiye.trim()}`
+      : role.mingzi?.trim() || role.name
   }))
 })
 

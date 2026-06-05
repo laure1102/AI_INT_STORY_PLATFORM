@@ -8,6 +8,7 @@ import {
 
 export interface StoryQuickCreateRolePayload {
   descr: string
+  mingzi: string
   name: string
   qufenXingbie: boolean
   roleKey: string
@@ -43,6 +44,7 @@ function createNormalQuickRole(payload: StoryQuickCreateRolePayload): StoryNorma
     img_compress_1: "",
     img_compress_2: "",
     img_raw: "",
+    mingzi: payload.mingzi.trim(),
     name: payload.name,
     prompt: "",
     zhiye: payload.zhiye.trim()
@@ -63,6 +65,7 @@ function createImportantQuickRole(payload: StoryQuickCreateRolePayload): StoryIm
     img_male_compress_2: "",
     img_male_raw: "",
     img_raw: "",
+    mingzi: payload.mingzi.trim(),
     name: payload.name,
     prompt: "",
     prompt_female: "",
@@ -100,6 +103,7 @@ export function appendQuickRoleToRoles(
 
 export function buildQuickCreateRolePayload(input: {
   descr: string
+  mingzi: string
   name: string
   qufenXingbie: boolean
   scope: StoryRoleScope
@@ -113,6 +117,7 @@ export function buildQuickCreateRolePayload(input: {
 
   return {
     descr: input.descr.trim(),
+    mingzi: input.mingzi.trim(),
     name: sanitizedName,
     qufenXingbie: input.scope === "important" ? input.qufenXingbie : false,
     roleKey: buildStoryRoleKey(input.scope, sanitizedName),

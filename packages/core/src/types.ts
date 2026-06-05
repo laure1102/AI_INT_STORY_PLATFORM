@@ -65,6 +65,7 @@ export interface StoryRoleAiConfig {
 
 export interface StoryNormalRoleDefinition {
   name: string
+  mingzi: string
   zhiye: string
   descr: string
   prompt: string
@@ -75,6 +76,7 @@ export interface StoryNormalRoleDefinition {
 
 export interface StoryImportantRoleDefinition {
   name: string
+  mingzi: string
   zhiye: string
   descr: string
   descr_male: string

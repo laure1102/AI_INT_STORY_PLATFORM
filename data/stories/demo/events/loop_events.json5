@@ -2,7 +2,7 @@
   {
     bgm: '',
     dialogues: [],
-    end_script: '',
+    end_script: '{player.money} += {player.day_give_money}',
     id: 'daily_money',
     init_script: '',
     location: '',

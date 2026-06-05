@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/cli.tsx",
+    "regression:loop": "tsx src/runtime-loop-regression.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
