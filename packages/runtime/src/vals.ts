@@ -26,6 +26,7 @@ export interface StoryScriptExecutionResult {
   vals: StoryValsFile
   locals: Record<string, unknown>
   externalValues: Record<string, unknown>
+  invocations: StoryScriptInvocation[]
 }
 
 export interface StoryScriptValidationIssue {
@@ -41,6 +42,11 @@ export interface StoryScriptExecutionContext extends StoryExpressionContext {
   assignableValues?: Record<string, unknown>
 }
 
+export interface StoryScriptInvocation {
+  eventId: string
+  args: Record<string, unknown>
+}
+
 interface StoryValueEntryReference {
   group: StoryValDefinition
   row: StoryValEntryDefinition
@@ -53,12 +59,26 @@ interface StoryCalcEntryReference extends StoryValueEntryReference {
   referenceKey: string
 }
 
-interface StoryScriptStatement {
+interface StoryScriptAssignStatement {
   kind: "declareLocal" | "assignLocal" | "assignGlobal"
   lineNumber: number
   target: string
   expression: string
 }
+
+interface StoryScriptInvokeArgument {
+  name: string
+  expression: string
+}
+
+interface StoryScriptInvokeStatement {
+  kind: "invokeOnce"
+  lineNumber: number
+  eventId: string
+  args: StoryScriptInvokeArgument[]
+}
+
+type StoryScriptStatement = StoryScriptAssignStatement | StoryScriptInvokeStatement
 
 type StoryScriptCompoundAssignmentOperator = "+=" | "-=" | "*=" | "/=" | "%="
 
@@ -812,6 +832,50 @@ function createStoryScriptCompoundAssignmentExpression(
   return `${targetReference} ${binaryOperator} (${expression.trim()})`
 }
 
+function parseStoryScriptInvokeArguments(source: string, lineNumber: number) {
+  const trimmedSource = normalizeText(source).trim()
+  if (!trimmedSource) {
+    return []
+  }
+
+  const args: StoryScriptInvokeArgument[] = []
+  const parts = trimmedSource.split(/\s+/).filter(Boolean)
+
+  for (const part of parts) {
+    const separatorIndex = part.indexOf("=")
+    if (separatorIndex <= 0 || separatorIndex >= part.length - 1) {
+      throw new StoryScriptError(
+        lineNumber,
+        `Invalid invoke_once argument "${part}". Use name=expression.`
+      )
+    }
+
+    const name = part.slice(0, separatorIndex).trim()
+    const expression = part.slice(separatorIndex + 1).trim()
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      throw new StoryScriptError(
+        lineNumber,
+        `Invalid invoke_once argument name "${name}".`
+      )
+    }
+
+    if (!expression) {
+      throw new StoryScriptError(
+        lineNumber,
+        `invoke_once argument "${name}" is missing its expression.`
+      )
+    }
+
+    args.push({
+      name,
+      expression
+    })
+  }
+
+  return args
+}
+
 function parseStoryScript(script: string) {
   const statements: StoryScriptStatement[] = []
   const lines = normalizeText(script).split(/\r?\n/)
@@ -832,6 +896,23 @@ function parseStoryScript(script: string) {
     }
 
     const lineNumber = lineIndex + 1
+    const invokeMatch = line.match(/^invoke_once\s+([A-Za-z0-9_\-:.]+)(?:\s+(.+))?$/)
+    if (invokeMatch) {
+      const eventId = (invokeMatch[1] ?? "").trim()
+
+      if (!eventId) {
+        throw new StoryScriptError(lineNumber, "invoke_once requires an event id.")
+      }
+
+      statements.push({
+        kind: "invokeOnce",
+        lineNumber,
+        eventId,
+        args: parseStoryScriptInvokeArguments(invokeMatch[2] ?? "", lineNumber)
+      })
+      continue
+    }
+
     const declareMatch = line.match(/^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/)
     if (declareMatch) {
       const identifier = declareMatch[1] ?? ""
@@ -977,6 +1058,7 @@ export function executeStoryScript(
 ): StoryScriptExecutionResult {
   const nextVals = cloneStoryValsFile(valsFile)
   const locals: Record<string, unknown> = {}
+  const invocations: StoryScriptInvocation[] = []
   const executionContext: StoryScriptExecutionContext = {
     values: { ...(context?.values ?? {}) },
     assignableValues: { ...(context?.assignableValues ?? {}) }
@@ -984,6 +1066,27 @@ export function executeStoryScript(
 
   for (const statement of parseStoryScript(script)) {
     try {
+      if (statement.kind === "invokeOnce") {
+        const args = Object.fromEntries(
+          statement.args.map((arg) => [
+            arg.name,
+            evaluateStoryScriptExpression(
+              nextVals,
+              arg.expression,
+              locals,
+              maxDepth,
+              executionContext
+            ).result
+          ])
+        )
+
+        invocations.push({
+          eventId: statement.eventId,
+          args
+        })
+        continue
+      }
+
       if (statement.kind === "declareLocal") {
         assertScriptLocalIdentifier(statement.target)
 
@@ -1042,7 +1145,8 @@ export function executeStoryScript(
   return {
     vals: nextVals,
     locals: { ...locals },
-    externalValues: { ...(executionContext.assignableValues ?? {}) }
+    externalValues: { ...(executionContext.assignableValues ?? {}) },
+    invocations
   }
 }
 

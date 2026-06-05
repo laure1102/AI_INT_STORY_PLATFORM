@@ -21,13 +21,20 @@
     end_script: '{county.level} = 1',
     id: 'test1',
     init_script: 'let money = {county.renkou} * 100\nmoney = money * 2',
+    invoke_params: [
+      {
+        descr: '0-100',
+        name: 'mama',
+      },
+    ],
     location: '',
     object_keys: [
       'important:zhuli',
       'normal:start_suanming',
       'important:xianzhang',
     ],
-    title: '测试大事件',
-    trigger_expr: '1==1',
+    title: '和助理闲聊',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
   },
 ]

@@ -313,6 +313,11 @@ export const storyOnceDialogueSchema = z.object({
   content: z.string().default("")
 })
 
+export const storyOnceInvokeParamSchema = z.object({
+  name: z.string().min(1),
+  descr: z.string().optional()
+})
+
 export const storyEventSchema = z.object({
   node_type: z.literal("event").optional(),
   id: z.string().min(1),
@@ -355,7 +360,9 @@ export const storyGraphEventsSchema = z.array(storyGraphNodeSchema).default([])
 export const storyOnceEventSchema = storyEventSchema.extend({
   id: z.string().min(1),
   title: z.string().min(1),
+  trigger_mode: z.enum(["condition", "invoke"]).default("condition"),
   trigger_expr: z.string().default(""),
+  invoke_params: z.array(storyOnceInvokeParamSchema).default([]),
   init_script: z.string().default(""),
   object_keys: z.array(z.string()).default([]),
   dialogues: z.array(storyOnceDialogueSchema).default([]),
@@ -364,6 +371,25 @@ export const storyOnceEventSchema = storyEventSchema.extend({
   end_script: z.string().default("")
 }).omit({
   next: true
+}).superRefine((event, context) => {
+  const normalizedNames = new Set<string>()
+  for (const [index, param] of event.invoke_params.entries()) {
+    const trimmedName = param.name.trim()
+    if (!trimmedName) {
+      continue
+    }
+
+    if (normalizedNames.has(trimmedName)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate invoke param name "${trimmedName}".`,
+        path: ["invoke_params", index, "name"]
+      })
+      continue
+    }
+
+    normalizedNames.add(trimmedName)
+  }
 })
 
 export const storyOnceEventsSchema = z.array(storyOnceEventSchema).default([])
@@ -375,7 +401,17 @@ export const storyLoopRuleSchema = z.object({
   month_day: z.number().int().min(1).max(31).optional()
 })
 
-export const storyLoopEventSchema = storyOnceEventSchema.extend({
+export const storyLoopEventSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  trigger_mode: z.literal("condition").default("condition"),
+  trigger_expr: z.string().default(""),
+  init_script: z.string().default(""),
+  object_keys: z.array(z.string()).default([]),
+  dialogues: z.array(storyOnceDialogueSchema).default([]),
+  location: z.string().default(""),
+  bgm: z.string().default(""),
+  end_script: z.string().default(""),
   loop: storyLoopRuleSchema
 })
 

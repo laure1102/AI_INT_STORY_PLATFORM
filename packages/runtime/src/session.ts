@@ -3,7 +3,7 @@ import {
   executeStoryScript,
   renderStoryTextTemplate
 } from "./vals"
-import type { StoryScriptExecutionContext } from "./vals"
+import type { StoryScriptExecutionContext, StoryScriptInvocation } from "./vals"
 import type {
   StoryPlayerOverrideValsFile,
   StoryValDefinition,
@@ -64,7 +64,13 @@ interface CompiledAction {
 
 interface RuntimeStandaloneEvent extends CompiledEvent {
   runtime_source_type: "once" | "loop"
+  trigger_mode?: "condition" | "invoke"
+  invoke_params?: Array<{
+    name: string
+    descr?: string
+  }>
   bgm: string
+  call_values: Record<string, unknown>
   next: []
 }
 
@@ -143,6 +149,7 @@ export interface RuntimeScheduledEvent {
   due_game_minute: number
   seq: number
   dedupe_key: string
+  call_values: Record<string, unknown>
   trigger_locked: boolean
   status: RuntimeSchedulerEventStatus
 }
@@ -287,6 +294,7 @@ export type RuntimeStorySessionAction =
   | { type: "continue" }
   | { type: "select-option"; optionId: string }
   | { type: "submit-text"; field: string; value: string }
+  | { type: "invoke-once"; eventId: string; args?: Record<string, unknown> }
   | { type: "open-debug" }
   | { type: "close-debug" }
 
@@ -299,6 +307,7 @@ export interface CreateStorySessionOptions {
 
 export interface RuntimeStorySession {
   dispatch(action: RuntimeStorySessionAction): void
+  invokeOnceEvent(eventId: string, args?: Record<string, unknown>): boolean
   tick(deltaMs: number): void
   setTimePause(paused: boolean): void
   setTimeSpeed(speed: number): void
@@ -682,6 +691,9 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
           due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
           seq: Math.max(1, clampInteger(item.seq, 1)),
           dedupe_key: normalizeSchedulerDedupeKey(item.dedupe_key, sourceType),
+          call_values: item.call_values && typeof item.call_values === "object"
+            ? cloneValue(item.call_values as Record<string, unknown>)
+            : {},
           trigger_locked: Boolean(item.trigger_locked),
           status: item.status
         }
@@ -699,6 +711,9 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
           due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
           seq: Math.max(1, clampInteger(item.seq, 1)),
           dedupe_key: normalizeSchedulerDedupeKey(item.dedupe_key, sourceType),
+          call_values: item.call_values && typeof item.call_values === "object"
+            ? cloneValue(item.call_values as Record<string, unknown>)
+            : {},
           trigger_locked: Boolean(item.trigger_locked),
           status: item.status
         }
@@ -716,6 +731,9 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
           due_game_minute: Math.max(0, clampInteger(scheduler.active.due_game_minute, 0)),
           seq: Math.max(1, clampInteger(scheduler.active.seq, 1)),
           dedupe_key: normalizeSchedulerDedupeKey(scheduler.active.dedupe_key, sourceType),
+          call_values: scheduler.active.call_values && typeof scheduler.active.call_values === "object"
+            ? cloneValue(scheduler.active.call_values as Record<string, unknown>)
+            : {},
           trigger_locked: Boolean(scheduler.active.trigger_locked),
           status: scheduler.active.status
         }
@@ -1131,7 +1149,8 @@ function createScheduledEvent(
   entryEventId: string,
   dueGameMinute: number,
   dedupeKey: string,
-  triggerLocked = false
+  triggerLocked = false,
+  callValues: Record<string, unknown> = {}
 ): RuntimeScheduledEvent {
   normalizeSchedulerState(snapshot)
   const seq = snapshot.scheduler.next_seq
@@ -1146,6 +1165,7 @@ function createScheduledEvent(
     seq,
     dedupe_key: normalizeText(dedupeKey),
     trigger_locked: triggerLocked,
+    call_values: cloneValue(callValues),
     status: "ready"
   }
 }
@@ -1365,6 +1385,10 @@ function scanOnceEvents(
   const onceEvents = getBundleOnceEvents(bundle)
 
   for (const event of onceEvents) {
+    if ((event.trigger_mode ?? "condition") !== "condition") {
+      continue
+    }
+
     const dedupeKey = `once:${event.id}`
     if (runtimeState.snapshot.scheduler.consumed_once_ids.includes(event.id)) {
       continue
@@ -1404,7 +1428,12 @@ function getBundleOnceEvents(bundle: RuntimeStoryBundle) {
   return onceEventsSource as Array<{
     id: string
     title: string
+    trigger_mode?: "condition" | "invoke"
     trigger_expr: string
+    invoke_params?: Array<{
+      name: string
+      descr?: string
+    }>
     init_script: string
     object_keys: string[]
     dialogues: RuntimeStoryDialogueDefinition[]
@@ -1499,7 +1528,11 @@ function startNextReadyEventIfIdle(
         due_game_minute: nextScheduledEvent.due_game_minute,
         message: "开始执行事件"
       })
-      runtimeState.activeStandaloneEvent = createStandaloneEvent("once", event)
+      runtimeState.activeStandaloneEvent = createStandaloneEvent(
+        "once",
+        event,
+        nextScheduledEvent.call_values
+      )
       runtimeState.snapshot.current_event_id = event.id
       runtimeState.currentEventEntered = false
       runtimeState.currentDialogueIndex = 0
@@ -1612,13 +1645,19 @@ function createStandaloneEvent(
     id: string
     title: string
     trigger_expr: string
+    trigger_mode?: "condition" | "invoke"
+    invoke_params?: Array<{
+      name: string
+      descr?: string
+    }>
     init_script: string
     end_script: string
     object_keys: string[]
     dialogues: RuntimeStoryDialogueDefinition[]
     location: string
     bgm: string
-  }
+  },
+  callValues: Record<string, unknown> = {}
 ): RuntimeStandaloneEvent {
   return {
     runtime_source_type: sourceType,
@@ -1626,12 +1665,15 @@ function createStandaloneEvent(
     id: event.id,
     title: event.title,
     trigger_expr: event.trigger_expr,
+    trigger_mode: event.trigger_mode,
+    invoke_params: cloneValue(event.invoke_params ?? []),
     init_script: event.init_script,
     end_script: event.end_script,
     object_keys: cloneValue(event.object_keys),
     dialogues: cloneValue(event.dialogues),
     location: event.location,
     bgm: event.bgm,
+    call_values: cloneValue(callValues),
     next: []
   }
 }
@@ -1705,14 +1747,27 @@ function findLocationLabel(bundle: RuntimeStoryBundle, locationId: string) {
   return descr ? `${location.id} - ${descr}` : location.id
 }
 
+function getRuntimeEventCallValues(event: RuntimePlayableEvent | null | undefined) {
+  if (!event || !isRuntimeStandaloneEvent(event)) {
+    return {}
+  }
+
+  return cloneValue(event.call_values ?? {})
+}
+
 function buildRuntimeContextValues(
   snapshot: RuntimeStorySessionSnapshot,
-  branchValues: Record<string, unknown>
+  branchValues: Record<string, unknown>,
+  callValues: Record<string, unknown> = {}
 ) {
   const combinedValues: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(branchValues)) {
     combinedValues[`branch.${key}`] = cloneValue(value)
+  }
+
+  for (const [key, value] of Object.entries(callValues)) {
+    combinedValues[`call.${key}`] = cloneValue(value)
   }
 
   return {
@@ -1722,7 +1777,8 @@ function buildRuntimeContextValues(
 
 function buildRuntimeScriptContext(
   snapshot: RuntimeStorySessionSnapshot,
-  branchValues: Record<string, unknown>
+  branchValues: Record<string, unknown>,
+  callValues: Record<string, unknown> = {}
 ) {
   const combinedValues: Record<string, unknown> = {}
   const assignableValues: Record<string, unknown> = {}
@@ -1730,6 +1786,10 @@ function buildRuntimeScriptContext(
   for (const [key, value] of Object.entries(branchValues)) {
     combinedValues[`branch.${key}`] = cloneValue(value)
     assignableValues[`branch.${key}`] = cloneValue(value)
+  }
+
+  for (const [key, value] of Object.entries(callValues)) {
+    combinedValues[`call.${key}`] = cloneValue(value)
   }
 
   return {
@@ -1764,16 +1824,18 @@ function appendHistory(
 }
 
 function executeEventScript(
+  bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
   script: string,
-  branchValues: Record<string, unknown>
+  branchValues: Record<string, unknown>,
+  callValues: Record<string, unknown> = {}
 ) {
   const trimmedScript = normalizeText(script)
   if (!trimmedScript) {
     return branchValues
   }
 
-  const executionContext = buildRuntimeScriptContext(runtimeState.snapshot, branchValues)
+  const executionContext = buildRuntimeScriptContext(runtimeState.snapshot, branchValues, callValues)
   const combinedValsFile = createCombinedValsFile(runtimeState.snapshot)
   const result = executeStoryScript(
     combinedValsFile,
@@ -1783,6 +1845,7 @@ function executeEventScript(
   )
 
   applyCombinedValsFile(runtimeState.snapshot, result.vals)
+  enqueueStoryScriptInvocations(bundle, runtimeState, result.invocations)
 
   const nextBranchValues: Record<string, unknown> = {}
   for (const [token, value] of Object.entries(result.externalValues)) {
@@ -1796,17 +1859,116 @@ function executeEventScript(
   return nextBranchValues
 }
 
+function findBundleOnceEvent(
+  bundle: RuntimeStoryBundle,
+  eventId: string
+) {
+  return getBundleOnceEvents(bundle).find((item) => item.id === eventId) ?? null
+}
+
+function validateInvokeOnceArgs(
+  event: ReturnType<typeof findBundleOnceEvent>,
+  args: Record<string, unknown>
+) {
+  if (!event) {
+    return {
+      ok: false,
+      message: "目标一次性事件不存在。"
+    }
+  }
+
+  if ((event.trigger_mode ?? "condition") !== "invoke") {
+    return {
+      ok: false,
+      message: `一次性事件 "${event.id}" 不是“被调用”触发方式。`
+    }
+  }
+
+  const requiredParamNames = (event.invoke_params ?? [])
+    .map((item) => normalizeText(item.name).trim())
+    .filter(Boolean)
+
+  for (const paramName of requiredParamNames) {
+    if (!Object.prototype.hasOwnProperty.call(args, paramName)) {
+      return {
+        ok: false,
+        message: `调用一次性事件 "${event.id}" 时缺少参数 "${paramName}"。`
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    message: ""
+  }
+}
+
+function queueInvokeOnceEvent(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  eventId: string,
+  args: Record<string, unknown>
+) {
+  const normalizedEventId = normalizeText(eventId)
+  if (!normalizedEventId) {
+    return false
+  }
+
+  const onceEvent = findBundleOnceEvent(bundle, normalizedEventId)
+  const normalizedArgs = cloneValue(args)
+  const validation = validateInvokeOnceArgs(onceEvent, normalizedArgs)
+  if (!validation.ok || !onceEvent) {
+    return false
+  }
+
+  const dedupeKey = `once:${onceEvent.id}`
+  if (runtimeState.snapshot.scheduler.consumed_once_ids.includes(onceEvent.id)) {
+    return false
+  }
+
+  if (runtimeState.snapshot.triggered_once_events.some((item) => item.event_id === onceEvent.id)) {
+    return false
+  }
+
+  if (isScheduledEventQueued(runtimeState.snapshot, dedupeKey)) {
+    return false
+  }
+
+  const readyEvent = createScheduledEvent(
+    runtimeState.snapshot,
+    "once",
+    onceEvent.id,
+    onceEvent.id,
+    getCurrentGameMinute(runtimeState.snapshot),
+    dedupeKey,
+    true,
+    normalizedArgs
+  )
+  return enqueueReadyEvent(runtimeState.snapshot, readyEvent)
+}
+
+function enqueueStoryScriptInvocations(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  invocations: StoryScriptInvocation[]
+) {
+  for (const invocation of invocations) {
+    queueInvokeOnceEvent(bundle, runtimeState, invocation.eventId, invocation.args)
+  }
+}
+
 function renderDialogueContent(
   snapshot: RuntimeStorySessionSnapshot,
   content: string,
-  branchValues: Record<string, unknown>
+  branchValues: Record<string, unknown>,
+  callValues: Record<string, unknown> = {}
 ) {
   const combinedValsFile = createCombinedValsFile(snapshot)
   return renderStoryTextTemplate(
     combinedValsFile,
     content,
     DEFAULT_MAX_CALC_NESTING_DEPTH,
-    buildRuntimeContextValues(snapshot, branchValues)
+    buildRuntimeContextValues(snapshot, branchValues, callValues)
   )
 }
 
@@ -1816,7 +1978,8 @@ function buildDialogueView(
   dialogue: RuntimeStoryDialogueDefinition,
   index: number,
   total: number,
-  branchValues: Record<string, unknown>
+  branchValues: Record<string, unknown>,
+  callValues: Record<string, unknown> = {}
 ): RuntimeRenderedDialogue {
   const speakerLabel = dialogue.speaker_type === "player"
     ? "主角"
@@ -1827,7 +1990,7 @@ function buildDialogueView(
     total,
     speakerLabel,
     speakerKey: dialogue.speaker_key,
-    content: renderDialogueContent(snapshot, dialogue.content, branchValues)
+    content: renderDialogueContent(snapshot, dialogue.content, branchValues, callValues)
   }
 }
 
@@ -1908,11 +2071,12 @@ function canEnterEvent(
   branchValues: Record<string, unknown>
 ) {
   const combinedValsFile = createCombinedValsFile(snapshot)
+  const callValues = getRuntimeEventCallValues(event)
   const triggerResult = evaluateStoryBooleanExpression(
     combinedValsFile,
     event.trigger_expr,
     DEFAULT_MAX_CALC_NESTING_DEPTH,
-    buildRuntimeContextValues(snapshot, branchValues)
+    buildRuntimeContextValues(snapshot, branchValues, callValues)
   )
 
   return triggerResult.result
@@ -2262,6 +2426,7 @@ function enterCurrentEventResolved(
   }
 
   const branchValues = runtimeState.lastAction?.branchValues ?? {}
+  const callValues = getRuntimeEventCallValues(currentNode)
 
   if (!options.skipTriggerCheck && !canEnterEvent(runtimeState.snapshot, currentNode, branchValues)) {
     appendSchedulerAudit(runtimeState.snapshot, {
@@ -2286,9 +2451,11 @@ function enterCurrentEventResolved(
   }
 
   const nextBranchValues = executeEventScript(
+    bundle,
     runtimeState,
     currentNode.init_script,
-    branchValues
+    branchValues,
+    callValues
   )
 
   appendHistory(runtimeState.snapshot, {
@@ -2319,10 +2486,13 @@ function finishCurrentEvent(
   }
 
   const branchValues = runtimeState.lastAction?.branchValues ?? {}
+  const callValues = getRuntimeEventCallValues(currentNode)
   const nextBranchValues = executeEventScript(
+    bundle,
     runtimeState,
     currentNode.end_script,
-    branchValues
+    branchValues,
+    callValues
   )
   const actionResolution = resolveEventActions(bundle, currentNode)
 
@@ -2372,7 +2542,8 @@ function executeAction(
 
   const executionContext = buildRuntimeScriptContext(
     runtimeState.snapshot,
-    targetActionState.branchValues
+    targetActionState.branchValues,
+    getRuntimeEventCallValues(sourceEvent)
   )
   const combinedValsFile = createCombinedValsFile(runtimeState.snapshot)
   const scriptResult = executeStoryScript(
@@ -2383,6 +2554,7 @@ function executeAction(
   )
 
   applyCombinedValsFile(runtimeState.snapshot, scriptResult.vals)
+  enqueueStoryScriptInvocations(bundle, runtimeState, scriptResult.invocations)
 
   const nextBranchValues: Record<string, unknown> = {}
   for (const [token, value] of Object.entries(scriptResult.externalValues)) {
@@ -2425,6 +2597,7 @@ function getCurrentEventState(
   }
 
   const branchValues = runtimeState.lastAction?.branchValues ?? {}
+  const callValues = getRuntimeEventCallValues(currentNode)
   const dialogues = currentNode.dialogues ?? []
   const currentDialogue = dialogues.length > 0 && runtimeState.currentDialogueIndex < dialogues.length
     ? buildDialogueView(
@@ -2433,7 +2606,8 @@ function getCurrentEventState(
         dialogues[runtimeState.currentDialogueIndex]!,
         runtimeState.currentDialogueIndex,
         dialogues.length,
-        branchValues
+        branchValues,
+        callValues
       )
     : null
 
@@ -2591,6 +2765,43 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
   reconcileScheduler(options.bundle, runtimeState, notifications)
 
+  function invokeOnceEventResolved(
+    eventId: string,
+    args?: Record<string, unknown>,
+    notifyFailure = false
+  ) {
+    const normalizedEventId = normalizeText(eventId)
+    const normalizedArgs =
+      args && typeof args === "object" && !Array.isArray(args)
+        ? cloneValue(args)
+        : {}
+    const onceEvent = findBundleOnceEvent(options.bundle, normalizedEventId)
+    const validation = validateInvokeOnceArgs(onceEvent, normalizedArgs)
+
+    if (!validation.ok || !onceEvent) {
+      if (notifyFailure && validation.message) {
+        notifications.push(validation.message)
+      }
+      return false
+    }
+
+    const queued = queueInvokeOnceEvent(
+      options.bundle,
+      runtimeState,
+      onceEvent.id,
+      normalizedArgs
+    )
+    if (!queued) {
+      if (notifyFailure) {
+        notifications.push(`一次性事件 "${onceEvent.id}" 未能进入队列，可能已触发或正在排队。`)
+      }
+      return false
+    }
+
+    reconcileScheduler(options.bundle, runtimeState, notifications)
+    return true
+  }
+
   return {
     dispatch(action) {
       if (action.type === "open-debug") {
@@ -2605,6 +2816,11 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
       if (action.type === "select-option" && action.optionId === "debug") {
         screen = "debug"
+        return
+      }
+
+      if (action.type === "invoke-once") {
+        invokeOnceEventResolved(action.eventId, action.args, true)
         return
       }
 
@@ -2659,6 +2875,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
         executeAction(options.bundle, runtimeState, action.optionId, notifications)
       }
+    },
+    invokeOnceEvent(eventId, args) {
+      return invokeOnceEventResolved(eventId, args)
     },
     tick(deltaMs) {
       const queued = queueClockProgress(runtimeState.snapshot, deltaMs)

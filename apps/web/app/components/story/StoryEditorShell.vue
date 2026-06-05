@@ -615,7 +615,9 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
     const event: StoryOnceEventFile = {
       id: createUniqueEventId("once-event"),
       title: "新事件",
+      trigger_mode: "condition",
       trigger_expr: "",
+      invoke_params: [],
       init_script: "",
       object_keys: [],
       dialogues: [],

@@ -198,10 +198,19 @@ export interface StoryOnceDialogueDefinition {
   content: string
 }
 
+export type StoryOnceTriggerMode = "condition" | "invoke"
+
+export interface StoryOnceInvokeParamDefinition {
+  name: string
+  descr?: string
+}
+
 export interface StoryOnceEventFile {
   id: string
   title: string
+  trigger_mode?: StoryOnceTriggerMode
   trigger_expr: string
+  invoke_params?: StoryOnceInvokeParamDefinition[]
   init_script: string
   object_keys: string[]
   dialogues: StoryOnceDialogueDefinition[]
@@ -222,6 +231,8 @@ export interface StoryLoopRule {
 }
 
 export interface StoryLoopEventFile extends StoryOnceEventFile {
+  trigger_mode?: "condition"
+  invoke_params?: never
   loop: StoryLoopRule
 }
 

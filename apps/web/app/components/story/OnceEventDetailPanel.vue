@@ -5,6 +5,8 @@ import {
   type StoryEventLocationFile,
   type StoryOnceDialogueDefinition,
   type StoryOnceEventFile,
+  type StoryOnceInvokeParamDefinition,
+  type StoryOnceTriggerMode,
   type StoryRolesFile,
   type StorySceneFile,
   type StoryValsFile
@@ -26,10 +28,16 @@ interface DialogueEditorDraft {
   content: string
 }
 
+interface InvokeParamDraft extends StoryOnceInvokeParamDefinition {
+  id: string
+}
+
 interface OnceEventDraft {
   id: string
   title: string
+  triggerMode: StoryOnceTriggerMode
   triggerExpr: string
+  invokeParams: InvokeParamDraft[]
   initScript: string
   location: string
   bgm: string
@@ -73,6 +81,8 @@ type ScriptEditorFieldKey = Exclude<ScriptFieldKey, "triggerExpr">
 
 const SCRIPT_HIGHLIGHT_PATTERN =
   /\b(let|true|false|null)\b|\bMath\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
+const ONCE_EVENT_SCRIPT_HELP =
+  "支持多行、let 临时变量、Math 函数，以及 =、+=、-=、*=、/=、%= 赋值；可读取 calc 变量，但不能给 calc 变量赋值。也支持 invoke_once 事件ID 参数=表达式 调用“被调用”型一次性事件；当前事件若为“被调用”，可通过 {call.参数名} 读取传入参数。"
 
 const props = defineProps<{
   event: StoryOnceEventFile | null
@@ -143,10 +153,16 @@ const dialogueContentAutocompleteState = reactive<ScriptAutocompleteState>({
 })
 
 let dialogueIdSeed = 0
+let invokeParamIdSeed = 0
 
 function createDialogueId() {
   dialogueIdSeed += 1
   return `dialogue-${dialogueIdSeed}`
+}
+
+function createInvokeParamId() {
+  invokeParamIdSeed += 1
+  return `invoke-param-${invokeParamIdSeed}`
 }
 
 function cloneDialogue(dialogue?: StoryOnceDialogueDefinition): DialogueDraft {
@@ -158,10 +174,20 @@ function cloneDialogue(dialogue?: StoryOnceDialogueDefinition): DialogueDraft {
   }
 }
 
+function cloneInvokeParam(param?: StoryOnceInvokeParamDefinition): InvokeParamDraft {
+  return {
+    id: createInvokeParamId(),
+    name: param?.name ?? "",
+    descr: param?.descr ?? ""
+  }
+}
+
 const draft = reactive<OnceEventDraft>({
   id: "",
   title: "",
+  triggerMode: "condition",
   triggerExpr: "",
+  invokeParams: [],
   initScript: "",
   location: "",
   bgm: "",
@@ -239,7 +265,7 @@ const objectKeyOptions = computed(() => draft.selectedObjectKeys)
 const dialogueEditorTitle = computed(() => {
   return dialogueEditorState.mode === "create" ? "新增对白" : "编辑对白"
 })
-const triggerAutocompleteCandidates = computed<TriggerAutocompleteItem[]>(() => {
+const globalAutocompleteCandidates = computed<TriggerAutocompleteItem[]>(() => {
   const seen = new Set<string>()
 
   return props.vals.variables.flatMap((group) => {
@@ -274,17 +300,52 @@ const triggerAutocompleteCandidates = computed<TriggerAutocompleteItem[]>(() => 
     })
   })
 })
+const invokeParamAutocompleteCandidates = computed<TriggerAutocompleteItem[]>(() => {
+  if (draft.triggerMode !== "invoke") {
+    return []
+  }
+
+  const seen = new Set<string>()
+
+  return draft.invokeParams.flatMap((param) => {
+    const paramName = normalizeAutocompleteText(param.name)
+    if (!paramName || seen.has(paramName)) {
+      return []
+    }
+
+    seen.add(paramName)
+    return [{
+      name: `call.${paramName}`,
+      description: normalizeAutocompleteText(param.descr) || "被调用时传入的参数"
+    }]
+  })
+})
+const scriptAutocompleteCandidates = computed(() => {
+  return [
+    ...globalAutocompleteCandidates.value,
+    ...invokeParamAutocompleteCandidates.value
+  ]
+})
 const triggerAutocompleteItems = computed(() => {
-  return filterScriptAutocompleteItems(triggerAutocompleteState.query)
+  return filterScriptAutocompleteItems(triggerAutocompleteState.query, globalAutocompleteCandidates.value)
 })
 const initScriptAutocompleteItems = computed(() => {
-  return filterScriptAutocompleteItems(initScriptAutocompleteState.query)
+  return filterScriptAutocompleteItems(
+    initScriptAutocompleteState.query,
+    scriptAutocompleteCandidates.value
+  )
 })
 const endScriptAutocompleteItems = computed(() => {
-  return filterScriptAutocompleteItems(endScriptAutocompleteState.query)
+  return filterScriptAutocompleteItems(
+    endScriptAutocompleteState.query,
+    scriptAutocompleteCandidates.value
+  )
 })
 const dialogueContentAutocompleteItems = computed(() => {
-  return filterScriptAutocompleteItems(dialogueContentAutocompleteState.query)
+  return filterScriptAutocompleteItems(
+    dialogueContentAutocompleteState.query,
+    scriptAutocompleteCandidates.value
+  )
 })
 const highlightedInitScriptTokens = computed(() => {
   return buildScriptHighlightTokens(draft.initScript)
@@ -341,7 +402,7 @@ const panelTitle = computed(() => {
     return draft.title.trim()
   }
 
-  return props.mode === "create" ? "未命名大事件" : (props.event?.title ?? "大事件")
+  return props.mode === "create" ? "未命名一次性事件" : (props.event?.title ?? "一次性事件")
 })
 
 const submitLabel = computed(() => {
@@ -353,7 +414,7 @@ const submitLabel = computed(() => {
 })
 
 const panelEyebrow = computed(() => {
-  return props.mode === "create" ? "新大事件" : "大事件编辑"
+  return props.mode === "create" ? "新一次性事件" : "一次性事件编辑"
 })
 
 function normalizeObjectKeys(objectKeys: string[]) {
@@ -364,14 +425,17 @@ function normalizeAutocompleteText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
-function filterScriptAutocompleteItems(queryText: string) {
+function filterScriptAutocompleteItems(
+  queryText: string,
+  sourceItems: TriggerAutocompleteItem[]
+) {
   const query = queryText.trim().toLowerCase()
 
   if (!query) {
-    return triggerAutocompleteCandidates.value
+    return sourceItems
   }
 
-  return triggerAutocompleteCandidates.value.filter((item) => {
+  return sourceItems.filter((item) => {
     return (
       item.name.toLowerCase().includes(query) ||
       item.description.toLowerCase().includes(query)
@@ -390,7 +454,9 @@ function normalizeStoredObjectKeys(objectKeys: string[]) {
 function syncDraft(event: StoryOnceEventFile | null) {
   draft.id = event?.id ?? ""
   draft.title = event?.title ?? ""
+  draft.triggerMode = event?.trigger_mode ?? "condition"
   draft.triggerExpr = event?.trigger_expr ?? ""
+  draft.invokeParams = (event?.invoke_params ?? []).map((param) => cloneInvokeParam(param))
   draft.initScript = event?.init_script ?? ""
   draft.location = event?.location ?? ""
   draft.bgm = event?.bgm ?? ""
@@ -454,6 +520,14 @@ function closeDialogueEditor() {
 
 function removeDialogue(dialogueId: string) {
   draft.dialogues = draft.dialogues.filter((dialogue) => dialogue.id !== dialogueId)
+}
+
+function addInvokeParam() {
+  draft.invokeParams.push(cloneInvokeParam())
+}
+
+function removeInvokeParam(paramId: string) {
+  draft.invokeParams = draft.invokeParams.filter((param) => param.id !== paramId)
 }
 
 function moveDialogue(dialogueId: string, direction: -1 | 1) {
@@ -957,7 +1031,12 @@ function submitDraft() {
   emit("save", {
     id: draft.id.trim(),
     title: draft.title.trim(),
-    trigger_expr: draft.triggerExpr.trim(),
+    trigger_mode: draft.triggerMode,
+    trigger_expr: draft.triggerMode === "condition" ? draft.triggerExpr.trim() : "",
+    invoke_params: draft.invokeParams.map((param) => ({
+      name: param.name.trim(),
+      descr: (param.descr ?? "").trim() || undefined
+    })),
     init_script: draft.initScript.trim(),
     object_keys: normalizeObjectKeys(draft.selectedObjectKeys),
     dialogues: draft.dialogues.map((dialogue) => ({
@@ -1057,6 +1136,17 @@ watch(
     }
   },
   { deep: true }
+)
+
+watch(
+  () => draft.triggerMode,
+  (mode) => {
+    closeTriggerHelp()
+
+    if (mode !== "condition") {
+      closeScriptAutocomplete("triggerExpr")
+    }
+  }
 )
 
 watch(
@@ -1196,73 +1286,149 @@ function handleDocumentPointerDown(event: MouseEvent) {
                 @quick-create="requestQuickCreateRole"
               />
 
-              <div ref="triggerExprField" class="field">
-                <div class="detail-panel__label-row">
-                  <span class="field-label">触发条件</span>
-                  <div ref="triggerHelp" class="detail-panel__help">
-                    <button
-                      class="detail-panel__help-button"
-                      type="button"
-                      aria-label="查看触发条件说明"
-                      :aria-expanded="isTriggerHelpOpen"
-                      @click.stop="toggleTriggerHelp"
-                    >
-                      ?
-                    </button>
-                    <div v-if="isTriggerHelpOpen" class="detail-panel__help-popover" @click.stop>
-                      <p>支持 `{group.row}`、比较运算、逻辑运算和常见 `Math` 函数；结果必须是 `boolean`。</p>
-                      <p>示例：{county.level} &gt; 0 | Math.floor({county.level}) &gt;= 1 | {county.level} !== null</p>
+              <div ref="triggerExprField" class="field detail-panel__trigger-config">
+                <span class="field-label">触发方式</span>
+                <div class="detail-panel__trigger-mode">
+                  <label class="detail-panel__trigger-mode-option">
+                    <input
+                      v-model="draft.triggerMode"
+                      class="detail-panel__trigger-mode-input"
+                      type="radio"
+                      value="condition"
+                    />
+                    <span>条件触发</span>
+                  </label>
+                  <label class="detail-panel__trigger-mode-option">
+                    <input
+                      v-model="draft.triggerMode"
+                      class="detail-panel__trigger-mode-input"
+                      type="radio"
+                      value="invoke"
+                    />
+                    <span>被调用</span>
+                  </label>
+                </div>
+
+                <template v-if="draft.triggerMode === 'condition'">
+                  <div class="detail-panel__label-row">
+                    <span class="field-label">触发条件</span>
+                    <div ref="triggerHelp" class="detail-panel__help">
+                      <button
+                        class="detail-panel__help-button"
+                        type="button"
+                        aria-label="查看触发条件说明"
+                        :aria-expanded="isTriggerHelpOpen"
+                        @click.stop="toggleTriggerHelp"
+                      >
+                        ?
+                      </button>
+                      <div v-if="isTriggerHelpOpen" class="detail-panel__help-popover" @click.stop>
+                        <p>支持 `{group.row}`、比较运算、逻辑运算和常见 `Math` 函数；结果必须是 `boolean`。</p>
+                        <p>示例：{county.level} &gt; 0 | Math.floor({county.level}) &gt;= 1 | {county.level} !== null</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div class="detail-panel__expression-wrap">
-                  <textarea
-                    ref="triggerExprTextarea"
-                    v-model="draft.triggerExpr"
-                    class="text-area detail-panel__expression"
-                    placeholder="{county.gdp} >= 10000000000 && {county.jiaoyu} >= 60"
-                    @input="onTriggerExprInput"
-                    @click="updateScriptAutocompleteFromCaret('triggerExpr')"
-                    @keyup="updateScriptAutocompleteFromCaret('triggerExpr')"
-                    @keydown="onTriggerExprKeydown"
-                  />
-
-                  <div
-                    v-if="isTriggerAutocompleteOpen"
-                    class="detail-panel__autocomplete"
-                    :class="{
-                      'detail-panel__autocomplete--top':
-                        triggerAutocompleteState.placement === 'top'
-                    }"
-                  >
-                    <button
-                      v-for="(item, index) in triggerAutocompleteItems"
-                      :key="item.name"
-                      class="detail-panel__autocomplete-item"
-                      :class="{
-                        'detail-panel__autocomplete-item--active':
-                          index === triggerAutocompleteState.activeIndex
-                      }"
-                      type="button"
-                      @mousedown.prevent="insertScriptAutocompleteItem('triggerExpr', item.name)"
-                    >
-                      <span class="detail-panel__autocomplete-name">{{ item.name }}</span>
-                      <span
-                        v-if="item.description"
-                        class="detail-panel__autocomplete-description"
-                      >
-                        {{ item.description }}
-                      </span>
-                    </button>
+                  <div class="detail-panel__expression-wrap">
+                    <textarea
+                      ref="triggerExprTextarea"
+                      v-model="draft.triggerExpr"
+                      class="text-area detail-panel__expression"
+                      placeholder="{county.gdp} >= 10000000000 && {county.jiaoyu} >= 60"
+                      @input="onTriggerExprInput"
+                      @click="updateScriptAutocompleteFromCaret('triggerExpr')"
+                      @keyup="updateScriptAutocompleteFromCaret('triggerExpr')"
+                      @keydown="onTriggerExprKeydown"
+                    />
 
                     <div
-                      v-if="!triggerAutocompleteItems.length"
-                      class="detail-panel__autocomplete-empty"
+                      v-if="isTriggerAutocompleteOpen"
+                      class="detail-panel__autocomplete"
+                      :class="{
+                        'detail-panel__autocomplete--top':
+                          triggerAutocompleteState.placement === 'top'
+                      }"
                     >
-                      没有匹配的变量
+                      <button
+                        v-for="(item, index) in triggerAutocompleteItems"
+                        :key="item.name"
+                        class="detail-panel__autocomplete-item"
+                        :class="{
+                          'detail-panel__autocomplete-item--active':
+                            index === triggerAutocompleteState.activeIndex
+                        }"
+                        type="button"
+                        @mousedown.prevent="insertScriptAutocompleteItem('triggerExpr', item.name)"
+                      >
+                        <span class="detail-panel__autocomplete-name">{{ item.name }}</span>
+                        <span
+                          v-if="item.description"
+                          class="detail-panel__autocomplete-description"
+                        >
+                          {{ item.description }}
+                        </span>
+                      </button>
+
+                      <div
+                        v-if="!triggerAutocompleteItems.length"
+                        class="detail-panel__autocomplete-empty"
+                      >
+                        没有匹配的变量
+                      </div>
                     </div>
                   </div>
-                </div>
+                </template>
+
+                <template v-else>
+                  <div class="detail-panel__label-row">
+                    <span class="field-label">调用参数</span>
+                    <button
+                      class="btn-secondary detail-panel__param-add"
+                      type="button"
+                      @click="addInvokeParam"
+                    >
+                      添加参数
+                    </button>
+                  </div>
+
+                  <div v-if="draft.invokeParams.length" class="detail-panel__param-table">
+                    <div class="detail-panel__param-table-head">
+                      <span>参数名</span>
+                      <span>说明</span>
+                      <span>操作</span>
+                    </div>
+
+                    <div
+                      v-for="param in draft.invokeParams"
+                      :key="param.id"
+                      class="detail-panel__param-row"
+                    >
+                      <input
+                        v-model="param.name"
+                        class="text-input"
+                        type="text"
+                        placeholder="county_name"
+                      />
+                      <input
+                        v-model="param.descr"
+                        class="text-input"
+                        type="text"
+                        placeholder="调用方需要传什么值"
+                      />
+                      <button
+                        class="btn-secondary detail-panel__param-remove"
+                        type="button"
+                        @click="removeInvokeParam(param.id)"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+
+                  <div v-else class="detail-panel__param-empty">
+                    这个事件不会自动扫描，只有在脚本或运行时通过 `invoke_once` / `invokeOnceEvent`
+                    传参后才会入队。
+                  </div>
+                </template>
               </div>
 
               <label ref="initScriptField" class="field">
@@ -1283,9 +1449,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       class="detail-panel__help-popover"
                       @click.stop
                     >
-                      <p>
-                        支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
-                      </p>
+                      <p>{{ ONCE_EVENT_SCRIPT_HELP }}</p>
                     </div>
                   </div>
                 </div>
@@ -1374,9 +1538,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       class="detail-panel__help-popover"
                       @click.stop
                     >
-                      <p>
-                        支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
-                      </p>
+                      <p>{{ ONCE_EVENT_SCRIPT_HELP }}</p>
                     </div>
                   </div>
                 </div>
@@ -1680,7 +1842,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
     </template>
 
     <div v-else class="detail-panel__empty">
-      请先在画布中选择一个大事件再开始编辑。
+      请先在画布中选择一个一次性事件再开始编辑。
     </div>
   </section>
 </template>
@@ -1794,6 +1956,34 @@ function handleDocumentPointerDown(event: MouseEvent) {
   white-space: nowrap;
 }
 
+.detail-panel__trigger-config {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.detail-panel__trigger-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.detail-panel__trigger-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+.detail-panel__trigger-mode-input {
+  margin: 0;
+}
+
 .detail-panel__label-row {
   display: flex;
   align-items: center;
@@ -1844,6 +2034,45 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
 .detail-panel__expression-wrap {
   position: relative;
+}
+
+.detail-panel__param-add {
+  margin-left: auto;
+  min-height: 30px;
+}
+
+.detail-panel__param-table {
+  display: grid;
+  gap: 8px;
+}
+
+.detail-panel__param-table-head,
+.detail-panel__param-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1.2fr) 72px;
+  gap: 10px;
+  align-items: center;
+}
+
+.detail-panel__param-table-head {
+  padding: 0 2px;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+}
+
+.detail-panel__param-remove {
+  min-width: 72px;
+  min-height: 34px;
+}
+
+.detail-panel__param-empty {
+  padding: 14px 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
 .detail-panel__script-wrap {

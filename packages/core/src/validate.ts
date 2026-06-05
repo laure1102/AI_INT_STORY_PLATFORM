@@ -16,6 +16,20 @@ import {
   validateStoryValsCalcRules
 } from "@story-mgr/runtime"
 
+function buildInvokeScriptContext(event: StoryOnceEventFile) {
+  const values = Object.fromEntries(
+    (event.invoke_params ?? [])
+      .map((param) => param.name.trim())
+      .filter(Boolean)
+      .map((name) => [`call.${name}`, null] as const)
+  )
+
+  return {
+    values,
+    assignableValues: {}
+  }
+}
+
 function pushIssue(
   issues: ValidationIssue[],
   level: ValidationIssue["level"],
@@ -78,24 +92,50 @@ function validateOnceEvent(
 ) {
   const locationNames = collectLocationNames(document)
   const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
+  const invokeScriptContext = buildInvokeScriptContext(event)
 
-  try {
-    evaluateStoryBooleanExpression(document.vals, event.trigger_expr)
-  } catch (error) {
-    pushIssue(
-      issues,
-      "error",
-      "once.trigger-expr-invalid",
-      `Once event "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
-      ["onceEvents", String(eventIndex), "trigger_expr"]
-    )
+  if ((event.trigger_mode ?? "condition") === "condition") {
+    try {
+      evaluateStoryBooleanExpression(document.vals, event.trigger_expr)
+    } catch (error) {
+      pushIssue(
+        issues,
+        "error",
+        "once.trigger-expr-invalid",
+        `Once event "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
+        ["onceEvents", String(eventIndex), "trigger_expr"]
+      )
+    }
+  }
+
+  for (const [paramIndex, param] of (event.invoke_params ?? []).entries()) {
+    const trimmedName = param.name.trim()
+
+    if (!trimmedName) {
+      continue
+    }
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmedName)) {
+      pushIssue(
+        issues,
+        "error",
+        "once.invoke-param-invalid",
+        `Once event "${event.id}" invoke param "${param.name}" must be a valid identifier.`,
+        ["onceEvents", String(eventIndex), "invoke_params", String(paramIndex), "name"]
+      )
+    }
   }
 
   for (const scriptField of [
     { key: "init_script", value: event.init_script, code: "once.init-script-invalid" },
     { key: "end_script", value: event.end_script, code: "once.end-script-invalid" }
   ] as const) {
-    for (const issue of validateStoryScript(document.vals, scriptField.value)) {
+    for (const issue of validateStoryScript(
+      document.vals,
+      scriptField.value,
+      undefined,
+      invokeScriptContext
+    )) {
       pushIssue(
         issues,
         "error",
