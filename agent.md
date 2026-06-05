@@ -506,8 +506,13 @@ Current behavior:
 - root event rule: graph `event` nodes with no incoming graph-event parent edge
 - graph roots are consumed once per save after successful playback
 - `big_once_events` are scanned, queued when trigger conditions pass, and consumed once
+- queued scheduler items now carry `trigger_locked`
+- `graph_root` and `big_once` events check `trigger_expr` at enqueue time; once queued, they keep execution eligibility even if related variable values change before playback
 - `loop_events` keep one next-due schedule per event, enter `scheduled`, and are promoted into `ready_queue` when due
+- loop events re-check `trigger_expr` only when they become due
 - if a loop event reaches due time but its `trigger_expr` is false, the current cycle is skipped and the next cycle is scheduled
+- a skipped loop cycle does not increment `scheduler.loop_states[].trigger_count`
+- a skipped loop cycle does not write `loop_event_states`
 - only one front-stage event may run at a time through `scheduler.active`
 - while a front-stage event is running, `event_pause` is set to `true`, so story playback pauses game time automatically
 - runtime clock progression now uses stepwise reconciliation:
@@ -637,8 +642,11 @@ Current regression coverage includes:
 - synthetic `monthly`
 - synthetic `interval_days`
 - same-minute multi-loop stable execution order
+- due-time loop skip and reschedule when `trigger_expr` is false
 - graph-event auto-next fallback to the first enterable next event
 - graph-root queue continuation after an action branch cannot enter its next event
+- queued graph-root trigger lock after enqueue
+- queued big-once trigger lock after enqueue
 
 Notes:
 

@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url"
 import React, { useEffect, useMemo, useState } from "react"
 import { Alert, ConfirmInput, Spinner, StatusMessage, TextInput } from "@inkjs/ui"
 import { Box, render, Text, useApp, useInput } from "ink"
+import type { StorySceneFile } from "@story-mgr/core"
 import type { RuntimeStorySessionAction, RuntimeStoryViewModel } from "@story-mgr/runtime"
 import { formatStoryValInput, getStoryValCalcDisplay } from "@story-mgr/runtime"
 import {
@@ -435,6 +436,45 @@ function findLatestNotification(notifications: string[]) {
   return notifications.length > 0
     ? notifications[notifications.length - 1] ?? ""
     : ""
+}
+
+function findCurrentSceneImagePath(state: TuiClientAppState) {
+  const bundle = state.bundle
+  if (!bundle) {
+    return ""
+  }
+
+  const rawLevel = findSystemValue(state, "county.level")
+  const currentHour = findSystemValue(state, "system.now_hour")
+  const sceneLevel = typeof rawLevel === "number"
+    ? rawLevel
+    : typeof rawLevel === "string" && rawLevel.trim()
+      ? Number(rawLevel)
+      : NaN
+  const hour = typeof currentHour === "number"
+    ? currentHour
+    : typeof currentHour === "string" && currentHour.trim()
+      ? Number(currentHour)
+      : NaN
+
+  if (!Number.isFinite(sceneLevel)) {
+    return ""
+  }
+
+  const scenes = (bundle.scenes as StorySceneFile | null)?.scenes ?? []
+  const matchedScene = scenes.find((scene) => scene.level === Math.trunc(sceneLevel))
+  if (!matchedScene) {
+    return ""
+  }
+
+  const isDayScene = Number.isFinite(hour) && hour >= 7 && hour <= 17
+  const assetPath = isDayScene ? matchedScene.day_img : matchedScene.night_img
+  return typeof assetPath === "string" ? assetPath.trim() : ""
+}
+
+function findCurrentLocationId(state: TuiClientAppState) {
+  const locationId = state.view?.currentLocationId
+  return typeof locationId === "string" ? locationId.trim() : ""
 }
 
 function formatGameMinuteLabel(gameMinute: number | null | undefined) {
@@ -1371,6 +1411,8 @@ function GameScreen({
 
   const interactionOptions = createInteractionOptions(view)
   const mergedNotifications = [...state.notifications, ...view.notifications]
+  const sceneImagePath = findCurrentSceneImagePath(state)
+  const currentLocationId = findCurrentLocationId(state)
   const footerHint = "h 主界面  t 设置  空格 暂停/继续  l 消息流  i 全局变量  e 调度器"
   const overlayLines = uiState.overlay === "notifications"
     ? mergedNotifications.slice().reverse()
@@ -1480,6 +1522,10 @@ function GameScreen({
             {findPlayerName(state)}  金钱: {findPlayerMoneyLabel(state)}
           </Text>
           <Text color="green">下一天</Text>
+        </Box>
+        <Box flexDirection="row" justifyContent="space-between" width={74}>
+          <Text color="gray">{`场景: ${sceneImagePath}`}</Text>
+          <Text color="gray">{`地点: ${currentLocationId}`}</Text>
         </Box>
         <Text color="gray">{`最新消息：${findLatestNotification(mergedNotifications) || "无"}`}</Text>
       </Box>

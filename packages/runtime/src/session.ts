@@ -142,6 +142,7 @@ export interface RuntimeScheduledEvent {
   due_game_minute: number
   seq: number
   dedupe_key: string
+  trigger_locked: boolean
   status: RuntimeSchedulerEventStatus
 }
 
@@ -261,6 +262,7 @@ export interface RuntimeStoryViewModel {
   activeEventTitle: string | null
   interaction: RuntimeInteraction
   notifications: string[]
+  currentLocationId: string | null
   currentLocationName: string | null
   currentSceneLevel: number | null
   currentDialogue: RuntimeRenderedDialogue | null
@@ -312,6 +314,10 @@ interface RuntimeState {
   pendingActions: RuntimeActionState[]
   lastAction: RuntimeActionState | null
   activeStandaloneEvent: RuntimeStandaloneEvent | null
+}
+
+interface RuntimeEnterEventOptions {
+  skipTriggerCheck?: boolean
 }
 
 interface RuntimeDialogueNodeState {
@@ -669,6 +675,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
         due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
         seq: Math.max(1, clampInteger(item.seq, 1)),
         dedupe_key: normalizeText(item.dedupe_key),
+        trigger_locked: Boolean(item.trigger_locked),
         status: item.status
       }))
     : []
@@ -681,6 +688,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
         due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
         seq: Math.max(1, clampInteger(item.seq, 1)),
         dedupe_key: normalizeText(item.dedupe_key),
+        trigger_locked: Boolean(item.trigger_locked),
         status: item.status
       }))
     : []
@@ -693,6 +701,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
         due_game_minute: Math.max(0, clampInteger(scheduler.active.due_game_minute, 0)),
         seq: Math.max(1, clampInteger(scheduler.active.seq, 1)),
         dedupe_key: normalizeText(scheduler.active.dedupe_key),
+        trigger_locked: Boolean(scheduler.active.trigger_locked),
         status: scheduler.active.status
       }
     : null
@@ -1067,7 +1076,8 @@ function createScheduledEvent(
   sourceId: string,
   entryEventId: string,
   dueGameMinute: number,
-  dedupeKey: string
+  dedupeKey: string,
+  triggerLocked = false
 ): RuntimeScheduledEvent {
   normalizeSchedulerState(snapshot)
   const seq = snapshot.scheduler.next_seq
@@ -1081,6 +1091,7 @@ function createScheduledEvent(
     due_game_minute: Math.max(0, clampInteger(dueGameMinute, 0)),
     seq,
     dedupe_key: normalizeText(dedupeKey),
+    trigger_locked: triggerLocked,
     status: "ready"
   }
 }
@@ -1146,7 +1157,12 @@ function enqueueScheduledEvent(snapshot: RuntimeStorySessionSnapshot, scheduledE
   return true
 }
 
-function promoteDueScheduledEvents(snapshot: RuntimeStorySessionSnapshot) {
+function promoteDueScheduledEvents(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+) {
+  return promoteDueScheduledEventsResolved(bundle, snapshot)
+  /*
   normalizeSchedulerState(snapshot)
   if (snapshot.scheduler.scheduled.length === 0) {
     return
@@ -1171,6 +1187,44 @@ function promoteDueScheduledEvents(snapshot: RuntimeStorySessionSnapshot) {
   snapshot.scheduler.scheduled = remainingScheduledEvents
 
   for (const scheduledEvent of dueScheduledEvents) {
+    if (scheduledEvent.source_type === "loop") {
+      const loopEvent = (bundle.loopEvents as RuntimeLoopEventDefinition[]).find(
+        (item) => item.id === scheduledEvent.source_id
+      )
+
+      if (!loopEvent) {
+        continue
+      }
+
+      const standaloneLoopEvent = createStandaloneEvent("loop", loopEvent)
+      // 循环事件只有在到点时条件成立，才真正进入就绪队列。
+      if (!canEnterEvent(snapshot, standaloneLoopEvent, {})) {
+        const loopState = getLoopSchedulerState(snapshot, loopEvent.id)
+        loopState.next_due_game_minute = calculateNextLoopDueGameMinute(
+          snapshot,
+          loopEvent,
+          scheduledEvent.due_game_minute
+        )
+        appendSchedulerAudit(snapshot, {
+          kind: "skip-event",
+          source_type: "loop",
+          source_id: loopEvent.id,
+          entry_event_id: loopEvent.id,
+          due_game_minute: scheduledEvent.due_game_minute,
+          message: "循环事件到点但未满足触发条件，已跳过当前周期"
+        })
+        appendSchedulerAudit(snapshot, {
+          kind: "loop-reschedule",
+          source_type: "loop",
+          source_id: loopEvent.id,
+          entry_event_id: loopEvent.id,
+          due_game_minute: loopState.next_due_game_minute,
+          message: "循环事件跳过当前周期后已重排下次触发时间"
+        })
+        continue
+      }
+    }
+
     appendSchedulerAudit(snapshot, {
       kind: "promote-due",
       source_type: scheduledEvent.source_type,
@@ -1181,6 +1235,7 @@ function promoteDueScheduledEvents(snapshot: RuntimeStorySessionSnapshot) {
     })
     enqueueReadyEvent(snapshot, scheduledEvent)
   }
+  */
 }
 
 function clearCurrentEventState(runtimeState: RuntimeState) {
@@ -1242,7 +1297,8 @@ function scanGraphRootEvents(
       rootEventId,
       rootEventId,
       getCurrentGameMinute(runtimeState.snapshot),
-      dedupeKey
+      dedupeKey,
+      true
     )
     enqueueReadyEvent(runtimeState.snapshot, readyEvent)
   }
@@ -1289,7 +1345,8 @@ function scanBigOnceEvents(
       event.id,
       event.id,
       getCurrentGameMinute(runtimeState.snapshot),
-      dedupeKey
+      dedupeKey,
+      true
     )
     enqueueReadyEvent(runtimeState.snapshot, readyEvent)
   }
@@ -1396,7 +1453,9 @@ function startNextReadyEventIfIdle(
       runtimeState.currentDialogueIndex = 0
       runtimeState.pendingActions = []
       runtimeState.lastAction = null
-      enterCurrentEvent(bundle, runtimeState, notifications)
+      enterCurrentEventResolved(bundle, runtimeState, notifications, {
+        skipTriggerCheck: Boolean(nextScheduledEvent.trigger_locked)
+      })
       settlePassiveEvents(bundle, runtimeState, notifications)
       return
     }
@@ -1430,7 +1489,9 @@ function startNextReadyEventIfIdle(
       runtimeState.currentDialogueIndex = 0
       runtimeState.pendingActions = []
       runtimeState.lastAction = null
-      enterCurrentEvent(bundle, runtimeState, notifications)
+      enterCurrentEventResolved(bundle, runtimeState, notifications, {
+        skipTriggerCheck: Boolean(nextScheduledEvent.trigger_locked)
+      })
       settlePassiveEvents(bundle, runtimeState, notifications)
       return
     }
@@ -1449,8 +1510,12 @@ function startNextReadyEventIfIdle(
       due_game_minute: nextScheduledEvent.due_game_minute,
       message: "开始执行事件"
     })
-    moveToEvent(bundle, runtimeState, nextScheduledEvent.entry_event_id, {})
-    enterCurrentEvent(bundle, runtimeState, notifications)
+    moveToEventResolved(bundle, runtimeState, nextScheduledEvent.entry_event_id, {}, {
+      skipTriggerCheck: Boolean(nextScheduledEvent.trigger_locked)
+    })
+    enterCurrentEventResolved(bundle, runtimeState, notifications, {
+      skipTriggerCheck: Boolean(nextScheduledEvent.trigger_locked)
+    })
     settlePassiveEvents(bundle, runtimeState, notifications)
   }
 }
@@ -1461,7 +1526,7 @@ function reconcileScheduler(
   notifications: string[]
 ) {
   normalizeSchedulerState(runtimeState.snapshot)
-  promoteDueScheduledEvents(runtimeState.snapshot)
+  promoteDueScheduledEventsResolved(bundle, runtimeState.snapshot)
   scanGraphRootEvents(bundle, runtimeState)
   scanBigOnceEvents(bundle, runtimeState)
   ensureLoopSchedules(bundle, runtimeState)
@@ -1807,6 +1872,8 @@ function moveToEvent(
   targetEventId: string | null,
   branchValues: Record<string, unknown>
 ) {
+  return moveToEventResolved(bundle, runtimeState, targetEventId, branchValues)
+  /*
   if (!targetEventId) {
     clearCurrentEventState(runtimeState)
     return false
@@ -1848,6 +1915,7 @@ function moveToEvent(
       }
     : null
   return true
+  */
 }
 
 function settlePassiveEvents(
@@ -1944,6 +2012,8 @@ function enterCurrentEvent(
   runtimeState: RuntimeState,
   notifications: string[]
 ) {
+  return enterCurrentEventResolved(bundle, runtimeState, notifications)
+  /*
   const currentNode = getCurrentPlayableEvent(bundle, runtimeState)
   if (!currentNode || runtimeState.currentEventEntered) {
     return
@@ -1952,6 +2022,196 @@ function enterCurrentEvent(
   const branchValues = runtimeState.lastAction?.branchValues ?? {}
 
   if (!canEnterEvent(runtimeState.snapshot, currentNode, branchValues)) {
+    appendSchedulerAudit(runtimeState.snapshot, {
+      kind: "skip-event",
+      source_type: runtimeState.snapshot.scheduler.active?.source_type,
+      source_id: runtimeState.snapshot.scheduler.active?.source_id ?? currentNode.id,
+      entry_event_id: currentNode.id,
+      due_game_minute: runtimeState.snapshot.scheduler.active?.due_game_minute ?? getCurrentGameMinute(runtimeState.snapshot),
+      message: "触发条件不满足，跳过事件"
+    })
+    notifications.push(`事件 "${currentNode.title}" 未满足触发条件，已跳过。`)
+    appendHistory(runtimeState.snapshot, {
+      type: "system",
+      id: "skip-event",
+      title: currentNode.id,
+      content: `skip ${currentNode.id}`
+    })
+    clearCurrentEventState(runtimeState)
+    completeActiveScheduledEvent(runtimeState.snapshot)
+    reconcileScheduler(bundle, runtimeState, notifications)
+    return
+  }
+
+  const nextBranchValues = executeEventScript(
+    runtimeState,
+    currentNode.init_script,
+    branchValues
+  )
+
+  appendHistory(runtimeState.snapshot, {
+    type: "event",
+    id: currentNode.id,
+    title: currentNode.title
+  })
+
+  runtimeState.currentEventEntered = true
+  runtimeState.currentDialogueIndex = 0
+  runtimeState.lastAction = {
+    nodeId: currentNode.id,
+    branchValues: nextBranchValues
+  }
+
+  const actionResolution = resolveEventActions(bundle, currentNode)
+  runtimeState.pendingActions = actionResolution.actions
+  */
+}
+
+function promoteDueScheduledEventsResolved(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+) {
+  normalizeSchedulerState(snapshot)
+  if (snapshot.scheduler.scheduled.length === 0) {
+    return
+  }
+
+  const nowGameMinute = getCurrentGameMinute(snapshot)
+  const dueScheduledEvents: RuntimeScheduledEvent[] = []
+  const remainingScheduledEvents: RuntimeScheduledEvent[] = []
+
+  for (const scheduledEvent of snapshot.scheduler.scheduled) {
+    if (scheduledEvent.due_game_minute <= nowGameMinute) {
+      dueScheduledEvents.push({
+        ...cloneValue(scheduledEvent),
+        status: "ready"
+      })
+      continue
+    }
+
+    remainingScheduledEvents.push(scheduledEvent)
+  }
+
+  snapshot.scheduler.scheduled = remainingScheduledEvents
+
+  for (const scheduledEvent of dueScheduledEvents) {
+    if (scheduledEvent.source_type === "loop") {
+      const loopEvent = (bundle.loopEvents as RuntimeLoopEventDefinition[]).find(
+        (item) => item.id === scheduledEvent.source_id
+      )
+
+      if (!loopEvent) {
+        continue
+      }
+
+      const standaloneLoopEvent = createStandaloneEvent("loop", loopEvent)
+      // 循环事件在到点时才判断触发条件，不满足则跳过本周期并重排下次时间。
+      if (!canEnterEvent(snapshot, standaloneLoopEvent, {})) {
+        const loopState = getLoopSchedulerState(snapshot, loopEvent.id)
+        loopState.next_due_game_minute = calculateNextLoopDueGameMinute(
+          snapshot,
+          loopEvent,
+          scheduledEvent.due_game_minute
+        )
+        appendSchedulerAudit(snapshot, {
+          kind: "skip-event",
+          source_type: "loop",
+          source_id: loopEvent.id,
+          entry_event_id: loopEvent.id,
+          due_game_minute: scheduledEvent.due_game_minute,
+          message: "循环事件到点但未满足触发条件，已跳过当前周期"
+        })
+        appendSchedulerAudit(snapshot, {
+          kind: "loop-reschedule",
+          source_type: "loop",
+          source_id: loopEvent.id,
+          entry_event_id: loopEvent.id,
+          due_game_minute: loopState.next_due_game_minute,
+          message: "循环事件跳过当前周期后已重排下次触发时间"
+        })
+        continue
+      }
+    }
+
+    appendSchedulerAudit(snapshot, {
+      kind: "promote-due",
+      source_type: scheduledEvent.source_type,
+      source_id: scheduledEvent.source_id,
+      entry_event_id: scheduledEvent.entry_event_id,
+      due_game_minute: scheduledEvent.due_game_minute,
+      message: "到时转入就绪队列"
+    })
+    enqueueReadyEvent(snapshot, {
+      ...scheduledEvent,
+      trigger_locked: true
+    })
+  }
+}
+
+function moveToEventResolved(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  targetEventId: string | null,
+  branchValues: Record<string, unknown>,
+  options: RuntimeEnterEventOptions = {}
+) {
+  if (!targetEventId) {
+    clearCurrentEventState(runtimeState)
+    return false
+  }
+
+  const targetNode = getBundleGraphNode(bundle, targetEventId)
+  if (!isCompiledEvent(targetNode)) {
+    throw new Error(`Target node "${targetEventId}" is not an event node.`)
+  }
+
+  if (!options.skipTriggerCheck && !canEnterEvent(runtimeState.snapshot, targetNode, branchValues)) {
+    appendSchedulerAudit(runtimeState.snapshot, {
+      kind: "skip-event",
+      source_type: runtimeState.snapshot.scheduler.active?.source_type,
+      source_id: runtimeState.snapshot.scheduler.active?.source_id ?? targetNode.id,
+      entry_event_id: targetNode.id,
+      due_game_minute: runtimeState.snapshot.scheduler.active?.due_game_minute ?? getCurrentGameMinute(runtimeState.snapshot),
+      message: "后续事件触发条件不满足，跳过节点"
+    })
+    appendHistory(runtimeState.snapshot, {
+      type: "system",
+      id: "skip-event",
+      title: targetNode.id,
+      content: `skip ${targetNode.id}`
+    })
+    clearCurrentEventState(runtimeState)
+    return false
+  }
+
+  runtimeState.snapshot.current_event_id = targetNode.id
+  runtimeState.activeStandaloneEvent = null
+  runtimeState.currentEventEntered = false
+  runtimeState.currentDialogueIndex = 0
+  runtimeState.pendingActions = []
+  runtimeState.lastAction = branchValues && Object.keys(branchValues).length > 0
+    ? {
+        nodeId: targetNode.id,
+        branchValues: cloneValue(branchValues)
+      }
+    : null
+  return true
+}
+
+function enterCurrentEventResolved(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[],
+  options: RuntimeEnterEventOptions = {}
+) {
+  const currentNode = getCurrentPlayableEvent(bundle, runtimeState)
+  if (!currentNode || runtimeState.currentEventEntered) {
+    return
+  }
+
+  const branchValues = runtimeState.lastAction?.branchValues ?? {}
+
+  if (!options.skipTriggerCheck && !canEnterEvent(runtimeState.snapshot, currentNode, branchValues)) {
     appendSchedulerAudit(runtimeState.snapshot, {
       kind: "skip-event",
       source_type: runtimeState.snapshot.scheduler.active?.source_type,
@@ -2222,6 +2482,7 @@ function buildViewModel(
     activeEventTitle: currentEvent?.title ?? null,
     interaction,
     notifications,
+    currentLocationId: normalizeText(currentEvent?.location ?? "") || null,
     currentLocationName: currentEventState?.locationName ?? null,
     currentSceneLevel: null,
     currentDialogue,

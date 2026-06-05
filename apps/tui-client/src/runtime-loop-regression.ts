@@ -2,6 +2,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { compileStory } from "@story-mgr/compiler"
 import type {
+  StoryBigOnceEventFile,
   StoryBigOnceDialogueDefinition,
   StoryLoopEventFile,
   StoryValDefinition,
@@ -84,9 +85,39 @@ interface GraphQueueRegressionScenario {
   title: string
   playerValues: Record<string, unknown>
   graphNodes: Array<RegressionGraphEventNode | RegressionGraphActionNode>
+  bigOnceEvents?: StoryBigOnceEventFile[]
   expectedMoney: number
   expectedConsumedRootIds?: string[]
+  expectedTriggeredBigOnceIds?: string[]
   expectedNotificationOrder?: string[]
+}
+
+interface LoopSkipRegressionResult {
+  kind: "loop-skip"
+  scenarioId: string
+  scenarioTitle: string
+  moneyBeforeLoop: number
+  moneyAfterLoop: number
+  afterDay: number
+  afterHour: number
+  afterMinute: number
+  notifications: string[]
+}
+
+interface LoopSkipRegressionScenario {
+  id: string
+  title: string
+  nowDate: string
+  nowDay: number
+  advanceDays: number
+  initialMoney: number
+  playerValues?: Record<string, unknown>
+  loopEvent: StoryLoopEventFile
+  expectedMoney: number
+  expectedDay: number
+  expectedHour?: number
+  expectedMinute?: number
+  expectedNextDueMinute: number
 }
 
 interface RegressionGraphEventNode {
@@ -284,6 +315,7 @@ function createGraphQueueBundle(input: {
   title: string
   playerValues: Record<string, unknown>
   graphNodes: Array<RegressionGraphEventNode | RegressionGraphActionNode>
+  bigOnceEvents?: StoryBigOnceEventFile[]
 }): RuntimeStoryBundle {
   return {
     storyId: `graph-${input.scenarioId}`,
@@ -333,7 +365,7 @@ function createGraphQueueBundle(input: {
       assignments: []
     },
     graphEvents: Object.fromEntries(input.graphNodes.map((node) => [node.id, node])),
-    bigOnceEvents: [],
+    bigOnceEvents: input.bigOnceEvents ?? [],
     loopEvents: []
   }
 }
@@ -595,7 +627,8 @@ function runGraphQueueScenario(
       scenarioId: scenario.id,
       title: scenario.title,
       playerValues: scenario.playerValues,
-      graphNodes: scenario.graphNodes
+      graphNodes: scenario.graphNodes,
+      bigOnceEvents: scenario.bigOnceEvents
     }),
     now: new Date(REGRESSION_NOW)
   })
@@ -619,6 +652,14 @@ function runGraphQueueScenario(
     )
   }
 
+  if (scenario.expectedTriggeredBigOnceIds) {
+    const triggeredBigOnceIds = afterSnapshot.triggered_big_once_events.map((item) => item.event_id)
+    assert(
+      JSON.stringify(triggeredBigOnceIds) === JSON.stringify(scenario.expectedTriggeredBigOnceIds),
+      `[${scenario.id}] Unexpected triggered big-once ids: ${JSON.stringify(triggeredBigOnceIds)}`
+    )
+  }
+
   if (scenario.expectedNotificationOrder) {
     let previousIndex = -1
 
@@ -636,6 +677,105 @@ function runGraphQueueScenario(
     scenarioTitle: scenario.title,
     moneyBeforeFlow,
     moneyAfterFlow,
+    notifications: notifications.slice(-10)
+  }
+}
+
+function runLoopSkipScenario(
+  scenario: LoopSkipRegressionScenario
+): LoopSkipRegressionResult {
+  const session = createStorySession({
+    bundle: {
+      storyId: `loop-skip-${scenario.id}`,
+      title: scenario.title,
+      generatedAt: REGRESSION_NOW,
+      vals: createPlayerValsFileFromRecord({
+        money: scenario.initialMoney,
+        ...(scenario.playerValues ?? {})
+      }),
+      playerOverrideVals: {
+        entries: []
+      },
+      systemVals: createSystemValsFile(scenario.nowDate, scenario.nowDay),
+      scenes: {
+        ai: {
+          compress_quality: 60
+        },
+        scenes: []
+      },
+      roles: {
+        normal: {
+          ai: {
+            width: 1536,
+            height: 1024,
+            global_prompt: "",
+            compress_quality_1: 60,
+            compress_quality_2: 80
+          },
+          roles: []
+        },
+        important: {
+          ai: {
+            width: 1536,
+            height: 1024,
+            global_prompt: "",
+            compress_quality_1: 60,
+            compress_quality_2: 80
+          },
+          roles: []
+        }
+      },
+      eventLocations: {
+        ai: {
+          width: 1536,
+          height: 1024,
+          global_prompt: "",
+          compress_quality_1: 60,
+          compress_quality_2: 80
+        },
+        assignments: []
+      },
+      graphEvents: {},
+      bigOnceEvents: [],
+      loopEvents: [scenario.loopEvent]
+    },
+    now: new Date(REGRESSION_NOW)
+  })
+
+  const beforeSnapshot = session.getSnapshot()
+  const moneyBeforeLoop = readNumber(beforeSnapshot.vals, "player.money")
+
+  advanceGameDays(session, scenario.advanceDays)
+
+  const afterSnapshot = session.getSnapshot()
+  const moneyAfterLoop = readNumber(afterSnapshot.vals, "player.money")
+  const afterDay = readNumber(afterSnapshot.system_vals, "system.now_day")
+  const afterHour = readNumber(afterSnapshot.system_vals, "system.now_hour")
+  const afterMinute = readNumber(afterSnapshot.system_vals, "system.now_minute")
+  const notifications = session.getViewModel().notifications
+  const loopState = afterSnapshot.scheduler.loop_states.find((item) => item.event_id === scenario.loopEvent.id)
+  const loopEventState = afterSnapshot.loop_event_states.find((item) => item.event_id === scenario.loopEvent.id)
+
+  assert(afterSnapshot.current_event_id === null, `[${scenario.id}] Expected skipped loop to stay idle`)
+  assert(afterDay === scenario.expectedDay, `[${scenario.id}] Expected day ${scenario.expectedDay}, received ${afterDay}`)
+  assert(afterHour === (scenario.expectedHour ?? 0), `[${scenario.id}] Expected hour ${scenario.expectedHour ?? 0}, received ${afterHour}`)
+  assert(afterMinute === (scenario.expectedMinute ?? 0), `[${scenario.id}] Expected minute ${scenario.expectedMinute ?? 0}, received ${afterMinute}`)
+  assert(moneyAfterLoop === scenario.expectedMoney, `[${scenario.id}] Expected money ${scenario.expectedMoney}, received ${moneyAfterLoop}`)
+  assert(loopState, `[${scenario.id}] Missing loop scheduler state for ${scenario.loopEvent.id}`)
+  assert(loopState.trigger_count === 0, `[${scenario.id}] Skipped loop should not increase trigger_count`)
+  assert(loopState.last_triggered_game_minute === null, `[${scenario.id}] Skipped loop should not set last_triggered_game_minute`)
+  assert(loopState.next_due_game_minute === scenario.expectedNextDueMinute, `[${scenario.id}] Unexpected next due minute`)
+  assert(!loopEventState, `[${scenario.id}] Skipped loop should not create loop_event_state`)
+
+  return {
+    kind: "loop-skip",
+    scenarioId: scenario.id,
+    scenarioTitle: scenario.title,
+    moneyBeforeLoop,
+    moneyAfterLoop,
+    afterDay,
+    afterHour,
+    afterMinute,
     notifications: notifications.slice(-10)
   }
 }
@@ -783,8 +923,92 @@ function buildSyntheticScenarios(): SyntheticRegressionScenario[] {
   ]
 }
 
+function buildLoopSkipScenarios(): LoopSkipRegressionScenario[] {
+  return [
+    {
+      id: "daily-loop-skip-and-reschedule",
+      title: "Daily loop skips current cycle when trigger is false",
+      nowDate: "1990-1-1",
+      nowDay: 1,
+      advanceDays: 1,
+      initialMoney: 50,
+      playerValues: {
+        flag: 0
+      },
+      loopEvent: createLoopEvent({
+        id: "daily_skip",
+        title: "Daily Skip",
+        triggerExpr: "{player.flag} > 0",
+        endScript: "{player.money} += 99",
+        loop: {
+          mode: "daily"
+        }
+      }),
+      expectedMoney: 50,
+      expectedDay: 2,
+      expectedNextDueMinute: MINUTES_PER_DAY * 2
+    }
+  ]
+}
+
 function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
   return [
+    {
+      id: "graph-root-trigger-lock-after-queue",
+      title: "Queued graph root still runs after trigger changes",
+      playerValues: {
+        money: 0,
+        flag: 0
+      },
+      graphNodes: [
+        createGraphEventNode({
+          id: "root_a",
+          title: "Root A",
+          endScript: "{player.money} += 1\n{player.flag} = 1"
+        }),
+        createGraphEventNode({
+          id: "root_b",
+          title: "Root B",
+          triggerExpr: "{player.flag} === 0",
+          endScript: "{player.money} += 10"
+        })
+      ],
+      expectedMoney: 11,
+      expectedConsumedRootIds: ["root_a", "root_b"],
+      expectedNotificationOrder: ["Root A", "Root B"]
+    },
+    {
+      id: "big-once-trigger-lock-after-queue",
+      title: "Queued big-once event still runs after trigger changes",
+      playerValues: {
+        money: 0,
+        flag: 0
+      },
+      graphNodes: [
+        createGraphEventNode({
+          id: "root_guard",
+          title: "Root Guard",
+          endScript: "{player.money} += 1\n{player.flag} = 1"
+        })
+      ],
+      bigOnceEvents: [
+        {
+          id: "once_bonus",
+          title: "Once Bonus",
+          trigger_expr: "{player.flag} === 0",
+          init_script: "",
+          object_keys: [],
+          dialogues: [],
+          location: "",
+          bgm: "",
+          end_script: "{player.money} += 20"
+        }
+      ],
+      expectedMoney: 21,
+      expectedConsumedRootIds: ["root_guard"],
+      expectedTriggeredBigOnceIds: ["once_bonus"],
+      expectedNotificationOrder: ["Root Guard", "Once Bonus"]
+    },
     {
       id: "graph-auto-next-fallback",
       title: "Graph auto next picks the first enterable event",
@@ -858,6 +1082,7 @@ async function main() {
   const loopEventId = process.argv[3] ?? DEFAULT_LOOP_EVENT_ID
   const demoResult = await runDemoDailyRegression(storyId, loopEventId)
   const syntheticResults = buildSyntheticScenarios().map(runSyntheticScenario)
+  const loopSkipResults = buildLoopSkipScenarios().map(runLoopSkipScenario)
   const graphQueueResults = buildGraphQueueScenarios().map(runGraphQueueScenario)
 
   console.log(JSON.stringify({
@@ -865,6 +1090,7 @@ async function main() {
     executedAt: REGRESSION_NOW,
     demoResult,
     syntheticResults,
+    loopSkipResults,
     graphQueueResults
   }, null, 2))
 }
