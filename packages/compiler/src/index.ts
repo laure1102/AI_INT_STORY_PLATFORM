@@ -46,7 +46,7 @@ export function compileStory(document: StoryDocument): {
       roles: document.roles,
       eventLocations: document.eventLocations,
       graphEvents,
-      bigOnceEvents: document.bigOnceEvents,
+      onceEvents: document.onceEvents,
       loopEvents: document.loopEvents
     },
     result: validateStoryDocument(document)

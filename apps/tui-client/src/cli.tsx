@@ -537,7 +537,7 @@ function buildSchedulerDebugLines(state: TuiClientAppState) {
   lines.push(`就绪队列: ${scheduler.ready_queue.length}`)
   lines.push(`未来调度: ${scheduler.scheduled.length}`)
   lines.push(`已消费根事件: ${scheduler.consumed_graph_root_ids.length}`)
-  lines.push(`已消费大事件: ${scheduler.consumed_big_once_ids.length}`)
+  lines.push(`已消费一次性事件: ${scheduler.consumed_once_ids.length}`)
   lines.push(`循环状态: ${scheduler.loop_states.length}`)
 
   if (scheduler.ready_queue.length > 0) {
@@ -651,7 +651,7 @@ function buildSchedulerMonitorLines(state: TuiClientAppState) {
     `就绪 ${scheduler.ready_queue.length} · 未来 ${scheduler.scheduled.length} · 循环 ${scheduler.loop_states.length} · 审计 ${scheduler.audit_logs.length}`
   )
   lines.push(`暂停状态 ${pauseFlags.length > 0 ? pauseFlags.join(" + ") : "无"}`)
-  lines.push(`已消费 根事件 ${scheduler.consumed_graph_root_ids.length} · 大事件 ${scheduler.consumed_big_once_ids.length}`)
+  lines.push(`已消费 根事件 ${scheduler.consumed_graph_root_ids.length} · 一次性事件 ${scheduler.consumed_once_ids.length}`)
 
   lines.push("")
   lines.push("[就绪队列]")

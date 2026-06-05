@@ -12,6 +12,13 @@ If this guide conflicts with code, trust the code in these files first:
 - `packages/file-store/src/index.ts`
 - `apps/api/src/routes/stories.ts`
 
+## 0. Encoding rule
+
+- all code reading, code writing, patch editing, and generated text files must use UTF-8 encoding
+- all PowerShell-based file read/write and command pipelines in this project must explicitly preserve UTF-8 input/output behavior
+- when inspecting files that may contain Chinese text, always prefer UTF-8-safe reads first, and never assume the terminal default encoding is correct
+- if any garbled text appears during editing or command output, stop and re-read the source with UTF-8 before making further changes
+
 ## 1. Project direction
 
 Story Manager is no longer only an editor.
@@ -58,7 +65,7 @@ Core files:
 Event files:
 
 - `events/events.json5`
-- `events/big_once_events.json5`
+- `events/once_events.json5`
 - `events/loop_events.json5`
 
 Notes:
@@ -270,7 +277,7 @@ Graph rules:
 - `action -> action` is not allowed
 - an action node should have at most one outgoing `next`
 
-### Big-once events: `events/big_once_events.json5`
+### Once events: `events/once_events.json5`
 
 ```json5
 {
@@ -288,7 +295,7 @@ Graph rules:
 
 ### Loop events: `events/loop_events.json5`
 
-Loop events extend big-once events with:
+Loop events extend once events with:
 
 ```json5
 {
@@ -369,10 +376,10 @@ Restrictions:
 `object_keys` uses unique keys:
 
 - `player`
-- `normal:<roleName>`
-- `important:<roleName>`
+- `normal:<roleId>`
+- `important:<roleId>`
 
-The editor intentionally allows duplicate role names across normal and important roles because the stored key includes the namespace.
+The editor intentionally allows duplicate role names across normal and important roles because the stored key includes the namespace and the role `id`.
 
 ### dialogue speaker
 
@@ -386,8 +393,8 @@ The editor intentionally allows duplicate role names across normal and important
 
 ### location field
 
-- stored value is the location `name`
-- editor displays `name - descr`
+- stored value is the location `id`
+- editor displays `id - descr`
 - empty location is allowed
 
 ## 8. Asset and AI rules
@@ -419,7 +426,7 @@ Compression:
 - event dialogue playback
 - action-node branch execution and branch-variable propagation
 - runtime clock state and system-time synchronization
-- runtime scheduler state for graph roots, big-once events, and loop events
+- runtime scheduler state for graph roots, once events, and loop events
 
 ### Runtime clock model
 
@@ -477,8 +484,9 @@ Important current boundary:
 - time progression is already part of the shared runtime and must remain reusable by both `tui-client` and future `cocos-client`
 - current runtime uses a scheduler model with `scheduled`, `ready_queue`, and `active`
 - graph root discovery is already connected
-- `big_once_events` are already connected to scheduler-driven playback
+- `once_events` are already connected to scheduler-driven playback
 - `loop_events` already maintain future due times and are promoted from `scheduled` to `ready_queue` when due
+- canonical naming is now `once`
 
 ### Runtime scheduler model
 
@@ -491,7 +499,7 @@ interface RuntimeSchedulerState {
   scheduled: RuntimeScheduledEvent[]
   ready_queue: RuntimeScheduledEvent[]
   active: RuntimeScheduledEvent | null
-  consumed_big_once_ids: string[]
+  consumed_once_ids: string[]
   consumed_graph_root_ids: string[]
   loop_states: RuntimeSchedulerLoopState[]
   manual_pause: boolean
@@ -505,9 +513,9 @@ Current behavior:
 - graph events only enter global scheduling through root event nodes
 - root event rule: graph `event` nodes with no incoming graph-event parent edge
 - graph roots are consumed once per save after successful playback
-- `big_once_events` are scanned, queued when trigger conditions pass, and consumed once
+- `once_events` are scanned, queued when trigger conditions pass, and consumed once
 - queued scheduler items now carry `trigger_locked`
-- `graph_root` and `big_once` events check `trigger_expr` at enqueue time; once queued, they keep execution eligibility even if related variable values change before playback
+- `graph_root` and `once` events check `trigger_expr` at enqueue time; once queued, they keep execution eligibility even if related variable values change before playback
 - `loop_events` keep one next-due schedule per event, enter `scheduled`, and are promoted into `ready_queue` when due
 - loop events re-check `trigger_expr` only when they become due
 - if a loop event reaches due time but its `trigger_expr` is false, the current cycle is skipped and the next cycle is scheduled
@@ -535,7 +543,7 @@ Current behavior:
 Current event-source coverage:
 
 - `graph_root`: fully connected
-- `big_once`: fully connected for first-pass runtime playback
+- `once`: fully connected for first-pass runtime playback
 - `loop`: first-pass scheduler connected for `daily`, `weekly`, `monthly`, and `interval_days`
 
 Current loop timing rule:
@@ -544,7 +552,7 @@ Current loop timing rule:
 - loop events currently trigger at day-boundary style times derived from the runtime clock
 - next cycle is recalculated after each loop completion
 - verified behavior for the demo `daily_money` loop:
-  - after the opening graph root / big-once chain finishes
+  - after the opening graph root / once chain finishes
   - advancing game time to day `2` `00:00`
   - triggers `daily_money`
   - auto-runs its `end_script`
@@ -646,13 +654,13 @@ Current regression coverage includes:
 - graph-event auto-next fallback to the first enterable next event
 - graph-root queue continuation after an action branch cannot enter its next event
 - queued graph-root trigger lock after enqueue
-- queued big-once trigger lock after enqueue
+- queued once trigger lock after enqueue
 
 Notes:
 
 - the TUI must run in a real interactive TTY terminal because Ink needs raw keyboard input
 - the current runtime gameplay loop now covers graph root events from `events/events.json5`
-- the current runtime gameplay loop now covers `big_once_events.json5`
+- the current runtime gameplay loop now covers `once_events.json5`
 - the current runtime gameplay loop now covers `loop_events.json5`
 
 ### Current TUI game-screen behavior
@@ -733,7 +741,7 @@ The intended rule is:
 - refine loop scheduling semantics and add regression coverage for daily/weekly/monthly/interval rules
 - add a lightweight repeatable runtime regression harness for scheduler / loop verification
 - add scheduler-focused tests around root-event auto discovery
-- add scheduler-focused tests around big-once single-consume behavior
+- add scheduler-focused tests around once single-consume behavior
 - add scheduler-focused tests around loop due-time promotion
 - add scheduler-focused tests around manual pause vs event pause interaction
 - add regression tests around bundle -> custom -> save layering

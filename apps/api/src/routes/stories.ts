@@ -61,7 +61,7 @@ function requireQueryString(value: unknown, name: string) {
 }
 
 function normalizeEventCollectionType(value: unknown): StoryEventCollectionType {
-  if (value === "bigOnce" || value === "loop") {
+  if (value === "once" || value === "loop") {
     return value
   }
 

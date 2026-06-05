@@ -3,12 +3,12 @@ import type {
   AppSettingsFile,
   StoryAnyEventFile,
   StoryActionFile,
-  StoryBigOnceEventFile,
   StoryDocument,
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
   StoryLoopEventFile,
+  StoryOnceEventFile,
   StoryPlayerOverrideValsFile,
   StoryRolesFile,
   StorySceneFile,
@@ -19,14 +19,14 @@ import type {
 import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
 import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
 import AppSettingsDialog from "./AppSettingsDialog.vue"
-import BigOnceEventDetailPanel from "./BigOnceEventDetailPanel.vue"
 import GraphActionDetailPanel from "./GraphActionDetailPanel.vue"
 import GraphEventDetailPanel from "./GraphEventDetailPanel.vue"
 import LoopEventDetailPanel from "./LoopEventDetailPanel.vue"
-import StoryBigOnceCanvas from "./StoryBigOnceCanvas.vue"
+import OnceEventDetailPanel from "./OnceEventDetailPanel.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
 import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
 import StoryLocationsDialog from "./StoryLocationsDialog.vue"
+import StoryOnceCanvas from "./StoryOnceCanvas.vue"
 import StoryPlayerOverrideValsDialog from "./StoryPlayerOverrideValsDialog.vue"
 import StoryRolesDialog from "./StoryRolesDialog.vue"
 import StoryScenesDialog from "./StoryScenesDialog.vue"
@@ -82,7 +82,7 @@ const activeEventTab = shallowRef<EventCanvasTab>("graph")
 
 const eventTabOptions: Array<{ key: EventCanvasTab; label: string }> = [
   { key: "graph", label: "普通剧情推进事件" },
-  { key: "bigOnce", label: "一次性大事件" },
+  { key: "once", label: "一次性事件" },
   { key: "loop", label: "定时循环事件" }
 ]
 
@@ -91,8 +91,8 @@ function getEventsByCollectionType(collectionType: EventCanvasTab) {
     return []
   }
 
-  if (collectionType === "bigOnce") {
-    return storyDocument.value.bigOnceEvents
+  if (collectionType === "once") {
+    return storyDocument.value.onceEvents
   }
 
   if (collectionType === "loop") {
@@ -134,12 +134,12 @@ const activeGraphEvents = computed<StoryEventFile[]>(() => {
   return getEventsByCollectionType("graph") as StoryEventFile[]
 })
 
-const activeBigOnceEvents = computed<StoryBigOnceEventFile[]>(() => {
-  if (activeEventTab.value !== "bigOnce") {
+const activeOnceEvents = computed<StoryOnceEventFile[]>(() => {
+  if (activeEventTab.value !== "once") {
     return []
   }
 
-  return getEventsByCollectionType("bigOnce") as StoryBigOnceEventFile[]
+  return getEventsByCollectionType("once") as StoryOnceEventFile[]
 })
 
 const activeLoopEvents = computed<StoryLoopEventFile[]>(() => {
@@ -253,9 +253,9 @@ function replaceEventInDocument(
     return
   }
 
-  if (collectionType === "bigOnce") {
-    const sourceEvents = storyDocument.value.bigOnceEvents
-    const typedSavedEvent = savedEvent as StoryBigOnceEventFile
+  if (collectionType === "once") {
+    const sourceEvents = storyDocument.value.onceEvents
+    const typedSavedEvent = savedEvent as StoryOnceEventFile
     const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
     const nextEvents = hasExistingEvent
       ? sourceEvents.map((currentEvent) =>
@@ -265,7 +265,7 @@ function replaceEventInDocument(
 
     storyDocument.value = {
       ...storyDocument.value,
-      bigOnceEvents: nextEvents
+      onceEvents: nextEvents
     }
     return
   }
@@ -326,10 +326,10 @@ function removeEventFromDocument(
     return
   }
 
-  if (collectionType === "bigOnce") {
+  if (collectionType === "once") {
     storyDocument.value = {
       ...storyDocument.value,
-      bigOnceEvents: storyDocument.value.bigOnceEvents.filter((event) => event.id !== eventId)
+      onceEvents: storyDocument.value.onceEvents.filter((event) => event.id !== eventId)
     }
     return
   }
@@ -503,7 +503,7 @@ async function loadStory() {
     storyDocument.value = story
     appSettings.value = settings
 
-    for (const collectionType of ["graph", "bigOnce", "loop"] as EventCanvasTab[]) {
+    for (const collectionType of ["graph", "once", "loop"] as EventCanvasTab[]) {
       const events = getEventsByCollectionType(collectionType)
       const currentSelection = projectStore.getSelectedEventId(props.storyId, collectionType)
       const fallbackEventId = events[0]?.id
@@ -611,9 +611,9 @@ function buildNewRootEvent(): StoryEventFile {
 }
 
 function buildNewStandaloneEvent(): StoryAnyEventFile {
-  if (activeEventTab.value === "bigOnce") {
-    const event: StoryBigOnceEventFile = {
-      id: createUniqueEventId("big-once-event"),
+  if (activeEventTab.value === "once") {
+    const event: StoryOnceEventFile = {
+      id: createUniqueEventId("once-event"),
       title: "新事件",
       trigger_expr: "",
       init_script: "",
@@ -1185,9 +1185,9 @@ watch(
         @toggle-link="handleToggleLink"
       />
 
-      <StoryBigOnceCanvas
-        v-else-if="activeEventTab === 'bigOnce'"
-        :events="activeBigOnceEvents"
+      <StoryOnceCanvas
+        v-else-if="activeEventTab === 'once'"
+        :events="activeOnceEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
@@ -1239,9 +1239,9 @@ watch(
               @close="closeEditor"
               @save="handleSaveEvent"
             />
-            <BigOnceEventDetailPanel
-              v-else-if="activeEventTab === 'bigOnce'"
-              :event="activeDraftEvent as StoryBigOnceEventFile | null"
+            <OnceEventDetailPanel
+              v-else-if="activeEventTab === 'once'"
+              :event="activeDraftEvent as StoryOnceEventFile | null"
               :event-locations="storyDocument.eventLocations"
               :mode="isCreateMode ? 'create' : 'edit'"
               :roles="storyDocument.roles"
@@ -1499,7 +1499,7 @@ watch(
 }
 
 .editor-canvas-band :deep(.graph-panel),
-.editor-canvas-band :deep(.big-once-board),
+.editor-canvas-band :deep(.once-board),
 .editor-canvas-band :deep(.loop-board) {
   border-top-left-radius: 0;
   border-top-right-radius: 18px;

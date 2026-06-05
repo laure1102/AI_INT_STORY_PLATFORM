@@ -63,7 +63,7 @@ interface CompiledAction {
 }
 
 interface RuntimeStandaloneEvent extends CompiledEvent {
-  runtime_source_type: "big_once" | "loop"
+  runtime_source_type: "once" | "loop"
   bgm: string
   next: []
 }
@@ -96,10 +96,11 @@ export interface RuntimeStorySaveState {
   session_state: RuntimeStorySessionSnapshot
 }
 
-export interface RuntimeTriggeredBigOnceState {
+export interface RuntimeTriggeredOnceState {
   event_id: string
   triggered_at: string
 }
+
 
 export interface RuntimeLoopEventState {
   event_id: string
@@ -124,7 +125,7 @@ export interface RuntimeClockState {
   step_minutes: number
 }
 
-export type RuntimeSchedulerSourceType = "graph_root" | "big_once" | "loop"
+export type RuntimeSchedulerSourceType = "graph_root" | "once" | "loop"
 
 export type RuntimeSchedulerEventStatus =
   | "scheduled"
@@ -176,7 +177,8 @@ export interface RuntimeSchedulerState {
   scheduled: RuntimeScheduledEvent[]
   ready_queue: RuntimeScheduledEvent[]
   active: RuntimeScheduledEvent | null
-  consumed_big_once_ids: string[]
+  consumed_once_ids: string[]
+  /** @deprecated 请改用 consumed_once_ids */
   consumed_graph_root_ids: string[]
   loop_states: RuntimeSchedulerLoopState[]
   audit_logs: RuntimeSchedulerAuditEntry[]
@@ -191,7 +193,8 @@ export interface RuntimeStorySessionSnapshot {
   system_vals: StoryValsFile
   clock: RuntimeClockState
   scheduler: RuntimeSchedulerState
-  triggered_big_once_events: RuntimeTriggeredBigOnceState[]
+  triggered_once_events: RuntimeTriggeredOnceState[]
+  /** @deprecated 请改用 triggered_once_events */
   loop_event_states: RuntimeLoopEventState[]
   history: RuntimeHistoryEntry[]
 }
@@ -207,7 +210,8 @@ export interface RuntimeStoryBundle {
   roles: unknown
   eventLocations: unknown
   graphEvents: Record<string, unknown>
-  bigOnceEvents: unknown[]
+  onceEvents: unknown[]
+  /** @deprecated 请改用 onceEvents */
   loopEvents: unknown[]
 }
 
@@ -275,7 +279,7 @@ export interface RuntimeStoryViewModel {
     globalGroupCount: number
     systemGroupCount: number
     historyCount: number
-    triggeredBigOnceCount: number
+    triggeredOnceCount: number
   }
 }
 
@@ -626,7 +630,7 @@ function createDefaultSchedulerState(): RuntimeSchedulerState {
     scheduled: [],
     ready_queue: [],
     active: null,
-    consumed_big_once_ids: [],
+    consumed_once_ids: [],
     consumed_graph_root_ids: [],
     loop_states: [],
     audit_logs: [],
@@ -667,47 +671,60 @@ function normalizeClockState(snapshot: RuntimeStorySessionSnapshot) {
 function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
   const scheduler = snapshot.scheduler ?? createDefaultSchedulerState()
   scheduler.scheduled = Array.isArray(scheduler.scheduled)
-    ? scheduler.scheduled.map((item) => ({
-        instance_id: normalizeText(item.instance_id),
-        source_type: item.source_type,
-        source_id: normalizeText(item.source_id),
-        entry_event_id: normalizeText(item.entry_event_id),
-        due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
-        seq: Math.max(1, clampInteger(item.seq, 1)),
-        dedupe_key: normalizeText(item.dedupe_key),
-        trigger_locked: Boolean(item.trigger_locked),
-        status: item.status
-      }))
+    ? scheduler.scheduled.map((item) => {
+        const sourceType = normalizeSchedulerSourceType(item.source_type) ?? "graph_root"
+
+        return {
+          instance_id: normalizeText(item.instance_id),
+          source_type: sourceType,
+          source_id: normalizeText(item.source_id),
+          entry_event_id: normalizeText(item.entry_event_id),
+          due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
+          seq: Math.max(1, clampInteger(item.seq, 1)),
+          dedupe_key: normalizeSchedulerDedupeKey(item.dedupe_key, sourceType),
+          trigger_locked: Boolean(item.trigger_locked),
+          status: item.status
+        }
+      })
     : []
   scheduler.ready_queue = Array.isArray(scheduler.ready_queue)
-    ? scheduler.ready_queue.map((item) => ({
-        instance_id: normalizeText(item.instance_id),
-        source_type: item.source_type,
-        source_id: normalizeText(item.source_id),
-        entry_event_id: normalizeText(item.entry_event_id),
-        due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
-        seq: Math.max(1, clampInteger(item.seq, 1)),
-        dedupe_key: normalizeText(item.dedupe_key),
-        trigger_locked: Boolean(item.trigger_locked),
-        status: item.status
-      }))
+    ? scheduler.ready_queue.map((item) => {
+        const sourceType = normalizeSchedulerSourceType(item.source_type) ?? "graph_root"
+
+        return {
+          instance_id: normalizeText(item.instance_id),
+          source_type: sourceType,
+          source_id: normalizeText(item.source_id),
+          entry_event_id: normalizeText(item.entry_event_id),
+          due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
+          seq: Math.max(1, clampInteger(item.seq, 1)),
+          dedupe_key: normalizeSchedulerDedupeKey(item.dedupe_key, sourceType),
+          trigger_locked: Boolean(item.trigger_locked),
+          status: item.status
+        }
+      })
     : []
   scheduler.active = scheduler.active
-    ? {
-        instance_id: normalizeText(scheduler.active.instance_id),
-        source_type: scheduler.active.source_type,
-        source_id: normalizeText(scheduler.active.source_id),
-        entry_event_id: normalizeText(scheduler.active.entry_event_id),
-        due_game_minute: Math.max(0, clampInteger(scheduler.active.due_game_minute, 0)),
-        seq: Math.max(1, clampInteger(scheduler.active.seq, 1)),
-        dedupe_key: normalizeText(scheduler.active.dedupe_key),
-        trigger_locked: Boolean(scheduler.active.trigger_locked),
-        status: scheduler.active.status
-      }
+    ? (() => {
+        const sourceType = normalizeSchedulerSourceType(scheduler.active.source_type) ?? "graph_root"
+
+        return {
+          instance_id: normalizeText(scheduler.active.instance_id),
+          source_type: sourceType,
+          source_id: normalizeText(scheduler.active.source_id),
+          entry_event_id: normalizeText(scheduler.active.entry_event_id),
+          due_game_minute: Math.max(0, clampInteger(scheduler.active.due_game_minute, 0)),
+          seq: Math.max(1, clampInteger(scheduler.active.seq, 1)),
+          dedupe_key: normalizeSchedulerDedupeKey(scheduler.active.dedupe_key, sourceType),
+          trigger_locked: Boolean(scheduler.active.trigger_locked),
+          status: scheduler.active.status
+        }
+      })()
     : null
-  scheduler.consumed_big_once_ids = Array.isArray(scheduler.consumed_big_once_ids)
-    ? scheduler.consumed_big_once_ids.map((item) => normalizeText(item)).filter(Boolean)
+  const consumedOnceIdsSource = Array.isArray(scheduler.consumed_once_ids)
+    ? scheduler.consumed_once_ids
     : []
+  scheduler.consumed_once_ids = consumedOnceIdsSource.map((item) => normalizeText(item)).filter(Boolean)
   scheduler.consumed_graph_root_ids = Array.isArray(scheduler.consumed_graph_root_ids)
     ? scheduler.consumed_graph_root_ids.map((item) => normalizeText(item)).filter(Boolean)
     : []
@@ -740,6 +757,35 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
   scheduler.event_pause = Boolean(scheduler.event_pause)
   scheduler.next_seq = Math.max(1, clampInteger(scheduler.next_seq, 1))
   snapshot.scheduler = scheduler
+
+  const triggeredOnceEventsSource = Array.isArray(snapshot.triggered_once_events)
+    ? snapshot.triggered_once_events
+    : []
+  snapshot.triggered_once_events = triggeredOnceEventsSource.map((item) => ({
+    event_id: normalizeText((item as RuntimeTriggeredOnceState | undefined)?.event_id),
+    triggered_at: normalizeText((item as RuntimeTriggeredOnceState | undefined)?.triggered_at)
+  })).filter((item) => item.event_id && item.triggered_at)
+
+  snapshot.loop_event_states = Array.isArray(snapshot.loop_event_states)
+    ? snapshot.loop_event_states.map((item) => ({
+        event_id: normalizeText(item.event_id),
+        last_triggered_at: normalizeOptionalText(item.last_triggered_at),
+        last_triggered_day: item.last_triggered_day === undefined
+          ? undefined
+          : Math.max(0, clampInteger(item.last_triggered_day, 0)),
+        trigger_count: Math.max(0, clampInteger(item.trigger_count, 0))
+      })).filter((item) => item.event_id)
+    : []
+
+  snapshot.history = Array.isArray(snapshot.history)
+    ? snapshot.history.map((item) => ({
+        type: item.type,
+        id: normalizeText(item.id),
+        title: normalizeOptionalText(item.title),
+        content: normalizeOptionalText(item.content),
+        timestamp: normalizeText(item.timestamp)
+      })).filter((item) => item.id && item.timestamp)
+    : []
 }
 
 function normalizeOptionalText(value: unknown) {
@@ -747,8 +793,16 @@ function normalizeOptionalText(value: unknown) {
   return normalized || undefined
 }
 
+function normalizeSchedulerDedupeKey(
+  value: unknown,
+  sourceType: RuntimeSchedulerSourceType | undefined
+) {
+  const normalized = normalizeText(value)
+  return normalized
+}
+
 function normalizeSchedulerSourceType(value: unknown): RuntimeSchedulerSourceType | undefined {
-  if (value === "graph_root" || value === "big_once" || value === "loop") {
+  if (value === "graph_root" || value === "once" || value === "loop") {
     return value
   }
 
@@ -797,7 +851,7 @@ function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnap
     system_vals: systemVals,
     clock: createDefaultClockState(systemVals),
     scheduler: createDefaultSchedulerState(),
-    triggered_big_once_events: [],
+    triggered_once_events: [],
     loop_event_states: [],
     history: []
   }
@@ -1304,11 +1358,50 @@ function scanGraphRootEvents(
   }
 }
 
-function scanBigOnceEvents(
+function scanOnceEvents(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState
 ) {
-  const bigOnceEvents = bundle.bigOnceEvents as Array<{
+  const onceEvents = getBundleOnceEvents(bundle)
+
+  for (const event of onceEvents) {
+    const dedupeKey = `once:${event.id}`
+    if (runtimeState.snapshot.scheduler.consumed_once_ids.includes(event.id)) {
+      continue
+    }
+
+    if (runtimeState.snapshot.triggered_once_events.some((item) => item.event_id === event.id)) {
+      continue
+    }
+
+    if (isScheduledEventQueued(runtimeState.snapshot, dedupeKey)) {
+      continue
+    }
+
+    const standaloneEvent = createStandaloneEvent("once", event)
+    if (!canEnterEvent(runtimeState.snapshot, standaloneEvent, {})) {
+      continue
+    }
+
+    const readyEvent = createScheduledEvent(
+      runtimeState.snapshot,
+      "once",
+      event.id,
+      event.id,
+      getCurrentGameMinute(runtimeState.snapshot),
+      dedupeKey,
+      true
+    )
+    enqueueReadyEvent(runtimeState.snapshot, readyEvent)
+  }
+}
+
+function getBundleOnceEvents(bundle: RuntimeStoryBundle) {
+  const onceEventsSource = Array.isArray(bundle.onceEvents)
+    ? bundle.onceEvents
+    : []
+
+  return onceEventsSource as Array<{
     id: string
     title: string
     trigger_expr: string
@@ -1319,37 +1412,6 @@ function scanBigOnceEvents(
     bgm: string
     end_script: string
   }>
-
-  for (const event of bigOnceEvents) {
-    const dedupeKey = `big_once:${event.id}`
-    if (runtimeState.snapshot.scheduler.consumed_big_once_ids.includes(event.id)) {
-      continue
-    }
-
-    if (runtimeState.snapshot.triggered_big_once_events.some((item) => item.event_id === event.id)) {
-      continue
-    }
-
-    if (isScheduledEventQueued(runtimeState.snapshot, dedupeKey)) {
-      continue
-    }
-
-    const standaloneEvent = createStandaloneEvent("big_once", event)
-    if (!canEnterEvent(runtimeState.snapshot, standaloneEvent, {})) {
-      continue
-    }
-
-    const readyEvent = createScheduledEvent(
-      runtimeState.snapshot,
-      "big_once",
-      event.id,
-      event.id,
-      getCurrentGameMinute(runtimeState.snapshot),
-      dedupeKey,
-      true
-    )
-    enqueueReadyEvent(runtimeState.snapshot, readyEvent)
-  }
 }
 
 function ensureLoopSchedules(
@@ -1416,18 +1478,8 @@ function startNextReadyEventIfIdle(
       return
     }
 
-    if (nextScheduledEvent.source_type === "big_once") {
-      const event = (bundle.bigOnceEvents as Array<{
-        id: string
-        title: string
-        trigger_expr: string
-        init_script: string
-        object_keys: string[]
-        dialogues: RuntimeStoryDialogueDefinition[]
-        location: string
-        bgm: string
-        end_script: string
-      }>).find((item) => item.id === nextScheduledEvent.source_id)
+    if (nextScheduledEvent.source_type === "once") {
+      const event = getBundleOnceEvents(bundle).find((item) => item.id === nextScheduledEvent.source_id)
 
       if (!event) {
         continue
@@ -1447,7 +1499,7 @@ function startNextReadyEventIfIdle(
         due_game_minute: nextScheduledEvent.due_game_minute,
         message: "开始执行事件"
       })
-      runtimeState.activeStandaloneEvent = createStandaloneEvent("big_once", event)
+      runtimeState.activeStandaloneEvent = createStandaloneEvent("once", event)
       runtimeState.snapshot.current_event_id = event.id
       runtimeState.currentEventEntered = false
       runtimeState.currentDialogueIndex = 0
@@ -1528,7 +1580,7 @@ function reconcileScheduler(
   normalizeSchedulerState(runtimeState.snapshot)
   promoteDueScheduledEventsResolved(bundle, runtimeState.snapshot)
   scanGraphRootEvents(bundle, runtimeState)
-  scanBigOnceEvents(bundle, runtimeState)
+  scanOnceEvents(bundle, runtimeState)
   ensureLoopSchedules(bundle, runtimeState)
   startNextReadyEventIfIdle(bundle, runtimeState, notifications)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)
@@ -1555,7 +1607,7 @@ function getBundleGraphNode(bundle: RuntimeStoryBundle, nodeId: string | null) {
 }
 
 function createStandaloneEvent(
-  sourceType: "big_once" | "loop",
+  sourceType: "once" | "loop",
   event: {
     id: string
     title: string
@@ -1965,13 +2017,13 @@ function completeActiveScheduledEvent(snapshot: RuntimeStorySessionSnapshot) {
     }
   }
 
-  if (activeScheduledEvent.source_type === "big_once") {
-    if (!snapshot.scheduler.consumed_big_once_ids.includes(activeScheduledEvent.source_id)) {
-      snapshot.scheduler.consumed_big_once_ids.push(activeScheduledEvent.source_id)
+  if (activeScheduledEvent.source_type === "once") {
+    if (!snapshot.scheduler.consumed_once_ids.includes(activeScheduledEvent.source_id)) {
+      snapshot.scheduler.consumed_once_ids.push(activeScheduledEvent.source_id)
     }
 
-    if (!snapshot.triggered_big_once_events.some((item) => item.event_id === activeScheduledEvent.source_id)) {
-      snapshot.triggered_big_once_events.push({
+    if (!snapshot.triggered_once_events.some((item) => item.event_id === activeScheduledEvent.source_id)) {
+      snapshot.triggered_once_events.push({
         event_id: activeScheduledEvent.source_id,
         triggered_at: new Date().toISOString()
       })
@@ -2492,7 +2544,7 @@ function buildViewModel(
       globalGroupCount: runtimeState.snapshot.vals.variables.length,
       systemGroupCount: runtimeState.snapshot.system_vals.variables.length,
       historyCount: runtimeState.snapshot.history.length,
-      triggeredBigOnceCount: runtimeState.snapshot.triggered_big_once_events.length
+      triggeredOnceCount: runtimeState.snapshot.triggered_once_events.length
     }
   }
 }

@@ -307,7 +307,7 @@ export const appSettingsSchema = z.object({
   })
 })
 
-export const storyBigOnceDialogueSchema = z.object({
+export const storyOnceDialogueSchema = z.object({
   speaker_type: z.enum(["player", "object"]).default("object"),
   speaker_key: z.string().default(""),
   content: z.string().default("")
@@ -321,7 +321,7 @@ export const storyEventSchema = z.object({
   init_script: z.string().default(""),
   end_script: z.string().default(""),
   object_keys: z.array(z.string()).default([]),
-  dialogues: z.array(storyBigOnceDialogueSchema).default([]),
+  dialogues: z.array(storyOnceDialogueSchema).default([]),
   location: z.string().default(""),
   next: z.array(z.string()),
   meta: z.record(z.unknown()).optional()
@@ -352,13 +352,13 @@ export const storyEventTriggerSchema = z.object({
 export const storyGraphNodeSchema = z.union([storyEventSchema, storyActionSchema])
 export const storyGraphEventsSchema = z.array(storyGraphNodeSchema).default([])
 
-export const storyBigOnceEventSchema = storyEventSchema.extend({
+export const storyOnceEventSchema = storyEventSchema.extend({
   id: z.string().min(1),
   title: z.string().min(1),
   trigger_expr: z.string().default(""),
   init_script: z.string().default(""),
   object_keys: z.array(z.string()).default([]),
-  dialogues: z.array(storyBigOnceDialogueSchema).default([]),
+  dialogues: z.array(storyOnceDialogueSchema).default([]),
   location: z.string().default(""),
   bgm: z.string().default(""),
   end_script: z.string().default("")
@@ -366,7 +366,7 @@ export const storyBigOnceEventSchema = storyEventSchema.extend({
   next: true
 })
 
-export const storyBigOnceEventsSchema = z.array(storyBigOnceEventSchema).default([])
+export const storyOnceEventsSchema = z.array(storyOnceEventSchema).default([])
 
 export const storyLoopRuleSchema = z.object({
   mode: z.enum(["daily", "weekly", "monthly", "interval_days"]),
@@ -375,7 +375,7 @@ export const storyLoopRuleSchema = z.object({
   month_day: z.number().int().min(1).max(31).optional()
 })
 
-export const storyLoopEventSchema = storyBigOnceEventSchema.extend({
+export const storyLoopEventSchema = storyOnceEventSchema.extend({
   loop: storyLoopRuleSchema
 })
 
@@ -390,6 +390,6 @@ export const storyDocumentSchema = z.object({
   roles: storyRolesSchema,
   eventLocations: storyEventLocationSchema,
   graphEvents: storyGraphEventsSchema,
-  bigOnceEvents: storyBigOnceEventsSchema,
+  onceEvents: storyOnceEventsSchema,
   loopEvents: storyLoopEventsSchema
 })

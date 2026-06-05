@@ -2,9 +2,9 @@
 import {
   buildStoryRoleKey,
   findStoryRoleReference,
-  type StoryBigOnceDialogueDefinition,
-  type StoryBigOnceEventFile,
   type StoryEventLocationFile,
+  type StoryOnceDialogueDefinition,
+  type StoryOnceEventFile,
   type StoryRolesFile,
   type StorySceneFile,
   type StoryValsFile
@@ -16,17 +16,17 @@ import StoryQuickRoleCreateDialog from "./StoryQuickRoleCreateDialog.vue"
 import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
 import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
 
-interface DialogueDraft extends StoryBigOnceDialogueDefinition {
+interface DialogueDraft extends StoryOnceDialogueDefinition {
   id: string
 }
 
 interface DialogueEditorDraft {
-  speaker_type: StoryBigOnceDialogueDefinition["speaker_type"]
+  speaker_type: StoryOnceDialogueDefinition["speaker_type"]
   speaker_key: string
   content: string
 }
 
-interface BigOnceEventDraft {
+interface OnceEventDraft {
   id: string
   title: string
   triggerExpr: string
@@ -75,7 +75,7 @@ const SCRIPT_HIGHLIGHT_PATTERN =
   /\b(let|true|false|null)\b|\bMath\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
 
 const props = defineProps<{
-  event: StoryBigOnceEventFile | null
+  event: StoryOnceEventFile | null
   eventLocations: StoryEventLocationFile
   mode?: "create" | "edit"
   roles: StoryRolesFile
@@ -88,7 +88,7 @@ const emit = defineEmits<{
   close: []
   quickCreateLocation: [payload: StoryQuickCreateLocationPayload]
   quickCreateRole: [payload: StoryQuickCreateRolePayload]
-  save: [event: StoryBigOnceEventFile]
+  save: [event: StoryOnceEventFile]
 }>()
 
 const triggerHelpRef = useTemplateRef<HTMLDivElement>("triggerHelp")
@@ -149,7 +149,7 @@ function createDialogueId() {
   return `dialogue-${dialogueIdSeed}`
 }
 
-function cloneDialogue(dialogue?: StoryBigOnceDialogueDefinition): DialogueDraft {
+function cloneDialogue(dialogue?: StoryOnceDialogueDefinition): DialogueDraft {
   return {
     id: createDialogueId(),
     speaker_type: dialogue?.speaker_type ?? "object",
@@ -158,7 +158,7 @@ function cloneDialogue(dialogue?: StoryBigOnceDialogueDefinition): DialogueDraft
   }
 }
 
-const draft = reactive<BigOnceEventDraft>({
+const draft = reactive<OnceEventDraft>({
   id: "",
   title: "",
   triggerExpr: "",
@@ -387,7 +387,7 @@ function normalizeStoredObjectKeys(objectKeys: string[]) {
   )
 }
 
-function syncDraft(event: StoryBigOnceEventFile | null) {
+function syncDraft(event: StoryOnceEventFile | null) {
   draft.id = event?.id ?? ""
   draft.title = event?.title ?? ""
   draft.triggerExpr = event?.trigger_expr ?? ""
@@ -409,7 +409,7 @@ function syncDraft(event: StoryBigOnceEventFile | null) {
   })
 }
 
-function createDialogueEditorDraft(dialogue?: StoryBigOnceDialogueDefinition): DialogueEditorDraft {
+function createDialogueEditorDraft(dialogue?: StoryOnceDialogueDefinition): DialogueEditorDraft {
   const speakerType = dialogue?.speaker_type ?? (objectKeyOptions.value[0] ? "object" : "player")
   const speakerKey = speakerType === "player"
     ? "player"
@@ -1177,8 +1177,8 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
               <label class="field">
                 <span class="field-label">背景音乐</span>
-                <input v-model="draft.bgm" class="text-input" type="text" list="big-once-bgm" />
-                <datalist id="big-once-bgm">
+                <input v-model="draft.bgm" class="text-input" type="text" list="once-event-bgm" />
+                <datalist id="once-event-bgm">
                   <option v-for="bgm in bgmOptions" :key="bgm" :value="bgm" />
                 </datalist>
               </label>

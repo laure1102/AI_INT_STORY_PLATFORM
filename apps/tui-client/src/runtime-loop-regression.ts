@@ -2,8 +2,8 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { compileStory } from "@story-mgr/compiler"
 import type {
-  StoryBigOnceEventFile,
-  StoryBigOnceDialogueDefinition,
+  StoryOnceDialogueDefinition,
+  StoryOnceEventFile,
   StoryLoopEventFile,
   StoryValDefinition,
   StoryValEntryDefinition,
@@ -85,10 +85,10 @@ interface GraphQueueRegressionScenario {
   title: string
   playerValues: Record<string, unknown>
   graphNodes: Array<RegressionGraphEventNode | RegressionGraphActionNode>
-  bigOnceEvents?: StoryBigOnceEventFile[]
+  onceEvents?: StoryOnceEventFile[]
   expectedMoney: number
   expectedConsumedRootIds?: string[]
-  expectedTriggeredBigOnceIds?: string[]
+  expectedTriggeredOnceIds?: string[]
   expectedNotificationOrder?: string[]
 }
 
@@ -128,7 +128,7 @@ interface RegressionGraphEventNode {
   init_script: string
   end_script: string
   object_keys: string[]
-  dialogues: StoryBigOnceDialogueDefinition[]
+  dialogues: StoryOnceDialogueDefinition[]
   location: string
   next: string[]
 }
@@ -265,7 +265,7 @@ function createSyntheticBundle(
       assignments: []
     },
     graphEvents: {},
-    bigOnceEvents: [],
+    onceEvents: [],
     loopEvents: scenario.loopEvents
   }
 }
@@ -276,7 +276,7 @@ function createGraphEventNode(input: {
   triggerExpr?: string
   initScript?: string
   endScript?: string
-  dialogues?: StoryBigOnceDialogueDefinition[]
+  dialogues?: StoryOnceDialogueDefinition[]
   next?: string[]
 }) {
   return {
@@ -315,7 +315,7 @@ function createGraphQueueBundle(input: {
   title: string
   playerValues: Record<string, unknown>
   graphNodes: Array<RegressionGraphEventNode | RegressionGraphActionNode>
-  bigOnceEvents?: StoryBigOnceEventFile[]
+  onceEvents?: StoryOnceEventFile[]
 }): RuntimeStoryBundle {
   return {
     storyId: `graph-${input.scenarioId}`,
@@ -365,7 +365,7 @@ function createGraphQueueBundle(input: {
       assignments: []
     },
     graphEvents: Object.fromEntries(input.graphNodes.map((node) => [node.id, node])),
-    bigOnceEvents: input.bigOnceEvents ?? [],
+    onceEvents: input.onceEvents ?? [],
     loopEvents: []
   }
 }
@@ -377,7 +377,7 @@ function createLoopEvent(input: {
   loop: StoryLoopEventFile["loop"]
   triggerExpr?: string
   initScript?: string
-  dialogues?: StoryBigOnceDialogueDefinition[]
+  dialogues?: StoryOnceDialogueDefinition[]
 }) {
   return {
     id: input.id,
@@ -628,7 +628,7 @@ function runGraphQueueScenario(
       title: scenario.title,
       playerValues: scenario.playerValues,
       graphNodes: scenario.graphNodes,
-      bigOnceEvents: scenario.bigOnceEvents
+      onceEvents: scenario.onceEvents
     }),
     now: new Date(REGRESSION_NOW)
   })
@@ -652,11 +652,11 @@ function runGraphQueueScenario(
     )
   }
 
-  if (scenario.expectedTriggeredBigOnceIds) {
-    const triggeredBigOnceIds = afterSnapshot.triggered_big_once_events.map((item) => item.event_id)
+  if (scenario.expectedTriggeredOnceIds) {
+    const triggeredOnceIds = afterSnapshot.triggered_once_events.map((item) => item.event_id)
     assert(
-      JSON.stringify(triggeredBigOnceIds) === JSON.stringify(scenario.expectedTriggeredBigOnceIds),
-      `[${scenario.id}] Unexpected triggered big-once ids: ${JSON.stringify(triggeredBigOnceIds)}`
+      JSON.stringify(triggeredOnceIds) === JSON.stringify(scenario.expectedTriggeredOnceIds),
+      `[${scenario.id}] Unexpected triggered once ids: ${JSON.stringify(triggeredOnceIds)}`
     )
   }
 
@@ -736,7 +736,7 @@ function runLoopSkipScenario(
         assignments: []
       },
       graphEvents: {},
-      bigOnceEvents: [],
+      onceEvents: [],
       loopEvents: [scenario.loopEvent]
     },
     now: new Date(REGRESSION_NOW)
@@ -978,8 +978,8 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
       expectedNotificationOrder: ["Root A", "Root B"]
     },
     {
-      id: "big-once-trigger-lock-after-queue",
-      title: "Queued big-once event still runs after trigger changes",
+      id: "once-trigger-lock-after-queue",
+      title: "Queued once event still runs after trigger changes",
       playerValues: {
         money: 0,
         flag: 0
@@ -991,7 +991,7 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
           endScript: "{player.money} += 1\n{player.flag} = 1"
         })
       ],
-      bigOnceEvents: [
+      onceEvents: [
         {
           id: "once_bonus",
           title: "Once Bonus",
@@ -1006,7 +1006,7 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
       ],
       expectedMoney: 21,
       expectedConsumedRootIds: ["root_guard"],
-      expectedTriggeredBigOnceIds: ["once_bonus"],
+      expectedTriggeredOnceIds: ["once_bonus"],
       expectedNotificationOrder: ["Root Guard", "Once Bonus"]
     },
     {

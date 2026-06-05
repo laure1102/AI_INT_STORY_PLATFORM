@@ -2,9 +2,9 @@
 import {
   buildStoryRoleKey,
   findStoryRoleReference,
-  type StoryBigOnceDialogueDefinition,
   type StoryEventFile,
   type StoryEventLocationFile,
+  type StoryOnceDialogueDefinition,
   type StoryRolesFile,
   type StoryValsFile
 } from "@story-mgr/core"
@@ -15,12 +15,12 @@ import StoryQuickRoleCreateDialog from "./StoryQuickRoleCreateDialog.vue"
 import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
 import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
 
-interface DialogueDraft extends StoryBigOnceDialogueDefinition {
+interface DialogueDraft extends StoryOnceDialogueDefinition {
   id: string
 }
 
 interface DialogueEditorDraft {
-  speaker_type: StoryBigOnceDialogueDefinition["speaker_type"]
+  speaker_type: StoryOnceDialogueDefinition["speaker_type"]
   speaker_key: string
   content: string
 }
@@ -155,7 +155,7 @@ function createDialogueId() {
   return `dialogue-${dialogueIdSeed}`
 }
 
-function cloneDialogue(dialogue?: StoryBigOnceDialogueDefinition): DialogueDraft {
+function cloneDialogue(dialogue?: StoryOnceDialogueDefinition): DialogueDraft {
   return {
     id: createDialogueId(),
     speaker_type: dialogue?.speaker_type ?? "object",
@@ -421,7 +421,7 @@ function syncDraft(event: StoryEventFile | null) {
   })
 }
 
-function createDialogueEditorDraft(dialogue?: StoryBigOnceDialogueDefinition): DialogueEditorDraft {
+function createDialogueEditorDraft(dialogue?: StoryOnceDialogueDefinition): DialogueEditorDraft {
   const speakerType = dialogue?.speaker_type ?? (objectKeyOptions.value[0] ? "object" : "player")
   const speakerKey = speakerType === "player"
     ? "player"

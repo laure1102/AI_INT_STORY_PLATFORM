@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { StoryBigOnceEventFile } from "@story-mgr/core"
+import type { StoryOnceEventFile } from "@story-mgr/core"
 
 const props = defineProps<{
-  events: StoryBigOnceEventFile[]
+  events: StoryOnceEventFile[]
   selectedEventId: string | null
 }>()
 
@@ -36,7 +36,7 @@ function handleEdit(eventId: string) {
   emit("edit", eventId)
 }
 
-function handleDelete(event: StoryBigOnceEventFile) {
+function handleDelete(event: StoryOnceEventFile) {
   const label = event.title.trim() || event.id
   const confirmed =
     typeof window === "undefined"
@@ -52,67 +52,67 @@ function handleDelete(event: StoryBigOnceEventFile) {
 </script>
 
 <template>
-  <section class="big-once-board glass-panel">
-    <div class="big-once-board__header">
-      <div class="big-once-board__copy">
-        <span class="eyebrow">大事件画布</span>
-        <h2 class="section-title">一次性大事件管理</h2>
-        <p class="big-once-board__summary">
-          一次性大事件彼此独立，不提供连接点或连接线。
+  <section class="once-board glass-panel">
+    <div class="once-board__header">
+      <div class="once-board__copy">
+        <span class="eyebrow">事件画布</span>
+        <h2 class="section-title">一次性事件管理</h2>
+        <p class="once-board__summary">
+          一次性事件彼此独立，不提供连接点或连接线。
         </p>
       </div>
 
-      <div class="big-once-board__actions">
+      <div class="once-board__actions">
         <span class="pill">{{ events.length }} 个事件</span>
-        <button class="btn-secondary big-once-board__button" type="button" @click="emit('create')">
+        <button class="btn-secondary once-board__button" type="button" @click="emit('create')">
           创建事件
         </button>
       </div>
     </div>
 
-    <div v-if="events.length" class="big-once-board__grid">
+    <div v-if="events.length" class="once-board__grid">
       <article
         v-for="event in events"
         :key="event.id"
-        class="big-once-card"
-        :class="{ 'big-once-card--active': event.id === selectedEventId }"
+        class="once-card"
+        :class="{ 'once-card--active': event.id === selectedEventId }"
       >
-        <button class="big-once-card__body" type="button" @click="emit('select', event.id)">
-          <div class="big-once-card__meta">
-            <span class="big-once-card__kind">一次性大事件</span>
-            <span class="big-once-card__tag">独立事件</span>
+        <button class="once-card__body" type="button" @click="emit('select', event.id)">
+          <div class="once-card__meta">
+            <span class="once-card__kind">一次性事件</span>
+            <span class="once-card__tag">独立事件</span>
           </div>
-          <strong class="big-once-card__title">{{ event.title }}</strong>
-          <span class="big-once-card__id">{{ event.id }}</span>
-          <div class="big-once-card__facts">
-            <span class="big-once-card__fact">
+          <strong class="once-card__title">{{ event.title }}</strong>
+          <span class="once-card__id">{{ event.id }}</span>
+          <div class="once-card__facts">
+            <span class="once-card__fact">
               <strong>触发</strong>
               <span>{{ summarizeTrigger(event.trigger_expr) }}</span>
             </span>
-            <span class="big-once-card__fact">
+            <span class="once-card__fact">
               <strong>地点</strong>
               <span>{{ event.location.trim() || "未设置" }}</span>
             </span>
-            <span class="big-once-card__fact">
+            <span class="once-card__fact">
               <strong>对象</strong>
               <span>{{ event.object_keys.length }} 个</span>
             </span>
-            <span class="big-once-card__fact">
+            <span class="once-card__fact">
               <strong>对白</strong>
               <span>{{ event.dialogues.length }} 条</span>
             </span>
           </div>
         </button>
 
-        <div class="big-once-card__footer">
-          <span class="big-once-card__status">
+        <div class="once-card__footer">
+          <span class="once-card__status">
             {{ selectedEvent?.id === event.id ? "当前已选中" : "点击卡片查看详情" }}
           </span>
-          <div class="big-once-card__actions">
-            <button class="btn-danger big-once-card__delete" type="button" @click="handleDelete(event)">
+          <div class="once-card__actions">
+            <button class="btn-danger once-card__delete" type="button" @click="handleDelete(event)">
               删除
             </button>
-            <button class="btn-secondary big-once-card__edit" type="button" @click="handleEdit(event.id)">
+            <button class="btn-secondary once-card__edit" type="button" @click="handleEdit(event.id)">
               编辑
             </button>
           </div>
@@ -120,10 +120,10 @@ function handleDelete(event: StoryBigOnceEventFile) {
       </article>
     </div>
 
-    <div v-else class="big-once-board__empty">
-      <strong class="big-once-board__empty-title">还没有一次性大事件</strong>
-      <p class="big-once-board__empty-copy">
-        这里管理的是彼此独立的大事件节点，可以先创建一个事件开始编辑。
+    <div v-else class="once-board__empty">
+      <strong class="once-board__empty-title">还没有一次性事件</strong>
+      <p class="once-board__empty-copy">
+        这里管理的是彼此独立的一次性事件节点，可以先创建一个事件开始编辑。
       </p>
       <button class="btn-primary" type="button" @click="emit('create')">创建事件</button>
     </div>
@@ -131,7 +131,7 @@ function handleDelete(event: StoryBigOnceEventFile) {
 </template>
 
 <style scoped>
-.big-once-board {
+.once-board {
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -144,26 +144,26 @@ function handleDelete(event: StoryBigOnceEventFile) {
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
 }
 
-.big-once-board__header {
+.once-board__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.big-once-board__copy {
+.once-board__copy {
   display: grid;
   gap: 6px;
 }
 
-.big-once-board__summary {
+.once-board__summary {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.9rem;
   line-height: 1.5;
 }
 
-.big-once-board__actions {
+.once-board__actions {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -171,11 +171,11 @@ function handleDelete(event: StoryBigOnceEventFile) {
   justify-content: flex-end;
 }
 
-.big-once-board__button {
+.once-board__button {
   min-height: 32px;
 }
 
-.big-once-board__grid {
+.once-board__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 14px;
@@ -184,7 +184,7 @@ function handleDelete(event: StoryBigOnceEventFile) {
   padding-right: 4px;
 }
 
-.big-once-card {
+.once-card {
   display: grid;
   gap: 12px;
   padding: 14px;
@@ -197,19 +197,19 @@ function handleDelete(event: StoryBigOnceEventFile) {
   transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
-.big-once-card:hover {
+.once-card:hover {
   transform: translateY(-2px);
   border-color: rgba(255, 180, 84, 0.34);
 }
 
-.big-once-card--active {
+.once-card--active {
   border-color: rgba(255, 180, 84, 0.62);
   box-shadow:
     0 0 0 1px rgba(255, 180, 84, 0.22),
     0 22px 32px rgba(0, 0, 0, 0.24);
 }
 
-.big-once-card__body {
+.once-card__body {
   display: grid;
   gap: 10px;
   padding: 0;
@@ -220,120 +220,118 @@ function handleDelete(event: StoryBigOnceEventFile) {
   cursor: pointer;
 }
 
-.big-once-card__meta {
+.once-card__meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--text-muted);
-  font-size: 0.8rem;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.big-once-card__kind,
-.big-once-card__tag {
-  padding: 4px 8px;
+.once-card__kind,
+.once-card__tag {
+  padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 180, 84, 0.14);
+  color: rgba(255, 212, 160, 0.92);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
 }
 
-.big-once-card__title {
-  font-family: "Space Grotesk", sans-serif;
+.once-card__title {
   font-size: 1.05rem;
+  color: #fff3df;
   line-height: 1.35;
 }
 
-.big-once-card__facts {
+.once-card__facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 8px 12px;
 }
 
-.big-once-card__fact {
+.once-card__fact {
   display: grid;
-  gap: 3px;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  gap: 4px;
 }
 
-.big-once-card__fact strong {
-  font-size: 0.76rem;
-  color: rgba(255, 255, 255, 0.72);
+.once-card__fact strong {
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  color: rgba(255, 212, 160, 0.72);
 }
 
-.big-once-card__fact span {
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: 0.82rem;
+.once-card__fact span {
+  font-size: 0.9rem;
+  color: rgba(242, 246, 255, 0.88);
   line-height: 1.45;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
-.big-once-card__id,
-.big-once-card__status {
-  color: var(--text-muted);
-  font-size: 0.82rem;
+.once-card__id,
+.once-card__status {
+  font-size: 0.8rem;
+  color: rgba(214, 222, 236, 0.72);
 }
 
-.big-once-card__footer {
+.once-card__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 
-.big-once-card__actions {
+.once-card__actions {
   display: flex;
-  align-items: center;
   gap: 8px;
+  justify-content: flex-end;
 }
 
-.big-once-card__delete,
-.big-once-card__edit {
-  min-height: 30px;
+.once-card__delete,
+.once-card__edit {
+  min-height: 32px;
 }
 
-.big-once-board__empty {
-  flex: 1 1 auto;
+.once-board__empty {
+  flex: 1;
   min-height: 0;
   display: grid;
   place-items: center;
-  gap: 10px;
-  padding: 24px;
-  border: 1px dashed rgba(255, 180, 84, 0.34);
-  border-radius: 24px;
-  background: rgba(255, 180, 84, 0.05);
+  gap: 12px;
   text-align: center;
+  padding: 28px;
+  border: 1px dashed rgba(255, 180, 84, 0.2);
+  border-radius: 24px;
+  background: rgba(6, 12, 22, 0.4);
 }
 
-.big-once-board__empty-title {
-  font-size: 1.02rem;
+.once-board__empty-title {
+  font-size: 1.05rem;
+  color: #fff3df;
 }
 
-.big-once-board__empty-copy {
-  max-width: 420px;
+.once-board__empty-copy {
+  max-width: 460px;
   margin: 0;
   color: var(--text-muted);
   line-height: 1.6;
 }
 
 @media (max-width: 900px) {
-  .big-once-board {
-    padding: 12px;
+  .once-board {
+    padding: 14px;
   }
 
-  .big-once-board__header,
-  .big-once-card__footer {
-    flex-direction: column;
-    align-items: stretch;
+  .once-board__header,
+  .once-card__footer {
+    grid-template-columns: 1fr;
+    display: grid;
   }
 
-  .big-once-board__actions {
+  .once-board__actions {
     justify-content: flex-start;
   }
 
-  .big-once-card__facts {
+  .once-card__facts {
     grid-template-columns: 1fr;
   }
 }

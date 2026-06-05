@@ -30,5 +30,5 @@ pnpm dev
 - `roles.json5`：角色信息
 - `event_location.json5`：事件场所
 - `events/events.json5`：网状剧情事件
-- `events/big_once_events.json5`：大事件
+- `events/once_events.json5`：一次性事件
 - `events/loop_events.json5`：循环事件

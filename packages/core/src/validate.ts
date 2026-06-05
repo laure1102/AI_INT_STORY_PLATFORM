@@ -1,11 +1,11 @@
 import type {
   StoryAnyEventFile,
   StoryActionFile,
-  StoryBigOnceEventFile,
   StoryDocument,
   StoryEventFile,
   StoryGraphNodeFile,
   StoryLoopEventFile,
+  StoryOnceEventFile,
   ValidationIssue,
   ValidationResult
 } from "./types"
@@ -32,10 +32,10 @@ function buildEventMap(events: StoryEventFile[]) {
 
 function buildAllEventMap(
   graphEvents: StoryGraphNodeFile[],
-  bigOnceEvents: StoryBigOnceEventFile[],
+  onceEvents: StoryOnceEventFile[],
   loopEvents: StoryLoopEventFile[]
 ) {
-  return new Map([...graphEvents, ...bigOnceEvents, ...loopEvents].map((event) => [event.id, event]))
+  return new Map([...graphEvents, ...onceEvents, ...loopEvents].map((event) => [event.id, event]))
 }
 
 function isGraphActionNode(event: StoryGraphNodeFile): event is StoryActionFile {
@@ -70,8 +70,8 @@ function collectGlobalValKeys(document: StoryDocument) {
   return keys
 }
 
-function validateBigOnceEvent(
-  event: StoryBigOnceEventFile,
+function validateOnceEvent(
+  event: StoryOnceEventFile,
   eventIndex: number,
   document: StoryDocument,
   issues: ValidationIssue[]
@@ -85,23 +85,23 @@ function validateBigOnceEvent(
     pushIssue(
       issues,
       "error",
-      "big-once.trigger-expr-invalid",
-      `Big once event "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
-      ["bigOnceEvents", String(eventIndex), "trigger_expr"]
+      "once.trigger-expr-invalid",
+      `Once event "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
+      ["onceEvents", String(eventIndex), "trigger_expr"]
     )
   }
 
   for (const scriptField of [
-    { key: "init_script", value: event.init_script, code: "big-once.init-script-invalid" },
-    { key: "end_script", value: event.end_script, code: "big-once.end-script-invalid" }
+    { key: "init_script", value: event.init_script, code: "once.init-script-invalid" },
+    { key: "end_script", value: event.end_script, code: "once.end-script-invalid" }
   ] as const) {
     for (const issue of validateStoryScript(document.vals, scriptField.value)) {
       pushIssue(
         issues,
         "error",
         scriptField.code,
-        `Big once event "${event.id}" ${scriptField.key} is invalid at line ${issue.lineNumber}: ${issue.message}`,
-        ["bigOnceEvents", String(eventIndex), scriptField.key]
+        `Once event "${event.id}" ${scriptField.key} is invalid at line ${issue.lineNumber}: ${issue.message}`,
+        ["onceEvents", String(eventIndex), scriptField.key]
       )
     }
   }
@@ -111,9 +111,9 @@ function validateBigOnceEvent(
       pushIssue(
         issues,
         "error",
-        "big-once.missing-object",
-        `Big once event "${event.id}" references missing object "${objectKey}".`,
-        ["bigOnceEvents", String(eventIndex), "object_keys", String(objectIndex)]
+        "once.missing-object",
+        `Once event "${event.id}" references missing object "${objectKey}".`,
+        ["onceEvents", String(eventIndex), "object_keys", String(objectIndex)]
       )
     }
   }
@@ -122,9 +122,9 @@ function validateBigOnceEvent(
     pushIssue(
       issues,
       "error",
-      "big-once.missing-location",
-      `Big once event "${event.id}" references missing location "${event.location}".`,
-      ["bigOnceEvents", String(eventIndex), "location"]
+      "once.missing-location",
+      `Once event "${event.id}" references missing location "${event.location}".`,
+      ["onceEvents", String(eventIndex), "location"]
     )
   }
 
@@ -134,9 +134,9 @@ function validateBigOnceEvent(
         pushIssue(
           issues,
           "error",
-          "big-once.invalid-player-speaker",
-          `Big once event "${event.id}" player dialogue must use speaker_key "player".`,
-          ["bigOnceEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+          "once.invalid-player-speaker",
+          `Once event "${event.id}" player dialogue must use speaker_key "player".`,
+          ["onceEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
         )
       }
       continue
@@ -146,9 +146,9 @@ function validateBigOnceEvent(
       pushIssue(
         issues,
         "error",
-        "big-once.invalid-object-speaker",
-        `Big once event "${event.id}" dialogue speaker "${dialogue.speaker_key}" is not in the current event objects.`,
-        ["bigOnceEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+        "once.invalid-object-speaker",
+        `Once event "${event.id}" dialogue speaker "${dialogue.speaker_key}" is not in the current event objects.`,
+        ["onceEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
       )
     }
   }
@@ -160,7 +160,7 @@ function validateLoopEvent(
   document: StoryDocument,
   issues: ValidationIssue[]
 ) {
-  validateBigOnceEvent(event, eventIndex, document, issues)
+  validateOnceEvent(event, eventIndex, document, issues)
 
   const loopPath = ["loopEvents", String(eventIndex), "loop"] as const
 
@@ -368,10 +368,10 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
   const graphNodes = document.graphEvents
   const graphEvents = graphNodes.filter(isGraphEventNode)
   const graphActions = graphNodes.filter(isGraphActionNode)
-  const bigOnceEvents = document.bigOnceEvents
+  const onceEvents = document.onceEvents
   const loopEvents = document.loopEvents
   const graphNodeMap = new Map(graphNodes.map((event) => [event.id, event]))
-  const eventMap = buildAllEventMap(graphNodes, bigOnceEvents, loopEvents)
+  const eventMap = buildAllEventMap(graphNodes, onceEvents, loopEvents)
   const seenIds = new Set<string>()
 
   if (graphEvents.length === 0) {
@@ -386,10 +386,10 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
 
   const eventGroups = [
     { key: "graphEvents", events: graphNodes },
-    { key: "bigOnceEvents", events: bigOnceEvents },
+    { key: "onceEvents", events: onceEvents },
     { key: "loopEvents", events: loopEvents }
   ] as const satisfies Array<{
-    key: "graphEvents" | "bigOnceEvents" | "loopEvents"
+    key: "graphEvents" | "onceEvents" | "loopEvents"
     events: StoryAnyEventFile[]
   }>
 
@@ -422,8 +422,8 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
         }
       }
 
-      if (group.key === "bigOnceEvents") {
-        validateBigOnceEvent(event as StoryBigOnceEventFile, eventIndex, document, issues)
+      if (group.key === "onceEvents") {
+        validateOnceEvent(event as StoryOnceEventFile, eventIndex, document, issues)
       }
 
       if (group.key === "loopEvents") {

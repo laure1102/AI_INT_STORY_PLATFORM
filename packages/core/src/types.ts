@@ -157,7 +157,7 @@ export interface StoryEventFile {
   init_script: string
   end_script: string
   object_keys: string[]
-  dialogues: StoryBigOnceDialogueDefinition[]
+  dialogues: StoryOnceDialogueDefinition[]
   location: string
   next: string[]
   meta?: Record<string, unknown>
@@ -185,32 +185,32 @@ export interface StoryEventTrigger {
   none?: Record<string, unknown>[]
 }
 
-export type StoryEventCollectionType = "graph" | "bigOnce" | "loop"
+export type StoryEventCollectionType = "graph" | "once" | "loop"
 
 export type StoryGraphNodeFile = StoryEventFile | StoryActionFile
 export type StoryGraphEventsFile = StoryGraphNodeFile[]
 
-export type StoryBigOnceSpeakerType = "player" | "object"
+export type StoryOnceSpeakerType = "player" | "object"
 
-export interface StoryBigOnceDialogueDefinition {
-  speaker_type: StoryBigOnceSpeakerType
+export interface StoryOnceDialogueDefinition {
+  speaker_type: StoryOnceSpeakerType
   speaker_key: string
   content: string
 }
 
-export interface StoryBigOnceEventFile {
+export interface StoryOnceEventFile {
   id: string
   title: string
   trigger_expr: string
   init_script: string
   object_keys: string[]
-  dialogues: StoryBigOnceDialogueDefinition[]
+  dialogues: StoryOnceDialogueDefinition[]
   location: string
   bgm: string
   end_script: string
 }
 
-export type StoryBigOnceEventsFile = StoryBigOnceEventFile[]
+export type StoryOnceEventsFile = StoryOnceEventFile[]
 
 export type StoryLoopMode = "daily" | "weekly" | "monthly" | "interval_days"
 
@@ -221,7 +221,7 @@ export interface StoryLoopRule {
   month_day?: number
 }
 
-export interface StoryLoopEventFile extends StoryBigOnceEventFile {
+export interface StoryLoopEventFile extends StoryOnceEventFile {
   loop: StoryLoopRule
 }
 
@@ -230,7 +230,7 @@ export type StoryLoopEventsFile = StoryLoopEventFile[]
 export type StoryAnyEventFile =
   | StoryEventFile
   | StoryActionFile
-  | StoryBigOnceEventFile
+  | StoryOnceEventFile
   | StoryLoopEventFile
 
 export interface StoryDocument {
@@ -242,7 +242,7 @@ export interface StoryDocument {
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
   graphEvents: StoryGraphEventsFile
-  bigOnceEvents: StoryBigOnceEventsFile
+  onceEvents: StoryOnceEventsFile
   loopEvents: StoryLoopEventsFile
 }
 
@@ -274,7 +274,7 @@ export interface CompiledEvent {
   init_script: string
   end_script: string
   object_keys: string[]
-  dialogues: StoryBigOnceDialogueDefinition[]
+  dialogues: StoryOnceDialogueDefinition[]
   location: string
   next: string[]
   meta?: Record<string, unknown>
@@ -301,6 +301,6 @@ export interface CompiledStory {
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
   graphEvents: Record<string, CompiledEvent | CompiledAction>
-  bigOnceEvents: StoryBigOnceEventsFile
+  onceEvents: StoryOnceEventsFile
   loopEvents: StoryLoopEventsFile
 }
