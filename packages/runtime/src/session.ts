@@ -24,13 +24,13 @@ interface RuntimeLocationAssignment {
 
 interface RuntimeNormalRoleDefinition {
   id: string
-  mingzi?: string
+  name?: string
   descr: string
 }
 
 interface RuntimeImportantRoleDefinition {
   id: string
-  mingzi?: string
+  name?: string
   descr: string
 }
 
@@ -1570,7 +1570,7 @@ function findRoleLabel(bundle: RuntimeStoryBundle, roleKey: string) {
     return roleKey
   }
 
-  return normalizeText(role.mingzi).trim() || role.descr.trim() || role.id
+  return normalizeText(role.name).trim() || role.descr.trim() || role.id
 }
 
 function findLocationLabel(bundle: RuntimeStoryBundle, locationId: string) {

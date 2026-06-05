@@ -77,8 +77,8 @@ export const storyRoleAiConfigSchema = z.object({
 
 export const storyNormalRoleSchema = z.object({
   id: z.string().min(1).optional(),
-  name: z.string().min(1).optional(),
-  mingzi: z.string().default(""),
+  name: z.string().default(""),
+  mingzi: z.string().optional(),
   zhiye: z.string().default(""),
   descr: z.string().default(""),
   prompt: z.string().default(""),
@@ -94,8 +94,8 @@ export const storyNormalRoleSchema = z.object({
     })
   }
 }).transform((role) => ({
-  id: role.id ?? role.name ?? "",
-  mingzi: role.mingzi,
+  id: role.id?.trim() ? role.id : role.name,
+  name: role.id?.trim() ? (role.name || role.mingzi || "") : (role.mingzi || ""),
   zhiye: role.zhiye,
   descr: role.descr,
   prompt: role.prompt,
@@ -106,8 +106,8 @@ export const storyNormalRoleSchema = z.object({
 
 export const storyImportantRoleSchema = z.object({
   id: z.string().min(1).optional(),
-  name: z.string().min(1).optional(),
-  mingzi: z.string().default(""),
+  name: z.string().default(""),
+  mingzi: z.string().optional(),
   zhiye: z.string().default(""),
   descr: z.string().default(""),
   descr_male: z.string().default(""),
@@ -136,8 +136,8 @@ export const storyImportantRoleSchema = z.object({
   }
 }).transform((role) => {
   const baseRole = {
-    id: role.id ?? role.name ?? "",
-    mingzi: role.mingzi,
+    id: role.id?.trim() ? role.id : role.name,
+    name: role.id?.trim() ? (role.name || role.mingzi || "") : (role.mingzi || ""),
     zhiye: role.zhiye,
     descr: role.descr,
     descr_male: role.descr_male,

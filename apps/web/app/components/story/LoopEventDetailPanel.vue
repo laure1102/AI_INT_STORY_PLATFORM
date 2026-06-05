@@ -228,8 +228,8 @@ const importantRoleOptions = computed<RoleOption[]>(() => {
   return props.roles.important.roles.map((role) => ({
     key: buildStoryRoleKey("important", role.id),
     label: role.zhiye.trim()
-      ? `${role.mingzi?.trim() || role.id} - ${role.zhiye.trim()}`
-      : role.mingzi?.trim() || role.id
+      ? `${role.name?.trim() || role.id} - ${role.zhiye.trim()}`
+      : role.name?.trim() || role.id
   }))
 })
 
@@ -237,8 +237,8 @@ const normalRoleOptions = computed<RoleOption[]>(() => {
   return props.roles.normal.roles.map((role) => ({
     key: buildStoryRoleKey("normal", role.id),
     label: role.zhiye.trim()
-      ? `${role.mingzi?.trim() || role.id} - ${role.zhiye.trim()}`
-      : role.mingzi?.trim() || role.id
+      ? `${role.name?.trim() || role.id} - ${role.zhiye.trim()}`
+      : role.name?.trim() || role.id
   }))
 })
 

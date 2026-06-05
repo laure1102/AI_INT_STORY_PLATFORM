@@ -25,7 +25,7 @@ interface NormalRoleDraft {
   img_compress_1: string
   img_compress_2: string
   img_raw: string
-  mingzi: string
+  name: string
   prompt: string
   selected: boolean
   zhiye: string
@@ -46,7 +46,7 @@ interface ImportantRoleDraft {
   img_male_compress_2: string
   img_male_raw: string
   img_raw: string
-  mingzi: string
+  name: string
   prompt: string
   prompt_female: string
   prompt_male: string
@@ -275,7 +275,7 @@ function cloneNormalRole(role: StoryNormalRoleDefinition): NormalRoleDraft {
     img_compress_1: normalizeText(role.img_compress_1),
     img_compress_2: normalizeText(role.img_compress_2),
     img_raw: normalizeText(role.img_raw),
-    mingzi: normalizeText(role.mingzi),
+    name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
     selected: false,
     zhiye: normalizeText(role.zhiye)
@@ -301,7 +301,7 @@ function cloneImportantRole(role: StoryImportantRoleDefinition): ImportantRoleDr
     img_male_compress_2: normalizeText(role.img_male_compress_2),
     img_male_raw: normalizeText(role.img_male_raw),
     img_raw: normalizeText(role.img_raw),
-    mingzi: normalizeText(role.mingzi),
+    name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
     prompt_female: normalizeText(role.prompt_female),
     prompt_male: normalizeText(role.prompt_male),
@@ -636,8 +636,8 @@ function getNextDefaultId(target: RolesTab) {
   return candidate
 }
 
-function getRoleDisplayName(role: { mingzi?: string; id: string }) {
-  return normalizeText(role.mingzi).trim() || normalizeText(role.id).trim() || "角色"
+function getRoleDisplayName(role: { name?: string; id: string }) {
+  return normalizeText(role.name).trim() || normalizeText(role.id).trim() || "角色"
 }
 
 function addNormalRole() {
@@ -647,7 +647,7 @@ function addNormalRole() {
     img_compress_1: "",
     img_compress_2: "",
     img_raw: "",
-    mingzi: "",
+    name: "",
     id: getNextDefaultId("normal"),
     prompt: "",
     selected: false,
@@ -673,7 +673,7 @@ function addImportantRole() {
     img_male_compress_2: "",
     img_male_raw: "",
     img_raw: "",
-    mingzi: "",
+    name: "",
     id: getNextDefaultId("important"),
     prompt: "",
     prompt_female: "",
@@ -1319,7 +1319,7 @@ function submitDraft() {
           img_male_compress_2: isSplitByGender ? role.img_male_compress_2.trim() : "",
           img_male_raw: isSplitByGender ? role.img_male_raw.trim() : "",
           img_raw: isSplitByGender ? "" : role.img_raw.trim(),
-          mingzi: role.mingzi.trim(),
+          name: role.name.trim(),
           id: sanitizeNameInput(role.id),
           prompt: isSplitByGender ? "" : role.prompt.trim(),
           prompt_female: isSplitByGender ? role.prompt_female.trim() : "",
@@ -1343,7 +1343,7 @@ function submitDraft() {
         img_compress_1: role.img_compress_1.trim(),
         img_compress_2: role.img_compress_2.trim(),
         img_raw: role.img_raw.trim(),
-        mingzi: role.mingzi.trim(),
+        name: role.name.trim(),
         id: sanitizeNameInput(role.id),
         prompt: role.prompt.trim(),
         zhiye: role.zhiye.trim()
@@ -1555,7 +1555,7 @@ watch(
                       <input v-model="role.id" class="text-input roles-dialog__cell-input" type="text" placeholder="villager_old_man" />
                     </td>
                     <td>
-                      <input v-model="role.mingzi" class="text-input roles-dialog__cell-input" type="text" placeholder="老孙" />
+                      <input v-model="role.name" class="text-input roles-dialog__cell-input" type="text" placeholder="老孙" />
                     </td>
                     <td>
                       <input v-model="role.zhiye" class="text-input roles-dialog__cell-input" type="text" placeholder="算命先生" />
@@ -1720,7 +1720,7 @@ watch(
                       <input v-model="role.id" class="text-input roles-dialog__cell-input" type="text" placeholder="suanming_xiansheng" />
                     </td>
                     <td>
-                      <input v-model="role.mingzi" class="text-input roles-dialog__cell-input" type="text" placeholder="李助理" />
+                      <input v-model="role.name" class="text-input roles-dialog__cell-input" type="text" placeholder="李助理" />
                     </td>
                     <td>
                       <input v-model="role.zhiye" class="text-input roles-dialog__cell-input" type="text" placeholder="县长" />
