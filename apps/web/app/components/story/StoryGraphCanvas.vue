@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { CSSProperties, ComponentPublicInstance } from "vue"
-import type { StoryActionFile, StoryAnyEventFile, StoryEventFile } from "@story-mgr/core"
+import type {
+  StoryActionFile,
+  StoryAnyEventFile,
+  StoryEventFile,
+  StoryEventTriggerMode
+} from "@story-mgr/core"
 
 type GraphDirection = "horizontal" | "vertical"
 type GraphNodeKind = "event" | "action"
@@ -12,6 +17,7 @@ interface GraphNodeView {
   kind: GraphNodeKind
   nextCount: number
   title: string
+  triggerMode: StoryEventTriggerMode | null
   x: number
   y: number
 }
@@ -109,6 +115,10 @@ function isEventNode(event: StoryAnyEventFile): event is StoryEventFile {
 
 function getNodeKind(event: StoryAnyEventFile): GraphNodeKind {
   return isActionNode(event) ? "action" : "event"
+}
+
+function getEventTriggerMode(event: StoryAnyEventFile): StoryEventTriggerMode | null {
+  return isEventNode(event) ? event.trigger_mode ?? "default" : null
 }
 
 function getNodeWidthByKind(kind: GraphNodeKind) {
@@ -354,6 +364,7 @@ const localNodes = computed<GraphNodeView[]>(() => {
       kind,
       nextCount: "next" in event ? event.next.length : 0,
       title: event.title,
+      triggerMode: getEventTriggerMode(event),
       x: Math.round(position.x),
       y: Math.round(position.y)
     }
@@ -1078,7 +1089,9 @@ onUnmounted(() => {
             'graph-node--horizontal': isHorizontalDirection,
             'graph-node--link-source': isNodeLinkSource(node.id),
             'graph-node--drop-target': isNodeDropTarget(node.id),
-            'graph-node--action': node.kind === 'action'
+            'graph-node--action': node.kind === 'action',
+            'graph-node--invoke': node.triggerMode === 'invoke',
+            'graph-node--condition': node.triggerMode === 'condition'
           }"
           :data-graph-node-id="node.id"
           :style="getNodeStyle(node)"
@@ -1096,6 +1109,20 @@ onUnmounted(() => {
                 class="graph-node__accent"
                 :style="{ background: `linear-gradient(135deg, ${node.color}, rgba(255,255,255,0.15))` }"
               />
+              <span
+                v-if="node.triggerMode === 'invoke'"
+                class="graph-node__trigger-mark graph-node__trigger-mark--invoke"
+                title="被调用"
+                aria-label="被调用"
+              />
+              <span
+                v-else-if="node.triggerMode === 'condition'"
+                class="graph-node__trigger-mark graph-node__trigger-mark--condition"
+                title="条件触发"
+                aria-label="条件触发"
+              >
+                ★
+              </span>
 
               <div class="graph-node__header">
                 <strong class="graph-node__title graph-node__title--header">{{ node.title }}</strong>
@@ -1396,6 +1423,31 @@ onUnmounted(() => {
   inset: 0 auto 0 0;
   width: 5px;
   border-radius: 0;
+}
+
+.graph-node__trigger-mark {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.graph-node__trigger-mark--invoke {
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 20px solid rgba(255, 180, 84, 0.96);
+  border-right: 20px solid transparent;
+  filter: drop-shadow(0 0 8px rgba(255, 180, 84, 0.34));
+}
+
+.graph-node__trigger-mark--condition {
+  left: 8px;
+  bottom: 8px;
+  color: rgba(255, 214, 107, 0.98);
+  font-size: 0.82rem;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(255, 214, 107, 0.45);
 }
 
 .graph-node__header {

@@ -4,6 +4,7 @@ import { compileStory } from "@story-mgr/compiler"
 import type {
   StoryOnceDialogueDefinition,
   StoryOnceEventFile,
+  StoryEventTriggerMode,
   StoryLoopEventFile,
   StoryValDefinition,
   StoryValEntryDefinition,
@@ -124,6 +125,7 @@ interface RegressionGraphEventNode {
   node_type: "event"
   id: string
   title: string
+  trigger_mode: StoryEventTriggerMode
   trigger_expr: string
   init_script: string
   end_script: string
@@ -283,6 +285,7 @@ function createGraphEventNode(input: {
     node_type: "event",
     id: input.id,
     title: input.title,
+    trigger_mode: input.triggerExpr?.trim() ? "condition" : "default",
     trigger_expr: input.triggerExpr ?? "",
     init_script: input.initScript ?? "",
     end_script: input.endScript ?? "",
@@ -382,6 +385,7 @@ function createLoopEvent(input: {
   return {
     id: input.id,
     title: input.title,
+    trigger_mode: input.triggerExpr?.trim() ? "condition" : "default",
     trigger_expr: input.triggerExpr ?? "",
     init_script: input.initScript ?? "",
     object_keys: [],
@@ -995,6 +999,7 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
         {
           id: "once_bonus",
           title: "Once Bonus",
+          trigger_mode: "condition",
           trigger_expr: "${player.flag} === 0",
           init_script: "",
           object_keys: [],

@@ -153,7 +153,9 @@ export interface StoryEventFile {
   node_type?: "event"
   id: string
   title: string
+  trigger_mode?: StoryEventTriggerMode
   trigger_expr: string
+  invoke_params?: StoryEventInvokeParamDefinition[]
   init_script: string
   end_script: string
   object_keys: string[]
@@ -186,6 +188,8 @@ export interface StoryEventTrigger {
 }
 
 export type StoryEventCollectionType = "graph" | "once" | "loop"
+export type StoryInvokeTargetType = "once" | "graph" | "loop"
+export type StoryEventTriggerMode = "default" | "condition" | "invoke"
 
 export type StoryGraphNodeFile = StoryEventFile | StoryActionFile
 export type StoryGraphEventsFile = StoryGraphNodeFile[]
@@ -198,19 +202,21 @@ export interface StoryOnceDialogueDefinition {
   content: string
 }
 
-export type StoryOnceTriggerMode = "condition" | "invoke"
+export type StoryOnceTriggerMode = StoryEventTriggerMode
 
-export interface StoryOnceInvokeParamDefinition {
+export interface StoryEventInvokeParamDefinition {
   name: string
   descr?: string
 }
 
+export type StoryOnceInvokeParamDefinition = StoryEventInvokeParamDefinition
+
 export interface StoryOnceEventFile {
   id: string
   title: string
-  trigger_mode?: StoryOnceTriggerMode
+  trigger_mode?: StoryEventTriggerMode
   trigger_expr: string
-  invoke_params?: StoryOnceInvokeParamDefinition[]
+  invoke_params?: StoryEventInvokeParamDefinition[]
   init_script: string
   object_keys: string[]
   dialogues: StoryOnceDialogueDefinition[]
@@ -231,8 +237,6 @@ export interface StoryLoopRule {
 }
 
 export interface StoryLoopEventFile extends StoryOnceEventFile {
-  trigger_mode?: "condition"
-  invoke_params?: never
   loop: StoryLoopRule
 }
 
@@ -281,7 +285,9 @@ export interface CompiledEvent {
   node_type?: "event"
   id: string
   title: string
+  trigger_mode?: StoryEventTriggerMode
   trigger_expr: string
+  invoke_params?: StoryEventInvokeParamDefinition[]
   init_script: string
   end_script: string
   object_keys: string[]

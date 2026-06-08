@@ -1,6 +1,6 @@
 # StoryScript 规范
 
-Last updated: `2026-06-05`
+Last updated: `2026-06-08`
 
 本文档定义 Story Manager 项目的统一脚本语言规范。
 
@@ -29,8 +29,10 @@ StoryScript 适用于以下字段：
 规则：
 
 - 条件脚本本质上是一个返回 `boolean` 的函数
+- 条件脚本仅用于 `trigger_mode: "condition"` 的事件
+- `trigger_mode: "condition"` 时，`trigger_expr` 必须为非空字符串
 - 最终结果必须为 `boolean`
-- 空字符串表示默认触发，语义等价于 `true`
+- `trigger_mode: "default"` 的事件不执行 `trigger_expr`
 
 允许两种写法：
 
@@ -160,7 +162,7 @@ ${call.xxx}
 
 来源：
 
-- `invoke` 型一次性事件被调用时传入的参数
+- `invoke` 型事件被调用时传入的参数
 
 规则：
 
@@ -233,7 +235,7 @@ StoryScript 使用 TypeScript / JavaScript 风格的受限子集。
 ### 6.1 条件脚本规则
 
 - 最终结果必须为 `boolean`
-- 空字符串表示默认触发
+- `trigger_expr` 必须为非空字符串
 - 若使用完整写法，应保证所有执行路径满足布尔语义
 - 条件脚本只读，不允许修改全局变量、系统变量、分支变量、调用参数
 - 条件脚本不允许使用 `invoke_once`
@@ -254,13 +256,18 @@ StoryScript 使用 TypeScript / JavaScript 风格的受限子集。
 语法：
 
 ```ts
-invoke_once test1 mama=${county.level}
+invoke_once once test1 mama=${county.level}
+invoke_once graph event_a mood=${county.level}
+invoke_once loop daily_tax day=${system.now_day}
 ```
 
 规则：
 
 - `invoke_once` 为保留语句
-- 用于把 `invoke` 型一次性事件推入调度队列
+- 用于把 `invoke` 型事件推入调度队列
+- 第一个参数为目标事件类型：`once`、`graph`、`loop`
+- 第二个参数为目标事件 `id`
+- 后续参数使用 `name=expression`
 - 不同步执行
 
 ---

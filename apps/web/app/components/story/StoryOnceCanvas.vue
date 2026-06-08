@@ -17,11 +17,21 @@ const selectedEvent = computed(() => {
   return props.events.find((event) => event.id === props.selectedEventId) ?? null
 })
 
-function summarizeTrigger(expression: string) {
-  const trimmed = expression.trim()
+function summarizeTrigger(event: StoryOnceEventFile) {
+  const mode = event.trigger_mode ?? "default"
+
+  if (mode === "default") {
+    return "默认触发"
+  }
+
+  if (mode === "invoke") {
+    return "被调用"
+  }
+
+  const trimmed = event.trigger_expr.trim()
 
   if (!trimmed) {
-    return "无条件触发"
+    return "条件未填写"
   }
 
   if (trimmed.length <= 56) {
@@ -77,6 +87,20 @@ function handleDelete(event: StoryOnceEventFile) {
         class="once-card"
         :class="{ 'once-card--active': event.id === selectedEventId }"
       >
+        <span
+          v-if="(event.trigger_mode ?? 'default') === 'invoke'"
+          class="once-card__trigger-mark once-card__trigger-mark--invoke"
+          title="被调用"
+          aria-label="被调用"
+        />
+        <span
+          v-else-if="(event.trigger_mode ?? 'default') === 'condition'"
+          class="once-card__trigger-mark once-card__trigger-mark--condition"
+          title="条件触发"
+          aria-label="条件触发"
+        >
+          ★
+        </span>
         <button class="once-card__body" type="button" @click="emit('select', event.id)">
           <div class="once-card__meta">
             <span class="once-card__kind">一次性事件</span>
@@ -87,7 +111,7 @@ function handleDelete(event: StoryOnceEventFile) {
           <div class="once-card__facts">
             <span class="once-card__fact">
               <strong>触发</strong>
-              <span>{{ summarizeTrigger(event.trigger_expr) }}</span>
+              <span>{{ summarizeTrigger(event) }}</span>
             </span>
             <span class="once-card__fact">
               <strong>地点</strong>
@@ -185,6 +209,7 @@ function handleDelete(event: StoryOnceEventFile) {
 }
 
 .once-card {
+  position: relative;
   display: grid;
   gap: 12px;
   padding: 14px;
@@ -195,6 +220,31 @@ function handleDelete(event: StoryOnceEventFile) {
     rgba(8, 18, 29, 0.88);
   box-shadow: 0 20px 30px rgba(0, 0, 0, 0.2);
   transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.once-card__trigger-mark {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.once-card__trigger-mark--invoke {
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 24px solid rgba(255, 180, 84, 0.96);
+  border-right: 24px solid transparent;
+  filter: drop-shadow(0 0 8px rgba(255, 180, 84, 0.34));
+}
+
+.once-card__trigger-mark--condition {
+  left: 10px;
+  bottom: 10px;
+  color: rgba(255, 214, 107, 0.98);
+  font-size: 0.9rem;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(255, 214, 107, 0.45);
 }
 
 .once-card:hover {

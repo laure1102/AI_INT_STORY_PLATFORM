@@ -174,7 +174,7 @@ function cloneInvokeParam(param?: StoryOnceInvokeParamDefinition): InvokeParamDr
 const draft = reactive<OnceEventDraft>({
   id: "",
   title: "",
-  triggerMode: "condition",
+  triggerMode: "default",
   triggerExpr: "",
   invokeParams: [],
   initScript: "",
@@ -385,6 +385,15 @@ function normalizeAutocompleteText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+function normalizeDraftTriggerMode(event: StoryOnceEventFile | null): StoryOnceTriggerMode {
+  const mode = event?.trigger_mode ?? "default"
+  if (mode === "condition" && !(event?.trigger_expr ?? "").trim()) {
+    return "default"
+  }
+
+  return mode
+}
+
 function normalizeStoredObjectKeys(objectKeys: string[]) {
   return normalizeObjectKeys(
     objectKeys
@@ -396,7 +405,7 @@ function normalizeStoredObjectKeys(objectKeys: string[]) {
 function syncDraft(event: StoryOnceEventFile | null) {
   draft.id = event?.id ?? ""
   draft.title = event?.title ?? ""
-  draft.triggerMode = event?.trigger_mode ?? "condition"
+  draft.triggerMode = normalizeDraftTriggerMode(event)
   draft.triggerExpr = event?.trigger_expr ?? ""
   draft.invokeParams = (event?.invoke_params ?? []).map((param) => cloneInvokeParam(param))
   draft.initScript = event?.init_script ?? ""
@@ -908,15 +917,33 @@ function submitDraft() {
     return
   }
 
+  const triggerMode = draft.triggerMode
+  const triggerExpr = triggerMode === "condition" ? draft.triggerExpr.trim() : ""
+  const invokeParams = triggerMode === "invoke"
+    ? draft.invokeParams
+        .map((param) => ({
+          name: param.name.trim(),
+          descr: (param.descr ?? "").trim() || undefined
+        }))
+        .filter((param) => param.name)
+    : []
+
+  if (triggerMode === "condition" && !triggerExpr) {
+    window.alert("条件触发必须填写触发条件。")
+    return
+  }
+
+  if (triggerMode === "invoke" && invokeParams.length === 0) {
+    window.alert("被调用触发必须至少填写一个调用参数。")
+    return
+  }
+
   emit("save", {
     id: draft.id.trim(),
     title: draft.title.trim(),
-    trigger_mode: draft.triggerMode,
-    trigger_expr: draft.triggerMode === "condition" ? draft.triggerExpr.trim() : "",
-    invoke_params: draft.invokeParams.map((param) => ({
-      name: param.name.trim(),
-      descr: (param.descr ?? "").trim() || undefined
-    })),
+    trigger_mode: triggerMode,
+    trigger_expr: triggerExpr,
+    invoke_params: invokeParams,
     init_script: draft.initScript.trim(),
     object_keys: normalizeObjectKeys(draft.selectedObjectKeys),
     dialogues: draft.dialogues.map((dialogue) => ({
@@ -1147,6 +1174,15 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       v-model="draft.triggerMode"
                       class="detail-panel__trigger-mode-input"
                       type="radio"
+                      value="default"
+                    />
+                    <span>默认触发</span>
+                  </label>
+                  <label class="detail-panel__trigger-mode-option">
+                    <input
+                      v-model="draft.triggerMode"
+                      class="detail-panel__trigger-mode-input"
+                      type="radio"
                       value="condition"
                     />
                     <span>条件触发</span>
@@ -1226,7 +1262,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                   </div>
                 </template>
 
-                <template v-else>
+                <template v-else-if="draft.triggerMode === 'invoke'">
                   <div class="detail-panel__label-row">
                     <span class="field-label">调用参数</span>
                     <button
@@ -1273,8 +1309,14 @@ function handleDocumentPointerDown(event: MouseEvent) {
                   </div>
 
                   <div v-else class="detail-panel__param-empty">
-                    这个事件不会自动扫描，只有在脚本或运行时通过 `invoke_once` / `invokeOnceEvent`
+                    这个事件不会自动扫描，只有通过 `invoke_once once {{ draft.id || 'event_id' }}`
                     传参后才会入队。
+                  </div>
+                </template>
+
+                <template v-else>
+                  <div class="detail-panel__param-empty">
+                    默认触发会参与运行时自动扫描，不需要填写触发条件。
                   </div>
                 </template>
               </div>

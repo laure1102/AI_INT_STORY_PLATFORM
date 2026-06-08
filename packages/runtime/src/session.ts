@@ -5,6 +5,7 @@ import {
 } from "./vals"
 import type { StoryScriptExecutionContext, StoryScriptInvocation } from "./vals"
 import type {
+  StoryInvokeTargetType,
   StoryPlayerOverrideValsFile,
   StoryValDefinition,
   StoryValEntryDefinition,
@@ -16,6 +17,8 @@ interface RuntimeStoryDialogueDefinition {
   speaker_key: string
   content: string
 }
+
+type RuntimeEventTriggerMode = "default" | "condition" | "invoke"
 
 interface RuntimeLocationAssignment {
   id: string
@@ -38,7 +41,12 @@ interface CompiledEvent {
   node_type?: "event"
   id: string
   title: string
+  trigger_mode?: RuntimeEventTriggerMode
   trigger_expr: string
+  invoke_params?: Array<{
+    name: string
+    descr?: string
+  }>
   init_script: string
   end_script: string
   object_keys: string[]
@@ -64,7 +72,7 @@ interface CompiledAction {
 
 interface RuntimeStandaloneEvent extends CompiledEvent {
   runtime_source_type: "once" | "loop"
-  trigger_mode?: "condition" | "invoke"
+  trigger_mode?: RuntimeEventTriggerMode
   invoke_params?: Array<{
     name: string
     descr?: string
@@ -131,7 +139,7 @@ export interface RuntimeClockState {
   step_minutes: number
 }
 
-export type RuntimeSchedulerSourceType = "graph_root" | "once" | "loop"
+export type RuntimeSchedulerSourceType = "graph_root" | "once" | "loop" | "invoke"
 
 export type RuntimeSchedulerEventStatus =
   | "scheduled"
@@ -145,6 +153,7 @@ export interface RuntimeScheduledEvent {
   instance_id: string
   source_type: RuntimeSchedulerSourceType
   source_id: string
+  invoke_target_type?: StoryInvokeTargetType
   entry_event_id: string
   due_game_minute: number
   seq: number
@@ -294,7 +303,7 @@ export type RuntimeStorySessionAction =
   | { type: "continue" }
   | { type: "select-option"; optionId: string }
   | { type: "submit-text"; field: string; value: string }
-  | { type: "invoke-once"; eventId: string; args?: Record<string, unknown> }
+  | { type: "invoke-once"; targetType: StoryInvokeTargetType; eventId: string; args?: Record<string, unknown> }
   | { type: "open-debug" }
   | { type: "close-debug" }
 
@@ -307,7 +316,7 @@ export interface CreateStorySessionOptions {
 
 export interface RuntimeStorySession {
   dispatch(action: RuntimeStorySessionAction): void
-  invokeOnceEvent(eventId: string, args?: Record<string, unknown>): boolean
+  invokeOnceEvent(targetType: StoryInvokeTargetType, eventId: string, args?: Record<string, unknown>): boolean
   tick(deltaMs: number): void
   setTimePause(paused: boolean): void
   setTimeSpeed(speed: number): void
@@ -367,7 +376,12 @@ interface RuntimeDateParts {
 interface RuntimeLoopEventDefinition {
   id: string
   title: string
+  trigger_mode?: RuntimeEventTriggerMode
   trigger_expr: string
+  invoke_params?: Array<{
+    name: string
+    descr?: string
+  }>
   init_script: string
   object_keys: string[]
   dialogues: RuntimeStoryDialogueDefinition[]
@@ -521,6 +535,18 @@ function applyCombinedValsFile(
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function normalizeRuntimeEventTriggerMode(mode: unknown): RuntimeEventTriggerMode {
+  if (mode === "condition" || mode === "invoke") {
+    return mode
+  }
+
+  return "default"
+}
+
+function isRuntimeEventScannable(event: { trigger_mode?: RuntimeEventTriggerMode }) {
+  return normalizeRuntimeEventTriggerMode(event.trigger_mode) !== "invoke"
 }
 
 function formatValueSummary(value: unknown) {
@@ -687,6 +713,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
           instance_id: normalizeText(item.instance_id),
           source_type: sourceType,
           source_id: normalizeText(item.source_id),
+          invoke_target_type: normalizeInvokeTargetType(item.invoke_target_type),
           entry_event_id: normalizeText(item.entry_event_id),
           due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
           seq: Math.max(1, clampInteger(item.seq, 1)),
@@ -707,6 +734,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
           instance_id: normalizeText(item.instance_id),
           source_type: sourceType,
           source_id: normalizeText(item.source_id),
+          invoke_target_type: normalizeInvokeTargetType(item.invoke_target_type),
           entry_event_id: normalizeText(item.entry_event_id),
           due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
           seq: Math.max(1, clampInteger(item.seq, 1)),
@@ -727,6 +755,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
           instance_id: normalizeText(scheduler.active.instance_id),
           source_type: sourceType,
           source_id: normalizeText(scheduler.active.source_id),
+          invoke_target_type: normalizeInvokeTargetType(scheduler.active.invoke_target_type),
           entry_event_id: normalizeText(scheduler.active.entry_event_id),
           due_game_minute: Math.max(0, clampInteger(scheduler.active.due_game_minute, 0)),
           seq: Math.max(1, clampInteger(scheduler.active.seq, 1)),
@@ -820,7 +849,15 @@ function normalizeSchedulerDedupeKey(
 }
 
 function normalizeSchedulerSourceType(value: unknown): RuntimeSchedulerSourceType | undefined {
-  if (value === "graph_root" || value === "once" || value === "loop") {
+  if (value === "graph_root" || value === "once" || value === "loop" || value === "invoke") {
+    return value
+  }
+
+  return undefined
+}
+
+function normalizeInvokeTargetType(value: unknown): StoryInvokeTargetType | undefined {
+  if (value === "once" || value === "graph" || value === "loop") {
     return value
   }
 
@@ -1150,7 +1187,8 @@ function createScheduledEvent(
   dueGameMinute: number,
   dedupeKey: string,
   triggerLocked = false,
-  callValues: Record<string, unknown> = {}
+  callValues: Record<string, unknown> = {},
+  invokeTargetType?: StoryInvokeTargetType
 ): RuntimeScheduledEvent {
   normalizeSchedulerState(snapshot)
   const seq = snapshot.scheduler.next_seq
@@ -1160,6 +1198,7 @@ function createScheduledEvent(
     instance_id: `evt-${seq}`,
     source_type: sourceType,
     source_id: normalizeText(sourceId),
+    invoke_target_type: invokeTargetType,
     entry_event_id: normalizeText(entryEventId),
     due_game_minute: Math.max(0, clampInteger(dueGameMinute, 0)),
     seq,
@@ -1361,7 +1400,11 @@ function scanGraphRootEvents(
     }
 
     const rootNode = getBundleGraphNode(bundle, rootEventId)
-    if (!isCompiledEvent(rootNode) || !canEnterEvent(runtimeState.snapshot, rootNode, {})) {
+    if (
+      !isCompiledEvent(rootNode)
+      || !isRuntimeEventScannable(rootNode)
+      || !canEnterEvent(runtimeState.snapshot, rootNode, {})
+    ) {
       continue
     }
 
@@ -1385,7 +1428,7 @@ function scanOnceEvents(
   const onceEvents = getBundleOnceEvents(bundle)
 
   for (const event of onceEvents) {
-    if ((event.trigger_mode ?? "condition") !== "condition") {
+    if (!isRuntimeEventScannable(event)) {
       continue
     }
 
@@ -1428,7 +1471,7 @@ function getBundleOnceEvents(bundle: RuntimeStoryBundle) {
   return onceEventsSource as Array<{
     id: string
     title: string
-    trigger_mode?: "condition" | "invoke"
+    trigger_mode?: RuntimeEventTriggerMode
     trigger_expr: string
     invoke_params?: Array<{
       name: string
@@ -1450,6 +1493,10 @@ function ensureLoopSchedules(
   const loopEvents = bundle.loopEvents as RuntimeLoopEventDefinition[]
 
   for (const loopEvent of loopEvents) {
+    if (!isRuntimeEventScannable(loopEvent)) {
+      continue
+    }
+
     const loopState = getLoopSchedulerState(runtimeState.snapshot, loopEvent.id)
 
     if (loopState.next_due_game_minute === null) {
@@ -1507,8 +1554,11 @@ function startNextReadyEventIfIdle(
       return
     }
 
-    if (nextScheduledEvent.source_type === "once") {
-      const event = getBundleOnceEvents(bundle).find((item) => item.id === nextScheduledEvent.source_id)
+    if (
+      nextScheduledEvent.source_type === "once"
+      || (nextScheduledEvent.source_type === "invoke" && nextScheduledEvent.invoke_target_type === "once")
+    ) {
+      const event = getBundleOnceEvents(bundle).find((item) => item.id === nextScheduledEvent.entry_event_id)
 
       if (!event) {
         continue
@@ -1545,9 +1595,12 @@ function startNextReadyEventIfIdle(
       return
     }
 
-    if (nextScheduledEvent.source_type === "loop") {
+    if (
+      nextScheduledEvent.source_type === "loop"
+      || (nextScheduledEvent.source_type === "invoke" && nextScheduledEvent.invoke_target_type === "loop")
+    ) {
       const event = (bundle.loopEvents as RuntimeLoopEventDefinition[]).find(
-        (item) => item.id === nextScheduledEvent.source_id
+        (item) => item.id === nextScheduledEvent.entry_event_id
       )
 
       if (!event) {
@@ -1568,7 +1621,11 @@ function startNextReadyEventIfIdle(
         due_game_minute: nextScheduledEvent.due_game_minute,
         message: "开始执行事件"
       })
-      runtimeState.activeStandaloneEvent = createStandaloneEvent("loop", event)
+      runtimeState.activeStandaloneEvent = createStandaloneEvent(
+        "loop",
+        event,
+        nextScheduledEvent.call_values
+      )
       runtimeState.snapshot.current_event_id = event.id
       runtimeState.currentEventEntered = false
       runtimeState.currentDialogueIndex = 0
@@ -1645,7 +1702,7 @@ function createStandaloneEvent(
     id: string
     title: string
     trigger_expr: string
-    trigger_mode?: "condition" | "invoke"
+    trigger_mode?: RuntimeEventTriggerMode
     invoke_params?: Array<{
       name: string
       descr?: string
@@ -1753,6 +1810,26 @@ function getRuntimeEventCallValues(event: RuntimePlayableEvent | null | undefine
   }
 
   return cloneValue(event.call_values ?? {})
+}
+
+function getRuntimeActiveCallValues(runtimeState: RuntimeState) {
+  const activeScheduledEvent = runtimeState.snapshot.scheduler.active
+  if (!activeScheduledEvent || activeScheduledEvent.source_type !== "invoke") {
+    return {}
+  }
+
+  return cloneValue(activeScheduledEvent.call_values ?? {})
+}
+
+function getRuntimePlayableEventCallValues(
+  runtimeState: RuntimeState,
+  event: RuntimePlayableEvent | null | undefined
+) {
+  if (isRuntimeStandaloneEvent(event)) {
+    return getRuntimeEventCallValues(event)
+  }
+
+  return getRuntimeActiveCallValues(runtimeState)
 }
 
 function buildRuntimeContextValues(
@@ -1866,21 +1943,60 @@ function findBundleOnceEvent(
   return getBundleOnceEvents(bundle).find((item) => item.id === eventId) ?? null
 }
 
-function validateInvokeOnceArgs(
-  event: ReturnType<typeof findBundleOnceEvent>,
+function findBundleLoopEvent(
+  bundle: RuntimeStoryBundle,
+  eventId: string
+) {
+  return (bundle.loopEvents as RuntimeLoopEventDefinition[]).find((item) => item.id === eventId) ?? null
+}
+
+function findBundleInvokeTargetEvent(
+  bundle: RuntimeStoryBundle,
+  targetType: StoryInvokeTargetType,
+  eventId: string
+) {
+  if (targetType === "once") {
+    return findBundleOnceEvent(bundle, eventId)
+  }
+
+  if (targetType === "loop") {
+    return findBundleLoopEvent(bundle, eventId)
+  }
+
+  const graphNode = getBundleGraphNode(bundle, eventId)
+  return isCompiledEvent(graphNode) ? graphNode : null
+}
+
+function getInvokeTargetLabel(targetType: StoryInvokeTargetType) {
+  if (targetType === "once") {
+    return "一次性事件"
+  }
+
+  if (targetType === "loop") {
+    return "循环事件"
+  }
+
+  return "普通剧情事件"
+}
+
+function validateInvokeArgs(
+  targetType: StoryInvokeTargetType,
+  event: ReturnType<typeof findBundleInvokeTargetEvent>,
   args: Record<string, unknown>
 ) {
+  const targetLabel = getInvokeTargetLabel(targetType)
+
   if (!event) {
     return {
       ok: false,
-      message: "目标一次性事件不存在。"
+      message: `目标${targetLabel}不存在。`
     }
   }
 
-  if ((event.trigger_mode ?? "condition") !== "invoke") {
+  if (normalizeRuntimeEventTriggerMode(event.trigger_mode) !== "invoke") {
     return {
       ok: false,
-      message: `一次性事件 "${event.id}" 不是“被调用”触发方式。`
+      message: `${targetLabel} "${event.id}" 不是“被调用”触发方式。`
     }
   }
 
@@ -1892,7 +2008,7 @@ function validateInvokeOnceArgs(
     if (!Object.prototype.hasOwnProperty.call(args, paramName)) {
       return {
         ok: false,
-        message: `调用一次性事件 "${event.id}" 时缺少参数 "${paramName}"。`
+        message: `调用${targetLabel} "${event.id}" 时缺少参数 "${paramName}"。`
       }
     }
   }
@@ -1903,9 +2019,10 @@ function validateInvokeOnceArgs(
   }
 }
 
-function queueInvokeOnceEvent(
+function queueInvokeEvent(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
+  targetType: StoryInvokeTargetType,
   eventId: string,
   args: Record<string, unknown>
 ) {
@@ -1914,35 +2031,26 @@ function queueInvokeOnceEvent(
     return false
   }
 
-  const onceEvent = findBundleOnceEvent(bundle, normalizedEventId)
+  const targetEvent = findBundleInvokeTargetEvent(bundle, targetType, normalizedEventId)
   const normalizedArgs = cloneValue(args)
-  const validation = validateInvokeOnceArgs(onceEvent, normalizedArgs)
-  if (!validation.ok || !onceEvent) {
+  const validation = validateInvokeArgs(targetType, targetEvent, normalizedArgs)
+  if (!validation.ok || !targetEvent) {
     return false
   }
 
-  const dedupeKey = `once:${onceEvent.id}`
-  if (runtimeState.snapshot.scheduler.consumed_once_ids.includes(onceEvent.id)) {
-    return false
-  }
-
-  if (runtimeState.snapshot.triggered_once_events.some((item) => item.event_id === onceEvent.id)) {
-    return false
-  }
-
-  if (isScheduledEventQueued(runtimeState.snapshot, dedupeKey)) {
-    return false
-  }
+  const nextSeq = runtimeState.snapshot.scheduler.next_seq
+  const dedupeKey = `invoke:${targetType}:${targetEvent.id}:${nextSeq}`
 
   const readyEvent = createScheduledEvent(
     runtimeState.snapshot,
-    "once",
-    onceEvent.id,
-    onceEvent.id,
+    "invoke",
+    `${targetType}:${targetEvent.id}`,
+    targetEvent.id,
     getCurrentGameMinute(runtimeState.snapshot),
     dedupeKey,
     true,
-    normalizedArgs
+    normalizedArgs,
+    targetType
   )
   return enqueueReadyEvent(runtimeState.snapshot, readyEvent)
 }
@@ -1953,7 +2061,7 @@ function enqueueStoryScriptInvocations(
   invocations: StoryScriptInvocation[]
 ) {
   for (const invocation of invocations) {
-    queueInvokeOnceEvent(bundle, runtimeState, invocation.eventId, invocation.args)
+    queueInvokeEvent(bundle, runtimeState, invocation.targetType, invocation.eventId, invocation.args)
   }
 }
 
@@ -2034,7 +2142,8 @@ function pickFirstEnterableNextEventId(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   candidateEventIds: string[],
-  branchValues: Record<string, unknown>
+  branchValues: Record<string, unknown>,
+  callValues: Record<string, unknown> = {}
 ) {
   for (const candidateEventId of candidateEventIds) {
     const candidateNode = getBundleGraphNode(bundle, candidateEventId)
@@ -2042,7 +2151,7 @@ function pickFirstEnterableNextEventId(
       continue
     }
 
-    if (canEnterEvent(snapshot, candidateNode, branchValues)) {
+    if (canEnterEvent(snapshot, candidateNode, branchValues, callValues)) {
       return candidateNode.id
     }
   }
@@ -2068,15 +2177,29 @@ function completeScheduledChain(
 function canEnterEvent(
   snapshot: RuntimeStorySessionSnapshot,
   event: RuntimePlayableEvent,
-  branchValues: Record<string, unknown>
+  branchValues: Record<string, unknown>,
+  callValues?: Record<string, unknown>
 ) {
+  const triggerMode = normalizeRuntimeEventTriggerMode(event.trigger_mode)
+  if (triggerMode === "default") {
+    return true
+  }
+
+  if (triggerMode === "invoke") {
+    return false
+  }
+
+  const triggerExpr = normalizeText(event.trigger_expr)
+  if (!triggerExpr) {
+    return false
+  }
+
   const combinedValsFile = createCombinedValsFile(snapshot)
-  const callValues = getRuntimeEventCallValues(event)
   const triggerResult = evaluateStoryBooleanExpression(
     combinedValsFile,
-    event.trigger_expr,
+    triggerExpr,
     DEFAULT_MAX_CALC_NESTING_DEPTH,
-    buildRuntimeContextValues(snapshot, branchValues, callValues)
+    buildRuntimeContextValues(snapshot, branchValues, callValues ?? getRuntimeEventCallValues(event))
   )
 
   return triggerResult.result
@@ -2381,7 +2504,10 @@ function moveToEventResolved(
     throw new Error(`Target node "${targetEventId}" is not an event node.`)
   }
 
-  if (!options.skipTriggerCheck && !canEnterEvent(runtimeState.snapshot, targetNode, branchValues)) {
+  if (
+    !options.skipTriggerCheck
+    && !canEnterEvent(runtimeState.snapshot, targetNode, branchValues, getRuntimeActiveCallValues(runtimeState))
+  ) {
     appendSchedulerAudit(runtimeState.snapshot, {
       kind: "skip-event",
       source_type: runtimeState.snapshot.scheduler.active?.source_type,
@@ -2426,9 +2552,9 @@ function enterCurrentEventResolved(
   }
 
   const branchValues = runtimeState.lastAction?.branchValues ?? {}
-  const callValues = getRuntimeEventCallValues(currentNode)
+  const callValues = getRuntimePlayableEventCallValues(runtimeState, currentNode)
 
-  if (!options.skipTriggerCheck && !canEnterEvent(runtimeState.snapshot, currentNode, branchValues)) {
+  if (!options.skipTriggerCheck && !canEnterEvent(runtimeState.snapshot, currentNode, branchValues, callValues)) {
     appendSchedulerAudit(runtimeState.snapshot, {
       kind: "skip-event",
       source_type: runtimeState.snapshot.scheduler.active?.source_type,
@@ -2486,7 +2612,7 @@ function finishCurrentEvent(
   }
 
   const branchValues = runtimeState.lastAction?.branchValues ?? {}
-  const callValues = getRuntimeEventCallValues(currentNode)
+  const callValues = getRuntimePlayableEventCallValues(runtimeState, currentNode)
   const nextBranchValues = executeEventScript(
     bundle,
     runtimeState,
@@ -2509,7 +2635,8 @@ function finishCurrentEvent(
     bundle,
     runtimeState.snapshot,
     actionResolution.autoNextEventIds,
-    nextBranchValues
+    nextBranchValues,
+    callValues
   )
   if (nextEventId) {
     moveToEvent(bundle, runtimeState, nextEventId, nextBranchValues)
@@ -2543,7 +2670,7 @@ function executeAction(
   const executionContext = buildRuntimeScriptContext(
     runtimeState.snapshot,
     targetActionState.branchValues,
-    getRuntimeEventCallValues(sourceEvent)
+    getRuntimePlayableEventCallValues(runtimeState, sourceEvent)
   )
   const combinedValsFile = createCombinedValsFile(runtimeState.snapshot)
   const scriptResult = executeStoryScript(
@@ -2597,7 +2724,7 @@ function getCurrentEventState(
   }
 
   const branchValues = runtimeState.lastAction?.branchValues ?? {}
-  const callValues = getRuntimeEventCallValues(currentNode)
+  const callValues = getRuntimePlayableEventCallValues(runtimeState, currentNode)
   const dialogues = currentNode.dialogues ?? []
   const currentDialogue = dialogues.length > 0 && runtimeState.currentDialogueIndex < dialogues.length
     ? buildDialogueView(
@@ -2766,34 +2893,44 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
   reconcileScheduler(options.bundle, runtimeState, notifications)
 
   function invokeOnceEventResolved(
+    targetType: StoryInvokeTargetType,
     eventId: string,
     args?: Record<string, unknown>,
     notifyFailure = false
   ) {
+    const normalizedTargetType = normalizeInvokeTargetType(targetType)
     const normalizedEventId = normalizeText(eventId)
     const normalizedArgs =
       args && typeof args === "object" && !Array.isArray(args)
         ? cloneValue(args)
         : {}
-    const onceEvent = findBundleOnceEvent(options.bundle, normalizedEventId)
-    const validation = validateInvokeOnceArgs(onceEvent, normalizedArgs)
+    if (!normalizedTargetType) {
+      if (notifyFailure) {
+        notifications.push("调用事件时必须指定目标类型：once、graph 或 loop。")
+      }
+      return false
+    }
 
-    if (!validation.ok || !onceEvent) {
+    const targetEvent = findBundleInvokeTargetEvent(options.bundle, normalizedTargetType, normalizedEventId)
+    const validation = validateInvokeArgs(normalizedTargetType, targetEvent, normalizedArgs)
+
+    if (!validation.ok || !targetEvent) {
       if (notifyFailure && validation.message) {
         notifications.push(validation.message)
       }
       return false
     }
 
-    const queued = queueInvokeOnceEvent(
+    const queued = queueInvokeEvent(
       options.bundle,
       runtimeState,
-      onceEvent.id,
+      normalizedTargetType,
+      targetEvent.id,
       normalizedArgs
     )
     if (!queued) {
       if (notifyFailure) {
-        notifications.push(`一次性事件 "${onceEvent.id}" 未能进入队列，可能已触发或正在排队。`)
+        notifications.push(`${getInvokeTargetLabel(normalizedTargetType)} "${targetEvent.id}" 未能进入队列。`)
       }
       return false
     }
@@ -2820,7 +2957,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
       }
 
       if (action.type === "invoke-once") {
-        invokeOnceEventResolved(action.eventId, action.args, true)
+        invokeOnceEventResolved(action.targetType, action.eventId, action.args, true)
         return
       }
 
@@ -2876,8 +3013,8 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         executeAction(options.bundle, runtimeState, action.optionId, notifications)
       }
     },
-    invokeOnceEvent(eventId, args) {
-      return invokeOnceEventResolved(eventId, args)
+    invokeOnceEvent(targetType, eventId, args) {
+      return invokeOnceEventResolved(targetType, eventId, args)
     },
     tick(deltaMs) {
       const queued = queueClockProgress(runtimeState.snapshot, deltaMs)

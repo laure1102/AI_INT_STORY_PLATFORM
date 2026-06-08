@@ -81,7 +81,7 @@ function testPredicateInvokeRejected() {
       vals,
       [
         "if (${county.level} > 0) {",
-        "  invoke_once test1 mama=${county.level}",
+        "  invoke_once once test1 mama=${county.level}",
         "  return true",
         "}",
         "return false"
@@ -113,16 +113,25 @@ function testProcedureControlFlowAndAssignments() {
       "while (${player.flag} < 3) {",
       "  ${player.flag} += 1",
       "}",
-      "invoke_once test1 mama=${county.level} money=${player.money}"
+      "invoke_once once test1 mama=${county.level} money=${player.money}",
+      "invoke_once graph event_a mood=${county.level}",
+      "invoke_once loop daily_tax day=${player.flag}"
     ].join("\n")
   )
 
   assert(readValue(result.vals, "player.money") === 103, "Expected player.money to become 103.")
   assert(readValue(result.vals, "player.flag") === 3, "Expected player.flag to become 3.")
-  assert(result.invocations.length === 1, "Expected one invoke_once invocation.")
+  assert(result.invocations.length === 3, "Expected three invoke_once invocations.")
+  assert(result.invocations[0]?.targetType === "once", "Expected first invoke_once target type to be once.")
   assert(result.invocations[0]?.eventId === "test1", "Expected invoke_once event id to be test1.")
   assert(result.invocations[0]?.args.mama === 3, "Expected invoke_once arg mama to be 3.")
   assert(result.invocations[0]?.args.money === 103, "Expected invoke_once arg money to be 103.")
+  assert(result.invocations[1]?.targetType === "graph", "Expected second invoke_once target type to be graph.")
+  assert(result.invocations[1]?.eventId === "event_a", "Expected graph invoke event id to be event_a.")
+  assert(result.invocations[1]?.args.mood === 3, "Expected graph invoke arg mood to be 3.")
+  assert(result.invocations[2]?.targetType === "loop", "Expected third invoke_once target type to be loop.")
+  assert(result.invocations[2]?.eventId === "daily_tax", "Expected loop invoke event id to be daily_tax.")
+  assert(result.invocations[2]?.args.day === 3, "Expected loop invoke arg day to be 3.")
 }
 
 function testSwitchBreakContinue() {

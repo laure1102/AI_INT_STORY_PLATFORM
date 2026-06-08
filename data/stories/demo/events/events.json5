@@ -80,6 +80,7 @@
       'normal:xitong',
     ],
     title: '回到县城',
+    trigger_mode: 'default',
     trigger_expr: '',
   },
   {
@@ -112,6 +113,7 @@
       'normal:xitong',
     ],
     title: '第一次给钱',
+    trigger_mode: 'default',
     trigger_expr: '',
   },
   {
@@ -124,6 +126,7 @@
     node_type: 'event',
     object_keys: [],
     title: '游戏正式开始',
+    trigger_mode: 'default',
     trigger_expr: '',
   },
 ]

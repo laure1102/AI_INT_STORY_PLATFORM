@@ -318,11 +318,68 @@ export const storyOnceInvokeParamSchema = z.object({
   descr: z.string().optional()
 })
 
-export const storyEventSchema = z.object({
+const storyEventTriggerModeSchema = z.enum(["default", "condition", "invoke"])
+
+function validateInvokeParamNames(
+  params: Array<{ name: string }>,
+  context: z.RefinementCtx
+) {
+  const normalizedNames = new Set<string>()
+
+  for (const [index, param] of params.entries()) {
+    const trimmedName = param.name.trim()
+    if (!trimmedName) {
+      continue
+    }
+
+    if (normalizedNames.has(trimmedName)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate invoke param name "${trimmedName}".`,
+        path: ["invoke_params", index, "name"]
+      })
+      continue
+    }
+
+    normalizedNames.add(trimmedName)
+  }
+}
+
+function validateEventTriggerConfig(
+  event: {
+    trigger_mode: "default" | "condition" | "invoke"
+    trigger_expr: string
+    invoke_params: Array<{ name: string }>
+  },
+  context: z.RefinementCtx
+) {
+  if (event.trigger_mode === "condition" && !event.trigger_expr.trim()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "trigger_expr is required when trigger_mode is condition.",
+      path: ["trigger_expr"]
+    })
+  }
+
+  if (
+    event.trigger_mode === "invoke"
+    && !event.invoke_params.some((param) => param.name.trim())
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "invoke_params is required when trigger_mode is invoke.",
+      path: ["invoke_params"]
+    })
+  }
+}
+
+const storyEventBaseSchema = z.object({
   node_type: z.literal("event").optional(),
   id: z.string().min(1),
   title: z.string().min(1),
+  trigger_mode: storyEventTriggerModeSchema.default("default"),
   trigger_expr: z.string().default(""),
+  invoke_params: z.array(storyOnceInvokeParamSchema).default([]),
   init_script: z.string().default(""),
   end_script: z.string().default(""),
   object_keys: z.array(z.string()).default([]),
@@ -330,6 +387,11 @@ export const storyEventSchema = z.object({
   location: z.string().default(""),
   next: z.array(z.string()),
   meta: z.record(z.unknown()).optional()
+})
+
+export const storyEventSchema = storyEventBaseSchema.superRefine((event, context) => {
+  validateEventTriggerConfig(event, context)
+  validateInvokeParamNames(event.invoke_params, context)
 })
 
 export const storyActionVarSchema = z.object({
@@ -357,10 +419,10 @@ export const storyEventTriggerSchema = z.object({
 export const storyGraphNodeSchema = z.union([storyEventSchema, storyActionSchema])
 export const storyGraphEventsSchema = z.array(storyGraphNodeSchema).default([])
 
-export const storyOnceEventSchema = storyEventSchema.extend({
+export const storyOnceEventSchema = storyEventBaseSchema.extend({
   id: z.string().min(1),
   title: z.string().min(1),
-  trigger_mode: z.enum(["condition", "invoke"]).default("condition"),
+  trigger_mode: storyEventTriggerModeSchema.default("default"),
   trigger_expr: z.string().default(""),
   invoke_params: z.array(storyOnceInvokeParamSchema).default([]),
   init_script: z.string().default(""),
@@ -372,24 +434,8 @@ export const storyOnceEventSchema = storyEventSchema.extend({
 }).omit({
   next: true
 }).superRefine((event, context) => {
-  const normalizedNames = new Set<string>()
-  for (const [index, param] of event.invoke_params.entries()) {
-    const trimmedName = param.name.trim()
-    if (!trimmedName) {
-      continue
-    }
-
-    if (normalizedNames.has(trimmedName)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Duplicate invoke param name "${trimmedName}".`,
-        path: ["invoke_params", index, "name"]
-      })
-      continue
-    }
-
-    normalizedNames.add(trimmedName)
-  }
+  validateEventTriggerConfig(event, context)
+  validateInvokeParamNames(event.invoke_params, context)
 })
 
 export const storyOnceEventsSchema = z.array(storyOnceEventSchema).default([])
@@ -404,8 +450,9 @@ export const storyLoopRuleSchema = z.object({
 export const storyLoopEventSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
-  trigger_mode: z.literal("condition").default("condition"),
+  trigger_mode: storyEventTriggerModeSchema.default("default"),
   trigger_expr: z.string().default(""),
+  invoke_params: z.array(storyOnceInvokeParamSchema).default([]),
   init_script: z.string().default(""),
   object_keys: z.array(z.string()).default([]),
   dialogues: z.array(storyOnceDialogueSchema).default([]),
@@ -413,6 +460,9 @@ export const storyLoopEventSchema = z.object({
   bgm: z.string().default(""),
   end_script: z.string().default(""),
   loop: storyLoopRuleSchema
+}).superRefine((event, context) => {
+  validateEventTriggerConfig(event, context)
+  validateInvokeParamNames(event.invoke_params, context)
 })
 
 export const storyLoopEventsSchema = z.array(storyLoopEventSchema).default([])

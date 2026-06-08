@@ -1,5 +1,6 @@
 import * as ts from "typescript"
 import type {
+  StoryInvokeTargetType,
   StoryValDefinition,
   StoryValEntryDefinition,
   StoryValsFile
@@ -44,6 +45,7 @@ export interface StoryScriptExecutionContext extends StoryExpressionContext {
 }
 
 export interface StoryScriptInvocation {
+  targetType: StoryInvokeTargetType
   eventId: string
   args: Record<string, unknown>
 }
@@ -954,14 +956,18 @@ function transformInvokeOnceStatements(script: string) {
   return normalizeText(script)
     .split(/\r?\n/)
     .map((rawLine, lineIndex) => {
-      const match = rawLine.match(/^(\s*)invoke_once\s+([A-Za-z0-9_\-:.]+)(?:\s+(.+?))?\s*$/)
+      const match = rawLine.match(/^(\s*)invoke_once\s+(once|graph|loop)\s+([A-Za-z0-9_\-:.]+)(?:\s+(.+?))?\s*$/)
       if (!match) {
         return rawLine
       }
 
       const indentation = match[1] ?? ""
-      const eventId = (match[2] ?? "").trim()
-      const argsSource = match[3] ?? ""
+      const targetType = (match[2] ?? "").trim()
+      const eventId = (match[3] ?? "").trim()
+      const argsSource = match[4] ?? ""
+      if (!targetType) {
+        throw new StoryScriptError(lineIndex + 1, "invoke_once requires target type: once, graph, or loop.")
+      }
       if (!eventId) {
         throw new StoryScriptError(lineIndex + 1, "invoke_once requires an event id.")
       }
@@ -971,7 +977,7 @@ function transformInvokeOnceStatements(script: string) {
         ? `{ ${args.map((arg) => `${arg.name}: (${arg.expression})`).join(", ")} }`
         : "{}"
 
-      return `${indentation}${STORY_SCRIPT_INTERNAL_INVOKE_NAME}(${JSON.stringify(eventId)}, ${objectLiteral});`
+      return `${indentation}${STORY_SCRIPT_INTERNAL_INVOKE_NAME}(${JSON.stringify(targetType)}, ${JSON.stringify(eventId)}, ${objectLiteral});`
     })
     .join("\n")
 }
@@ -1449,21 +1455,36 @@ function executeStoryScriptInvokeCall(
     )
   }
 
-  if (expression.arguments.length !== 2) {
+  if (expression.arguments.length !== 3) {
     throw createStoryScriptErrorFromNode(
       state.sourceFile,
       expression,
-      "invoke_once must receive exactly two arguments after transformation."
+      "invoke_once must receive exactly three arguments after transformation."
     )
   }
 
-  const eventIdNode = expression.arguments[0]
-  const argsNode = expression.arguments[1]
-  if (!eventIdNode || !argsNode || !ts.isStringLiteral(eventIdNode)) {
+  const targetTypeNode = expression.arguments[0]
+  const eventIdNode = expression.arguments[1]
+  const argsNode = expression.arguments[2]
+  if (
+    !targetTypeNode ||
+    !eventIdNode ||
+    !argsNode ||
+    !ts.isStringLiteral(targetTypeNode) ||
+    !ts.isStringLiteral(eventIdNode)
+  ) {
     throw createStoryScriptErrorFromNode(
       state.sourceFile,
       expression,
-      "invoke_once event id must be a string literal."
+      "invoke_once target type and event id must be string literals."
+    )
+  }
+
+  if (!["once", "graph", "loop"].includes(targetTypeNode.text)) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      targetTypeNode,
+      "invoke_once target type must be once, graph, or loop."
     )
   }
 
@@ -1500,6 +1521,7 @@ function executeStoryScriptInvokeCall(
   }
 
   state.invocations.push({
+    targetType: targetTypeNode.text as StoryInvokeTargetType,
     eventId: eventIdNode.text,
     args
   })

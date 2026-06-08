@@ -11,6 +11,7 @@
     },
     object_keys: [],
     title: '每日签到发钱',
+    trigger_mode: 'default',
     trigger_expr: '',
   },
 ]

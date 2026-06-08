@@ -30,7 +30,9 @@
 - resolves calc variables before comparison
 - supports common `Math` functions
 - must return `boolean`
-- empty expression is treated as `true`
+- only applies when `trigger_mode` is `condition`
+- `condition` events require a non-empty expression
+- `default` events do not execute `trigger_expr`
 
 ### event scripts
 

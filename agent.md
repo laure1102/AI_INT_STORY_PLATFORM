@@ -241,7 +241,9 @@ Event node:
   node_type: "event",
   id: "arrival",
   title: "Arrival",
+  trigger_mode: "default", // "default" | "condition" | "invoke"
   trigger_expr: "",
+  invoke_params: [],
   init_script: "",
   end_script: "",
   object_keys: ["player"],
@@ -284,7 +286,9 @@ Graph rules:
 {
   id: "opening",
   title: "Opening Event",
+  trigger_mode: "default",
   trigger_expr: "",
+  invoke_params: [],
   init_script: "",
   object_keys: [],
   dialogues: [],
@@ -300,6 +304,8 @@ Loop events extend once events with:
 
 ```json5
 {
+  trigger_mode: "default",
+  invoke_params: [],
   loop: {
     mode: "daily" | "weekly" | "monthly" | "interval_days",
     weekday?: 1..7,
@@ -308,6 +314,19 @@ Loop events extend once events with:
   }
 }
 ```
+
+### Trigger modes and invocation
+
+- graph events, once events, and loop events all support `trigger_mode: "default" | "condition" | "invoke"`.
+- `default` events participate in normal scheduler scanning and do not execute `trigger_expr`.
+- `condition` events participate in normal scheduler scanning and require a non-empty `trigger_expr`.
+- `invoke` events require at least one `invoke_params` entry; they do not participate in normal scanning and only enter the runtime queue when called.
+- event ids only need to be unique inside their own collection; graph/once/loop ids may repeat.
+- StoryScript invocation must include the target collection: `invoke_once once test1 money=${player.money}`, `invoke_once graph event_a mood=${county.level}`, `invoke_once loop daily_tax day=${system.now_day}`.
+- runtime API shape is `invokeOnceEvent(targetType, eventId, args)` and dispatch action shape is `{ type: "invoke-once", targetType, eventId, args }`.
+- scheduler stores invoked calls as `source_type: "invoke"` plus `invoke_target_type`; invoked calls are queue instances and do not mark once events consumed or update loop cycle state.
+- invoked graph events enter the graph chain at the target event; `call.xxx` values stay available through that invoked graph chain.
+- invoked loop events run as standalone loop event content but do not reschedule the loop cycle.
 
 ## 6. Variable and script rules
 
@@ -335,7 +354,9 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - calc variables are resolved before comparison
 - supports common `Math` functions
 - result must be `boolean`
-- empty string means `true`
+- only applies when `trigger_mode: "condition"`
+- `trigger_mode: "condition"` requires a non-empty expression
+- `trigger_mode: "default"` is the explicit always-eligible mode
 - predicate mode is read-only and rejects external assignment
 - predicate mode rejects `invoke_once`
 
@@ -345,11 +366,12 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - supports direct assignment and compound assignment
 - supports `if`, `else`, `switch`, `for`, `while`, `break`, `continue`, and `return`
 - supports `Math`
-- supports `invoke_once`
+- supports `invoke_once once|graph|loop <eventId> name=expression`
 - loops are protected by both a max step limit and a max iteration limit
 - StoryScript placeholder syntax is only `${...}`
 - legacy `{...}` placeholders are invalid in StoryScript fields and text templates
 - `branch.xxx` is only available when runtime provides action-branch context
+- `call.xxx` is only available for `invoke` mode event scripts/dialogue after runtime provides invocation args
 - runtime text substitution for dialogue/template content is implemented in `packages/runtime`
 - editor `?` help popovers for condition/script/dialogue fields should eventually be sourced from `StoryScript.md`
 - regression entry: `pnpm tui:storyscript-regression`
@@ -498,11 +520,12 @@ Current behavior:
 - graph events only enter global scheduling through root event nodes
 - root event rule: graph `event` nodes with no incoming graph-event parent edge
 - graph roots are consumed once per save after successful playback
-- `once_events` are scanned, queued when trigger conditions pass, and consumed once
+- `once_events` with `default` or passing `condition` triggers are scanned, queued, and consumed once
 - queued scheduler items now carry `trigger_locked`
-- `graph_root` and `once` events check `trigger_expr` at enqueue time; once queued, they keep execution eligibility even if related variable values change before playback
+- `graph_root` and `once` condition events check `trigger_expr` at enqueue time; once queued, they keep execution eligibility even if related variable values change before playback
+- `default` events do not execute `trigger_expr`; `invoke` events are excluded from normal scanning
 - `loop_events` keep one next-due schedule per event, enter `scheduled`, and are promoted into `ready_queue` when due
-- loop events re-check `trigger_expr` only when they become due
+- loop condition events re-check `trigger_expr` only when they become due
 - if a loop event reaches due time but its `trigger_expr` is false, the current cycle is skipped and the next cycle is scheduled
 - a skipped loop cycle does not increment `scheduler.loop_states[].trigger_count`
 - a skipped loop cycle does not write `loop_event_states`

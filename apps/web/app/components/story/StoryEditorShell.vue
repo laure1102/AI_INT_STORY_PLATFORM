@@ -7,6 +7,7 @@ import type {
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryEventTriggerMode,
   StoryLoopEventFile,
   StoryOnceEventFile,
   StoryPlayerOverrideValsFile,
@@ -40,6 +41,7 @@ import {
 } from "./storyScriptEditor"
 
 type EventCanvasTab = StoryEventCollectionType
+type EventTriggerFilter = "all" | "normal" | "invoke"
 
 const props = defineProps<{
   storyId: string
@@ -84,11 +86,18 @@ const scenesSaveSuccessMessage = shallowRef<string | null>(null)
 const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
 const activeEventTab = shallowRef<EventCanvasTab>("graph")
+const eventTriggerFilter = shallowRef<EventTriggerFilter>("all")
 
 const eventTabOptions: Array<{ key: EventCanvasTab; label: string }> = [
   { key: "graph", label: "普通剧情推进事件" },
   { key: "once", label: "一次性事件" },
   { key: "loop", label: "定时循环事件" }
+]
+
+const eventTriggerFilterOptions: Array<{ key: EventTriggerFilter; label: string }> = [
+  { key: "all", label: "全部" },
+  { key: "normal", label: "普通" },
+  { key: "invoke", label: "被调用" }
 ]
 
 function getEventsByCollectionType(collectionType: EventCanvasTab) {
@@ -123,6 +132,25 @@ function isGraphEventNode(event: StoryAnyEventFile): event is StoryEventFile {
   return "next" in event && !("exec_script" in event) && !("bgm" in event)
 }
 
+function normalizeEventTriggerMode(
+  event: StoryEventFile | StoryOnceEventFile | StoryLoopEventFile
+): StoryEventTriggerMode {
+  return event.trigger_mode ?? "default"
+}
+
+function matchesEventTriggerFilter(
+  event: StoryEventFile | StoryOnceEventFile | StoryLoopEventFile
+) {
+  if (eventTriggerFilter.value === "all") {
+    return true
+  }
+
+  const triggerMode = normalizeEventTriggerMode(event)
+  return eventTriggerFilter.value === "invoke"
+    ? triggerMode === "invoke"
+    : triggerMode !== "invoke"
+}
+
 const activeEvents = computed<StoryAnyEventFile[]>(() => {
   if (activeEventTab.value === "graph") {
     return getGraphNodes()
@@ -153,6 +181,52 @@ const activeLoopEvents = computed<StoryLoopEventFile[]>(() => {
   }
 
   return getEventsByCollectionType("loop") as StoryLoopEventFile[]
+})
+
+const filteredGraphCanvasEvents = computed<StoryAnyEventFile[]>(() => {
+  const graphNodes = getGraphNodes()
+  if (eventTriggerFilter.value === "all") {
+    return graphNodes
+  }
+
+  const visibleEventIds = new Set(
+    graphNodes
+      .filter(isGraphEventNode)
+      .filter((event) => matchesEventTriggerFilter(event))
+      .map((event) => event.id)
+  )
+  const visibleActionIds = new Set<string>()
+
+  for (const node of graphNodes) {
+    if (isGraphEventNode(node) && visibleEventIds.has(node.id)) {
+      for (const nextId of node.next) {
+        const nextNode = graphNodes.find((candidate) => candidate.id === nextId)
+        if (nextNode && isGraphActionNode(nextNode)) {
+          visibleActionIds.add(nextNode.id)
+        }
+      }
+    }
+
+    if (isGraphActionNode(node) && node.next.some((nextId) => visibleEventIds.has(nextId))) {
+      visibleActionIds.add(node.id)
+    }
+  }
+
+  return graphNodes.filter((node) => {
+    if (isGraphEventNode(node)) {
+      return visibleEventIds.has(node.id)
+    }
+
+    return isGraphActionNode(node) && visibleActionIds.has(node.id)
+  })
+})
+
+const filteredOnceCanvasEvents = computed(() => {
+  return activeOnceEvents.value.filter((event) => matchesEventTriggerFilter(event))
+})
+
+const filteredLoopCanvasEvents = computed(() => {
+  return activeLoopEvents.value.filter((event) => matchesEventTriggerFilter(event))
 })
 
 const selectedEventId = computed(() =>
@@ -648,7 +722,9 @@ function buildNewEventFromParent(parentEventId: string): StoryEventFile {
   return {
     id: newId,
     title: "新事件",
+    trigger_mode: "default",
     trigger_expr: "",
+    invoke_params: [],
     init_script: "",
     end_script: "",
     object_keys: [],
@@ -676,7 +752,9 @@ function buildNewRootEvent(): StoryEventFile {
   return {
     id: newId,
     title: "新根事件",
+    trigger_mode: "default",
     trigger_expr: "",
+    invoke_params: [],
     init_script: "",
     end_script: "",
     object_keys: [],
@@ -691,7 +769,7 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
     const event: StoryOnceEventFile = {
       id: createUniqueEventId("once-event"),
       title: "新事件",
-      trigger_mode: "condition",
+      trigger_mode: "default",
       trigger_expr: "",
       invoke_params: [],
       init_script: "",
@@ -709,7 +787,9 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
     const event: StoryLoopEventFile = {
       id: createUniqueEventId("loop-event"),
       title: "新循环事件",
+      trigger_mode: "default",
       trigger_expr: "",
+      invoke_params: [],
       init_script: "",
       object_keys: [],
       dialogues: [],
@@ -729,7 +809,9 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
   return {
     id: createUniqueEventId(defaultId),
     title: "新事件",
+    trigger_mode: "default",
     trigger_expr: "",
+    invoke_params: [],
     init_script: "",
     end_script: "",
     object_keys: [],
@@ -1235,24 +1317,40 @@ watch(
     </section>
 
     <section v-if="storyDocument" class="editor-canvas-band">
-      <div class="editor-event-tabs" role="tablist" aria-label="剧情事件类型">
-        <button
-          v-for="tab in eventTabOptions"
-          :key="tab.key"
-          class="editor-event-tabs__button"
-          :class="{ 'editor-event-tabs__button--active': activeEventTab === tab.key }"
-          type="button"
-          role="tab"
-          :aria-selected="activeEventTab === tab.key"
-          @click="handleSwitchEventTab(tab.key)"
-        >
-          {{ tab.label }}
-        </button>
+      <div class="editor-event-tabs">
+        <div class="editor-event-tabs__tablist" role="tablist" aria-label="剧情事件类型">
+          <button
+            v-for="tab in eventTabOptions"
+            :key="tab.key"
+            class="editor-event-tabs__button"
+            :class="{ 'editor-event-tabs__button--active': activeEventTab === tab.key }"
+            type="button"
+            role="tab"
+            :aria-selected="activeEventTab === tab.key"
+            @click="handleSwitchEventTab(tab.key)"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <div class="editor-trigger-filter" role="group" aria-label="触发方式筛选">
+          <span class="editor-trigger-filter__label">触发</span>
+          <button
+            v-for="option in eventTriggerFilterOptions"
+            :key="option.key"
+            class="editor-trigger-filter__button"
+            :class="{ 'editor-trigger-filter__button--active': eventTriggerFilter === option.key }"
+            type="button"
+            @click="eventTriggerFilter = option.key"
+          >
+            {{ option.label }}
+          </button>
+        </div>
       </div>
 
       <StoryGraphCanvas
         v-if="activeEventTab === 'graph'"
-        :events="activeEvents"
+        :events="filteredGraphCanvasEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
@@ -1265,7 +1363,7 @@ watch(
 
       <StoryOnceCanvas
         v-else-if="activeEventTab === 'once'"
-        :events="activeOnceEvents"
+        :events="filteredOnceCanvasEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
@@ -1275,7 +1373,7 @@ watch(
 
       <StoryLoopEventCanvas
         v-else
-        :events="activeLoopEvents"
+        :events="filteredLoopCanvasEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
         @edit="handleEditEvent"
@@ -1528,6 +1626,8 @@ watch(
 
 .editor-event-tabs {
   display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 2px;
   margin-bottom: 0;
   padding: 8px 8px 0;
@@ -1540,6 +1640,12 @@ watch(
   flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
+}
+
+.editor-event-tabs__tablist {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
 }
 
 .editor-event-tabs__button {
@@ -1558,6 +1664,46 @@ watch(
     border-color 0.2s ease,
     color 0.2s ease,
     transform 0.2s ease;
+}
+
+.editor-trigger-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px auto;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.editor-trigger-filter__label {
+  padding: 0 7px 0 9px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.editor-trigger-filter__button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.editor-trigger-filter__button:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.editor-trigger-filter__button--active {
+  color: #07121d;
+  background: rgba(124, 227, 195, 0.9);
 }
 
 .editor-event-tabs__button:hover {

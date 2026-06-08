@@ -17,11 +17,21 @@ const selectedEvent = computed(() => {
   return props.events.find((event) => event.id === props.selectedEventId) ?? null
 })
 
-function summarizeTrigger(expression: string) {
-  const trimmed = expression.trim()
+function summarizeTrigger(event: StoryLoopEventFile) {
+  const mode = event.trigger_mode ?? "default"
+
+  if (mode === "default") {
+    return "默认触发"
+  }
+
+  if (mode === "invoke") {
+    return "被调用"
+  }
+
+  const trimmed = event.trigger_expr.trim()
 
   if (!trimmed) {
-    return "无条件触发"
+    return "条件未填写"
   }
 
   if (trimmed.length <= 56) {
@@ -103,6 +113,20 @@ function handleDelete(event: StoryLoopEventFile) {
         class="loop-card"
         :class="{ 'loop-card--active': event.id === selectedEventId }"
       >
+        <span
+          v-if="(event.trigger_mode ?? 'default') === 'invoke'"
+          class="loop-card__trigger-mark loop-card__trigger-mark--invoke"
+          title="被调用"
+          aria-label="被调用"
+        />
+        <span
+          v-else-if="(event.trigger_mode ?? 'default') === 'condition'"
+          class="loop-card__trigger-mark loop-card__trigger-mark--condition"
+          title="条件触发"
+          aria-label="条件触发"
+        >
+          ★
+        </span>
         <button class="loop-card__body" type="button" @click="emit('select', event.id)">
           <div class="loop-card__top">
             <strong class="loop-card__title">{{ event.title }}</strong>
@@ -112,7 +136,7 @@ function handleDelete(event: StoryLoopEventFile) {
           <div class="loop-card__facts">
             <span class="loop-card__fact">
               <strong>触发</strong>
-              <span>{{ summarizeTrigger(event.trigger_expr) }}</span>
+              <span>{{ summarizeTrigger(event) }}</span>
             </span>
             <span class="loop-card__fact">
               <strong>地点</strong>
@@ -209,6 +233,7 @@ function handleDelete(event: StoryLoopEventFile) {
 }
 
 .loop-card {
+  position: relative;
   display: grid;
   gap: 12px;
   padding: 14px;
@@ -219,6 +244,31 @@ function handleDelete(event: StoryLoopEventFile) {
     rgba(8, 18, 29, 0.88);
   box-shadow: 0 20px 30px rgba(0, 0, 0, 0.2);
   transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.loop-card__trigger-mark {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.loop-card__trigger-mark--invoke {
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 24px solid rgba(255, 180, 84, 0.96);
+  border-right: 24px solid transparent;
+  filter: drop-shadow(0 0 8px rgba(255, 180, 84, 0.34));
+}
+
+.loop-card__trigger-mark--condition {
+  left: 10px;
+  bottom: 10px;
+  color: rgba(255, 214, 107, 0.98);
+  font-size: 0.9rem;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(255, 214, 107, 0.45);
 }
 
 .loop-card:hover {

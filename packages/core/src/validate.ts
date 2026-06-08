@@ -18,7 +18,28 @@ import {
 } from "@story-mgr/runtime"
 import type { StoryValsFile } from "./types"
 
-function buildInvokeScriptContext(event: StoryOnceEventFile) {
+type EventValidationGroupKey = "graphEvents" | "onceEvents" | "loopEvents"
+
+interface StoryEventValidationShape {
+  id: string
+  trigger_mode?: "default" | "condition" | "invoke"
+  trigger_expr: string
+  invoke_params?: Array<{
+    name: string
+    descr?: string
+  }>
+  init_script: string
+  end_script: string
+  object_keys: string[]
+  dialogues: Array<{
+    speaker_type: "player" | "object"
+    speaker_key: string
+    content: string
+  }>
+  location: string
+}
+
+function buildInvokeScriptContext(event: StoryEventValidationShape) {
   const values = Object.fromEntries(
     (event.invoke_params ?? [])
       .map((param) => param.name.trim())
@@ -64,18 +85,6 @@ function pushIssue(
   path: string[]
 ) {
   issues.push({ level, code, message, path })
-}
-
-function buildEventMap(events: StoryEventFile[]) {
-  return new Map(events.map((event) => [event.id, event]))
-}
-
-function buildAllEventMap(
-  graphEvents: StoryGraphNodeFile[],
-  onceEvents: StoryOnceEventFile[],
-  loopEvents: StoryLoopEventFile[]
-) {
-  return new Map([...graphEvents, ...onceEvents, ...loopEvents].map((event) => [event.id, event]))
 }
 
 function isGraphActionNode(event: StoryGraphNodeFile): event is StoryActionFile {
@@ -130,30 +139,25 @@ function validateDialogueTemplates(
   }
 }
 
-function validateOnceEvent(
-  event: StoryOnceEventFile,
-  eventIndex: number,
-  document: StoryDocument,
-  issues: ValidationIssue[]
-) {
-  const locationNames = collectLocationNames(document)
-  const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
-  const invokeScriptContext = buildInvokeScriptContext(event)
-  const scriptVals = buildCombinedStoryScriptVals(document)
-
-  if ((event.trigger_mode ?? "condition") === "condition") {
-    try {
-      evaluateStoryBooleanExpression(scriptVals, event.trigger_expr)
-    } catch (error) {
-      pushIssue(
-        issues,
-        "error",
-        "once.trigger-expr-invalid",
-        `Once event "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
-        ["onceEvents", String(eventIndex), "trigger_expr"]
-      )
-    }
+function getEventValidationMeta(eventGroupKey: EventValidationGroupKey) {
+  if (eventGroupKey === "graphEvents") {
+    return { codePrefix: "graph", label: "Graph event" }
   }
+
+  if (eventGroupKey === "loopEvents") {
+    return { codePrefix: "loop", label: "Loop event" }
+  }
+
+  return { codePrefix: "once", label: "Once event" }
+}
+
+function validateInvokeParamDefinitions(
+  issues: ValidationIssue[],
+  eventGroupKey: EventValidationGroupKey,
+  eventIndex: number,
+  event: StoryEventValidationShape
+) {
+  const { codePrefix, label } = getEventValidationMeta(eventGroupKey)
 
   for (const [paramIndex, param] of (event.invoke_params ?? []).entries()) {
     const trimmedName = param.name.trim()
@@ -166,16 +170,74 @@ function validateOnceEvent(
       pushIssue(
         issues,
         "error",
-        "once.invoke-param-invalid",
-        `Once event "${event.id}" invoke param "${param.name}" must be a valid identifier.`,
-        ["onceEvents", String(eventIndex), "invoke_params", String(paramIndex), "name"]
+        `${codePrefix}.invoke-param-invalid`,
+        `${label} "${event.id}" invoke param "${param.name}" must be a valid identifier.`,
+        [eventGroupKey, String(eventIndex), "invoke_params", String(paramIndex), "name"]
       )
     }
   }
+}
+
+function validatePlayableEvent(
+  event: StoryEventValidationShape,
+  eventIndex: number,
+  eventGroupKey: EventValidationGroupKey,
+  document: StoryDocument,
+  issues: ValidationIssue[]
+) {
+  const locationNames = collectLocationNames(document)
+  const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
+  const triggerMode = event.trigger_mode ?? "default"
+  const invokeScriptContext = triggerMode === "invoke"
+    ? buildInvokeScriptContext(event)
+    : undefined
+  const scriptVals = buildCombinedStoryScriptVals(document)
+  const { codePrefix, label } = getEventValidationMeta(eventGroupKey)
+
+  if (triggerMode === "condition") {
+    if (!event.trigger_expr.trim()) {
+      pushIssue(
+        issues,
+        "error",
+        `${codePrefix}.trigger-expr-required`,
+        `${label} "${event.id}" trigger_expr is required when trigger_mode is condition.`,
+        [eventGroupKey, String(eventIndex), "trigger_expr"]
+      )
+    }
+
+    if (event.trigger_expr.trim()) {
+      try {
+        evaluateStoryBooleanExpression(scriptVals, event.trigger_expr)
+      } catch (error) {
+        pushIssue(
+          issues,
+          "error",
+          `${codePrefix}.trigger-expr-invalid`,
+          `${label} "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
+          [eventGroupKey, String(eventIndex), "trigger_expr"]
+        )
+      }
+    }
+  }
+
+  if (
+    triggerMode === "invoke"
+    && !(event.invoke_params ?? []).some((param) => param.name.trim())
+  ) {
+    pushIssue(
+      issues,
+      "error",
+      `${codePrefix}.invoke-param-required`,
+      `${label} "${event.id}" invoke_params is required when trigger_mode is invoke.`,
+      [eventGroupKey, String(eventIndex), "invoke_params"]
+    )
+  }
+
+  validateInvokeParamDefinitions(issues, eventGroupKey, eventIndex, event)
 
   for (const scriptField of [
-    { key: "init_script", value: event.init_script, code: "once.init-script-invalid" },
-    { key: "end_script", value: event.end_script, code: "once.end-script-invalid" }
+    { key: "init_script", value: event.init_script, code: `${codePrefix}.init-script-invalid` },
+    { key: "end_script", value: event.end_script, code: `${codePrefix}.end-script-invalid` }
   ] as const) {
     for (const issue of validateStoryScript(
       scriptVals,
@@ -187,8 +249,8 @@ function validateOnceEvent(
         issues,
         "error",
         scriptField.code,
-        `Once event "${event.id}" ${scriptField.key} is invalid at line ${issue.lineNumber}: ${issue.message}`,
-        ["onceEvents", String(eventIndex), scriptField.key]
+        `${label} "${event.id}" ${scriptField.key} is invalid at line ${issue.lineNumber}: ${issue.message}`,
+        [eventGroupKey, String(eventIndex), scriptField.key]
       )
     }
   }
@@ -198,9 +260,9 @@ function validateOnceEvent(
       pushIssue(
         issues,
         "error",
-        "once.missing-object",
-        `Once event "${event.id}" references missing object "${objectKey}".`,
-        ["onceEvents", String(eventIndex), "object_keys", String(objectIndex)]
+        `${codePrefix}.missing-object`,
+        `${label} "${event.id}" references missing object "${objectKey}".`,
+        [eventGroupKey, String(eventIndex), "object_keys", String(objectIndex)]
       )
     }
   }
@@ -209,9 +271,9 @@ function validateOnceEvent(
     pushIssue(
       issues,
       "error",
-      "once.missing-location",
-      `Once event "${event.id}" references missing location "${event.location}".`,
-      ["onceEvents", String(eventIndex), "location"]
+      `${codePrefix}.missing-location`,
+      `${label} "${event.id}" references missing location "${event.location}".`,
+      [eventGroupKey, String(eventIndex), "location"]
     )
   }
 
@@ -221,9 +283,9 @@ function validateOnceEvent(
         pushIssue(
           issues,
           "error",
-          "once.invalid-player-speaker",
-          `Once event "${event.id}" player dialogue must use speaker_key "player".`,
-          ["onceEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+          `${codePrefix}.invalid-player-speaker`,
+          `${label} "${event.id}" player dialogue must use speaker_key "player".`,
+          [eventGroupKey, String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
         )
       }
       continue
@@ -233,20 +295,29 @@ function validateOnceEvent(
       pushIssue(
         issues,
         "error",
-        "once.invalid-object-speaker",
-        `Once event "${event.id}" dialogue speaker "${dialogue.speaker_key}" is not in the current event objects.`,
-        ["onceEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+        `${codePrefix}.invalid-object-speaker`,
+        `${label} "${event.id}" dialogue speaker "${dialogue.speaker_key}" is not in the current event objects.`,
+        [eventGroupKey, String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
       )
     }
   }
 
   validateDialogueTemplates(
     issues,
-    "onceEvents",
+    eventGroupKey,
     eventIndex,
-    `Once event "${event.id}"`,
+    `${label} "${event.id}"`,
     event.dialogues
   )
+}
+
+function validateOnceEvent(
+  event: StoryOnceEventFile,
+  eventIndex: number,
+  document: StoryDocument,
+  issues: ValidationIssue[]
+) {
+  validatePlayableEvent(event, eventIndex, "onceEvents", document, issues)
 }
 
 function validateLoopEvent(
@@ -255,7 +326,7 @@ function validateLoopEvent(
   document: StoryDocument,
   issues: ValidationIssue[]
 ) {
-  validateOnceEvent(event, eventIndex, document, issues)
+  validatePlayableEvent(event, eventIndex, "loopEvents", document, issues)
 
   const loopPath = ["loopEvents", String(eventIndex), "loop"] as const
 
@@ -296,91 +367,7 @@ function validateGraphEvent(
   document: StoryDocument,
   issues: ValidationIssue[]
 ) {
-  const locationNames = collectLocationNames(document)
-  const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
-  const scriptVals = buildCombinedStoryScriptVals(document)
-
-  try {
-    evaluateStoryBooleanExpression(scriptVals, event.trigger_expr)
-  } catch (error) {
-    pushIssue(
-      issues,
-      "error",
-      "graph.trigger-expr-invalid",
-      `Graph event "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
-      ["graphEvents", String(eventIndex), "trigger_expr"]
-    )
-  }
-
-  for (const scriptField of [
-    { key: "init_script", value: event.init_script, code: "graph.init-script-invalid" },
-    { key: "end_script", value: event.end_script, code: "graph.end-script-invalid" }
-  ] as const) {
-    for (const issue of validateStoryScript(scriptVals, scriptField.value)) {
-      pushIssue(
-        issues,
-        "error",
-        scriptField.code,
-        `Graph event "${event.id}" ${scriptField.key} is invalid at line ${issue.lineNumber}: ${issue.message}`,
-        ["graphEvents", String(eventIndex), scriptField.key]
-      )
-    }
-  }
-
-  for (const [objectIndex, objectKey] of event.object_keys.entries()) {
-    if (!findStoryRoleReference(document.roles, objectKey)) {
-      pushIssue(
-        issues,
-        "error",
-        "graph.missing-object",
-        `Graph event "${event.id}" references missing object "${objectKey}".`,
-        ["graphEvents", String(eventIndex), "object_keys", String(objectIndex)]
-      )
-    }
-  }
-
-  if (event.location && !locationNames.has(event.location)) {
-    pushIssue(
-      issues,
-      "error",
-      "graph.missing-location",
-      `Graph event "${event.id}" references missing location "${event.location}".`,
-      ["graphEvents", String(eventIndex), "location"]
-    )
-  }
-
-  for (const [dialogueIndex, dialogue] of event.dialogues.entries()) {
-    if (dialogue.speaker_type === "player") {
-      if (dialogue.speaker_key !== "player") {
-        pushIssue(
-          issues,
-          "error",
-          "graph.invalid-player-speaker",
-          `Graph event "${event.id}" player dialogue must use speaker_key "player".`,
-          ["graphEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
-        )
-      }
-      continue
-    }
-
-    if (!allowedSpeakerKeys.has(dialogue.speaker_key)) {
-      pushIssue(
-        issues,
-        "error",
-        "graph.invalid-object-speaker",
-        `Graph event "${event.id}" dialogue speaker "${dialogue.speaker_key}" is not in the current event objects.`,
-        ["graphEvents", String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
-      )
-    }
-  }
-
-  validateDialogueTemplates(
-    issues,
-    "graphEvents",
-    eventIndex,
-    `Graph event "${event.id}"`,
-    event.dialogues
-  )
+  validatePlayableEvent(event, eventIndex, "graphEvents", document, issues)
 }
 
 function validateGraphAction(
@@ -480,8 +467,6 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
   const onceEvents = document.onceEvents
   const loopEvents = document.loopEvents
   const graphNodeMap = new Map(graphNodes.map((event) => [event.id, event]))
-  const eventMap = buildAllEventMap(graphNodes, onceEvents, loopEvents)
-  const seenIds = new Set<string>()
 
   if (graphEvents.length === 0) {
     pushIssue(
@@ -503,29 +488,31 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
   }>
 
   for (const group of eventGroups) {
+    const seenGroupIds = new Set<string>()
+
     for (const [eventIndex, event] of group.events.entries()) {
-      if (seenIds.has(event.id)) {
+      if (seenGroupIds.has(event.id)) {
         pushIssue(
           issues,
           "error",
           "event.duplicate-id",
-          `Duplicate event id "${event.id}" detected.`,
-          [group.key, event.id]
+          `Duplicate ${group.key} id "${event.id}" detected.`,
+          [group.key, String(eventIndex), "id"]
         )
         continue
       }
 
-      seenIds.add(event.id)
+      seenGroupIds.add(event.id)
 
       if ("next" in event) {
-        for (const nextId of event.next) {
-          if (!eventMap.has(nextId)) {
+        for (const [nextIndex, nextId] of event.next.entries()) {
+          if (!graphNodeMap.has(nextId)) {
             pushIssue(
               issues,
               "error",
               "event.missing-link",
-              `Event "${event.id}" points to missing event "${nextId}".`,
-              [group.key, event.id, "next"]
+              `Graph node "${event.id}" points to missing graph node "${nextId}".`,
+              [group.key, String(eventIndex), "next", String(nextIndex)]
             )
           }
         }

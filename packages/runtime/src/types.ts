@@ -1,4 +1,5 @@
 export type StoryValValueType = "value" | "calc"
+export type StoryInvokeTargetType = "once" | "graph" | "loop"
 
 export interface StoryValEntryDefinition {
   name: string
