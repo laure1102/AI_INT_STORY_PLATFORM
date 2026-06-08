@@ -815,6 +815,101 @@ function findLegacyStoryScriptPlaceholder(source: string) {
   }
 }
 
+function stripStoryScriptComments(source: string) {
+  const text = normalizeText(source)
+  let result = ""
+  let index = 0
+  let activeQuote: "'" | "\"" | "`" | null = null
+  let escaping = false
+
+  while (index < text.length) {
+    const char = text[index] ?? ""
+    const nextChar = text[index + 1] ?? ""
+
+    if (activeQuote) {
+      result += char
+
+      if (escaping) {
+        escaping = false
+        index += 1
+        continue
+      }
+
+      if (char === "\\") {
+        escaping = true
+        index += 1
+        continue
+      }
+
+      if (char === activeQuote) {
+        activeQuote = null
+      }
+
+      index += 1
+      continue
+    }
+
+    if (char === "'" || char === "\"" || char === "`") {
+      activeQuote = char
+      result += char
+      index += 1
+      continue
+    }
+
+    if (char === "/" && nextChar === "/") {
+      result += "  "
+      index += 2
+
+      while (index < text.length) {
+        const commentChar = text[index] ?? ""
+        if (commentChar === "\r" || commentChar === "\n") {
+          result += commentChar
+          index += 1
+          break
+        }
+
+        result += " "
+        index += 1
+      }
+
+      continue
+    }
+
+    if (char === "/" && nextChar === "*") {
+      const startLineNumber = getStoryScriptSourceLineNumber(text, index)
+      result += "  "
+      index += 2
+      let closed = false
+
+      while (index < text.length) {
+        const commentChar = text[index] ?? ""
+        const commentNextChar = text[index + 1] ?? ""
+
+        if (commentChar === "*" && commentNextChar === "/") {
+          result += "  "
+          index += 2
+          closed = true
+          break
+        }
+
+        result += commentChar === "\r" || commentChar === "\n" ? commentChar : " "
+        index += 1
+      }
+
+      if (!closed) {
+        throw new StoryScriptError(startLineNumber, "Unterminated StoryScript block comment.")
+      }
+
+      continue
+    }
+
+    result += char
+    index += 1
+  }
+
+  return result
+}
+
 function parseAdvancedInvokeOnceArguments(source: string, lineNumber: number) {
   const text = normalizeText(source)
   const args: StoryScriptInvokeArgument[] = []
@@ -983,7 +1078,8 @@ function transformInvokeOnceStatements(script: string) {
 }
 
 function compileStoryScriptSource(source: string): CompiledStoryScriptSource {
-  const transformedSource = transformInvokeOnceStatements(source)
+  const commentlessSource = stripStoryScriptComments(source)
+  const transformedSource = transformInvokeOnceStatements(commentlessSource)
   const placeholders: StoryScriptPlaceholderBinding[] = []
   let placeholderIndex = 0
   const legacyPlaceholderMatch = STORY_SCRIPT_LEGACY_PLACEHOLDER_PATTERN.exec(transformedSource)
@@ -1998,17 +2094,18 @@ export function evaluateStoryBooleanExpression(
   context?: StoryExpressionContext
 ): StoryBooleanExpressionEvaluation {
   const trimmedExpression = normalizeText(expression).trim()
+  const commentlessExpression = stripStoryScriptComments(trimmedExpression).trim()
 
-  if (!trimmedExpression) {
+  if (!commentlessExpression) {
     return {
       expression: "true",
       result: true
     }
   }
 
-  const predicateSource = /\breturn\b|[{};]/.test(trimmedExpression)
+  const predicateSource = /\breturn\b|[{};]/.test(commentlessExpression)
     ? trimmedExpression
-    : `return (${trimmedExpression});`
+    : `return (${commentlessExpression});`
   const compiled = executeCompiledStoryScript(
     valsFile,
     predicateSource,

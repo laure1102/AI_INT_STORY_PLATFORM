@@ -135,20 +135,35 @@ function escapeStoryScriptHighlightHtml(value: string) {
     .replaceAll(">", "&gt;")
 }
 
-export function buildStoryScriptHighlightTokens(value: string): StoryScriptHighlightToken[] {
-  const tokens: StoryScriptHighlightToken[] = []
+function pushStoryScriptPlainHighlightToken(
+  tokens: StoryScriptHighlightToken[],
+  text: string
+) {
+  if (!text) {
+    return
+  }
+
+  tokens.push({
+    text: escapeStoryScriptHighlightHtml(text),
+    highlighted: false
+  })
+}
+
+function pushStoryScriptCodeHighlightTokens(
+  tokens: StoryScriptHighlightToken[],
+  text: string
+) {
+  if (!text) {
+    return
+  }
+
   let lastIndex = 0
 
-  for (const match of value.matchAll(STORY_SCRIPT_HIGHLIGHT_PATTERN)) {
+  for (const match of text.matchAll(STORY_SCRIPT_HIGHLIGHT_PATTERN)) {
     const matchIndex = match.index ?? 0
     const matchedText = match[0] ?? ""
 
-    if (matchIndex > lastIndex) {
-      tokens.push({
-        text: escapeStoryScriptHighlightHtml(value.slice(lastIndex, matchIndex)),
-        highlighted: false
-      })
-    }
+    pushStoryScriptPlainHighlightToken(tokens, text.slice(lastIndex, matchIndex))
 
     tokens.push({
       text: escapeStoryScriptHighlightHtml(matchedText),
@@ -158,12 +173,91 @@ export function buildStoryScriptHighlightTokens(value: string): StoryScriptHighl
     lastIndex = matchIndex + matchedText.length
   }
 
-  if (lastIndex < value.length) {
-    tokens.push({
-      text: escapeStoryScriptHighlightHtml(value.slice(lastIndex)),
-      highlighted: false
-    })
+  pushStoryScriptPlainHighlightToken(tokens, text.slice(lastIndex))
+}
+
+export function buildStoryScriptHighlightTokens(value: string): StoryScriptHighlightToken[] {
+  const tokens: StoryScriptHighlightToken[] = []
+  let segmentStart = 0
+  let index = 0
+  let activeQuote: "'" | "\"" | "`" | null = null
+  let escaping = false
+
+  while (index < value.length) {
+    const char = value[index] ?? ""
+    const nextChar = value[index + 1] ?? ""
+
+    if (activeQuote) {
+      if (escaping) {
+        escaping = false
+        index += 1
+        continue
+      }
+
+      if (char === "\\") {
+        escaping = true
+        index += 1
+        continue
+      }
+
+      if (char === activeQuote) {
+        activeQuote = null
+      }
+
+      index += 1
+      continue
+    }
+
+    if (char === "'" || char === "\"" || char === "`") {
+      activeQuote = char
+      index += 1
+      continue
+    }
+
+    if (char === "/" && nextChar === "/") {
+      pushStoryScriptCodeHighlightTokens(tokens, value.slice(segmentStart, index))
+      const commentStart = index
+      index += 2
+
+      while (index < value.length) {
+        const commentChar = value[index] ?? ""
+        index += 1
+        if (commentChar === "\r" || commentChar === "\n") {
+          break
+        }
+      }
+
+      pushStoryScriptPlainHighlightToken(tokens, value.slice(commentStart, index))
+      segmentStart = index
+      continue
+    }
+
+    if (char === "/" && nextChar === "*") {
+      pushStoryScriptCodeHighlightTokens(tokens, value.slice(segmentStart, index))
+      const commentStart = index
+      index += 2
+
+      while (index < value.length) {
+        const commentChar = value[index] ?? ""
+        const commentNextChar = value[index + 1] ?? ""
+
+        if (commentChar === "*" && commentNextChar === "/") {
+          index += 2
+          break
+        }
+
+        index += 1
+      }
+
+      pushStoryScriptPlainHighlightToken(tokens, value.slice(commentStart, index))
+      segmentStart = index
+      continue
+    }
+
+    index += 1
   }
+
+  pushStoryScriptCodeHighlightTokens(tokens, value.slice(segmentStart))
 
   if (tokens.length === 0) {
     tokens.push({

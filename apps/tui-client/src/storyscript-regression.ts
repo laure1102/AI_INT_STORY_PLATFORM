@@ -166,6 +166,51 @@ function testSwitchBreakContinue() {
   assert(readValue(result.vals, "player.money") === 131, "Expected switch/break/continue flow to add 31 money.")
 }
 
+function testComments() {
+  const vals = createRegressionVals()
+  const predicate = evaluateStoryBooleanExpression(vals, "${county.level} > 0 // 单行注释")
+
+  assert(predicate.result === true, "Expected predicate line comments to be ignored.")
+
+  const result = executeStoryScript(
+    vals,
+    [
+      "// ${player.money} = 999",
+      "/*",
+      "  ${player.money} = 888",
+      "  invoke_once once hidden mama=${county.level}",
+      "  {player.money}",
+      "*/",
+      "let marker = \"http://demo.local//still-text\"",
+      "if (marker === \"http://demo.local//still-text\") {",
+      "  ${player.money} += 5",
+      "}",
+      "invoke_once once test1 mama=${county.level} // 行尾注释"
+    ].join("\n")
+  )
+
+  assert(readValue(result.vals, "player.money") === 105, "Expected commented assignments to be ignored.")
+  assert(result.invocations.length === 1, "Expected commented invoke_once to be ignored.")
+  assert(result.invocations[0]?.eventId === "test1", "Expected active invoke_once to remain executable.")
+
+  const commentOnlyIssues = validateStoryScript(
+    vals,
+    [
+      "// {player.money}",
+      "/* ${player.money} = 1 */"
+    ].join("\n")
+  )
+
+  assert(commentOnlyIssues.length === 0, "Expected placeholders inside comments to be ignored.")
+
+  const unterminatedIssues = validateStoryScript(vals, "/* ${player.money} = 1")
+  assert(unterminatedIssues.length === 1, "Expected unterminated block comment to produce one issue.")
+  assert(
+    unterminatedIssues[0]?.message.includes("Unterminated StoryScript block comment"),
+    `Expected unterminated comment error, received: ${unterminatedIssues[0]?.message ?? ""}`
+  )
+}
+
 function testCalcAssignmentRejected() {
   const vals = createRegressionVals()
   const issues = validateStoryScript(vals, "${player.bonus} = 1")
@@ -216,6 +261,7 @@ function main() {
   testPredicateInvokeRejected()
   testProcedureControlFlowAndAssignments()
   testSwitchBreakContinue()
+  testComments()
   testCalcAssignmentRejected()
   testLoopLimit()
   testTemplateSyntax()

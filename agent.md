@@ -365,10 +365,12 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - supports `let`
 - supports direct assignment and compound assignment
 - supports `if`, `else`, `switch`, `for`, `while`, `break`, `continue`, and `return`
+- supports `//` line comments and `/* */` block comments in script fields
 - supports `Math`
 - supports `invoke_once once|graph|loop <eventId> name=expression`
 - loops are protected by both a max step limit and a max iteration limit
 - StoryScript placeholder syntax is only `${...}`
+- comments are stripped before placeholder and `invoke_once` preprocessing while preserving line numbers
 - legacy `{...}` placeholders are invalid in StoryScript fields and text templates
 - `branch.xxx` is only available when runtime provides action-branch context
 - `call.xxx` is only available for `invoke` mode event scripts/dialogue after runtime provides invocation args
