@@ -1,3 +1,4 @@
+import * as ts from "typescript"
 import type {
   StoryValDefinition,
   StoryValEntryDefinition,
@@ -45,6 +46,42 @@ export interface StoryScriptExecutionContext extends StoryExpressionContext {
 export interface StoryScriptInvocation {
   eventId: string
   args: Record<string, unknown>
+}
+
+type StoryScriptMode = "predicate" | "procedure"
+
+type StoryScriptControlFlow =
+  | { kind: "normal" }
+  | { kind: "return"; value: unknown }
+  | { kind: "break" }
+  | { kind: "continue" }
+
+interface StoryScriptPlaceholderBinding {
+  identifier: string
+  token: string
+}
+
+interface CompiledStoryScriptSource {
+  source: string
+  placeholders: StoryScriptPlaceholderBinding[]
+}
+
+interface PredicateStoryScriptExecutionResult extends StoryScriptExecutionResult {
+  result: boolean
+}
+
+interface StoryScriptRuntimeState {
+  valsFile: StoryValsFile
+  locals: Record<string, unknown>
+  invocations: StoryScriptInvocation[]
+  mode: StoryScriptMode
+  maxDepth: number
+  contextValues: Record<string, unknown>
+  executionContext: StoryScriptExecutionContext
+  placeholderMap: Map<string, string>
+  sourceFile: ts.SourceFile
+  stepCount: number
+  lastExpressionValue: unknown
 }
 
 interface StoryValueEntryReference {
@@ -723,6 +760,1175 @@ function prepareExpressionTemplate(
   }
 }
 
+const STORY_SCRIPT_MAX_STEPS = 20000
+const STORY_SCRIPT_MAX_LOOP_ITERATIONS = 5000
+const STORY_SCRIPT_INTERNAL_INVOKE_NAME = "__story_invoke_once"
+const STORY_SCRIPT_LEGACY_PLACEHOLDER_PATTERN =
+  /(?<!\$)\{[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+\}/
+const STORY_SCRIPT_TEMPLATE_PLACEHOLDER_PATTERN = /\$\{([^{}]*)\}/g
+const STORY_SCRIPT_SAFE_MATH = Object.freeze({
+  E: Math.E,
+  PI: Math.PI,
+  abs: Math.abs,
+  acos: Math.acos,
+  asin: Math.asin,
+  atan: Math.atan,
+  atan2: Math.atan2,
+  ceil: Math.ceil,
+  clamp: (value: number, min: number, max: number) => Math.min(Math.max(value, min), max),
+  cos: Math.cos,
+  exp: Math.exp,
+  floor: Math.floor,
+  log: Math.log,
+  log10: Math.log10 ?? ((value: number) => Math.log(value) / Math.LN10),
+  log2: Math.log2 ?? ((value: number) => Math.log(value) / Math.LN2),
+  max: Math.max,
+  min: Math.min,
+  pow: Math.pow,
+  round: Math.round,
+  sign: Math.sign,
+  sin: Math.sin,
+  sqrt: Math.sqrt,
+  tan: Math.tan,
+  trunc: Math.trunc
+})
+
+function isStoryScriptPlaceholderToken(token: string) {
+  return /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(token.trim())
+}
+
+function getStoryScriptSourceLineNumber(source: string, index: number) {
+  return source.slice(0, Math.max(0, index)).split(/\r?\n/).length
+}
+
+function findLegacyStoryScriptPlaceholder(source: string) {
+  const match = STORY_SCRIPT_LEGACY_PLACEHOLDER_PATTERN.exec(source)
+  if (!match) {
+    return null
+  }
+
+  return {
+    placeholder: match[0],
+    lineNumber: getStoryScriptSourceLineNumber(source, match.index ?? 0)
+  }
+}
+
+function parseAdvancedInvokeOnceArguments(source: string, lineNumber: number) {
+  const text = normalizeText(source)
+  const args: StoryScriptInvokeArgument[] = []
+  let index = 0
+
+  while (index < text.length) {
+    while (index < text.length && /\s/.test(text[index] ?? "")) {
+      index += 1
+    }
+
+    if (index >= text.length) {
+      break
+    }
+
+    const nameMatch = text.slice(index).match(/^[A-Za-z_][A-Za-z0-9_]*/)
+    if (!nameMatch) {
+      throw new StoryScriptError(lineNumber, "invoke_once argument name is invalid.")
+    }
+
+    const name = nameMatch[0]
+    index += name.length
+
+    while (index < text.length && /\s/.test(text[index] ?? "")) {
+      index += 1
+    }
+
+    if ((text[index] ?? "") !== "=") {
+      throw new StoryScriptError(lineNumber, `invoke_once argument "${name}" must use name=expression.`)
+    }
+
+    index += 1
+    const expressionStart = index
+    let parenDepth = 0
+    let bracketDepth = 0
+    let braceDepth = 0
+    let activeQuote: "'" | "\"" | "`" | null = null
+    let escaping = false
+
+    while (index < text.length) {
+      const char = text[index] ?? ""
+
+      if (activeQuote) {
+        if (escaping) {
+          escaping = false
+          index += 1
+          continue
+        }
+
+        if (char === "\\") {
+          escaping = true
+          index += 1
+          continue
+        }
+
+        if (char === activeQuote) {
+          activeQuote = null
+        }
+
+        index += 1
+        continue
+      }
+
+      if (char === "'" || char === "\"" || char === "`") {
+        activeQuote = char
+        index += 1
+        continue
+      }
+
+      if (char === "(") {
+        parenDepth += 1
+        index += 1
+        continue
+      }
+
+      if (char === ")") {
+        parenDepth = Math.max(0, parenDepth - 1)
+        index += 1
+        continue
+      }
+
+      if (char === "[") {
+        bracketDepth += 1
+        index += 1
+        continue
+      }
+
+      if (char === "]") {
+        bracketDepth = Math.max(0, bracketDepth - 1)
+        index += 1
+        continue
+      }
+
+      if (char === "{") {
+        braceDepth += 1
+        index += 1
+        continue
+      }
+
+      if (char === "}") {
+        braceDepth = Math.max(0, braceDepth - 1)
+        index += 1
+        continue
+      }
+
+      if (
+        /\s/.test(char)
+        && parenDepth === 0
+        && bracketDepth === 0
+        && braceDepth === 0
+      ) {
+        const rest = text.slice(index).trimStart()
+        if (!rest) {
+          break
+        }
+
+        if (/^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(rest)) {
+          break
+        }
+      }
+
+      index += 1
+    }
+
+    const expression = text.slice(expressionStart, index).trim()
+    if (!expression) {
+      throw new StoryScriptError(lineNumber, `invoke_once argument "${name}" is missing its expression.`)
+    }
+
+    args.push({
+      name,
+      expression
+    })
+  }
+
+  return args
+}
+
+function transformInvokeOnceStatements(script: string) {
+  return normalizeText(script)
+    .split(/\r?\n/)
+    .map((rawLine, lineIndex) => {
+      const match = rawLine.match(/^(\s*)invoke_once\s+([A-Za-z0-9_\-:.]+)(?:\s+(.+?))?\s*$/)
+      if (!match) {
+        return rawLine
+      }
+
+      const indentation = match[1] ?? ""
+      const eventId = (match[2] ?? "").trim()
+      const argsSource = match[3] ?? ""
+      if (!eventId) {
+        throw new StoryScriptError(lineIndex + 1, "invoke_once requires an event id.")
+      }
+
+      const args = parseAdvancedInvokeOnceArguments(argsSource, lineIndex + 1)
+      const objectLiteral = args.length > 0
+        ? `{ ${args.map((arg) => `${arg.name}: (${arg.expression})`).join(", ")} }`
+        : "{}"
+
+      return `${indentation}${STORY_SCRIPT_INTERNAL_INVOKE_NAME}(${JSON.stringify(eventId)}, ${objectLiteral});`
+    })
+    .join("\n")
+}
+
+function compileStoryScriptSource(source: string): CompiledStoryScriptSource {
+  const transformedSource = transformInvokeOnceStatements(source)
+  const placeholders: StoryScriptPlaceholderBinding[] = []
+  let placeholderIndex = 0
+  const legacyPlaceholderMatch = STORY_SCRIPT_LEGACY_PLACEHOLDER_PATTERN.exec(transformedSource)
+
+  if (legacyPlaceholderMatch) {
+    throw new StoryScriptError(
+      getStoryScriptSourceLineNumber(transformedSource, legacyPlaceholderMatch.index ?? 0),
+      `StoryScript variable references must use \${...}. Found legacy placeholder "${legacyPlaceholderMatch[0]}".`
+    )
+  }
+
+  const compiledSource = transformedSource.replace(/\$\{([^{}]+)\}/g, (_match, tokenText: string) => {
+    const token = tokenText.trim()
+    if (!token) {
+      throw new Error("Empty placeholder is not allowed.")
+    }
+
+    if (!isStoryScriptPlaceholderToken(token)) {
+      throw new Error(`Invalid placeholder: \${${token}}`)
+    }
+
+    const identifier = `__story_ref_${placeholderIndex}`
+    placeholderIndex += 1
+    placeholders.push({
+      identifier,
+      token
+    })
+    return identifier
+  })
+
+  return {
+    source: compiledSource,
+    placeholders
+  }
+}
+
+function getStoryScriptLineNumber(sourceFile: ts.SourceFile, node: ts.Node) {
+  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1
+}
+
+function createStoryScriptErrorFromNode(
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+  message: string
+) {
+  return new StoryScriptError(getStoryScriptLineNumber(sourceFile, node), message)
+}
+
+function bumpStoryScriptStep(state: StoryScriptRuntimeState, node: ts.Node) {
+  state.stepCount += 1
+  if (state.stepCount > STORY_SCRIPT_MAX_STEPS) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      `StoryScript exceeded the maximum step count of ${STORY_SCRIPT_MAX_STEPS}.`
+    )
+  }
+}
+
+function getStoryScriptContextValues(state: StoryScriptRuntimeState) {
+  return buildStoryReadableContextValues(state.executionContext)
+}
+
+function resolveStoryScriptPlaceholderValue(
+  state: StoryScriptRuntimeState,
+  identifier: string,
+  node: ts.Node
+) {
+  const token = state.placeholderMap.get(identifier)
+  if (!token) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      `Unknown StoryScript placeholder identifier "${identifier}".`
+    )
+  }
+
+  return resolveStoryValueReference(
+    state.valsFile,
+    token,
+    state.maxDepth,
+    getStoryScriptContextValues(state)
+  )
+}
+
+function getStoryScriptSafeIdentifierValue(identifier: string) {
+  if (identifier === "Math") {
+    return STORY_SCRIPT_SAFE_MATH
+  }
+
+  if (Object.prototype.hasOwnProperty.call(STORY_SCRIPT_SAFE_MATH, identifier)) {
+    return STORY_SCRIPT_SAFE_MATH[identifier as keyof typeof STORY_SCRIPT_SAFE_MATH]
+  }
+
+  return undefined
+}
+
+function assertStoryScriptBooleanValue(
+  value: unknown,
+  state: StoryScriptRuntimeState,
+  node: ts.Node
+) {
+  if (typeof value !== "boolean") {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      "StoryScript condition must evaluate to a boolean value."
+    )
+  }
+
+  return value
+}
+
+function isStoryScriptAssignmentOperator(kind: ts.SyntaxKind) {
+  return kind === ts.SyntaxKind.EqualsToken
+    || kind === ts.SyntaxKind.PlusEqualsToken
+    || kind === ts.SyntaxKind.MinusEqualsToken
+    || kind === ts.SyntaxKind.AsteriskEqualsToken
+    || kind === ts.SyntaxKind.SlashEqualsToken
+    || kind === ts.SyntaxKind.PercentEqualsToken
+}
+
+function resolveStoryScriptAssignmentTarget(
+  left: ts.Expression,
+  state: StoryScriptRuntimeState
+):
+  | { kind: "local"; name: string }
+  | { kind: "placeholder"; token: string } {
+  if (!ts.isIdentifier(left)) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      left,
+      "StoryScript assignment target must be a local variable or placeholder."
+    )
+  }
+
+  const identifier = left.text
+  const placeholderToken = state.placeholderMap.get(identifier)
+  if (placeholderToken) {
+    return {
+      kind: "placeholder",
+      token: placeholderToken
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(state.locals, identifier)) {
+    return {
+      kind: "local",
+      name: identifier
+    }
+  }
+
+  throw createStoryScriptErrorFromNode(
+    state.sourceFile,
+    left,
+    `Temporary variable "${identifier}" was not declared.`
+  )
+}
+
+function getStoryScriptAssignmentCurrentValue(
+  target: ReturnType<typeof resolveStoryScriptAssignmentTarget>,
+  state: StoryScriptRuntimeState,
+  node: ts.Node
+) {
+  if (target.kind === "local") {
+    return state.locals[target.name]
+  }
+
+  return resolveStoryValueReference(
+    state.valsFile,
+    target.token,
+    state.maxDepth,
+    getStoryScriptContextValues(state)
+  )
+}
+
+function assignStoryScriptTargetValue(
+  target: ReturnType<typeof resolveStoryScriptAssignmentTarget>,
+  value: unknown,
+  state: StoryScriptRuntimeState,
+  node: ts.Node
+) {
+  if (target.kind === "local") {
+    state.locals[target.name] = value
+    return value
+  }
+
+  // 条件脚本只允许计算结果，不允许修改外部变量。
+  if (state.mode === "predicate") {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      "Predicate StoryScript is read-only and cannot assign external values."
+    )
+  }
+
+  try {
+    assignStoryScriptGlobalValue(state.valsFile, target.token, value, state.executionContext)
+    return value
+  } catch (error) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      error instanceof Error ? error.message : "StoryScript assignment failed."
+    )
+  }
+}
+
+function evaluateStoryScriptBinaryOperator(
+  operator: ts.SyntaxKind,
+  left: unknown,
+  right: unknown,
+  state: StoryScriptRuntimeState,
+  node: ts.Node
+) {
+  switch (operator) {
+    case ts.SyntaxKind.PlusToken:
+      return typeof left === "string" || typeof right === "string"
+        ? `${left ?? ""}${right ?? ""}`
+        : Number(left) + Number(right)
+    case ts.SyntaxKind.MinusToken:
+      return Number(left) - Number(right)
+    case ts.SyntaxKind.AsteriskToken:
+      return Number(left) * Number(right)
+    case ts.SyntaxKind.SlashToken:
+      return Number(left) / Number(right)
+    case ts.SyntaxKind.PercentToken:
+      return Number(left) % Number(right)
+    case ts.SyntaxKind.GreaterThanToken:
+      return (left as number | string) > (right as number | string)
+    case ts.SyntaxKind.GreaterThanEqualsToken:
+      return (left as number | string) >= (right as number | string)
+    case ts.SyntaxKind.LessThanToken:
+      return (left as number | string) < (right as number | string)
+    case ts.SyntaxKind.LessThanEqualsToken:
+      return (left as number | string) <= (right as number | string)
+    case ts.SyntaxKind.EqualsEqualsToken:
+      return left == right
+    case ts.SyntaxKind.EqualsEqualsEqualsToken:
+      return left === right
+    case ts.SyntaxKind.ExclamationEqualsToken:
+      return left != right
+    case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+      return left !== right
+    default:
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        node,
+        `Unsupported StoryScript operator: ${ts.tokenToString(operator) ?? String(operator)}`
+      )
+  }
+}
+
+function executeStoryScriptVariableDeclarationList(
+  declarationList: ts.VariableDeclarationList,
+  state: StoryScriptRuntimeState,
+  node: ts.Node
+) {
+  if ((declarationList.flags & ts.NodeFlags.Let) === 0) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      "StoryScript only supports let variable declarations."
+    )
+  }
+
+  for (const declaration of declarationList.declarations) {
+    if (!ts.isIdentifier(declaration.name)) {
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        declaration,
+        "StoryScript variable declaration must use a simple identifier."
+      )
+    }
+
+    const identifier = declaration.name.text
+    assertScriptLocalIdentifier(identifier)
+    if (Object.prototype.hasOwnProperty.call(state.locals, identifier)) {
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        declaration.name,
+        `Temporary variable "${identifier}" is already declared.`
+      )
+    }
+
+    if (!declaration.initializer) {
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        declaration,
+        `Temporary variable "${identifier}" requires an initializer.`
+      )
+    }
+
+    state.locals[identifier] = evaluateStoryScriptAstExpression(
+      declaration.initializer,
+      state
+    )
+  }
+}
+
+function executeStoryScriptSwitchStatement(
+  statement: ts.SwitchStatement,
+  state: StoryScriptRuntimeState
+): StoryScriptControlFlow {
+  const switchValue = evaluateStoryScriptAstExpression(statement.expression, state)
+  const defaultClauseIndex = statement.caseBlock.clauses.findIndex((clause) =>
+    ts.isDefaultClause(clause)
+  )
+  const startClauseIndex = statement.caseBlock.clauses.findIndex((clause) => {
+    if (ts.isDefaultClause(clause)) {
+      return false
+    }
+
+    return evaluateStoryScriptAstExpression(clause.expression, state) === switchValue
+  })
+  const clauseIndex = startClauseIndex >= 0 ? startClauseIndex : defaultClauseIndex
+
+  if (clauseIndex < 0) {
+    return {
+      kind: "normal"
+    }
+  }
+
+  for (let index = clauseIndex; index < statement.caseBlock.clauses.length; index += 1) {
+    const clause = statement.caseBlock.clauses[index]
+    if (!clause) {
+      continue
+    }
+
+    for (const clauseStatement of clause.statements) {
+      const flow = executeStoryScriptAstStatement(clauseStatement, state)
+      if (flow.kind === "break") {
+        return {
+          kind: "normal"
+        }
+      }
+
+      if (flow.kind !== "normal") {
+        return flow
+      }
+    }
+  }
+
+  return {
+    kind: "normal"
+  }
+}
+
+function executeStoryScriptWhileStatement(
+  statement: ts.WhileStatement,
+  state: StoryScriptRuntimeState
+): StoryScriptControlFlow {
+  let iterationCount = 0
+
+  while (
+    assertStoryScriptBooleanValue(
+      evaluateStoryScriptAstExpression(statement.expression, state),
+      state,
+      statement.expression
+    )
+  ) {
+    iterationCount += 1
+    // 循环单独限制迭代次数，避免长时间占住脚本执行器。
+    if (iterationCount > STORY_SCRIPT_MAX_LOOP_ITERATIONS) {
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        statement,
+        `StoryScript loop exceeded the maximum iteration count of ${STORY_SCRIPT_MAX_LOOP_ITERATIONS}.`
+      )
+    }
+
+    const flow = executeStoryScriptAstStatement(statement.statement, state)
+    if (flow.kind === "break") {
+      return {
+        kind: "normal"
+      }
+    }
+
+    if (flow.kind === "continue") {
+      continue
+    }
+
+    if (flow.kind !== "normal") {
+      return flow
+    }
+  }
+
+  return {
+    kind: "normal"
+  }
+}
+
+function executeStoryScriptForStatement(
+  statement: ts.ForStatement,
+  state: StoryScriptRuntimeState
+): StoryScriptControlFlow {
+  if (statement.initializer) {
+    if (ts.isVariableDeclarationList(statement.initializer)) {
+      executeStoryScriptVariableDeclarationList(
+        statement.initializer,
+        state,
+        statement.initializer
+      )
+    } else {
+      evaluateStoryScriptAstExpression(statement.initializer, state)
+    }
+  }
+
+  let iterationCount = 0
+
+  while (true) {
+    if (
+      statement.condition &&
+      !assertStoryScriptBooleanValue(
+        evaluateStoryScriptAstExpression(statement.condition, state),
+        state,
+        statement.condition
+      )
+    ) {
+      return {
+        kind: "normal"
+      }
+    }
+
+    iterationCount += 1
+    // for 循环与 while 循环共用同一套最大迭代次数限制。
+    if (iterationCount > STORY_SCRIPT_MAX_LOOP_ITERATIONS) {
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        statement,
+        `StoryScript loop exceeded the maximum iteration count of ${STORY_SCRIPT_MAX_LOOP_ITERATIONS}.`
+      )
+    }
+
+    const flow = executeStoryScriptAstStatement(statement.statement, state)
+    if (flow.kind === "return") {
+      return flow
+    }
+
+    if (flow.kind === "break") {
+      return {
+        kind: "normal"
+      }
+    }
+
+    if (statement.incrementor) {
+      evaluateStoryScriptAstExpression(statement.incrementor, state)
+    }
+
+    if (flow.kind === "continue") {
+      continue
+    }
+
+    if (flow.kind !== "normal") {
+      return flow
+    }
+  }
+}
+
+function executeStoryScriptInvokeCall(
+  expression: ts.CallExpression,
+  state: StoryScriptRuntimeState
+) {
+  if (state.mode === "predicate") {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      expression,
+      "Predicate StoryScript is read-only and cannot invoke events."
+    )
+  }
+
+  if (expression.arguments.length !== 2) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      expression,
+      "invoke_once must receive exactly two arguments after transformation."
+    )
+  }
+
+  const eventIdNode = expression.arguments[0]
+  const argsNode = expression.arguments[1]
+  if (!eventIdNode || !argsNode || !ts.isStringLiteral(eventIdNode)) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      expression,
+      "invoke_once event id must be a string literal."
+    )
+  }
+
+  if (!ts.isObjectLiteralExpression(argsNode)) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      expression,
+      "invoke_once arguments must be transformed into an object literal."
+    )
+  }
+
+  const args: Record<string, unknown> = {}
+  for (const property of argsNode.properties) {
+    if (!ts.isPropertyAssignment(property)) {
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        property,
+        "invoke_once only supports direct property assignments."
+      )
+    }
+
+    const name = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
+      ? property.name.text
+      : null
+    if (!name) {
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        property.name,
+        "invoke_once argument name is invalid."
+      )
+    }
+
+    args[name] = evaluateStoryScriptAstExpression(property.initializer, state)
+  }
+
+  state.invocations.push({
+    eventId: eventIdNode.text,
+    args
+  })
+
+  return null
+}
+
+function evaluateStoryScriptAstExpression(
+  expression: ts.Expression,
+  state: StoryScriptRuntimeState
+): unknown {
+  bumpStoryScriptStep(state, expression)
+
+  if (ts.isParenthesizedExpression(expression)) {
+    return evaluateStoryScriptAstExpression(expression.expression, state)
+  }
+
+  if (ts.isNumericLiteral(expression)) {
+    return Number(expression.text)
+  }
+
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+    return expression.text
+  }
+
+  if (expression.kind === ts.SyntaxKind.TrueKeyword) {
+    return true
+  }
+
+  if (expression.kind === ts.SyntaxKind.FalseKeyword) {
+    return false
+  }
+
+  if (expression.kind === ts.SyntaxKind.NullKeyword) {
+    return null
+  }
+
+  if (ts.isIdentifier(expression)) {
+    if (Object.prototype.hasOwnProperty.call(state.locals, expression.text)) {
+      return state.locals[expression.text]
+    }
+
+    if (state.placeholderMap.has(expression.text)) {
+      return resolveStoryScriptPlaceholderValue(state, expression.text, expression)
+    }
+
+    const safeValue = getStoryScriptSafeIdentifierValue(expression.text)
+    if (safeValue !== undefined) {
+      return safeValue
+    }
+
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      expression,
+      `Unsupported identifier in StoryScript: ${expression.text}`
+    )
+  }
+
+  if (ts.isPrefixUnaryExpression(expression)) {
+    const operand = evaluateStoryScriptAstExpression(expression.operand, state)
+    switch (expression.operator) {
+      case ts.SyntaxKind.ExclamationToken:
+        return !operand
+      case ts.SyntaxKind.MinusToken:
+        return -Number(operand)
+      case ts.SyntaxKind.PlusToken:
+        return +Number(operand)
+      default:
+        throw createStoryScriptErrorFromNode(
+          state.sourceFile,
+          expression,
+          "Unsupported unary operator in StoryScript."
+        )
+    }
+  }
+
+  if (ts.isConditionalExpression(expression)) {
+    const condition = assertStoryScriptBooleanValue(
+      evaluateStoryScriptAstExpression(expression.condition, state),
+      state,
+      expression.condition
+    )
+
+    return condition
+      ? evaluateStoryScriptAstExpression(expression.whenTrue, state)
+      : evaluateStoryScriptAstExpression(expression.whenFalse, state)
+  }
+
+  if (ts.isPropertyAccessExpression(expression)) {
+    const target = evaluateStoryScriptAstExpression(expression.expression, state)
+    if (target === STORY_SCRIPT_SAFE_MATH) {
+      const member = expression.name.text
+      if (Object.prototype.hasOwnProperty.call(STORY_SCRIPT_SAFE_MATH, member)) {
+        return STORY_SCRIPT_SAFE_MATH[member as keyof typeof STORY_SCRIPT_SAFE_MATH]
+      }
+    }
+
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      expression,
+      "Unsupported property access in StoryScript."
+    )
+  }
+
+  if (ts.isCallExpression(expression)) {
+    if (ts.isIdentifier(expression.expression) && expression.expression.text === STORY_SCRIPT_INTERNAL_INVOKE_NAME) {
+      return executeStoryScriptInvokeCall(expression, state)
+    }
+
+    const callee = evaluateStoryScriptAstExpression(expression.expression, state)
+    if (typeof callee !== "function") {
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        expression.expression,
+        "StoryScript call target must be a function."
+      )
+    }
+
+    const args = expression.arguments.map((arg) => evaluateStoryScriptAstExpression(arg, state))
+    return callee(...args)
+  }
+
+  if (ts.isBinaryExpression(expression)) {
+    if (isStoryScriptAssignmentOperator(expression.operatorToken.kind)) {
+      const target = resolveStoryScriptAssignmentTarget(expression.left, state)
+
+      if (expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+        const assignedValue = evaluateStoryScriptAstExpression(expression.right, state)
+        return assignStoryScriptTargetValue(target, assignedValue, state, expression.left)
+      }
+
+      const currentValue = getStoryScriptAssignmentCurrentValue(target, state, expression.left)
+      const rightValue = evaluateStoryScriptAstExpression(expression.right, state)
+      const mappedOperator = expression.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken
+        ? ts.SyntaxKind.PlusToken
+        : expression.operatorToken.kind === ts.SyntaxKind.MinusEqualsToken
+          ? ts.SyntaxKind.MinusToken
+          : expression.operatorToken.kind === ts.SyntaxKind.AsteriskEqualsToken
+            ? ts.SyntaxKind.AsteriskToken
+            : expression.operatorToken.kind === ts.SyntaxKind.SlashEqualsToken
+              ? ts.SyntaxKind.SlashToken
+              : ts.SyntaxKind.PercentToken
+      const nextValue = evaluateStoryScriptBinaryOperator(
+        mappedOperator,
+        currentValue,
+        rightValue,
+        state,
+        expression
+      )
+      return assignStoryScriptTargetValue(target, nextValue, state, expression.left)
+    }
+
+    if (expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+      const left = assertStoryScriptBooleanValue(
+        evaluateStoryScriptAstExpression(expression.left, state),
+        state,
+        expression.left
+      )
+
+      return left
+        ? assertStoryScriptBooleanValue(
+            evaluateStoryScriptAstExpression(expression.right, state),
+            state,
+            expression.right
+          )
+        : false
+    }
+
+    if (expression.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+      const left = assertStoryScriptBooleanValue(
+        evaluateStoryScriptAstExpression(expression.left, state),
+        state,
+        expression.left
+      )
+
+      return left
+        ? true
+        : assertStoryScriptBooleanValue(
+            evaluateStoryScriptAstExpression(expression.right, state),
+            state,
+            expression.right
+          )
+    }
+
+    if (expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+      const left = evaluateStoryScriptAstExpression(expression.left, state)
+      return left ?? evaluateStoryScriptAstExpression(expression.right, state)
+    }
+
+    const left = evaluateStoryScriptAstExpression(expression.left, state)
+    const right = evaluateStoryScriptAstExpression(expression.right, state)
+    return evaluateStoryScriptBinaryOperator(
+      expression.operatorToken.kind,
+      left,
+      right,
+      state,
+      expression
+    )
+  }
+
+  throw createStoryScriptErrorFromNode(
+    state.sourceFile,
+    expression,
+    `Unsupported StoryScript expression kind: ${ts.SyntaxKind[expression.kind] ?? expression.kind}`
+  )
+}
+
+function executeStoryScriptAstStatements(
+  statements: readonly ts.Statement[],
+  state: StoryScriptRuntimeState
+): StoryScriptControlFlow {
+  for (const statement of statements) {
+    const flow = executeStoryScriptAstStatement(statement, state)
+    if (flow.kind !== "normal") {
+      return flow
+    }
+  }
+
+  return {
+    kind: "normal"
+  }
+}
+
+function executeStoryScriptAstStatement(
+  statement: ts.Statement,
+  state: StoryScriptRuntimeState
+): StoryScriptControlFlow {
+  bumpStoryScriptStep(state, statement)
+
+  if (ts.isBlock(statement)) {
+    return executeStoryScriptAstStatements(statement.statements, state)
+  }
+
+  if (ts.isEmptyStatement(statement)) {
+    return {
+      kind: "normal"
+    }
+  }
+
+  if (ts.isVariableStatement(statement)) {
+    executeStoryScriptVariableDeclarationList(statement.declarationList, state, statement)
+    return {
+      kind: "normal"
+    }
+  }
+
+  if (ts.isExpressionStatement(statement)) {
+    state.lastExpressionValue = evaluateStoryScriptAstExpression(statement.expression, state)
+    return {
+      kind: "normal"
+    }
+  }
+
+  if (ts.isIfStatement(statement)) {
+    const condition = assertStoryScriptBooleanValue(
+      evaluateStoryScriptAstExpression(statement.expression, state),
+      state,
+      statement.expression
+    )
+
+    return condition
+      ? executeStoryScriptAstStatement(statement.thenStatement, state)
+      : (statement.elseStatement
+          ? executeStoryScriptAstStatement(statement.elseStatement, state)
+          : { kind: "normal" })
+  }
+
+  if (ts.isSwitchStatement(statement)) {
+    return executeStoryScriptSwitchStatement(statement, state)
+  }
+
+  if (ts.isWhileStatement(statement)) {
+    return executeStoryScriptWhileStatement(statement, state)
+  }
+
+  if (ts.isForStatement(statement)) {
+    return executeStoryScriptForStatement(statement, state)
+  }
+
+  if (ts.isReturnStatement(statement)) {
+    if (!statement.expression) {
+      if (state.mode === "predicate") {
+        throw createStoryScriptErrorFromNode(
+          state.sourceFile,
+          statement,
+          "StoryScript predicate return must provide a boolean expression."
+        )
+      }
+
+      return {
+        kind: "return",
+        value: undefined
+      }
+    }
+
+    const returnValue = evaluateStoryScriptAstExpression(statement.expression, state)
+    if (state.mode === "procedure") {
+      throw createStoryScriptErrorFromNode(
+        state.sourceFile,
+        statement.expression,
+        "Procedure StoryScript does not support return values."
+      )
+    }
+
+    return {
+      kind: "return",
+      value: assertStoryScriptBooleanValue(returnValue, state, statement.expression)
+    }
+  }
+
+  if (ts.isBreakStatement(statement)) {
+    return {
+      kind: "break"
+    }
+  }
+
+  if (ts.isContinueStatement(statement)) {
+    return {
+      kind: "continue"
+    }
+  }
+
+  throw createStoryScriptErrorFromNode(
+    state.sourceFile,
+    statement,
+    `Unsupported StoryScript statement kind: ${ts.SyntaxKind[statement.kind] ?? statement.kind}`
+  )
+}
+
+function executeCompiledStoryScript(
+  valsFile: StoryValsFile,
+  source: string,
+  mode: "predicate",
+  maxDepth: number,
+  context?: StoryScriptExecutionContext
+): PredicateStoryScriptExecutionResult
+function executeCompiledStoryScript(
+  valsFile: StoryValsFile,
+  source: string,
+  mode: "procedure",
+  maxDepth: number,
+  context?: StoryScriptExecutionContext
+): StoryScriptExecutionResult
+function executeCompiledStoryScript(
+  valsFile: StoryValsFile,
+  source: string,
+  mode: StoryScriptMode,
+  maxDepth: number,
+  context?: StoryScriptExecutionContext
+) {
+  const nextVals = cloneStoryValsFile(valsFile)
+  const executionContext: StoryScriptExecutionContext = {
+    values: { ...(context?.values ?? {}) },
+    assignableValues: { ...(context?.assignableValues ?? {}) }
+  }
+  const compiledSource = compileStoryScriptSource(source)
+  const sourceFile = ts.createSourceFile(
+    "storyscript.ts",
+    compiledSource.source,
+    ts.ScriptTarget.ES2022,
+    true,
+    ts.ScriptKind.TS
+  )
+
+  const parseDiagnostics =
+    (sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] })
+      .parseDiagnostics ?? []
+  const firstDiagnostic = parseDiagnostics.find(
+    (diagnostic: ts.DiagnosticWithLocation) => diagnostic.category === ts.DiagnosticCategory.Error
+  )
+  if (firstDiagnostic) {
+    const position = firstDiagnostic.start ?? 0
+    const lineNumber = sourceFile.getLineAndCharacterOfPosition(position).line + 1
+    throw new StoryScriptError(
+      lineNumber,
+      ts.flattenDiagnosticMessageText(firstDiagnostic.messageText, "\n")
+    )
+  }
+
+  const state: StoryScriptRuntimeState = {
+    valsFile: nextVals,
+    locals: {},
+    invocations: [],
+    mode,
+    maxDepth,
+    contextValues: {},
+    executionContext,
+    placeholderMap: new Map(
+      compiledSource.placeholders.map((binding) => [binding.identifier, binding.token] as const)
+    ),
+    sourceFile,
+    stepCount: 0,
+    lastExpressionValue: undefined
+  }
+
+  const flow = executeStoryScriptAstStatements(sourceFile.statements, state)
+  if (flow.kind === "break" || flow.kind === "continue") {
+    throw new StoryScriptError(
+      1,
+      `StoryScript ${flow.kind} is only valid inside loops.`
+    )
+  }
+
+  if (mode === "predicate") {
+    const result = flow.kind === "return" ? flow.value : state.lastExpressionValue
+    if (typeof result !== "boolean") {
+      throw new StoryScriptError(
+        sourceFile.getLineAndCharacterOfPosition(sourceFile.end).line + 1,
+        "StoryScript predicate must produce a boolean result."
+      )
+    }
+
+    return {
+      result,
+      vals: nextVals,
+      locals: { ...state.locals },
+      externalValues: { ...(executionContext.assignableValues ?? {}) },
+      invocations: [...state.invocations]
+    }
+  }
+
+  return {
+    vals: nextVals,
+    locals: { ...state.locals },
+    externalValues: { ...(executionContext.assignableValues ?? {}) },
+    invocations: [...state.invocations]
+  }
+}
+
 export function evaluateStoryValCalcRule(
   group: StoryValDefinition,
   calcRule: string,
@@ -778,17 +1984,22 @@ export function evaluateStoryBooleanExpression(
     }
   }
 
-  const contextValues = buildStoryReadableContextValues(context)
-  const preparedExpression = prepareExpressionTemplate(trimmedExpression, (token) =>
-    resolveStoryValueReference(valsFile, token, maxDepth, contextValues)
+  const predicateSource = /\breturn\b|[{};]/.test(trimmedExpression)
+    ? trimmedExpression
+    : `return (${trimmedExpression});`
+  const compiled = executeCompiledStoryScript(
+    valsFile,
+    predicateSource,
+    "predicate",
+    maxDepth,
+    {
+      values: { ...(context?.values ?? {}) }
+    }
   )
 
   return {
-    expression: preparedExpression.expression,
-    result: evaluateBooleanExpression(
-      preparedExpression.expression,
-      preparedExpression.extraContext
-    )
+    expression: predicateSource,
+    result: compiled.result
   }
 }
 
@@ -876,163 +2087,20 @@ function parseStoryScriptInvokeArguments(source: string, lineNumber: number) {
   return args
 }
 
-function parseStoryScript(script: string) {
-  const statements: StoryScriptStatement[] = []
-  const lines = normalizeText(script).split(/\r?\n/)
-
-  for (const [lineIndex, rawLine] of lines.entries()) {
-    let line = rawLine.trim()
-
-    if (!line || line.startsWith("//")) {
-      continue
-    }
-
-    if (line.endsWith(";")) {
-      line = line.slice(0, -1).trimEnd()
-    }
-
-    if (!line) {
-      continue
-    }
-
-    const lineNumber = lineIndex + 1
-    const invokeMatch = line.match(/^invoke_once\s+([A-Za-z0-9_\-:.]+)(?:\s+(.+))?$/)
-    if (invokeMatch) {
-      const eventId = (invokeMatch[1] ?? "").trim()
-
-      if (!eventId) {
-        throw new StoryScriptError(lineNumber, "invoke_once requires an event id.")
-      }
-
-      statements.push({
-        kind: "invokeOnce",
-        lineNumber,
-        eventId,
-        args: parseStoryScriptInvokeArguments(invokeMatch[2] ?? "", lineNumber)
-      })
-      continue
-    }
-
-    const declareMatch = line.match(/^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/)
-    if (declareMatch) {
-      const identifier = declareMatch[1] ?? ""
-      const expression = declareMatch[2] ?? ""
-      statements.push({
-        kind: "declareLocal",
-        lineNumber,
-        target: identifier,
-        expression: expression.trim()
-      })
-      continue
-    }
-
-    const globalCompoundAssignMatch =
-      line.match(/^\{([^{}]+)\}\s*(\+=|-=|\*=|\/=|%=)\s*(.+)$/)
-    if (globalCompoundAssignMatch) {
-      const token = globalCompoundAssignMatch[1] ?? ""
-      const operator =
-        (globalCompoundAssignMatch[2] as StoryScriptCompoundAssignmentOperator | undefined)
-        ?? "+="
-      const expression = globalCompoundAssignMatch[3] ?? ""
-      const normalizedToken = token.trim()
-      statements.push({
-        kind: "assignGlobal",
-        lineNumber,
-        target: normalizedToken,
-        expression: createStoryScriptCompoundAssignmentExpression(
-          `{${normalizedToken}}`,
-          operator,
-          expression
-        )
-      })
-      continue
-    }
-
-    const globalAssignMatch = line.match(/^\{([^{}]+)\}\s*=\s*(.+)$/)
-    if (globalAssignMatch) {
-      const token = globalAssignMatch[1] ?? ""
-      const expression = globalAssignMatch[2] ?? ""
-      statements.push({
-        kind: "assignGlobal",
-        lineNumber,
-        target: token.trim(),
-        expression: expression.trim()
-      })
-      continue
-    }
-
-    const localCompoundAssignMatch =
-      line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(\+=|-=|\*=|\/=|%=)\s*(.+)$/)
-    if (localCompoundAssignMatch) {
-      const identifier = localCompoundAssignMatch[1] ?? ""
-      const operator =
-        (localCompoundAssignMatch[2] as StoryScriptCompoundAssignmentOperator | undefined) ?? "+="
-      const expression = localCompoundAssignMatch[3] ?? ""
-      statements.push({
-        kind: "assignLocal",
-        lineNumber,
-        target: identifier,
-        expression: createStoryScriptCompoundAssignmentExpression(
-          identifier,
-          operator,
-          expression
-        )
-      })
-      continue
-    }
-
-    const localAssignMatch = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/)
-    if (localAssignMatch) {
-      const identifier = localAssignMatch[1] ?? ""
-      const expression = localAssignMatch[2] ?? ""
-      statements.push({
-        kind: "assignLocal",
-        lineNumber,
-        target: identifier,
-        expression: expression.trim()
-      })
-      continue
-    }
-
-    throw new StoryScriptError(lineNumber, "Unsupported script statement.")
-  }
-
-  return statements
-}
-
-function evaluateStoryScriptExpression(
-  valsFile: StoryValsFile,
-  expression: string,
-  locals: Record<string, unknown>,
-  maxDepth: number,
-  context?: StoryScriptExecutionContext
-) {
-  const trimmedExpression = normalizeText(expression).trim()
-
-  if (!trimmedExpression) {
-    throw new Error("Script expression is required.")
-  }
-
-  const contextValues = buildStoryReadableContextValues(context)
-  const preparedExpression = prepareExpressionTemplate(trimmedExpression, (token) =>
-    resolveStoryValueReference(valsFile, token, maxDepth, contextValues)
-  )
-
-  return {
-    expression: preparedExpression.expression,
-    result: evaluateDynamicExpression(preparedExpression.expression, [
-      ...preparedExpression.extraContext,
-      ...Object.entries(locals).map(([key, value]) => ({ key, value }))
-    ])
-  }
-}
-
 function assignStoryScriptGlobalValue(
   valsFile: StoryValsFile,
   token: string,
   value: unknown,
   context?: StoryScriptExecutionContext
 ) {
+  if (token.startsWith("call.")) {
+    throw new Error(`Cannot assign to invoke parameter: \${${token}}`)
+  }
+
+  if (token.startsWith("system.")) {
+    throw new Error(`Cannot assign to system variable: \${${token}}`)
+  }
+
   if (
     context?.assignableValues &&
     Object.prototype.hasOwnProperty.call(context.assignableValues, token)
@@ -1044,7 +2112,7 @@ function assignStoryScriptGlobalValue(
   const reference = getStoryValueEntryReference(valsFile, token)
 
   if (isCalcRow(reference.row)) {
-    throw new Error(`Cannot assign to calc variable: {${reference.groupName}.${reference.rowName}}`)
+    throw new Error(`Cannot assign to calc variable: \${${reference.groupName}.${reference.rowName}}`)
   }
 
   reference.row.value = value
@@ -1056,97 +2124,29 @@ export function executeStoryScript(
   maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH,
   context?: StoryScriptExecutionContext
 ): StoryScriptExecutionResult {
-  const nextVals = cloneStoryValsFile(valsFile)
-  const locals: Record<string, unknown> = {}
-  const invocations: StoryScriptInvocation[] = []
-  const executionContext: StoryScriptExecutionContext = {
-    values: { ...(context?.values ?? {}) },
-    assignableValues: { ...(context?.assignableValues ?? {}) }
-  }
-
-  for (const statement of parseStoryScript(script)) {
-    try {
-      if (statement.kind === "invokeOnce") {
-        const args = Object.fromEntries(
-          statement.args.map((arg) => [
-            arg.name,
-            evaluateStoryScriptExpression(
-              nextVals,
-              arg.expression,
-              locals,
-              maxDepth,
-              executionContext
-            ).result
-          ])
-        )
-
-        invocations.push({
-          eventId: statement.eventId,
-          args
-        })
-        continue
-      }
-
-      if (statement.kind === "declareLocal") {
-        assertScriptLocalIdentifier(statement.target)
-
-        if (Object.prototype.hasOwnProperty.call(locals, statement.target)) {
-          throw new Error(`Temporary variable "${statement.target}" is already declared.`)
-        }
-
-        locals[statement.target] = evaluateStoryScriptExpression(
-          nextVals,
-          statement.expression,
-          locals,
-          maxDepth,
-          executionContext
-        ).result
-        continue
-      }
-
-      if (statement.kind === "assignLocal") {
-        assertScriptLocalIdentifier(statement.target)
-
-        if (!Object.prototype.hasOwnProperty.call(locals, statement.target)) {
-          throw new Error(`Temporary variable "${statement.target}" was not declared.`)
-        }
-
-        locals[statement.target] = evaluateStoryScriptExpression(
-          nextVals,
-          statement.expression,
-          locals,
-          maxDepth,
-          executionContext
-        ).result
-        continue
-      }
-
-      const nextValue = evaluateStoryScriptExpression(
-        nextVals,
-        statement.expression,
-        locals,
-        maxDepth,
-        executionContext
-      ).result
-
-      assignStoryScriptGlobalValue(nextVals, statement.target, nextValue, executionContext)
-    } catch (error) {
-      if (error instanceof StoryScriptError) {
-        throw error
-      }
-
-      throw new StoryScriptError(
-        statement.lineNumber,
-        error instanceof Error ? error.message : "Script execution failed."
-      )
+  const trimmedScript = normalizeText(script).trim()
+  if (!trimmedScript) {
+    return {
+      vals: cloneStoryValsFile(valsFile),
+      locals: {},
+      externalValues: { ...(context?.assignableValues ?? {}) },
+      invocations: []
     }
   }
 
+  const compiled = executeCompiledStoryScript(
+    valsFile,
+    trimmedScript,
+    "procedure",
+    maxDepth,
+    context
+  )
+
   return {
-    vals: nextVals,
-    locals: { ...locals },
-    externalValues: { ...(executionContext.assignableValues ?? {}) },
-    invocations
+    vals: compiled.vals,
+    locals: compiled.locals,
+    externalValues: compiled.externalValues,
+    invocations: compiled.invocations
   }
 }
 
@@ -1180,6 +2180,35 @@ export function validateStoryScript(
   }
 }
 
+export function validateStoryTextTemplate(template: string): StoryScriptValidationIssue[] {
+  const normalizedTemplate = normalizeText(template)
+  const legacyPlaceholder = findLegacyStoryScriptPlaceholder(normalizedTemplate)
+
+  if (legacyPlaceholder) {
+    return [{
+      lineNumber: legacyPlaceholder.lineNumber,
+      message: `StoryScript text template must use \${...}. Found legacy placeholder "${legacyPlaceholder.placeholder}".`
+    }]
+  }
+
+  const issues: StoryScriptValidationIssue[] = []
+
+  for (const match of normalizedTemplate.matchAll(STORY_SCRIPT_TEMPLATE_PLACEHOLDER_PATTERN)) {
+    const token = (match[1] ?? "").trim()
+
+    if (token && isStoryScriptPlaceholderToken(token)) {
+      continue
+    }
+
+    issues.push({
+      lineNumber: getStoryScriptSourceLineNumber(normalizedTemplate, match.index ?? 0),
+      message: `Invalid StoryScript template placeholder "\${${match[1] ?? ""}}".`
+    })
+  }
+
+  return issues
+}
+
 export function renderStoryTextTemplate(
   valsFile: StoryValsFile,
   template: string,
@@ -1187,9 +2216,16 @@ export function renderStoryTextTemplate(
   context?: StoryExpressionContext
 ) {
   const contextValues = buildStoryReadableContextValues(context)
+  const legacyPlaceholder = findLegacyStoryScriptPlaceholder(template)
 
-  return normalizeText(template).replace(/\{([^{}]+)\}/g, (_match, token: string) => {
-    const trimmedToken = token.trim()
+  if (legacyPlaceholder) {
+    throw new Error(
+      `StoryScript text template must use \${...}. Found legacy placeholder "${legacyPlaceholder.placeholder}".`
+    )
+  }
+
+  return normalizeText(template).replace(/\$\{([^{}]+)\}/g, (_match, tokenText: string) => {
+    const trimmedToken = tokenText.trim()
 
     if (!trimmedToken) {
       return ""

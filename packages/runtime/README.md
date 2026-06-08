@@ -26,7 +26,7 @@
 
 ### `trigger_expr`
 
-- supports `{group.row}` placeholders
+- supports `${group.row}` placeholders
 - resolves calc variables before comparison
 - supports common `Math` functions
 - must return `boolean`
@@ -44,18 +44,27 @@ temp -= expression
 temp *= expression
 temp /= expression
 temp %= expression
-{group.row} = expression
-{group.row} += expression
-{group.row} -= expression
-{group.row} *= expression
-{group.row} /= expression
-{group.row} %= expression
+${group.row} = expression
+${group.row} += expression
+${group.row} -= expression
+${group.row} *= expression
+${group.row} /= expression
+${group.row} %= expression
+if (...) { ... } else { ... }
+switch (...) { ... }
+for (...) { ... }
+while (...) { ... }
+break
+continue
+return
 ```
 
 Restrictions:
 
 - cannot assign to `calc` variables
-- no `if`, `for`, `while`, or function declarations
+- cannot assign to `system.xxx`
+- cannot assign to `call.xxx`
+- no function declarations
 - temporary variables must use `let`
 
 ## Runtime session

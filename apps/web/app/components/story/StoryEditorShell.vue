@@ -33,6 +33,11 @@ import StoryScenesDialog from "./StoryScenesDialog.vue"
 import StoryValsDialog from "./StoryValsDialog.vue"
 import { appendQuickLocationToEventLocations } from "./storyQuickLocation"
 import { appendQuickRoleToRoles } from "./storyQuickRole"
+import {
+  mergeStoryScriptAutocompleteItems,
+  normalizeStoryScriptAutocompleteText,
+  type StoryScriptAutocompleteItem
+} from "./storyScriptEditor"
 
 type EventCanvasTab = StoryEventCollectionType
 
@@ -228,6 +233,77 @@ const graphNodeOptions = computed(() => {
     title: node.title,
     type: (isGraphActionNode(node) ? "action" : "event") as "action" | "event"
   }))
+})
+
+const storyScriptVals = computed<StoryValsFile>(() => {
+  if (!storyDocument.value) {
+    return {
+      variables: []
+    }
+  }
+
+  return {
+    variables: [
+      ...storyDocument.value.vals.variables,
+      ...storyDocument.value.systemVals.variables
+    ]
+  }
+})
+
+function buildGraphEventBranchAutocompleteItemsFromActions(
+  actions: StoryActionFile[]
+): StoryScriptAutocompleteItem[] {
+  const actionItems = actions.flatMap((action) => {
+    return action.vars.flatMap((actionVar) => {
+      const branchName = normalizeStoryScriptAutocompleteText(actionVar.name)
+
+      if (!branchName) {
+        return []
+      }
+
+      const branchDescription = [
+        action.title.trim() ? `来自操作 ${action.title.trim()}` : "",
+        normalizeStoryScriptAutocompleteText(actionVar.descr)
+      ]
+        .filter(Boolean)
+        .join(" / ")
+
+      return [{
+        name: `branch.${branchName}`,
+        description: branchDescription || "前置操作连接变量"
+      }]
+    })
+  })
+
+  return mergeStoryScriptAutocompleteItems(actionItems)
+}
+
+const activeGraphBranchAutocompleteItems = computed<StoryScriptAutocompleteItem[]>(() => {
+  if (activeEventTab.value !== "graph" || !storyDocument.value) {
+    return []
+  }
+
+  const graphActions = storyDocument.value.graphEvents.filter(isGraphActionNode)
+  const currentEventId = activeGraphDraftEvent.value?.id ?? null
+
+  if (currentEventId) {
+    const incomingActions = graphActions.filter((action) => action.next.includes(currentEventId))
+    return buildGraphEventBranchAutocompleteItemsFromActions(incomingActions)
+  }
+
+  if (!activeGraphParentNodeId.value) {
+    return []
+  }
+
+  const parentNode = storyDocument.value.graphEvents.find(
+    (node) => node.id === activeGraphParentNodeId.value
+  )
+
+  if (!parentNode || !isGraphActionNode(parentNode)) {
+    return []
+  }
+
+  return buildGraphEventBranchAutocompleteItemsFromActions([parentNode])
 })
 
 const isCreateMode = computed(() => !!creatingEventDraft.value)
@@ -1219,13 +1295,14 @@ watch(
             <GraphEventDetailPanel
               v-if="activeEventTab === 'graph' && activeGraphDraftEvent"
               :event="activeGraphDraftEvent"
+              :branch-autocomplete-items="activeGraphBranchAutocompleteItems"
               :event-locations="storyDocument.eventLocations"
               :graph-node-options="graphNodeOptions"
               :mode="isCreateMode ? 'create' : 'edit'"
               :parent-event-id="activeGraphParentNodeId"
               :roles="storyDocument.roles"
               :saving="isSaving"
-              :vals="storyDocument.vals"
+              :vals="storyScriptVals"
               @close="closeEditor"
               @quick-create-location="handleQuickCreateLocation"
               @quick-create-role="handleQuickCreateRole"
@@ -1237,7 +1314,7 @@ watch(
               :graph-node-options="graphNodeOptions"
               :mode="isCreateMode ? 'create' : 'edit'"
               :saving="isSaving"
-              :vals="storyDocument.vals"
+              :vals="storyScriptVals"
               @close="closeEditor"
               @save="handleSaveEvent"
             />
@@ -1249,7 +1326,7 @@ watch(
               :roles="storyDocument.roles"
               :saving="isSaving"
               :scenes="storyDocument.scenes"
-              :vals="storyDocument.vals"
+              :vals="storyScriptVals"
               @close="closeEditor"
               @quick-create-location="handleQuickCreateLocation"
               @quick-create-role="handleQuickCreateRole"
@@ -1263,7 +1340,7 @@ watch(
               :roles="storyDocument.roles"
               :saving="isSaving"
               :scenes="storyDocument.scenes"
-              :vals="storyDocument.vals"
+              :vals="storyScriptVals"
               @close="closeEditor"
               @quick-create-location="handleQuickCreateLocation"
               @quick-create-role="handleQuickCreateRole"

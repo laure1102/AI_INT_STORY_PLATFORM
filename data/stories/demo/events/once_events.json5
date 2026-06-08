@@ -18,9 +18,9 @@
         speaker_type: 'player',
       },
     ],
-    end_script: '{county.level} = 1',
+    end_script: '${county.level} = 1',
     id: 'test1',
-    init_script: 'let money = {county.renkou} * 100\nmoney = money * 2',
+    init_script: 'let money = ${county.renkou} * 100\nmoney = money * 2',
     invoke_params: [
       {
         descr: '0-100',

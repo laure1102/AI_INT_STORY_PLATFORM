@@ -11,6 +11,7 @@ If this guide conflicts with code, trust the code in these files first:
 - `packages/runtime/src/session.ts`
 - `packages/file-store/src/index.ts`
 - `apps/api/src/routes/stories.ts`
+- `StoryScript.md`
 
 ## 0. Encoding rule
 
@@ -310,7 +311,15 @@ Loop events extend once events with:
 
 ## 6. Variable and script rules
 
-These rules must stay aligned with `packages/runtime/src/vals.ts`.
+Current implementation details must stay aligned with `packages/runtime/src/vals.ts`.
+
+Unified script specification lives in:
+
+- `StoryScript.md`
+
+Keep this section short and implementation-focused. Do not duplicate the full language spec here.
+
+`StoryScript.md` is the single source of truth for StoryScript syntax and semantics.
 
 ### `calc_rule`
 
@@ -320,54 +329,30 @@ These rules must stay aligned with `packages/runtime/src/vals.ts`.
 - supports common `Math` functions and constants
 - result must be a finite number
 
-### `trigger_expr`
+### current `trigger_expr` behavior
 
-- supports `{group.row}`
+- supports `${group.row}`
 - calc variables are resolved before comparison
 - supports common `Math` functions
 - result must be `boolean`
 - empty string means `true`
+- predicate mode is read-only and rejects external assignment
+- predicate mode rejects `invoke_once`
 
-### event scripts
+### current script engine summary
 
-Supported syntax:
-
-```txt
-let temp = expression
-temp = expression
-temp += expression
-temp -= expression
-temp *= expression
-temp /= expression
-temp %= expression
-{group.row} = expression
-{group.row} += expression
-{group.row} -= expression
-{group.row} *= expression
-{group.row} /= expression
-{group.row} %= expression
-{branch.xxx} = expression
-{branch.xxx} += expression
-{branch.xxx} -= expression
-{branch.xxx} *= expression
-{branch.xxx} /= expression
-{branch.xxx} %= expression
-```
-
-Restrictions:
-
-- cannot assign to `calc` variables
-- no `if`, `else`, `for`, `while`, or function declarations
-- temporary variables must be declared with `let`
+- supports `let`
+- supports direct assignment and compound assignment
+- supports `if`, `else`, `switch`, `for`, `while`, `break`, `continue`, and `return`
+- supports `Math`
+- supports `invoke_once`
+- loops are protected by both a max step limit and a max iteration limit
+- StoryScript placeholder syntax is only `${...}`
+- legacy `{...}` placeholders are invalid in StoryScript fields and text templates
 - `branch.xxx` is only available when runtime provides action-branch context
-- runtime currently allows script writes into merged global/system values except `calc` rows; the long-term design intent is stricter: system time variables should be runtime-owned and eventually read-only to story scripts
-
-### dialogue content
-
-- dialogue content may include `{group.row}` placeholders
-- dialogue content may include `{branch.xxx}` placeholders
-- editor-side autocomplete exists
-- runtime text substitution is implemented in `packages/runtime`
+- runtime text substitution for dialogue/template content is implemented in `packages/runtime`
+- editor `?` help popovers for condition/script/dialogue fields should eventually be sourced from `StoryScript.md`
+- regression entry: `pnpm tui:storyscript-regression`
 
 ## 7. Object and location rules
 
@@ -667,7 +652,7 @@ Notes:
 
 Layout:
 
-- header: left shows `第N天 HH:MM 时段` and paused state; right shows `县名县({county.level})`
+- header: left shows `第N天 HH:MM 时段` and paused state; right shows `XX县(${county.level})`
 - middle game area: only runtime content, overlays, dialogue, branch options, or empty-state text
 - footer: left shows `角色名  金钱: <格式化金额>`; right shows `下一天`
 - footer extra hint row: keyboard shortcuts
@@ -691,7 +676,7 @@ Overlay behavior:
 
 Current TUI money/header formatting:
 
-- county header appends global county level as `XX县({county.level})`
+- county header appends global county level as `XX县(${county.level})`
 - footer money display is humanized with `千 / 万 / 亿` formatting
 
 Current TUI scheduler debug overlay:

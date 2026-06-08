@@ -1,5 +1,15 @@
 <script setup lang="ts">
 import type { StoryActionFile, StoryValsFile } from "@story-mgr/core"
+import {
+  buildStoryScriptHighlightTokens,
+  buildStoryScriptValAutocompleteItems,
+  filterStoryScriptAutocompleteItems,
+  mergeStoryScriptAutocompleteItems,
+  normalizeStoryScriptAutocompleteText,
+  openStoryScriptReferencePage,
+  resolveStoryScriptAutocompletePlacement,
+  type StoryScriptAutocompleteItem
+} from "./storyScriptEditor"
 
 interface ActionVarDraft {
   id: string
@@ -8,22 +18,13 @@ interface ActionVarDraft {
   initialValue: string
 }
 
-interface ScriptAutocompleteItem {
-  name: string
-  description: string
-}
-
 interface ScriptAutocompleteState {
   open: boolean
   query: string
   replaceStart: number
   replaceEnd: number
   activeIndex: number
-}
-
-interface ScriptHighlightToken {
-  text: string
-  highlighted: boolean
+  placement: "top" | "bottom"
 }
 
 interface GraphNodeOption {
@@ -31,9 +32,6 @@ interface GraphNodeOption {
   title: string
   type: "event" | "action"
 }
-
-const SCRIPT_HIGHLIGHT_PATTERN =
-  /\b(let|true|false|null)\b|\bMath\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
 
 const props = defineProps<{
   action: StoryActionFile | null
@@ -50,16 +48,15 @@ const emit = defineEmits<{
 
 const activeTab = shallowRef<"basic" | "next">("basic")
 
-const execScriptHelpRef = useTemplateRef<HTMLDivElement>("execScriptHelp")
 const execScriptFieldRef = useTemplateRef<HTMLDivElement>("execScriptField")
 const execScriptTextareaRef = useTemplateRef<HTMLTextAreaElement>("execScriptTextarea")
-const isExecScriptHelpOpen = shallowRef(false)
 const autocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
   query: "",
   replaceStart: 0,
   replaceEnd: 0,
-  activeIndex: 0
+  activeIndex: 0,
+  placement: "bottom"
 })
 
 const draft = reactive({
@@ -85,47 +82,15 @@ function createVarDraft(value?: { descr?: string; initial_value?: string; name?:
   }
 }
 
-const globalAutocompleteCandidates = computed<ScriptAutocompleteItem[]>(() => {
-  const seen = new Set<string>()
-
-  return props.vals.variables.flatMap((group) => {
-    const groupName = normalizeAutocompleteText(group.name)
-    const groupDescription = normalizeAutocompleteText(group.description)
-
-    if (!groupName) {
-      return []
-    }
-
-    return group.vals.flatMap((row) => {
-      const rowName = normalizeAutocompleteText(row.name)
-
-      if (!rowName) {
-        return []
-      }
-
-      const name = `${groupName}.${rowName}`
-
-      if (seen.has(name)) {
-        return []
-      }
-
-      seen.add(name)
-
-      return [{
-        name,
-        description: [groupDescription, normalizeAutocompleteText(row.description)]
-          .filter(Boolean)
-          .join(" / ")
-      }]
-    })
-  })
+const globalAutocompleteCandidates = computed(() => {
+  return buildStoryScriptValAutocompleteItems(props.vals)
 })
 
-const branchVarAutocompleteCandidates = computed<ScriptAutocompleteItem[]>(() => {
+const branchVarAutocompleteCandidates = computed<StoryScriptAutocompleteItem[]>(() => {
   const seen = new Set<string>()
 
   return draft.vars.flatMap((actionVar) => {
-    const name = normalizeAutocompleteText(actionVar.name)
+    const name = normalizeStoryScriptAutocompleteText(actionVar.name)
 
     if (!name || seen.has(name)) {
       return []
@@ -135,25 +100,19 @@ const branchVarAutocompleteCandidates = computed<ScriptAutocompleteItem[]>(() =>
 
     return [{
       name: `branch.${name}`,
-      description: normalizeAutocompleteText(actionVar.descr)
+      description: normalizeStoryScriptAutocompleteText(actionVar.descr)
     }]
   })
 })
 
 const autocompleteItems = computed(() => {
-  const query = autocompleteState.query.trim().toLowerCase()
-  const items = [...branchVarAutocompleteCandidates.value, ...globalAutocompleteCandidates.value]
-
-  if (!query) {
-    return items
-  }
-
-  return items.filter((item) => {
-    return (
-      item.name.toLowerCase().includes(query) ||
-      item.description.toLowerCase().includes(query)
+  return filterStoryScriptAutocompleteItems(
+    autocompleteState.query,
+    mergeStoryScriptAutocompleteItems(
+      branchVarAutocompleteCandidates.value,
+      globalAutocompleteCandidates.value
     )
-  })
+  )
 })
 
 const activeAutocompleteItem = computed(() => {
@@ -164,7 +123,7 @@ const activeAutocompleteItem = computed(() => {
   return autocompleteItems.value[autocompleteState.activeIndex % autocompleteItems.value.length]
 })
 
-const highlightedExecScriptTokens = computed(() => buildScriptHighlightTokens(draft.execScript))
+const highlightedExecScriptTokens = computed(() => buildStoryScriptHighlightTokens(draft.execScript))
 
 const panelTitle = computed(() => {
   if (draft.title.trim()) {
@@ -199,57 +158,6 @@ const linkedNextNodes = computed(() => {
   })
 })
 
-function normalizeAutocompleteText(value: unknown) {
-  return typeof value === "string" ? value.trim() : ""
-}
-
-function escapeScriptHighlightHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-}
-
-function buildScriptHighlightTokens(value: string): ScriptHighlightToken[] {
-  const tokens: ScriptHighlightToken[] = []
-  let lastIndex = 0
-
-  for (const match of value.matchAll(SCRIPT_HIGHLIGHT_PATTERN)) {
-    const matchIndex = match.index ?? 0
-    const matchedText = match[0] ?? ""
-
-    if (matchIndex > lastIndex) {
-      tokens.push({
-        text: escapeScriptHighlightHtml(value.slice(lastIndex, matchIndex)),
-        highlighted: false
-      })
-    }
-
-    tokens.push({
-      text: escapeScriptHighlightHtml(matchedText),
-      highlighted: true
-    })
-
-    lastIndex = matchIndex + matchedText.length
-  }
-
-  if (lastIndex < value.length) {
-    tokens.push({
-      text: escapeScriptHighlightHtml(value.slice(lastIndex)),
-      highlighted: false
-    })
-  }
-
-  if (tokens.length === 0) {
-    tokens.push({
-      text: "",
-      highlighted: false
-    })
-  }
-
-  return tokens
-}
-
 function syncDraft(action: StoryActionFile | null) {
   draft.id = action?.id ?? ""
   draft.title = action?.title ?? ""
@@ -266,11 +174,7 @@ function removeVarRow(varId: string) {
 }
 
 function toggleExecScriptHelp() {
-  isExecScriptHelpOpen.value = !isExecScriptHelpOpen.value
-}
-
-function closeExecScriptHelp() {
-  isExecScriptHelpOpen.value = false
+  openStoryScriptReferencePage()
 }
 
 function closeAutocomplete() {
@@ -279,6 +183,7 @@ function closeAutocomplete() {
   autocompleteState.replaceStart = 0
   autocompleteState.replaceEnd = 0
   autocompleteState.activeIndex = 0
+  autocompleteState.placement = "bottom"
 }
 
 function updateAutocompleteFromCaret() {
@@ -292,17 +197,21 @@ function updateAutocompleteFromCaret() {
 
   const caret = textarea.selectionStart ?? fieldValue.length
   const beforeCaret = fieldValue.slice(0, caret)
-  const openBraceIndex = beforeCaret.lastIndexOf("{")
+  const openPlaceholderIndex = beforeCaret.lastIndexOf("${")
 
-  if (openBraceIndex < 0 || beforeCaret.slice(openBraceIndex + 1).includes("}")) {
+  if (
+    openPlaceholderIndex < 0 ||
+    beforeCaret.slice(openPlaceholderIndex + 2).includes("}")
+  ) {
     closeAutocomplete()
     return
   }
 
   autocompleteState.open = true
-  autocompleteState.query = beforeCaret.slice(openBraceIndex + 1)
-  autocompleteState.replaceStart = openBraceIndex
+  autocompleteState.query = beforeCaret.slice(openPlaceholderIndex + 2)
+  autocompleteState.replaceStart = openPlaceholderIndex
   autocompleteState.replaceEnd = caret
+  autocompleteState.placement = resolveStoryScriptAutocompletePlacement(textarea)
 
   if (autocompleteItems.value.length === 0) {
     autocompleteState.activeIndex = 0
@@ -314,7 +223,7 @@ function updateAutocompleteFromCaret() {
 function insertAutocompleteItem(itemName: string) {
   const replaceStart = autocompleteState.replaceStart
   draft.execScript =
-    draft.execScript.slice(0, replaceStart + 1) +
+    draft.execScript.slice(0, replaceStart + 2) +
     itemName +
     "}" +
     draft.execScript.slice(autocompleteState.replaceEnd)
@@ -322,7 +231,7 @@ function insertAutocompleteItem(itemName: string) {
   closeAutocomplete()
 
   requestAnimationFrame(() => {
-    const nextCaret = replaceStart + itemName.length + 2
+    const nextCaret = replaceStart + itemName.length + 3
     execScriptTextareaRef.value?.focus()
     execScriptTextareaRef.value?.setSelectionRange(nextCaret, nextCaret)
   })
@@ -423,7 +332,6 @@ watch(
   (action) => {
     syncDraft(action)
     closeAutocomplete()
-    closeExecScriptHelp()
     activeTab.value = "basic"
   },
   { immediate: true }
@@ -439,14 +347,6 @@ onBeforeUnmount(() => {
 
 function handleDocumentPointerDown(event: MouseEvent) {
   const target = event.target as Node | null
-
-  if (isExecScriptHelpOpen.value) {
-    const helpElement = execScriptHelpRef.value
-
-    if (helpElement && target && !helpElement.contains(target)) {
-      closeExecScriptHelp()
-    }
-  }
 
   if (!autocompleteState.open) {
     return
@@ -567,24 +467,15 @@ function handleDocumentPointerDown(event: MouseEvent) {
           <div ref="execScriptField" class="field">
             <div class="action-detail-panel__label-row">
               <span class="field-label">执行脚本</span>
-              <div ref="execScriptHelp" class="action-detail-panel__help">
+              <div class="action-detail-panel__help">
                 <button
                   class="action-detail-panel__help-button"
                   type="button"
                   aria-label="查看执行脚本说明"
-                  :aria-expanded="isExecScriptHelpOpen"
                   @click.stop="toggleExecScriptHelp"
                 >
                   ?
                 </button>
-                <div
-                  v-if="isExecScriptHelpOpen"
-                  class="action-detail-panel__help-popover"
-                  @click.stop
-                >
-                  <p>支持多行、`let` 临时变量、`Math` 函数。</p>
-                  <p>可读取全局变量 `{group.row}`，也可读写当前操作的连接变量 `{branch.xxx}`。</p>
-                </div>
               </div>
             </div>
 
@@ -605,7 +496,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                   v-model="draft.execScript"
                   class="text-area action-detail-panel__script-textarea"
                   spellcheck="false"
-                  placeholder="let nextMood = {branch.mood}\nif ({county.level} > 3) {\n  nextMood = 'serious'\n}"
+                  placeholder="let nextMood = ${branch.mood}\nif (${county.level} > 3) {\n  nextMood = 'serious'\n}"
                   @input="onExecScriptInput"
                   @click="updateAutocompleteFromCaret"
                   @keyup="updateAutocompleteFromCaret"
@@ -614,7 +505,13 @@ function handleDocumentPointerDown(event: MouseEvent) {
                 />
               </div>
 
-              <div v-if="autocompleteState.open" class="action-detail-panel__autocomplete">
+              <div
+                v-if="autocompleteState.open"
+                class="action-detail-panel__autocomplete"
+                :class="{
+                  'action-detail-panel__autocomplete--top': autocompleteState.placement === 'top'
+                }"
+              >
                 <button
                   v-for="(item, index) in autocompleteItems"
                   :key="item.name"
@@ -947,30 +844,6 @@ function handleDocumentPointerDown(event: MouseEvent) {
   cursor: pointer;
 }
 
-.action-detail-panel__help-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: min(320px, calc(100vw - 72px));
-  padding: 12px 14px;
-  border: 1px solid rgba(124, 227, 195, 0.28);
-  border-radius: 14px;
-  background: rgba(10, 18, 30, 0.96);
-  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.28);
-  z-index: 10;
-}
-
-.action-detail-panel__help-popover p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
-.action-detail-panel__help-popover p + p {
-  margin-top: 6px;
-}
-
 .action-detail-panel__script-wrap {
   position: relative;
 }
@@ -1034,6 +907,11 @@ function handleDocumentPointerDown(event: MouseEvent) {
   background: rgba(6, 12, 20, 0.98);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
   z-index: 12;
+}
+
+.action-detail-panel__autocomplete--top {
+  top: auto;
+  bottom: calc(100% + 8px);
 }
 
 .action-detail-panel__autocomplete-item {

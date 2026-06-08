@@ -587,6 +587,9 @@ watch(
         <p class="vals-dialog__hint">
           `calc_rule` &#x652f;&#x6301; `{a}` &#x5f15;&#x7528;&#x5f53;&#x524d;&#x5206;&#x7ec4;&#x53d8;&#x91cf;&#xff0c;&#x4e5f;&#x652f;&#x6301; `{group.row}` &#x8de8;&#x5206;&#x7ec4;&#x5f15;&#x7528;&#xff0c;&#x4f8b;&#x5982;&#xff1a;`{a}+{other.score}`&#x3002;
         </p>
+        <p class="vals-dialog__hint">
+          StoryScript &#x5b57;&#x6bb5;&#xff08;&#x5982; `trigger_expr`&#x3001;&#x521d;&#x59cb;&#x5316;&#x811a;&#x672c;&#x3001;&#x7ed3;&#x675f;&#x811a;&#x672c;&#x3001;&#x5bf9;&#x767d;&#x63d2;&#x503c;&#xff09;&#x4e0d;&#x4f7f;&#x7528; `calc_rule` &#x8fd9;&#x5957;&#x5199;&#x6cd5;&#xff0c;&#x8bf7;&#x7edf;&#x4e00;&#x4f7f;&#x7528; `${group.row}`&#x3002;
+        </p>
         <p v-if="hasInvalidDraft" class="vals-dialog__warning">
           &#x5206;&#x7ec4;&#x540d;&#x79f0;&#x3001;&#x53d8;&#x91cf;&#x540d;&#x79f0;&#x4e0d;&#x80fd;&#x4e3a;&#x7a7a;&#xff0c;`calc` &#x6a21;&#x5f0f;&#x5fc5;&#x987b;&#x586b;&#x5199; `calc_rule`&#x3002;
         </p>

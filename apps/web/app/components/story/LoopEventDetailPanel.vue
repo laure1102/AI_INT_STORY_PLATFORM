@@ -16,6 +16,14 @@ import StoryQuickLocationCreateDialog from "./StoryQuickLocationCreateDialog.vue
 import StoryQuickRoleCreateDialog from "./StoryQuickRoleCreateDialog.vue"
 import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
 import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
+import {
+  STORY_SCRIPT_TEMPLATE_PLACEHOLDER,
+  buildStoryScriptHighlightTokens,
+  buildStoryScriptValAutocompleteItems,
+  filterStoryScriptAutocompleteItems,
+  openStoryScriptReferencePage,
+  resolveStoryScriptAutocompletePlacement
+} from "./storyScriptEditor"
 
 interface DialogueDraft extends StoryOnceDialogueDefinition {
   id: string
@@ -53,11 +61,6 @@ const PLAYER_OBJECT_OPTION: RoleOption = {
   label: "主角"
 }
 
-interface TriggerAutocompleteItem {
-  name: string
-  description: string
-}
-
 type ScriptFieldKey = "triggerExpr" | "initScript" | "endScript"
 
 interface ScriptAutocompleteState {
@@ -69,15 +72,7 @@ interface ScriptAutocompleteState {
   placement: "top" | "bottom"
 }
 
-interface ScriptHighlightToken {
-  text: string
-  highlighted: boolean
-}
-
 type ScriptEditorFieldKey = Exclude<ScriptFieldKey, "triggerExpr">
-
-const SCRIPT_HIGHLIGHT_PATTERN =
-  /\b(let|true|false|null)\b|\bMath\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
 
 const props = defineProps<{
   event: StoryLoopEventFile | null
@@ -96,9 +91,6 @@ const emit = defineEmits<{
   save: [event: StoryLoopEventFile]
 }>()
 
-const triggerHelpRef = useTemplateRef<HTMLDivElement>("triggerHelp")
-const initScriptHelpRef = useTemplateRef<HTMLDivElement>("initScriptHelp")
-const endScriptHelpRef = useTemplateRef<HTMLDivElement>("endScriptHelp")
 const triggerExprFieldRef = useTemplateRef<HTMLDivElement>("triggerExprField")
 const triggerExprTextareaRef = useTemplateRef<HTMLTextAreaElement>("triggerExprTextarea")
 const initScriptFieldRef = useTemplateRef<HTMLDivElement>("initScriptField")
@@ -107,9 +99,6 @@ const endScriptFieldRef = useTemplateRef<HTMLDivElement>("endScriptField")
 const endScriptTextareaRef = useTemplateRef<HTMLTextAreaElement>("endScriptTextarea")
 const dialogueContentFieldRef = useTemplateRef<HTMLElement>("dialogueContentField")
 const dialogueContentTextareaRef = useTemplateRef<HTMLTextAreaElement>("dialogueContentTextarea")
-const isTriggerHelpOpen = shallowRef(false)
-const isInitScriptHelpOpen = shallowRef(false)
-const isEndScriptHelpOpen = shallowRef(false)
 const isQuickLocationDialogOpen = shallowRef(false)
 const pendingQuickLocationId = shallowRef<string | null>(null)
 const isQuickRoleDialogOpen = shallowRef(false)
@@ -264,58 +253,38 @@ const loopModeOptions: Array<{ value: StoryLoopMode; label: string }> = [
   { value: "monthly", label: "每月" },
   { value: "interval_days", label: "每隔多少天" }
 ]
-const triggerAutocompleteCandidates = computed<TriggerAutocompleteItem[]>(() => {
-  const seen = new Set<string>()
-
-  return props.vals.variables.flatMap((group) => {
-    const groupName = normalizeAutocompleteText(group.name)
-    const groupDescription = normalizeAutocompleteText(group.description)
-
-    if (!groupName) {
-      return []
-    }
-
-    return group.vals.flatMap((row) => {
-      const rowName = normalizeAutocompleteText(row.name)
-
-      if (!rowName) {
-        return []
-      }
-
-      const name = `${groupName}.${rowName}`
-
-      if (seen.has(name)) {
-        return []
-      }
-
-      seen.add(name)
-
-      return [{
-        name,
-        description: [groupDescription, normalizeAutocompleteText(row.description)]
-          .filter(Boolean)
-          .join(" / ")
-      }]
-    })
-  })
+const triggerAutocompleteCandidates = computed(() => {
+  return buildStoryScriptValAutocompleteItems(props.vals)
 })
 const triggerAutocompleteItems = computed(() => {
-  return filterScriptAutocompleteItems(triggerAutocompleteState.query)
+  return filterStoryScriptAutocompleteItems(
+    triggerAutocompleteState.query,
+    triggerAutocompleteCandidates.value
+  )
 })
 const initScriptAutocompleteItems = computed(() => {
-  return filterScriptAutocompleteItems(initScriptAutocompleteState.query)
+  return filterStoryScriptAutocompleteItems(
+    initScriptAutocompleteState.query,
+    triggerAutocompleteCandidates.value
+  )
 })
 const endScriptAutocompleteItems = computed(() => {
-  return filterScriptAutocompleteItems(endScriptAutocompleteState.query)
+  return filterStoryScriptAutocompleteItems(
+    endScriptAutocompleteState.query,
+    triggerAutocompleteCandidates.value
+  )
 })
 const dialogueContentAutocompleteItems = computed(() => {
-  return filterScriptAutocompleteItems(dialogueContentAutocompleteState.query)
+  return filterStoryScriptAutocompleteItems(
+    dialogueContentAutocompleteState.query,
+    triggerAutocompleteCandidates.value
+  )
 })
 const highlightedInitScriptTokens = computed(() => {
-  return buildScriptHighlightTokens(draft.initScript)
+  return buildStoryScriptHighlightTokens(draft.initScript)
 })
 const highlightedEndScriptTokens = computed(() => {
-  return buildScriptHighlightTokens(draft.endScript)
+  return buildStoryScriptHighlightTokens(draft.endScript)
 })
 const isTriggerAutocompleteOpen = computed(() => triggerAutocompleteState.open)
 const isInitScriptAutocompleteOpen = computed(() => initScriptAutocompleteState.open)
@@ -383,25 +352,6 @@ const panelEyebrow = computed(() => {
 
 function normalizeObjectKeys(objectKeys: string[]) {
   return Array.from(new Set(objectKeys.map((roleKey) => roleKey.trim()).filter(Boolean)))
-}
-
-function normalizeAutocompleteText(value: unknown) {
-  return typeof value === "string" ? value.trim() : ""
-}
-
-function filterScriptAutocompleteItems(queryText: string) {
-  const query = queryText.trim().toLowerCase()
-
-  if (!query) {
-    return triggerAutocompleteCandidates.value
-  }
-
-  return triggerAutocompleteCandidates.value.filter((item) => {
-    return (
-      item.name.toLowerCase().includes(query) ||
-      item.description.toLowerCase().includes(query)
-    )
-  })
 }
 
 function normalizeStoredObjectKeys(objectKeys: string[]) {
@@ -542,74 +492,19 @@ function saveDialogueEditor() {
 }
 
 function toggleTriggerHelp() {
-  isTriggerHelpOpen.value = !isTriggerHelpOpen.value
-}
-
-function closeTriggerHelp() {
-  isTriggerHelpOpen.value = false
+  openStoryScriptReferencePage()
 }
 
 function toggleInitScriptHelp() {
-  isInitScriptHelpOpen.value = !isInitScriptHelpOpen.value
-}
-
-function closeInitScriptHelp() {
-  isInitScriptHelpOpen.value = false
+  openStoryScriptReferencePage()
 }
 
 function toggleEndScriptHelp() {
-  isEndScriptHelpOpen.value = !isEndScriptHelpOpen.value
+  openStoryScriptReferencePage()
 }
 
-function closeEndScriptHelp() {
-  isEndScriptHelpOpen.value = false
-}
-
-function escapeScriptHighlightHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-}
-
-function buildScriptHighlightTokens(value: string): ScriptHighlightToken[] {
-  const tokens: ScriptHighlightToken[] = []
-  let lastIndex = 0
-
-  for (const match of value.matchAll(SCRIPT_HIGHLIGHT_PATTERN)) {
-    const matchIndex = match.index ?? 0
-    const matchedText = match[0] ?? ""
-
-    if (matchIndex > lastIndex) {
-      tokens.push({
-        text: escapeScriptHighlightHtml(value.slice(lastIndex, matchIndex)),
-        highlighted: false
-      })
-    }
-
-    tokens.push({
-      text: escapeScriptHighlightHtml(matchedText),
-      highlighted: true
-    })
-
-    lastIndex = matchIndex + matchedText.length
-  }
-
-  if (lastIndex < value.length) {
-    tokens.push({
-      text: escapeScriptHighlightHtml(value.slice(lastIndex)),
-      highlighted: false
-    })
-  }
-
-  if (tokens.length === 0) {
-    tokens.push({
-      text: "",
-      highlighted: false
-    })
-  }
-
-  return tokens
+function toggleDialogueTemplateHelp() {
+  openStoryScriptReferencePage()
 }
 
 function getScriptAutocompleteState(field: ScriptFieldKey) {
@@ -698,19 +593,6 @@ function setScriptFieldValue(field: ScriptFieldKey, value: string) {
   draft.endScript = value
 }
 
-function resolveAutocompletePlacement(element: HTMLElement | null) {
-  if (!element || typeof window === "undefined") {
-    return "bottom" as const
-  }
-
-  const rect = element.getBoundingClientRect()
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
-  const spaceBelow = viewportHeight - rect.bottom
-  const spaceAbove = rect.top
-
-  return spaceBelow < 260 && spaceAbove > spaceBelow ? "top" : "bottom"
-}
-
 function closeScriptAutocomplete(field: ScriptFieldKey) {
   const state = getScriptAutocompleteState(field)
   state.open = false
@@ -739,18 +621,21 @@ function updateScriptAutocompleteFromCaret(field: ScriptFieldKey) {
 
   const caret = textarea.selectionStart ?? fieldValue.length
   const beforeCaret = fieldValue.slice(0, caret)
-  const openBraceIndex = beforeCaret.lastIndexOf("{")
+  const openPlaceholderIndex = beforeCaret.lastIndexOf("${")
 
-  if (openBraceIndex < 0 || beforeCaret.slice(openBraceIndex + 1).includes("}")) {
+  if (
+    openPlaceholderIndex < 0 ||
+    beforeCaret.slice(openPlaceholderIndex + 2).includes("}")
+  ) {
     closeScriptAutocomplete(field)
     return
   }
 
   state.open = true
-  state.query = beforeCaret.slice(openBraceIndex + 1)
-  state.replaceStart = openBraceIndex
+  state.query = beforeCaret.slice(openPlaceholderIndex + 2)
+  state.replaceStart = openPlaceholderIndex
   state.replaceEnd = caret
-  state.placement = resolveAutocompletePlacement(textarea)
+  state.placement = resolveStoryScriptAutocompletePlacement(textarea)
 
   const items = getScriptAutocompleteItems(field)
 
@@ -766,7 +651,7 @@ function insertScriptAutocompleteItem(field: ScriptFieldKey, itemName: string) {
   const state = getScriptAutocompleteState(field)
   const replaceStart = state.replaceStart
   const nextValue =
-    getScriptFieldValue(field).slice(0, replaceStart + 1) +
+    getScriptFieldValue(field).slice(0, replaceStart + 2) +
     itemName +
     "}" +
     getScriptFieldValue(field).slice(state.replaceEnd)
@@ -775,7 +660,7 @@ function insertScriptAutocompleteItem(field: ScriptFieldKey, itemName: string) {
   closeScriptAutocomplete(field)
 
   requestAnimationFrame(() => {
-    const nextCaret = replaceStart + itemName.length + 2
+    const nextCaret = replaceStart + itemName.length + 3
     textarea?.focus()
     textarea?.setSelectionRange(nextCaret, nextCaret)
   })
@@ -833,18 +718,21 @@ function updateDialogueContentAutocompleteFromCaret() {
 
   const caret = textarea.selectionStart ?? fieldValue.length
   const beforeCaret = fieldValue.slice(0, caret)
-  const openBraceIndex = beforeCaret.lastIndexOf("{")
+  const openPlaceholderIndex = beforeCaret.lastIndexOf("${")
 
-  if (openBraceIndex < 0 || beforeCaret.slice(openBraceIndex + 1).includes("}")) {
+  if (
+    openPlaceholderIndex < 0 ||
+    beforeCaret.slice(openPlaceholderIndex + 2).includes("}")
+  ) {
     closeDialogueContentAutocomplete()
     return
   }
 
   dialogueContentAutocompleteState.open = true
-  dialogueContentAutocompleteState.query = beforeCaret.slice(openBraceIndex + 1)
-  dialogueContentAutocompleteState.replaceStart = openBraceIndex
+  dialogueContentAutocompleteState.query = beforeCaret.slice(openPlaceholderIndex + 2)
+  dialogueContentAutocompleteState.replaceStart = openPlaceholderIndex
   dialogueContentAutocompleteState.replaceEnd = caret
-  dialogueContentAutocompleteState.placement = resolveAutocompletePlacement(textarea)
+  dialogueContentAutocompleteState.placement = resolveStoryScriptAutocompletePlacement(textarea)
 
   if (dialogueContentAutocompleteItems.value.length === 0) {
     dialogueContentAutocompleteState.activeIndex = 0
@@ -860,7 +748,7 @@ function insertDialogueContentAutocompleteItem(itemName: string) {
   const replaceStart = dialogueContentAutocompleteState.replaceStart
 
   dialogueEditorState.draft.content =
-    dialogueEditorState.draft.content.slice(0, replaceStart + 1) +
+    dialogueEditorState.draft.content.slice(0, replaceStart + 2) +
     itemName +
     "}" +
     dialogueEditorState.draft.content.slice(dialogueContentAutocompleteState.replaceEnd)
@@ -868,7 +756,7 @@ function insertDialogueContentAutocompleteItem(itemName: string) {
   closeDialogueContentAutocomplete()
 
   requestAnimationFrame(() => {
-    const nextCaret = replaceStart + itemName.length + 2
+    const nextCaret = replaceStart + itemName.length + 3
     dialogueContentTextareaRef.value?.focus()
     dialogueContentTextareaRef.value?.setSelectionRange(nextCaret, nextCaret)
   })
@@ -1052,7 +940,6 @@ watch(
     syncDraft(event)
     closeAllScriptAutocomplete()
     closeDialogueContentAutocomplete()
-    closeTriggerHelp()
   },
   { immediate: true }
 )
@@ -1115,30 +1002,6 @@ onBeforeUnmount(() => {
 
 function handleDocumentPointerDown(event: MouseEvent) {
   const target = event.target as Node | null
-
-  if (isTriggerHelpOpen.value) {
-    const helpElement = triggerHelpRef.value
-
-    if (helpElement && target && !helpElement.contains(target)) {
-      closeTriggerHelp()
-    }
-  }
-
-  if (isInitScriptHelpOpen.value) {
-    const helpElement = initScriptHelpRef.value
-
-    if (helpElement && target && !helpElement.contains(target)) {
-      closeInitScriptHelp()
-    }
-  }
-
-  if (isEndScriptHelpOpen.value) {
-    const helpElement = endScriptHelpRef.value
-
-    if (helpElement && target && !helpElement.contains(target)) {
-      closeEndScriptHelp()
-    }
-  }
 
   if (
     !isTriggerAutocompleteOpen.value &&
@@ -1304,20 +1167,15 @@ function handleDocumentPointerDown(event: MouseEvent) {
               <div ref="triggerExprField" class="field">
                 <div class="detail-panel__label-row">
                   <span class="field-label">触发条件</span>
-                  <div ref="triggerHelp" class="detail-panel__help">
+                  <div class="detail-panel__help">
                     <button
                       class="detail-panel__help-button"
                       type="button"
                       aria-label="查看触发条件说明"
-                      :aria-expanded="isTriggerHelpOpen"
                       @click.stop="toggleTriggerHelp"
                     >
                       ?
                     </button>
-                    <div v-if="isTriggerHelpOpen" class="detail-panel__help-popover" @click.stop>
-                      <p>支持 `{group.row}`、比较运算、逻辑运算和常见 `Math` 函数；结果必须是 `boolean`。</p>
-                      <p>示例：{county.level} &gt; 0 | Math.floor({county.level}) &gt;= 1 | {county.level} !== null</p>
-                    </div>
                   </div>
                 </div>
                 <div class="detail-panel__expression-wrap">
@@ -1325,7 +1183,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                     ref="triggerExprTextarea"
                     v-model="draft.triggerExpr"
                     class="text-area detail-panel__expression"
-                    placeholder="{county.gdp} >= 10000000000 && {county.jiaoyu} >= 60"
+                    placeholder="${county.gdp} >= 10000000000 && ${county.jiaoyu} >= 60"
                     @input="onTriggerExprInput"
                     @click="updateScriptAutocompleteFromCaret('triggerExpr')"
                     @keyup="updateScriptAutocompleteFromCaret('triggerExpr')"
@@ -1373,25 +1231,15 @@ function handleDocumentPointerDown(event: MouseEvent) {
               <label ref="initScriptField" class="field">
                 <div class="detail-panel__label-row">
                 <span class="field-label">初始化脚本</span>
-                  <div ref="initScriptHelp" class="detail-panel__help">
+                  <div class="detail-panel__help">
                     <button
                       class="detail-panel__help-button"
                       type="button"
                       aria-label="查看初始化脚本说明"
-                      :aria-expanded="isInitScriptHelpOpen"
                       @click.stop="toggleInitScriptHelp"
                     >
                       ?
                     </button>
-                    <div
-                      v-if="isInitScriptHelpOpen"
-                      class="detail-panel__help-popover"
-                      @click.stop
-                    >
-                      <p>
-                        支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
-                      </p>
-                    </div>
                   </div>
                 </div>
                 <div class="detail-panel__script-wrap">
@@ -1410,7 +1258,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       ref="initScriptTextarea"
                       v-model="draft.initScript"
                       class="text-area detail-panel__script detail-panel__script--overlay"
-                      placeholder="let bonus = Math.floor({county.level} * 2)"
+                      placeholder="let bonus = Math.floor(${county.level} * 2)"
                       spellcheck="false"
                       @input="onInitScriptInput"
                       @scroll="onInitScriptScroll"
@@ -1464,25 +1312,15 @@ function handleDocumentPointerDown(event: MouseEvent) {
               <label ref="endScriptField" class="field">
                 <div class="detail-panel__label-row">
                 <span class="field-label">结束脚本</span>
-                  <div ref="endScriptHelp" class="detail-panel__help">
+                  <div class="detail-panel__help">
                     <button
                       class="detail-panel__help-button"
                       type="button"
                       aria-label="查看结束脚本说明"
-                      :aria-expanded="isEndScriptHelpOpen"
                       @click.stop="toggleEndScriptHelp"
                     >
                       ?
                     </button>
-                    <div
-                      v-if="isEndScriptHelpOpen"
-                      class="detail-panel__help-popover"
-                      @click.stop
-                    >
-                      <p>
-                        支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
-                      </p>
-                    </div>
                   </div>
                 </div>
                 <div class="detail-panel__script-wrap">
@@ -1501,7 +1339,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       ref="endScriptTextarea"
                       v-model="draft.endScript"
                       class="text-area detail-panel__script detail-panel__script--overlay"
-                      placeholder="{county.exp} = {county.exp} + 10"
+                      placeholder="${county.exp} = ${county.exp} + 10"
                       spellcheck="false"
                       @input="onEndScriptInput"
                       @scroll="onEndScriptScroll"
@@ -1710,12 +1548,25 @@ function handleDocumentPointerDown(event: MouseEvent) {
           </div>
 
           <label ref="dialogueContentField" class="field">
-            <span class="field-label">对白</span>
+            <div class="detail-panel__label-row">
+              <span class="field-label">对白</span>
+              <div class="detail-panel__help">
+                <button
+                  class="detail-panel__help-button"
+                  type="button"
+                  aria-label="查看对白插值说明"
+                  @click.stop="toggleDialogueTemplateHelp"
+                >
+                  ?
+                </button>
+              </div>
+            </div>
             <div class="detail-panel__expression-wrap">
               <textarea
                 ref="dialogueContentTextarea"
                 v-model="dialogueEditorState.draft.content"
                 class="text-area dialogue-editor__content"
+                :placeholder="STORY_SCRIPT_TEMPLATE_PLACEHOLDER"
                 @input="onDialogueContentInput"
                 @click="updateDialogueContentAutocompleteFromCaret"
                 @keyup="updateDialogueContentAutocompleteFromCaret"
@@ -2008,28 +1859,6 @@ function handleDocumentPointerDown(event: MouseEvent) {
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1;
-}
-
-.detail-panel__help-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 10;
-  width: min(360px, 60vw);
-  display: grid;
-  gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  background: rgba(10, 24, 37, 0.98);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  line-height: 1.5;
-}
-
-.detail-panel__help-popover p {
-  margin: 0;
 }
 
 .detail-panel__expression-wrap {

@@ -793,7 +793,7 @@ function buildSyntheticScenarios(): SyntheticRegressionScenario[] {
         createLoopEvent({
           id: "weekly_pay",
           title: "Weekly Pay",
-          endScript: "{player.money} += 30",
+          endScript: "${player.money} += 30",
           loop: {
             mode: "weekly",
             weekday: 3
@@ -823,7 +823,7 @@ function buildSyntheticScenarios(): SyntheticRegressionScenario[] {
         createLoopEvent({
           id: "monthly_bonus",
           title: "Monthly Bonus",
-          endScript: "{player.money} += 40",
+          endScript: "${player.money} += 40",
           loop: {
             mode: "monthly",
             month_day: 15
@@ -853,7 +853,7 @@ function buildSyntheticScenarios(): SyntheticRegressionScenario[] {
         createLoopEvent({
           id: "interval_reward",
           title: "Interval Reward",
-          endScript: "{player.money} += 20",
+          endScript: "${player.money} += 20",
           loop: {
             mode: "interval_days",
             interval_days: 3
@@ -883,7 +883,7 @@ function buildSyntheticScenarios(): SyntheticRegressionScenario[] {
         createLoopEvent({
           id: "multiply_first",
           title: "Multiply First",
-          endScript: "{player.money} *= 10",
+          endScript: "${player.money} *= 10",
           loop: {
             mode: "daily"
           }
@@ -891,7 +891,7 @@ function buildSyntheticScenarios(): SyntheticRegressionScenario[] {
         createLoopEvent({
           id: "add_second",
           title: "Add Second",
-          endScript: "{player.money} += 5",
+          endScript: "${player.money} += 5",
           loop: {
             mode: "daily"
           }
@@ -938,8 +938,8 @@ function buildLoopSkipScenarios(): LoopSkipRegressionScenario[] {
       loopEvent: createLoopEvent({
         id: "daily_skip",
         title: "Daily Skip",
-        triggerExpr: "{player.flag} > 0",
-        endScript: "{player.money} += 99",
+        triggerExpr: "${player.flag} > 0",
+        endScript: "${player.money} += 99",
         loop: {
           mode: "daily"
         }
@@ -964,13 +964,13 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
         createGraphEventNode({
           id: "root_a",
           title: "Root A",
-          endScript: "{player.money} += 1\n{player.flag} = 1"
+          endScript: "${player.money} += 1\n${player.flag} = 1"
         }),
         createGraphEventNode({
           id: "root_b",
           title: "Root B",
-          triggerExpr: "{player.flag} === 0",
-          endScript: "{player.money} += 10"
+          triggerExpr: "${player.flag} === 0",
+          endScript: "${player.money} += 10"
         })
       ],
       expectedMoney: 11,
@@ -988,20 +988,20 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
         createGraphEventNode({
           id: "root_guard",
           title: "Root Guard",
-          endScript: "{player.money} += 1\n{player.flag} = 1"
+          endScript: "${player.money} += 1\n${player.flag} = 1"
         })
       ],
       onceEvents: [
         {
           id: "once_bonus",
           title: "Once Bonus",
-          trigger_expr: "{player.flag} === 0",
+          trigger_expr: "${player.flag} === 0",
           init_script: "",
           object_keys: [],
           dialogues: [],
           location: "",
           bgm: "",
-          end_script: "{player.money} += 20"
+          end_script: "${player.money} += 20"
         }
       ],
       expectedMoney: 21,
@@ -1020,19 +1020,19 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
         createGraphEventNode({
           id: "root_entry",
           title: "Root Entry",
-          endScript: "{player.money} += 10",
+          endScript: "${player.money} += 10",
           next: ["blocked_next", "eligible_next"]
         }),
         createGraphEventNode({
           id: "blocked_next",
           title: "Blocked Next",
-          triggerExpr: "{player.flag} > 0",
-          endScript: "{player.money} += 100"
+          triggerExpr: "${player.flag} > 0",
+          endScript: "${player.money} += 100"
         }),
         createGraphEventNode({
           id: "eligible_next",
           title: "Eligible Next",
-          endScript: "{player.money} += 5"
+          endScript: "${player.money} += 5"
         })
       ],
       expectedMoney: 15,
@@ -1055,19 +1055,19 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
         createGraphActionNode({
           id: "root_a_action",
           title: "Root A Action",
-          execScript: "{player.money} += 1",
+          execScript: "${player.money} += 1",
           next: ["blocked_after_action"]
         }),
         createGraphEventNode({
           id: "blocked_after_action",
           title: "Blocked After Action",
-          triggerExpr: "{player.flag} > 0",
-          endScript: "{player.money} += 100"
+          triggerExpr: "${player.flag} > 0",
+          endScript: "${player.money} += 100"
         }),
         createGraphEventNode({
           id: "root_b",
           title: "Root B",
-          endScript: "{player.money} += 10"
+          endScript: "${player.money} += 10"
         })
       ],
       expectedMoney: 11,

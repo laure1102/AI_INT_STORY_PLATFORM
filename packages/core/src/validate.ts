@@ -13,8 +13,10 @@ import { findStoryRoleReference } from "./roles"
 import {
   evaluateStoryBooleanExpression,
   validateStoryScript,
+  validateStoryTextTemplate,
   validateStoryValsCalcRules
 } from "@story-mgr/runtime"
+import type { StoryValsFile } from "./types"
 
 function buildInvokeScriptContext(event: StoryOnceEventFile) {
   const values = Object.fromEntries(
@@ -27,6 +29,30 @@ function buildInvokeScriptContext(event: StoryOnceEventFile) {
   return {
     values,
     assignableValues: {}
+  }
+}
+
+function buildCombinedStoryScriptVals(document: StoryDocument): StoryValsFile {
+  return {
+    variables: [
+      ...document.vals.variables,
+      ...document.systemVals.variables
+    ]
+  }
+}
+
+function buildGraphActionScriptContext(action: StoryActionFile) {
+  const values = Object.fromEntries(
+    (action.vars ?? [])
+      .map((actionVar) => actionVar.name.trim())
+      .filter(Boolean)
+      .map((name) => [`branch.${name}`, null] as const)
+  )
+  const assignableValues = { ...values }
+
+  return {
+    values,
+    assignableValues
   }
 }
 
@@ -84,6 +110,26 @@ function collectGlobalValKeys(document: StoryDocument) {
   return keys
 }
 
+function validateDialogueTemplates(
+  issues: ValidationIssue[],
+  eventGroupKey: "graphEvents" | "onceEvents" | "loopEvents",
+  eventIndex: number,
+  eventId: string,
+  dialogues: Array<{ content: string }>
+) {
+  for (const [dialogueIndex, dialogue] of dialogues.entries()) {
+    for (const issue of validateStoryTextTemplate(dialogue.content)) {
+      pushIssue(
+        issues,
+        "error",
+        `${eventGroupKey}.dialogue-template-invalid`,
+        `${eventId} dialogue template is invalid at line ${issue.lineNumber}: ${issue.message}`,
+        [eventGroupKey, String(eventIndex), "dialogues", String(dialogueIndex), "content"]
+      )
+    }
+  }
+}
+
 function validateOnceEvent(
   event: StoryOnceEventFile,
   eventIndex: number,
@@ -93,10 +139,11 @@ function validateOnceEvent(
   const locationNames = collectLocationNames(document)
   const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
   const invokeScriptContext = buildInvokeScriptContext(event)
+  const scriptVals = buildCombinedStoryScriptVals(document)
 
   if ((event.trigger_mode ?? "condition") === "condition") {
     try {
-      evaluateStoryBooleanExpression(document.vals, event.trigger_expr)
+      evaluateStoryBooleanExpression(scriptVals, event.trigger_expr)
     } catch (error) {
       pushIssue(
         issues,
@@ -131,7 +178,7 @@ function validateOnceEvent(
     { key: "end_script", value: event.end_script, code: "once.end-script-invalid" }
   ] as const) {
     for (const issue of validateStoryScript(
-      document.vals,
+      scriptVals,
       scriptField.value,
       undefined,
       invokeScriptContext
@@ -192,6 +239,14 @@ function validateOnceEvent(
       )
     }
   }
+
+  validateDialogueTemplates(
+    issues,
+    "onceEvents",
+    eventIndex,
+    `Once event "${event.id}"`,
+    event.dialogues
+  )
 }
 
 function validateLoopEvent(
@@ -243,9 +298,10 @@ function validateGraphEvent(
 ) {
   const locationNames = collectLocationNames(document)
   const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
+  const scriptVals = buildCombinedStoryScriptVals(document)
 
   try {
-    evaluateStoryBooleanExpression(document.vals, event.trigger_expr)
+    evaluateStoryBooleanExpression(scriptVals, event.trigger_expr)
   } catch (error) {
     pushIssue(
       issues,
@@ -260,7 +316,7 @@ function validateGraphEvent(
     { key: "init_script", value: event.init_script, code: "graph.init-script-invalid" },
     { key: "end_script", value: event.end_script, code: "graph.end-script-invalid" }
   ] as const) {
-    for (const issue of validateStoryScript(document.vals, scriptField.value)) {
+    for (const issue of validateStoryScript(scriptVals, scriptField.value)) {
       pushIssue(
         issues,
         "error",
@@ -317,6 +373,14 @@ function validateGraphEvent(
       )
     }
   }
+
+  validateDialogueTemplates(
+    issues,
+    "graphEvents",
+    eventIndex,
+    `Graph event "${event.id}"`,
+    event.dialogues
+  )
 }
 
 function validateGraphAction(
@@ -392,7 +456,12 @@ function validateGraphAction(
     }
   }
 
-  for (const issue of validateStoryScript(document.vals, action.exec_script)) {
+  for (const issue of validateStoryScript(
+    buildCombinedStoryScriptVals(document),
+    action.exec_script,
+    undefined,
+    buildGraphActionScriptContext(action)
+  )) {
     pushIssue(
       issues,
       "error",
