@@ -187,12 +187,18 @@ export interface StoryEventTrigger {
   none?: Record<string, unknown>[]
 }
 
-export type StoryEventCollectionType = "graph" | "once" | "loop"
-export type StoryInvokeTargetType = "once" | "graph" | "loop"
+export type StoryCanonicalEventCollectionType = "chain" | "pool" | "schedule"
+export type StoryLegacyEventCollectionType = "graph" | "once" | "loop"
+export type StoryEventCollectionType = StoryCanonicalEventCollectionType | StoryLegacyEventCollectionType
+export type StoryInvokeTargetType = StoryEventCollectionType
 export type StoryEventTriggerMode = "default" | "condition" | "invoke"
 
-export type StoryGraphNodeFile = StoryEventFile | StoryActionFile
-export type StoryGraphEventsFile = StoryGraphNodeFile[]
+export type StoryChainNodeFile = StoryEventFile | StoryActionFile
+export type StoryChainEventsFile = StoryChainNodeFile[]
+/** @deprecated 请改用 StoryChainNodeFile */
+export type StoryGraphNodeFile = StoryChainNodeFile
+/** @deprecated 请改用 StoryChainEventsFile */
+export type StoryGraphEventsFile = StoryChainEventsFile
 
 export type StoryOnceSpeakerType = "player" | "object"
 
@@ -223,9 +229,15 @@ export interface StoryOnceEventFile {
   location: string
   bgm: string
   end_script: string
+  meta?: Record<string, unknown>
 }
 
-export type StoryOnceEventsFile = StoryOnceEventFile[]
+export type StoryPoolEventFile = StoryOnceEventFile
+export type StoryPoolEventsFile = StoryPoolEventFile[]
+/** @deprecated 请改用 StoryPoolEventFile */
+export type StoryOnceEventFileLegacy = StoryOnceEventFile
+/** @deprecated 请改用 StoryPoolEventsFile */
+export type StoryOnceEventsFile = StoryPoolEventsFile
 
 export type StoryLoopMode = "daily" | "weekly" | "monthly" | "interval_days"
 
@@ -240,7 +252,12 @@ export interface StoryLoopEventFile extends StoryOnceEventFile {
   loop: StoryLoopRule
 }
 
-export type StoryLoopEventsFile = StoryLoopEventFile[]
+export type StoryScheduleEventFile = StoryLoopEventFile
+export type StoryScheduleEventsFile = StoryScheduleEventFile[]
+/** @deprecated 请改用 StoryScheduleEventFile */
+export type StoryLoopEventFileLegacy = StoryLoopEventFile
+/** @deprecated 请改用 StoryScheduleEventsFile */
+export type StoryLoopEventsFile = StoryScheduleEventsFile
 
 export type StoryAnyEventFile =
   | StoryEventFile
@@ -256,8 +273,14 @@ export interface StoryDocument {
   scenes: StorySceneFile
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
+  chainEvents: StoryChainEventsFile
+  poolEvents: StoryPoolEventsFile
+  scheduleEvents: StoryScheduleEventsFile
+  /** @deprecated 请改用 chainEvents */
   graphEvents: StoryGraphEventsFile
+  /** @deprecated 请改用 poolEvents */
   onceEvents: StoryOnceEventsFile
+  /** @deprecated 请改用 scheduleEvents */
   loopEvents: StoryLoopEventsFile
 }
 
@@ -317,7 +340,13 @@ export interface CompiledStory {
   scenes: StorySceneFile
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
+  chainEvents: Record<string, CompiledEvent | CompiledAction>
+  poolEvents: StoryPoolEventsFile
+  scheduleEvents: StoryScheduleEventsFile
+  /** @deprecated 请改用 chainEvents */
   graphEvents: Record<string, CompiledEvent | CompiledAction>
+  /** @deprecated 请改用 poolEvents */
   onceEvents: StoryOnceEventsFile
+  /** @deprecated 请改用 scheduleEvents */
   loopEvents: StoryLoopEventsFile
 }

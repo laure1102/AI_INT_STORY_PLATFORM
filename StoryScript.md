@@ -283,16 +283,17 @@ ${player.money} += 100 // 行尾注释
 语法：
 
 ```ts
-invoke_once once test1 mama=${county.level}
-invoke_once graph event_a mood=${county.level}
-invoke_once loop daily_tax day=${system.now_day}
+invoke_once pool test1 mama=${county.level}
+invoke_once chain event_a mood=${county.level}
+invoke_once schedule daily_tax day=${system.now_day}
 ```
 
 规则：
 
 - `invoke_once` 为保留语句
 - 用于把 `invoke` 型事件推入调度队列
-- 第一个参数为目标事件类型：`once`、`graph`、`loop`
+- 第一个参数为目标事件类型：`chain`、`pool`、`schedule`
+- 兼容旧写法：`graph`、`once`、`loop`
 - 第二个参数为目标事件 `id`
 - 后续参数使用 `name=expression`
 - 不同步执行

@@ -1309,7 +1309,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                   </div>
 
                   <div v-else class="detail-panel__param-empty">
-                    这个事件不会自动扫描，只有通过 `invoke_once once {{ draft.id || 'event_id' }}`
+                    这个事件不会自动扫描，只有通过 `invoke_once pool {{ draft.id || 'event_id' }}`
                     传参后才会入队。
                   </div>
                 </template>

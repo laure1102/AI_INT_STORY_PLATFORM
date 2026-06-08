@@ -68,7 +68,7 @@ export function useStoryApi() {
   async function getEvent(
     storyId: string,
     eventId: string,
-    collectionType: StoryEventCollectionType = "graph"
+    collectionType: StoryEventCollectionType = "chain"
   ): Promise<StoryAnyEventFile> {
     const response = await $fetch<StoryEventResponse>(
       `${apiBase}/stories/${storyId}/events/${eventId}`,
@@ -84,7 +84,7 @@ export function useStoryApi() {
   async function saveEvent(
     storyId: string,
     event: StoryAnyEventFile,
-    collectionType: StoryEventCollectionType = "graph"
+    collectionType: StoryEventCollectionType = "chain"
   ): Promise<StoryAnyEventFile> {
     const response = await $fetch<StoryEventResponse>(
       `${apiBase}/stories/${storyId}/events/${event.id}`,
@@ -103,7 +103,7 @@ export function useStoryApi() {
   async function deleteEvent(
     storyId: string,
     eventId: string,
-    collectionType: StoryEventCollectionType = "graph"
+    collectionType: StoryEventCollectionType = "chain"
   ): Promise<void> {
     await $fetch<StoryDeleteEventResponse>(`${apiBase}/stories/${storyId}/events/${eventId}`, {
       method: "DELETE",

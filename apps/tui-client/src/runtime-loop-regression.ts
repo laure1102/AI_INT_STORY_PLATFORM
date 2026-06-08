@@ -12,6 +12,7 @@ import type {
 } from "@story-mgr/core"
 import { createStoryFileStore } from "@story-mgr/file-store"
 import {
+  createRuntimeDirectorTrainingSamples,
   createStorySession,
   evaluateStoryValCalcRule,
   type RuntimeStoryBundle,
@@ -91,6 +92,10 @@ interface GraphQueueRegressionScenario {
   expectedConsumedRootIds?: string[]
   expectedTriggeredOnceIds?: string[]
   expectedNotificationOrder?: string[]
+  expectedDirectorSelections?: Array<{
+    sourceType: "chain_root" | "pool"
+    eventId: string
+  }>
 }
 
 interface LoopSkipRegressionResult {
@@ -664,6 +669,36 @@ function runGraphQueueScenario(
     )
   }
 
+  if (scenario.expectedDirectorSelections) {
+    const selectedEntries = afterSnapshot.scheduler.director_logs.map((item) => ({
+      sourceType: item.selected_source_type,
+      eventId: item.selected_event_id
+    }))
+    assert(
+      JSON.stringify(selectedEntries) === JSON.stringify(scenario.expectedDirectorSelections),
+      `[${scenario.id}] Unexpected director selections: ${JSON.stringify(selectedEntries)}`
+    )
+
+    const trainingSamples = createRuntimeDirectorTrainingSamples(afterSnapshot.scheduler.director_logs)
+    const trainingSampleSelections = trainingSamples.map((item) => ({
+      sourceType: item.label.selected_source_type,
+      eventId: item.label.selected_event_id
+    }))
+    assert(
+      JSON.stringify(trainingSampleSelections) === JSON.stringify(scenario.expectedDirectorSelections),
+      `[${scenario.id}] Unexpected director training labels: ${JSON.stringify(trainingSampleSelections)}`
+    )
+    assert(trainingSamples.length > 0, `[${scenario.id}] Expected director training samples`)
+    assert(
+      trainingSamples.every((item) => item.input.candidates.length > 0),
+      `[${scenario.id}] Director training samples should keep typed candidates`
+    )
+    assert(
+      trainingSamples.every((item) => item.label.selected_candidate_index >= 0),
+      `[${scenario.id}] Director training labels should point to selected candidate index`
+    )
+  }
+
   if (scenario.expectedNotificationOrder) {
     let previousIndex = -1
 
@@ -958,8 +993,8 @@ function buildLoopSkipScenarios(): LoopSkipRegressionScenario[] {
 function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
   return [
     {
-      id: "graph-root-trigger-lock-after-queue",
-      title: "Queued graph root still runs after trigger changes",
+      id: "chain-root-director-rechecks-after-each-entry",
+      title: "Chain root director picks one entry and rechecks after completion",
       playerValues: {
         money: 0,
         flag: 0
@@ -978,12 +1013,22 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
         })
       ],
       expectedMoney: 11,
-      expectedConsumedRootIds: ["root_a", "root_b"],
-      expectedNotificationOrder: ["Root A", "Root B"]
+      expectedConsumedRootIds: ["root_b", "root_a"],
+      expectedDirectorSelections: [
+        {
+          sourceType: "chain_root",
+          eventId: "root_b"
+        },
+        {
+          sourceType: "chain_root",
+          eventId: "root_a"
+        }
+      ],
+      expectedNotificationOrder: ["Root B", "Root A"]
     },
     {
-      id: "once-trigger-lock-after-queue",
-      title: "Queued once event still runs after trigger changes",
+      id: "pool-condition-director-can-outrank-chain-root",
+      title: "Pool condition entry can outrank a default chain root",
       playerValues: {
         money: 0,
         flag: 0
@@ -1012,7 +1057,82 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
       expectedMoney: 21,
       expectedConsumedRootIds: ["root_guard"],
       expectedTriggeredOnceIds: ["once_bonus"],
-      expectedNotificationOrder: ["Root Guard", "Once Bonus"]
+      expectedDirectorSelections: [
+        {
+          sourceType: "pool",
+          eventId: "once_bonus"
+        },
+        {
+          sourceType: "chain_root",
+          eventId: "root_guard"
+        }
+      ],
+      expectedNotificationOrder: ["Once Bonus", "Root Guard"]
+    },
+    {
+      id: "pool-director-picks-one-candidate",
+      title: "Pool director picks one next candidate by rule score",
+      playerValues: {
+        money: 0,
+        flag: 0
+      },
+      graphNodes: [
+        createGraphEventNode({
+          id: "root_intro",
+          title: "Root Intro",
+          endScript: "${player.money} += 1"
+        })
+      ],
+      onceEvents: [
+        {
+          id: "pool_low",
+          title: "Pool Low Priority",
+          trigger_mode: "condition",
+          trigger_expr: "${player.flag} === 0",
+          init_script: "",
+          object_keys: [],
+          dialogues: [],
+          location: "",
+          bgm: "",
+          end_script: "${player.money} += 100",
+          meta: {
+            director: {
+              priority: 1
+            }
+          }
+        },
+        {
+          id: "pool_high",
+          title: "Pool High Priority",
+          trigger_mode: "condition",
+          trigger_expr: "${player.flag} === 0",
+          init_script: "",
+          object_keys: [],
+          dialogues: [],
+          location: "",
+          bgm: "",
+          end_script: "${player.money} += 20\n${player.flag} = 1",
+          meta: {
+            director: {
+              priority: 5
+            }
+          }
+        }
+      ],
+      expectedMoney: 21,
+      expectedConsumedRootIds: ["root_intro"],
+      expectedTriggeredOnceIds: ["pool_high"],
+      expectedDirectorSelections: [
+        {
+          sourceType: "pool",
+          eventId: "pool_high"
+        },
+        {
+          sourceType: "chain_root",
+          eventId: "root_intro"
+        }
+      ],
+      expectedNotificationOrder: ["Pool High Priority", "Root Intro"]
     },
     {
       id: "graph-auto-next-fallback",
@@ -1077,6 +1197,16 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
       ],
       expectedMoney: 11,
       expectedConsumedRootIds: ["root_a", "root_b"],
+      expectedDirectorSelections: [
+        {
+          sourceType: "chain_root",
+          eventId: "root_a"
+        },
+        {
+          sourceType: "chain_root",
+          eventId: "root_b"
+        }
+      ],
       expectedNotificationOrder: ["Root A", "Root B"]
     }
   ]

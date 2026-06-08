@@ -1,5 +1,7 @@
 export type StoryValValueType = "value" | "calc"
-export type StoryInvokeTargetType = "once" | "graph" | "loop"
+export type StoryCanonicalEventCollectionType = "chain" | "pool" | "schedule"
+export type StoryLegacyEventCollectionType = "graph" | "once" | "loop"
+export type StoryInvokeTargetType = StoryCanonicalEventCollectionType | StoryLegacyEventCollectionType
 
 export interface StoryValEntryDefinition {
   name: string

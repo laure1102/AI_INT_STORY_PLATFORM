@@ -1,6 +1,6 @@
 # Story Manager Agent Guide
 
-Last updated: `2026-06-05`
+Last updated: `2026-06-08`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -65,15 +65,16 @@ Core files:
 
 Event files:
 
-- `events/events.json5`
-- `events/once_events.json5`
-- `events/loop_events.json5`
+- `events/chains.json5`
+- `events/pool_events.json5`
+- `events/schedule_events.json5`
 
 Notes:
 
 - `nomal_roles.json5` and `import_roles.json5` are the active file names, even though `nomal` is misspelled.
 - Old `roles.json5` and `roles_setting.json5` should not be restored.
-- Graph events and action nodes now live together in `events/events.json5`.
+- Chain event nodes and action nodes now live together in `events/chains.json5`.
+- `events/events.json5`, `events/once_events.json5`, and `events/loop_events.json5` are legacy fallback file names only.
 
 ## 4. Current story data contracts
 
@@ -226,11 +227,11 @@ Current minimal shape:
 Notes:
 
 - `startEventId` has been removed from `story.json5`
-- runtime now auto-discovers graph start events by finding graph `event` nodes with no incoming graph-event parent
+- runtime now auto-discovers chain start events by finding chain `event` nodes with no incoming chain-event parent
 
 ## 5. Event model
 
-### Graph events: `events/events.json5`
+### Chain events: `events/chains.json5`
 
 This file contains two node types.
 
@@ -272,7 +273,7 @@ Action node:
 }
 ```
 
-Graph rules:
+Chain rules:
 
 - `event -> event` is allowed
 - `event -> action` is allowed
@@ -280,7 +281,7 @@ Graph rules:
 - `action -> action` is not allowed
 - an action node should have at most one outgoing `next`
 
-### Once events: `events/once_events.json5`
+### Pool events: `events/pool_events.json5`
 
 ```json5
 {
@@ -298,9 +299,9 @@ Graph rules:
 }
 ```
 
-### Loop events: `events/loop_events.json5`
+### Schedule events: `events/schedule_events.json5`
 
-Loop events extend once events with:
+Schedule events extend pool events with:
 
 ```json5
 {
@@ -317,16 +318,17 @@ Loop events extend once events with:
 
 ### Trigger modes and invocation
 
-- graph events, once events, and loop events all support `trigger_mode: "default" | "condition" | "invoke"`.
+- chain events, pool events, and schedule events all support `trigger_mode: "default" | "condition" | "invoke"`.
 - `default` events participate in normal scheduler scanning and do not execute `trigger_expr`.
 - `condition` events participate in normal scheduler scanning and require a non-empty `trigger_expr`.
 - `invoke` events require at least one `invoke_params` entry; they do not participate in normal scanning and only enter the runtime queue when called.
-- event ids only need to be unique inside their own collection; graph/once/loop ids may repeat.
-- StoryScript invocation must include the target collection: `invoke_once once test1 money=${player.money}`, `invoke_once graph event_a mood=${county.level}`, `invoke_once loop daily_tax day=${system.now_day}`.
+- event ids only need to be unique inside their own collection; chain/pool/schedule ids may repeat.
+- StoryScript invocation must include the target collection: `invoke_once pool test1 money=${player.money}`, `invoke_once chain event_a mood=${county.level}`, `invoke_once schedule daily_tax day=${system.now_day}`.
+- legacy StoryScript target names `graph`, `once`, and `loop` are still accepted and normalized to `chain`, `pool`, and `schedule`.
 - runtime API shape is `invokeOnceEvent(targetType, eventId, args)` and dispatch action shape is `{ type: "invoke-once", targetType, eventId, args }`.
 - scheduler stores invoked calls as `source_type: "invoke"` plus `invoke_target_type`; invoked calls are queue instances and do not mark once events consumed or update loop cycle state.
-- invoked graph events enter the graph chain at the target event; `call.xxx` values stay available through that invoked graph chain.
-- invoked loop events run as standalone loop event content but do not reschedule the loop cycle.
+- invoked chain events enter the chain at the target event; `call.xxx` values stay available through that invoked chain.
+- invoked schedule events run as standalone schedule event content but do not reschedule the schedule cycle.
 
 ## 6. Variable and script rules
 
@@ -367,7 +369,8 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - supports `if`, `else`, `switch`, `for`, `while`, `break`, `continue`, and `return`
 - supports `//` line comments and `/* */` block comments in script fields
 - supports `Math`
-- supports `invoke_once once|graph|loop <eventId> name=expression`
+- supports `invoke_once chain|pool|schedule <eventId> name=expression`
+- legacy `invoke_once graph|once|loop ...` remains compatible
 - loops are protected by both a max step limit and a max iteration limit
 - StoryScript placeholder syntax is only `${...}`
 - comments are stripped before placeholder and `invoke_once` preprocessing while preserving line numbers
@@ -435,7 +438,7 @@ Compression:
 - event dialogue playback
 - action-node branch execution and branch-variable propagation
 - runtime clock state and system-time synchronization
-- runtime scheduler state for graph roots, once events, and loop events
+- runtime scheduler state for chain roots, pool events, and schedule events
 
 ### Runtime clock model
 
@@ -492,10 +495,10 @@ Important current boundary:
 
 - time progression is already part of the shared runtime and must remain reusable by both `tui-client` and future `cocos-client`
 - current runtime uses a scheduler model with `scheduled`, `ready_queue`, and `active`
-- graph root discovery is already connected
-- `once_events` are already connected to scheduler-driven playback
-- `loop_events` already maintain future due times and are promoted from `scheduled` to `ready_queue` when due
-- canonical naming is now `once`
+- chain root discovery is already connected
+- `pool_events` are already connected to scheduler-driven playback
+- `schedule_events` already maintain future due times and are promoted from `scheduled` to `ready_queue` when due
+- canonical event collection naming is now `chain`, `pool`, and `schedule`; legacy `graph`, `once`, and `loop` are compatibility aliases
 
 ### Runtime scheduler model
 
@@ -511,6 +514,8 @@ interface RuntimeSchedulerState {
   consumed_once_ids: string[]
   consumed_graph_root_ids: string[]
   loop_states: RuntimeSchedulerLoopState[]
+  audit_logs: RuntimeSchedulerAuditEntry[]
+  director_logs: RuntimeDirectorDecisionLog[]
   manual_pause: boolean
   event_pause: boolean
   next_seq: number
@@ -519,16 +524,26 @@ interface RuntimeSchedulerState {
 
 Current behavior:
 
-- graph events only enter global scheduling through root event nodes
-- root event rule: graph `event` nodes with no incoming graph-event parent edge
-- graph roots are consumed once per save after successful playback
-- `once_events` with `default` or passing `condition` triggers are scanned, queued, and consumed once
+- chain events only enter global scheduling through root event nodes
+- root event rule: chain `event` nodes with no incoming chain-event parent edge
+- chain roots are consumed once per save after successful playback
+- chain roots and `pool_events` with `default` or passing `condition` triggers are scanned as AI director entry candidates
+- the director selects one natural story entry per scheduling round; selected `chain_root` entries run their authored chain, and selected `pool` entries run as standalone pool events
+- the first-pass AI剧情导演 lives in `packages/runtime/src/director.ts`
+  - `RuntimeStoryDirector` owns candidate selection
+  - `RuntimeDirectorScorer` owns scoring and can later be replaced by a TensorFlow-backed implementation
+  - the default rule scorer reads optional `event.meta.director.priority` and `event.meta.director.weight`
+  - candidate feature snapshots include flattened global/system values, game time, consumed pool ids, triggered pool ids, and recent history
+  - director decisions are stored in `scheduler.director_logs` for later training-data export
+  - `createRuntimeDirectorTrainingSamples` converts `director_logs` into stable `{ input, label, teacher }` samples for later TensorFlow training
+  - training sample labels use selected `source_type`, event id, and candidate index; rule scores stay in `teacher` metadata instead of becoming required model inputs
+  - when a front-stage event is active or waiting in the ready queue, the director does not enqueue another natural entry
 - queued scheduler items now carry `trigger_locked`
-- `graph_root` and `once` condition events check `trigger_expr` at enqueue time; once queued, they keep execution eligibility even if related variable values change before playback
+- `chain_root` and `pool` condition events check `trigger_expr` at enqueue time; once queued, they keep execution eligibility even if related variable values change before playback
 - `default` events do not execute `trigger_expr`; `invoke` events are excluded from normal scanning
-- `loop_events` keep one next-due schedule per event, enter `scheduled`, and are promoted into `ready_queue` when due
-- loop condition events re-check `trigger_expr` only when they become due
-- if a loop event reaches due time but its `trigger_expr` is false, the current cycle is skipped and the next cycle is scheduled
+- `schedule_events` keep one next-due schedule per event, enter `scheduled`, and are promoted into `ready_queue` when due
+- schedule condition events re-check `trigger_expr` only when they become due
+- if a schedule event reaches due time but its `trigger_expr` is false, the current cycle is skipped and the next cycle is scheduled
 - a skipped loop cycle does not increment `scheduler.loop_states[].trigger_count`
 - a skipped loop cycle does not write `loop_event_states`
 - only one front-stage event may run at a time through `scheduler.active`
@@ -538,31 +553,31 @@ Current behavior:
   - advance one clock step at a time
   - reconcile scheduler after each step
   - if an event becomes active, stop advancing time immediately
-- due loop events are first removed from `scheduled`, then inserted into `ready_queue`
-  - this avoids self-deduping bugs where a due loop item could stay forever at the same due minute
+- due schedule events are first removed from `scheduled`, then inserted into `ready_queue`
+  - this avoids self-deduping bugs where a due schedule item could stay forever at the same due minute
 - passive events now auto-settle:
   - if an entered event has no dialogue and no action branches, runtime auto-runs its end flow
   - this is important for settlement-style loop events such as daily income payout
 - event completion now clears current runtime event state through a shared helper, reducing branch-specific cleanup drift
 - a scheduled queue item now represents a full front-stage event chain, not only the first event node
-  - graph root -> event -> event chains stay inside the same `scheduler.active` instance until the chain truly ends
+  - chain root -> event -> event chains stay inside the same `scheduler.active` instance until the chain truly ends
   - action-branch flows also stay inside the same `scheduler.active` instance until the branch resolves or the chain ends
   - if a branch next-event is missing or blocked by `trigger_expr`, the current scheduled chain now completes cleanly instead of leaving `scheduler.active` stuck
   - when a graph event has multiple direct event `next` nodes, runtime now checks them in declared order and picks the first enterable one
 
 Current event-source coverage:
 
-- `graph_root`: fully connected
-- `once`: fully connected for first-pass runtime playback
-- `loop`: first-pass scheduler connected for `daily`, `weekly`, `monthly`, and `interval_days`
+- `chain_root`: fully connected
+- `pool`: fully connected for first-pass runtime playback
+- `schedule`: first-pass scheduler connected for `daily`, `weekly`, `monthly`, and `interval_days`
 
 Current loop timing rule:
 
 - scheduler stores due time in game minutes
-- loop events currently trigger at day-boundary style times derived from the runtime clock
-- next cycle is recalculated after each loop completion
+- schedule events currently trigger at day-boundary style times derived from the runtime clock
+- next cycle is recalculated after each schedule completion
 - verified behavior for the demo `daily_money` loop:
-  - after the opening graph root / once chain finishes
+  - after the opening chain root / pool chain finishes
   - advancing game time to day `2` `00:00`
   - triggers `daily_money`
   - auto-runs its `end_script`
@@ -669,9 +684,9 @@ Current regression coverage includes:
 Notes:
 
 - the TUI must run in a real interactive TTY terminal because Ink needs raw keyboard input
-- the current runtime gameplay loop now covers graph root events from `events/events.json5`
-- the current runtime gameplay loop now covers `once_events.json5`
-- the current runtime gameplay loop now covers `loop_events.json5`
+- the current runtime gameplay loop now covers chain root events from `events/chains.json5`
+- the current runtime gameplay loop now covers `pool_events.json5`
+- the current runtime gameplay loop now covers `schedule_events.json5`
 
 ### Current TUI game-screen behavior
 
@@ -696,6 +711,7 @@ Overlay behavior:
 
 - message flow and global variables render inside the game area, not below the screen
 - scheduler debug also renders inside the game area with the same pager behavior
+- scheduler debug includes AI剧情导演 decision logs, selected entry source/id, candidate count, and top candidate score
 - overlay paging preserves the previous game-area state and restores it after closing
 - overlay content can be scrolled without changing the overall shell height
 

@@ -539,6 +539,7 @@ function buildSchedulerDebugLines(state: TuiClientAppState) {
   lines.push(`已消费根事件: ${scheduler.consumed_graph_root_ids.length}`)
   lines.push(`已消费一次性事件: ${scheduler.consumed_once_ids.length}`)
   lines.push(`循环状态: ${scheduler.loop_states.length}`)
+  lines.push(`导演日志: ${scheduler.director_logs.length}`)
 
   if (scheduler.ready_queue.length > 0) {
     lines.push("--- 就绪队列 ---")
@@ -563,6 +564,16 @@ function buildSchedulerDebugLines(state: TuiClientAppState) {
     for (const item of scheduler.loop_states) {
       lines.push(
         `${item.event_id}: next=${formatGameMinuteLabel(item.next_due_game_minute)} last=${formatGameMinuteLabel(item.last_triggered_game_minute)} count=${item.trigger_count}`
+      )
+    }
+  }
+
+  if (scheduler.director_logs.length > 0) {
+    lines.push("--- AI剧情导演 ---")
+    for (const item of scheduler.director_logs.slice(-5).reverse()) {
+      const selectedSource = item.selected_source_type ? `${item.selected_source_type}/` : ""
+      lines.push(
+        `${formatGameMinuteLabel(item.game_minute)}: selected=${item.selected_event_id ? `${selectedSource}${item.selected_event_id}` : "无"} candidates=${item.candidate_count}`
       )
     }
   }
@@ -630,6 +641,7 @@ function buildSchedulerMonitorLines(state: TuiClientAppState) {
     scheduler.event_pause ? "事件暂停" : ""
   ].filter(Boolean)
   const auditLogs = scheduler.audit_logs.slice().reverse()
+  const directorLogs = scheduler.director_logs.slice().reverse()
 
   lines.push("[当前执行]")
   if (scheduler.active) {
@@ -648,7 +660,7 @@ function buildSchedulerMonitorLines(state: TuiClientAppState) {
   lines.push("")
   lines.push("[队列概览]")
   lines.push(
-    `就绪 ${scheduler.ready_queue.length} · 未来 ${scheduler.scheduled.length} · 循环 ${scheduler.loop_states.length} · 审计 ${scheduler.audit_logs.length}`
+    `就绪 ${scheduler.ready_queue.length} · 未来 ${scheduler.scheduled.length} · 循环 ${scheduler.loop_states.length} · 审计 ${scheduler.audit_logs.length} · 导演 ${scheduler.director_logs.length}`
   )
   lines.push(`暂停状态 ${pauseFlags.length > 0 ? pauseFlags.join(" + ") : "无"}`)
   lines.push(`已消费 根事件 ${scheduler.consumed_graph_root_ids.length} · 一次性事件 ${scheduler.consumed_once_ids.length}`)
@@ -685,6 +697,26 @@ function buildSchedulerMonitorLines(state: TuiClientAppState) {
     for (const item of scheduler.loop_states) {
       lines.push(
         `${item.event_id} · next ${formatSchedulerGameMinuteLabel(item.next_due_game_minute, baseDay)} · last ${formatSchedulerGameMinuteLabel(item.last_triggered_game_minute, baseDay)} · x${item.trigger_count}`
+      )
+    }
+  }
+
+  lines.push("")
+  lines.push("[AI剧情导演]")
+  if (directorLogs.length === 0) {
+    lines.push("暂无导演决策日志")
+  } else {
+    for (const item of directorLogs) {
+      const selectedSource = item.selected_source_type ? `${item.selected_source_type}/` : ""
+      const selectedLabel = item.selected_event_id
+        ? `${selectedSource}${item.selected_event_id}${item.selected_event_title ? ` / ${item.selected_event_title}` : ""}`
+        : "无"
+      const topCandidate = item.candidates[0]
+      const topLabel = topCandidate
+        ? `${topCandidate.sourceType}/${topCandidate.eventId}:${topCandidate.score}`
+        : "无"
+      lines.push(
+        `${formatSchedulerGameMinuteLabel(item.game_minute, baseDay)} · 选择 ${selectedLabel} · 候选 ${item.candidate_count} · 最高 ${topLabel}`
       )
     }
   }

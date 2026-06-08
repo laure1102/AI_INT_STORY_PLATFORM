@@ -1051,7 +1051,7 @@ function transformInvokeOnceStatements(script: string) {
   return normalizeText(script)
     .split(/\r?\n/)
     .map((rawLine, lineIndex) => {
-      const match = rawLine.match(/^(\s*)invoke_once\s+(once|graph|loop)\s+([A-Za-z0-9_\-:.]+)(?:\s+(.+?))?\s*$/)
+      const match = rawLine.match(/^(\s*)invoke_once\s+(chain|pool|schedule|once|graph|loop)\s+([A-Za-z0-9_\-:.]+)(?:\s+(.+?))?\s*$/)
       if (!match) {
         return rawLine
       }
@@ -1061,7 +1061,7 @@ function transformInvokeOnceStatements(script: string) {
       const eventId = (match[3] ?? "").trim()
       const argsSource = match[4] ?? ""
       if (!targetType) {
-        throw new StoryScriptError(lineIndex + 1, "invoke_once requires target type: once, graph, or loop.")
+        throw new StoryScriptError(lineIndex + 1, "invoke_once requires target type: chain, pool, schedule, graph, once, or loop.")
       }
       if (!eventId) {
         throw new StoryScriptError(lineIndex + 1, "invoke_once requires an event id.")
@@ -1576,11 +1576,11 @@ function executeStoryScriptInvokeCall(
     )
   }
 
-  if (!["once", "graph", "loop"].includes(targetTypeNode.text)) {
+  if (!["chain", "pool", "schedule", "once", "graph", "loop"].includes(targetTypeNode.text)) {
     throw createStoryScriptErrorFromNode(
       state.sourceFile,
       targetTypeNode,
-      "invoke_once target type must be once, graph, or loop."
+      "invoke_once target type must be chain, pool, schedule, graph, once, or loop."
     )
   }
 

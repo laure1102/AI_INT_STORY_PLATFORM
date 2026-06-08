@@ -3,6 +3,17 @@ import {
   executeStoryScript,
   renderStoryTextTemplate
 } from "./vals"
+import {
+  createRuleBasedRuntimeDirector,
+  createRuntimeDirectorDecisionLog,
+  flattenDirectorValues,
+  type RuntimeDirectorCandidate,
+  type RuntimeDirectorCandidateSourceType,
+  type RuntimeDirectorDecisionLog,
+  type RuntimeDirectorFeatureSnapshot,
+  type RuntimeDirectorHistoryEntry,
+  type RuntimeStoryDirector
+} from "./director"
 import type { StoryScriptExecutionContext, StoryScriptInvocation } from "./vals"
 import type {
   StoryInvokeTargetType,
@@ -71,7 +82,7 @@ interface CompiledAction {
 }
 
 interface RuntimeStandaloneEvent extends CompiledEvent {
-  runtime_source_type: "once" | "loop"
+  runtime_source_type: "pool" | "schedule"
   trigger_mode?: RuntimeEventTriggerMode
   invoke_params?: Array<{
     name: string
@@ -139,7 +150,7 @@ export interface RuntimeClockState {
   step_minutes: number
 }
 
-export type RuntimeSchedulerSourceType = "graph_root" | "once" | "loop" | "invoke"
+export type RuntimeSchedulerSourceType = "chain_root" | "pool" | "schedule" | "invoke"
 
 export type RuntimeSchedulerEventStatus =
   | "scheduled"
@@ -198,6 +209,7 @@ export interface RuntimeSchedulerState {
   consumed_graph_root_ids: string[]
   loop_states: RuntimeSchedulerLoopState[]
   audit_logs: RuntimeSchedulerAuditEntry[]
+  director_logs: RuntimeDirectorDecisionLog[]
   manual_pause: boolean
   event_pause: boolean
   next_seq: number
@@ -225,9 +237,14 @@ export interface RuntimeStoryBundle {
   scenes: unknown
   roles: unknown
   eventLocations: unknown
+  chainEvents?: Record<string, unknown>
+  poolEvents?: unknown[]
+  scheduleEvents?: unknown[]
+  /** @deprecated 请改用 chainEvents */
   graphEvents: Record<string, unknown>
+  /** @deprecated 请改用 poolEvents */
   onceEvents: unknown[]
-  /** @deprecated 请改用 onceEvents */
+  /** @deprecated 请改用 scheduleEvents */
   loopEvents: unknown[]
 }
 
@@ -312,6 +329,7 @@ export interface CreateStorySessionOptions {
   customOverrides?: RuntimeProfileCustomFile | null
   saveState?: RuntimeStorySaveState | null
   now?: Date
+  storyDirector?: RuntimeStoryDirector | null
 }
 
 export interface RuntimeStorySession {
@@ -336,6 +354,7 @@ interface RuntimeState {
   pendingActions: RuntimeActionState[]
   lastAction: RuntimeActionState | null
   activeStandaloneEvent: RuntimeStandaloneEvent | null
+  storyDirector: RuntimeStoryDirector
 }
 
 interface RuntimeEnterEventOptions {
@@ -357,6 +376,7 @@ const DEFAULT_MAX_CALC_NESTING_DEPTH = 5
 const DEFAULT_CLOCK_STEP_MINUTES = 10
 const MINUTES_PER_DAY = 24 * 60
 const MAX_SCHEDULER_AUDIT_LOGS = 120
+const MAX_RUNTIME_DIRECTOR_LOGS = 120
 const RUNTIME_SCHEDULER_AUDIT_KINDS: RuntimeSchedulerAuditKind[] = [
   "schedule-future",
   "queue-ready",
@@ -669,6 +689,7 @@ function createDefaultSchedulerState(): RuntimeSchedulerState {
     consumed_graph_root_ids: [],
     loop_states: [],
     audit_logs: [],
+    director_logs: [],
     manual_pause: false,
     event_pause: false,
     next_seq: 1
@@ -707,7 +728,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
   const scheduler = snapshot.scheduler ?? createDefaultSchedulerState()
   scheduler.scheduled = Array.isArray(scheduler.scheduled)
     ? scheduler.scheduled.map((item) => {
-        const sourceType = normalizeSchedulerSourceType(item.source_type) ?? "graph_root"
+        const sourceType = normalizeSchedulerSourceType(item.source_type) ?? "chain_root"
 
         return {
           instance_id: normalizeText(item.instance_id),
@@ -728,7 +749,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
     : []
   scheduler.ready_queue = Array.isArray(scheduler.ready_queue)
     ? scheduler.ready_queue.map((item) => {
-        const sourceType = normalizeSchedulerSourceType(item.source_type) ?? "graph_root"
+        const sourceType = normalizeSchedulerSourceType(item.source_type) ?? "chain_root"
 
         return {
           instance_id: normalizeText(item.instance_id),
@@ -749,7 +770,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
     : []
   scheduler.active = scheduler.active
     ? (() => {
-        const sourceType = normalizeSchedulerSourceType(scheduler.active.source_type) ?? "graph_root"
+        const sourceType = normalizeSchedulerSourceType(scheduler.active.source_type) ?? "chain_root"
 
         return {
           instance_id: normalizeText(scheduler.active.instance_id),
@@ -800,6 +821,9 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
         message: normalizeText(item.message)
       })).slice(-MAX_SCHEDULER_AUDIT_LOGS)
     : []
+  scheduler.director_logs = Array.isArray(scheduler.director_logs)
+    ? scheduler.director_logs.map(normalizeRuntimeDirectorDecisionLog).slice(-MAX_RUNTIME_DIRECTOR_LOGS)
+    : []
   scheduler.manual_pause = Boolean(scheduler.manual_pause)
   scheduler.event_pause = Boolean(scheduler.event_pause)
   scheduler.next_seq = Math.max(1, clampInteger(scheduler.next_seq, 1))
@@ -849,16 +873,40 @@ function normalizeSchedulerDedupeKey(
 }
 
 function normalizeSchedulerSourceType(value: unknown): RuntimeSchedulerSourceType | undefined {
-  if (value === "graph_root" || value === "once" || value === "loop" || value === "invoke") {
+  if (value === "chain_root" || value === "pool" || value === "schedule" || value === "invoke") {
     return value
+  }
+
+  if (value === "graph_root") {
+    return "chain_root"
+  }
+
+  if (value === "once") {
+    return "pool"
+  }
+
+  if (value === "loop") {
+    return "schedule"
   }
 
   return undefined
 }
 
 function normalizeInvokeTargetType(value: unknown): StoryInvokeTargetType | undefined {
-  if (value === "once" || value === "graph" || value === "loop") {
+  if (value === "chain" || value === "pool" || value === "schedule") {
     return value
+  }
+
+  if (value === "graph") {
+    return "chain"
+  }
+
+  if (value === "once") {
+    return "pool"
+  }
+
+  if (value === "loop") {
+    return "schedule"
   }
 
   return undefined
@@ -870,6 +918,104 @@ function normalizeSchedulerAuditKind(value: unknown): RuntimeSchedulerAuditKind 
   }
 
   return "queue-ready"
+}
+
+function normalizeRuntimeDirectorCandidateSourceType(
+  value: unknown,
+  fallback: RuntimeDirectorCandidateSourceType = "pool"
+): RuntimeDirectorCandidateSourceType {
+  if (value === "chain_root" || value === "pool") {
+    return value
+  }
+
+  if (value === "graph_root") {
+    return "chain_root"
+  }
+
+  if (value === "once") {
+    return "pool"
+  }
+
+  return fallback
+}
+
+function normalizeUnknownRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? cloneValue(value as Record<string, unknown>)
+    : {}
+}
+
+function normalizeRuntimeDirectorHistoryEntry(value: unknown): RuntimeDirectorHistoryEntry {
+  const entry = normalizeUnknownRecord(value)
+  const type: RuntimeDirectorHistoryEntry["type"] =
+    entry.type === "event" || entry.type === "action" || entry.type === "dialogue" || entry.type === "system"
+    ? entry.type
+    : "system"
+
+  return {
+    type,
+    id: normalizeText(entry.id),
+    title: normalizeOptionalText(entry.title)
+  }
+}
+
+function normalizeRuntimeDirectorFeatureSnapshot(value: unknown): RuntimeDirectorFeatureSnapshot {
+  const feature = normalizeUnknownRecord(value)
+
+  return {
+    storyId: normalizeText(feature.storyId),
+    gameMinute: Math.max(0, clampInteger(feature.gameMinute, 0)),
+    day: Math.max(0, clampInteger(feature.day, 0)),
+    hour: Math.max(0, Math.min(23, clampInteger(feature.hour, 0))),
+    minute: Math.max(0, Math.min(59, clampInteger(feature.minute, 0))),
+    weekday: Math.max(0, Math.min(7, clampInteger(feature.weekday, 0))),
+    values: normalizeUnknownRecord(feature.values),
+    consumedPoolEventIds: Array.isArray(feature.consumedPoolEventIds)
+      ? feature.consumedPoolEventIds.map((item) => normalizeText(item)).filter(Boolean)
+      : [],
+    triggeredPoolEventIds: Array.isArray(feature.triggeredPoolEventIds)
+      ? feature.triggeredPoolEventIds.map((item) => normalizeText(item)).filter(Boolean)
+      : [],
+    recentHistory: Array.isArray(feature.recentHistory)
+      ? feature.recentHistory
+          .map(normalizeRuntimeDirectorHistoryEntry)
+          .filter((item) => Boolean(item.id))
+      : []
+  }
+}
+
+function normalizeRuntimeDirectorDecisionLog(value: unknown): RuntimeDirectorDecisionLog {
+  const log = normalizeUnknownRecord(value)
+  const candidates = Array.isArray(log.candidates)
+    ? log.candidates.map((item) => {
+        const candidate = normalizeUnknownRecord(item)
+
+        return {
+          sourceType: normalizeRuntimeDirectorCandidateSourceType(candidate.sourceType ?? candidate.source_type),
+          eventId: normalizeText(candidate.eventId),
+          title: normalizeText(candidate.title),
+          score: clampNumber(candidate.score, 0),
+          reasons: Array.isArray(candidate.reasons)
+            ? candidate.reasons.map((reason) => normalizeText(reason)).filter(Boolean)
+            : []
+        }
+      }).filter((candidate) => candidate.eventId)
+    : []
+
+  return {
+    game_minute: Math.max(0, clampInteger(log.game_minute, 0)),
+    selected_source_type: log.selected_event_id === null || log.selected_event_id === undefined
+      ? null
+      : normalizeRuntimeDirectorCandidateSourceType(log.selected_source_type ?? log.selectedSourceType),
+    selected_event_id: log.selected_event_id === null || log.selected_event_id === undefined
+      ? null
+      : normalizeText(log.selected_event_id),
+    selected_event_title: normalizeOptionalText(log.selected_event_title),
+    candidate_count: Math.max(0, clampInteger(log.candidate_count, candidates.length)),
+    candidates,
+    features: normalizeRuntimeDirectorFeatureSnapshot(log.features),
+    reason: normalizeText(log.reason)
+  }
 }
 
 function syncSystemTimeFieldsFromClock(snapshot: RuntimeStorySessionSnapshot) {
@@ -995,6 +1141,46 @@ function appendSchedulerAudit(
 
   if (snapshot.scheduler.audit_logs.length > MAX_SCHEDULER_AUDIT_LOGS) {
     snapshot.scheduler.audit_logs = snapshot.scheduler.audit_logs.slice(-MAX_SCHEDULER_AUDIT_LOGS)
+  }
+}
+
+function appendRuntimeDirectorLog(
+  snapshot: RuntimeStorySessionSnapshot,
+  log: RuntimeDirectorDecisionLog
+) {
+  normalizeSchedulerState(snapshot)
+  snapshot.scheduler.director_logs.push(cloneValue(log))
+
+  if (snapshot.scheduler.director_logs.length > MAX_RUNTIME_DIRECTOR_LOGS) {
+    snapshot.scheduler.director_logs = snapshot.scheduler.director_logs.slice(-MAX_RUNTIME_DIRECTOR_LOGS)
+  }
+}
+
+function buildRuntimeDirectorFeatureSnapshot(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+): RuntimeDirectorFeatureSnapshot {
+  normalizeClockState(snapshot)
+  normalizeSchedulerState(snapshot)
+  syncSystemTimeFieldsFromClock(snapshot)
+
+  const minuteOfDay = ((snapshot.clock.total_minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+
+  return {
+    storyId: bundle.storyId,
+    gameMinute: getCurrentGameMinute(snapshot),
+    day: readSystemNumber(snapshot.system_vals, "system.now_day", snapshot.clock.base_day),
+    hour: Math.floor(minuteOfDay / 60),
+    minute: minuteOfDay % 60,
+    weekday: readSystemNumber(snapshot.system_vals, "system.now_weekday", 0),
+    values: flattenDirectorValues(snapshot.vals, snapshot.system_vals),
+    consumedPoolEventIds: [...snapshot.scheduler.consumed_once_ids],
+    triggeredPoolEventIds: snapshot.triggered_once_events.map((item) => item.event_id),
+    recentHistory: snapshot.history.slice(-20).map((entry): RuntimeDirectorHistoryEntry => ({
+      type: entry.type,
+      id: entry.id,
+      title: entry.title
+    }))
   }
 }
 
@@ -1300,8 +1486,8 @@ function promoteDueScheduledEvents(
   snapshot.scheduler.scheduled = remainingScheduledEvents
 
   for (const scheduledEvent of dueScheduledEvents) {
-    if (scheduledEvent.source_type === "loop") {
-      const loopEvent = (bundle.loopEvents as RuntimeLoopEventDefinition[]).find(
+    if (scheduledEvent.source_type === "schedule") {
+      const loopEvent = getBundleScheduleEvents(bundle).find(
         (item) => item.id === scheduledEvent.source_id
       )
 
@@ -1309,7 +1495,7 @@ function promoteDueScheduledEvents(
         continue
       }
 
-      const standaloneLoopEvent = createStandaloneEvent("loop", loopEvent)
+      const standaloneLoopEvent = createStandaloneEvent("schedule", loopEvent)
       // 循环事件只有在到点时条件成立，才真正进入就绪队列。
       if (!canEnterEvent(snapshot, standaloneLoopEvent, {})) {
         const loopState = getLoopSchedulerState(snapshot, loopEvent.id)
@@ -1320,7 +1506,7 @@ function promoteDueScheduledEvents(
         )
         appendSchedulerAudit(snapshot, {
           kind: "skip-event",
-          source_type: "loop",
+          source_type: "schedule",
           source_id: loopEvent.id,
           entry_event_id: loopEvent.id,
           due_game_minute: scheduledEvent.due_game_minute,
@@ -1328,7 +1514,7 @@ function promoteDueScheduledEvents(
         })
         appendSchedulerAudit(snapshot, {
           kind: "loop-reschedule",
-          source_type: "loop",
+          source_type: "schedule",
           source_id: loopEvent.id,
           entry_event_id: loopEvent.id,
           due_game_minute: loopState.next_due_game_minute,
@@ -1362,7 +1548,7 @@ function clearCurrentEventState(runtimeState: RuntimeState) {
 
 function getGraphRootEventIds(bundle: RuntimeStoryBundle) {
   const incomingTargets = new Set<string>()
-  const graphNodes = Object.values(bundle.graphEvents) as RuntimeGraphNode[]
+  const graphNodes = Object.values(getBundleChainNodes(bundle)) as RuntimeGraphNode[]
 
   for (const node of graphNodes) {
     if (!Array.isArray(node.next)) {
@@ -1383,14 +1569,31 @@ function getGraphRootEventIds(bundle: RuntimeStoryBundle) {
     .map((node) => node.id)
 }
 
-function scanGraphRootEvents(
-  bundle: RuntimeStoryBundle,
-  runtimeState: RuntimeState
-) {
-  const rootEventIds = getGraphRootEventIds(bundle)
+function hasPendingDirectorEntryEvent(snapshot: RuntimeStorySessionSnapshot) {
+  normalizeSchedulerState(snapshot)
 
+  return Boolean(
+    snapshot.current_event_id
+    || snapshot.scheduler.active
+    || snapshot.scheduler.ready_queue.length > 0
+  )
+}
+
+function scanDirectorEntryEvents(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  storyDirector: RuntimeStoryDirector
+) {
+  const candidates: RuntimeDirectorCandidate[] = []
+  let candidateIndex = 0
+
+  if (hasPendingDirectorEntryEvent(runtimeState.snapshot)) {
+    return
+  }
+
+  const rootEventIds = getGraphRootEventIds(bundle)
   for (const rootEventId of rootEventIds) {
-    const dedupeKey = `graph_root:${rootEventId}`
+    const dedupeKey = `chain_root:${rootEventId}`
     if (runtimeState.snapshot.scheduler.consumed_graph_root_ids.includes(rootEventId)) {
       continue
     }
@@ -1408,31 +1611,27 @@ function scanGraphRootEvents(
       continue
     }
 
-    const readyEvent = createScheduledEvent(
-      runtimeState.snapshot,
-      "graph_root",
-      rootEventId,
-      rootEventId,
-      getCurrentGameMinute(runtimeState.snapshot),
-      dedupeKey,
-      true
-    )
-    enqueueReadyEvent(runtimeState.snapshot, readyEvent)
+    candidates.push({
+      sourceType: "chain_root",
+      event: rootNode,
+      index: candidateIndex,
+      reasons: [
+        "chain-root",
+        "scannable",
+        "not-consumed",
+        "trigger-passed"
+      ]
+    })
+    candidateIndex += 1
   }
-}
 
-function scanOnceEvents(
-  bundle: RuntimeStoryBundle,
-  runtimeState: RuntimeState
-) {
   const onceEvents = getBundleOnceEvents(bundle)
-
-  for (const event of onceEvents) {
+  for (const [eventIndex, event] of onceEvents.entries()) {
     if (!isRuntimeEventScannable(event)) {
       continue
     }
 
-    const dedupeKey = `once:${event.id}`
+    const dedupeKey = `pool:${event.id}`
     if (runtimeState.snapshot.scheduler.consumed_once_ids.includes(event.id)) {
       continue
     }
@@ -1445,28 +1644,83 @@ function scanOnceEvents(
       continue
     }
 
-    const standaloneEvent = createStandaloneEvent("once", event)
+    const standaloneEvent = createStandaloneEvent("pool", event)
     if (!canEnterEvent(runtimeState.snapshot, standaloneEvent, {})) {
       continue
     }
 
-    const readyEvent = createScheduledEvent(
-      runtimeState.snapshot,
-      "once",
-      event.id,
-      event.id,
-      getCurrentGameMinute(runtimeState.snapshot),
-      dedupeKey,
-      true
-    )
-    enqueueReadyEvent(runtimeState.snapshot, readyEvent)
+    candidates.push({
+      sourceType: "pool",
+      event,
+      index: candidateIndex + eventIndex,
+      reasons: [
+        "pool",
+        "scannable",
+        "not-consumed",
+        "trigger-passed"
+      ]
+    })
   }
+
+  if (candidates.length === 0) {
+    return
+  }
+
+  const features = buildRuntimeDirectorFeatureSnapshot(bundle, runtimeState.snapshot)
+  const decision = storyDirector.decide({
+    candidates,
+    features
+  })
+  appendRuntimeDirectorLog(
+    runtimeState.snapshot,
+    createRuntimeDirectorDecisionLog(decision, features)
+  )
+
+  if (!decision.selectedEventId) {
+    appendSchedulerAudit(runtimeState.snapshot, {
+      kind: "skip-event",
+      due_game_minute: getCurrentGameMinute(runtimeState.snapshot),
+      message: "AI剧情导演未选择自然剧情入口候选"
+    })
+    return
+  }
+
+  const selectedCandidate = candidates.find((candidate) =>
+    candidate.sourceType === decision.selectedSourceType
+    && candidate.event.id === decision.selectedEventId
+  )
+  if (!selectedCandidate) {
+    appendSchedulerAudit(runtimeState.snapshot, {
+      kind: "skip-event",
+      source_type: decision.selectedSourceType ?? undefined,
+      source_id: decision.selectedEventId,
+      entry_event_id: decision.selectedEventId,
+      due_game_minute: getCurrentGameMinute(runtimeState.snapshot),
+      message: "AI剧情导演选择的事件不在候选集中"
+    })
+    return
+  }
+
+  const selectedEvent = selectedCandidate.event
+  const selectedDedupeKey = `${selectedCandidate.sourceType}:${selectedEvent.id}`
+  const readyEvent = createScheduledEvent(
+    runtimeState.snapshot,
+    selectedCandidate.sourceType,
+    selectedEvent.id,
+    selectedEvent.id,
+    getCurrentGameMinute(runtimeState.snapshot),
+    selectedDedupeKey,
+    true
+  )
+  enqueueReadyEvent(runtimeState.snapshot, readyEvent)
 }
 
 function getBundleOnceEvents(bundle: RuntimeStoryBundle) {
-  const onceEventsSource = Array.isArray(bundle.onceEvents)
-    ? bundle.onceEvents
-    : []
+  const onceEventsSource = Array.isArray(bundle.poolEvents)
+    ? bundle.poolEvents
+    : Array.isArray(bundle.onceEvents)
+      ? bundle.onceEvents
+      : []
 
   return onceEventsSource as Array<{
     id: string
@@ -1486,11 +1740,21 @@ function getBundleOnceEvents(bundle: RuntimeStoryBundle) {
   }>
 }
 
+function getBundleScheduleEvents(bundle: RuntimeStoryBundle) {
+  const scheduleEventsSource = Array.isArray(bundle.scheduleEvents)
+    ? bundle.scheduleEvents
+    : Array.isArray(bundle.loopEvents)
+      ? bundle.loopEvents
+      : []
+
+  return scheduleEventsSource as RuntimeLoopEventDefinition[]
+}
+
 function ensureLoopSchedules(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState
 ) {
-  const loopEvents = bundle.loopEvents as RuntimeLoopEventDefinition[]
+  const loopEvents = getBundleScheduleEvents(bundle)
 
   for (const loopEvent of loopEvents) {
     if (!isRuntimeEventScannable(loopEvent)) {
@@ -1507,7 +1771,7 @@ function ensureLoopSchedules(
       )
       appendSchedulerAudit(runtimeState.snapshot, {
         kind: "loop-reschedule",
-        source_type: "loop",
+        source_type: "schedule",
         source_id: loopEvent.id,
         entry_event_id: loopEvent.id,
         due_game_minute: loopState.next_due_game_minute,
@@ -1520,7 +1784,7 @@ function ensureLoopSchedules(
       continue
     }
 
-    const dedupeKey = `loop:${loopEvent.id}:${nextDueGameMinute}`
+    const dedupeKey = `schedule:${loopEvent.id}:${nextDueGameMinute}`
 
     if (isScheduledEventQueued(runtimeState.snapshot, dedupeKey)) {
       continue
@@ -1528,7 +1792,7 @@ function ensureLoopSchedules(
 
     const scheduledEvent = createScheduledEvent(
       runtimeState.snapshot,
-      "loop",
+      "schedule",
       loopEvent.id,
       loopEvent.id,
       nextDueGameMinute,
@@ -1555,8 +1819,8 @@ function startNextReadyEventIfIdle(
     }
 
     if (
-      nextScheduledEvent.source_type === "once"
-      || (nextScheduledEvent.source_type === "invoke" && nextScheduledEvent.invoke_target_type === "once")
+      nextScheduledEvent.source_type === "pool"
+      || (nextScheduledEvent.source_type === "invoke" && nextScheduledEvent.invoke_target_type === "pool")
     ) {
       const event = getBundleOnceEvents(bundle).find((item) => item.id === nextScheduledEvent.entry_event_id)
 
@@ -1579,7 +1843,7 @@ function startNextReadyEventIfIdle(
         message: "开始执行事件"
       })
       runtimeState.activeStandaloneEvent = createStandaloneEvent(
-        "once",
+        "pool",
         event,
         nextScheduledEvent.call_values
       )
@@ -1596,10 +1860,10 @@ function startNextReadyEventIfIdle(
     }
 
     if (
-      nextScheduledEvent.source_type === "loop"
-      || (nextScheduledEvent.source_type === "invoke" && nextScheduledEvent.invoke_target_type === "loop")
+      nextScheduledEvent.source_type === "schedule"
+      || (nextScheduledEvent.source_type === "invoke" && nextScheduledEvent.invoke_target_type === "schedule")
     ) {
-      const event = (bundle.loopEvents as RuntimeLoopEventDefinition[]).find(
+      const event = getBundleScheduleEvents(bundle).find(
         (item) => item.id === nextScheduledEvent.entry_event_id
       )
 
@@ -1622,7 +1886,7 @@ function startNextReadyEventIfIdle(
         message: "开始执行事件"
       })
       runtimeState.activeStandaloneEvent = createStandaloneEvent(
-        "loop",
+        "schedule",
         event,
         nextScheduledEvent.call_values
       )
@@ -1669,8 +1933,7 @@ function reconcileScheduler(
 ) {
   normalizeSchedulerState(runtimeState.snapshot)
   promoteDueScheduledEventsResolved(bundle, runtimeState.snapshot)
-  scanGraphRootEvents(bundle, runtimeState)
-  scanOnceEvents(bundle, runtimeState)
+  scanDirectorEntryEvents(bundle, runtimeState, runtimeState.storyDirector)
   ensureLoopSchedules(bundle, runtimeState)
   startNextReadyEventIfIdle(bundle, runtimeState, notifications)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)
@@ -1693,11 +1956,15 @@ function getBundleGraphNode(bundle: RuntimeStoryBundle, nodeId: string | null) {
     return null
   }
 
-  return (bundle.graphEvents[nodeId] as RuntimeGraphNode | undefined) ?? null
+  return (getBundleChainNodes(bundle)[nodeId] as RuntimeGraphNode | undefined) ?? null
+}
+
+function getBundleChainNodes(bundle: RuntimeStoryBundle) {
+  return bundle.chainEvents ?? bundle.graphEvents ?? {}
 }
 
 function createStandaloneEvent(
-  sourceType: "once" | "loop",
+  sourceType: "pool" | "schedule",
   event: {
     id: string
     title: string
@@ -1947,7 +2214,7 @@ function findBundleLoopEvent(
   bundle: RuntimeStoryBundle,
   eventId: string
 ) {
-  return (bundle.loopEvents as RuntimeLoopEventDefinition[]).find((item) => item.id === eventId) ?? null
+  return getBundleScheduleEvents(bundle).find((item) => item.id === eventId) ?? null
 }
 
 function findBundleInvokeTargetEvent(
@@ -1955,11 +2222,13 @@ function findBundleInvokeTargetEvent(
   targetType: StoryInvokeTargetType,
   eventId: string
 ) {
-  if (targetType === "once") {
+  const normalizedTargetType = normalizeInvokeTargetType(targetType)
+
+  if (normalizedTargetType === "pool") {
     return findBundleOnceEvent(bundle, eventId)
   }
 
-  if (targetType === "loop") {
+  if (normalizedTargetType === "schedule") {
     return findBundleLoopEvent(bundle, eventId)
   }
 
@@ -1968,15 +2237,17 @@ function findBundleInvokeTargetEvent(
 }
 
 function getInvokeTargetLabel(targetType: StoryInvokeTargetType) {
-  if (targetType === "once") {
-    return "一次性事件"
+  const normalizedTargetType = normalizeInvokeTargetType(targetType)
+
+  if (normalizedTargetType === "pool") {
+    return "平面事件池事件"
   }
 
-  if (targetType === "loop") {
-    return "循环事件"
+  if (normalizedTargetType === "schedule") {
+    return "定时规则事件"
   }
 
-  return "普通剧情事件"
+  return "链式剧情线事件"
 }
 
 function validateInvokeArgs(
@@ -2031,26 +2302,31 @@ function queueInvokeEvent(
     return false
   }
 
-  const targetEvent = findBundleInvokeTargetEvent(bundle, targetType, normalizedEventId)
+  const normalizedTargetType = normalizeInvokeTargetType(targetType)
+  if (!normalizedTargetType) {
+    return false
+  }
+
+  const targetEvent = findBundleInvokeTargetEvent(bundle, normalizedTargetType, normalizedEventId)
   const normalizedArgs = cloneValue(args)
-  const validation = validateInvokeArgs(targetType, targetEvent, normalizedArgs)
+  const validation = validateInvokeArgs(normalizedTargetType, targetEvent, normalizedArgs)
   if (!validation.ok || !targetEvent) {
     return false
   }
 
   const nextSeq = runtimeState.snapshot.scheduler.next_seq
-  const dedupeKey = `invoke:${targetType}:${targetEvent.id}:${nextSeq}`
+  const dedupeKey = `invoke:${normalizedTargetType}:${targetEvent.id}:${nextSeq}`
 
   const readyEvent = createScheduledEvent(
     runtimeState.snapshot,
     "invoke",
-    `${targetType}:${targetEvent.id}`,
+    `${normalizedTargetType}:${targetEvent.id}`,
     targetEvent.id,
     getCurrentGameMinute(runtimeState.snapshot),
     dedupeKey,
     true,
     normalizedArgs,
-    targetType
+    normalizedTargetType
   )
   return enqueueReadyEvent(runtimeState.snapshot, readyEvent)
 }
@@ -2298,13 +2574,13 @@ function completeActiveScheduledEvent(snapshot: RuntimeStorySessionSnapshot) {
     message: "事件执行完成"
   })
 
-  if (activeScheduledEvent.source_type === "graph_root") {
+  if (activeScheduledEvent.source_type === "chain_root") {
     if (!snapshot.scheduler.consumed_graph_root_ids.includes(activeScheduledEvent.source_id)) {
       snapshot.scheduler.consumed_graph_root_ids.push(activeScheduledEvent.source_id)
     }
   }
 
-  if (activeScheduledEvent.source_type === "once") {
+  if (activeScheduledEvent.source_type === "pool") {
     if (!snapshot.scheduler.consumed_once_ids.includes(activeScheduledEvent.source_id)) {
       snapshot.scheduler.consumed_once_ids.push(activeScheduledEvent.source_id)
     }
@@ -2317,7 +2593,7 @@ function completeActiveScheduledEvent(snapshot: RuntimeStorySessionSnapshot) {
     }
   }
 
-  if (activeScheduledEvent.source_type === "loop") {
+  if (activeScheduledEvent.source_type === "schedule") {
     const loopState = getLoopSchedulerState(snapshot, activeScheduledEvent.source_id)
     const lastTriggeredGameMinute = activeScheduledEvent.due_game_minute
     const lastTriggeredGameDay = getGameDayFromGameMinute(snapshot, lastTriggeredGameMinute)
@@ -2434,8 +2710,8 @@ function promoteDueScheduledEventsResolved(
   snapshot.scheduler.scheduled = remainingScheduledEvents
 
   for (const scheduledEvent of dueScheduledEvents) {
-    if (scheduledEvent.source_type === "loop") {
-      const loopEvent = (bundle.loopEvents as RuntimeLoopEventDefinition[]).find(
+    if (scheduledEvent.source_type === "schedule") {
+      const loopEvent = getBundleScheduleEvents(bundle).find(
         (item) => item.id === scheduledEvent.source_id
       )
 
@@ -2443,7 +2719,7 @@ function promoteDueScheduledEventsResolved(
         continue
       }
 
-      const standaloneLoopEvent = createStandaloneEvent("loop", loopEvent)
+      const standaloneLoopEvent = createStandaloneEvent("schedule", loopEvent)
       // 循环事件在到点时才判断触发条件，不满足则跳过本周期并重排下次时间。
       if (!canEnterEvent(snapshot, standaloneLoopEvent, {})) {
         const loopState = getLoopSchedulerState(snapshot, loopEvent.id)
@@ -2454,7 +2730,7 @@ function promoteDueScheduledEventsResolved(
         )
         appendSchedulerAudit(snapshot, {
           kind: "skip-event",
-          source_type: "loop",
+          source_type: "schedule",
           source_id: loopEvent.id,
           entry_event_id: loopEvent.id,
           due_game_minute: scheduledEvent.due_game_minute,
@@ -2462,7 +2738,7 @@ function promoteDueScheduledEventsResolved(
         })
         appendSchedulerAudit(snapshot, {
           kind: "loop-reschedule",
-          source_type: "loop",
+          source_type: "schedule",
           source_id: loopEvent.id,
           entry_event_id: loopEvent.id,
           due_game_minute: loopState.next_due_game_minute,
@@ -2857,13 +3133,15 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     : createBaseSnapshot(options.bundle)
   const notifications: string[] = []
   let screen: RuntimeStoryViewModel["screen"] = "game"
+  const storyDirector = options.storyDirector ?? createRuleBasedRuntimeDirector()
   const runtimeState: RuntimeState = {
     snapshot: baseSnapshot,
     currentEventEntered: false,
     currentDialogueIndex: 0,
     pendingActions: [],
     lastAction: null,
-    activeStandaloneEvent: null
+    activeStandaloneEvent: null,
+    storyDirector
   }
 
   if (!runtimeState.snapshot.clock) {
@@ -2906,7 +3184,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         : {}
     if (!normalizedTargetType) {
       if (notifyFailure) {
-        notifications.push("调用事件时必须指定目标类型：once、graph 或 loop。")
+        notifications.push("调用事件时必须指定目标类型：chain、pool 或 schedule。")
       }
       return false
     }

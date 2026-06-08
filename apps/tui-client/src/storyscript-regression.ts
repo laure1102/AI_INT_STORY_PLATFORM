@@ -134,6 +134,23 @@ function testProcedureControlFlowAndAssignments() {
   assert(result.invocations[2]?.args.day === 3, "Expected loop invoke arg day to be 3.")
 }
 
+function testCanonicalInvokeTargets() {
+  const vals = createRegressionVals()
+  const result = executeStoryScript(
+    vals,
+    [
+      "invoke_once pool pool_event mood=${county.level}",
+      "invoke_once chain chain_event mood=${county.level}",
+      "invoke_once schedule schedule_event day=${player.money}"
+    ].join("\n")
+  )
+
+  assert(result.invocations.length === 3, "Expected three canonical invoke_once invocations.")
+  assert(result.invocations[0]?.targetType === "pool", "Expected first canonical target type to be pool.")
+  assert(result.invocations[1]?.targetType === "chain", "Expected second canonical target type to be chain.")
+  assert(result.invocations[2]?.targetType === "schedule", "Expected third canonical target type to be schedule.")
+}
+
 function testSwitchBreakContinue() {
   const vals = createRegressionVals()
   const result = executeStoryScript(
@@ -260,6 +277,7 @@ function main() {
   testPredicateReadOnly()
   testPredicateInvokeRejected()
   testProcedureControlFlowAndAssignments()
+  testCanonicalInvokeTargets()
   testSwitchBreakContinue()
   testComments()
   testCalcAssignmentRejected()

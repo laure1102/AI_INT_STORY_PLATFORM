@@ -1,11 +1,11 @@
 import type {
   StoryAnyEventFile,
   StoryActionFile,
+  StoryChainNodeFile,
   StoryDocument,
   StoryEventFile,
-  StoryGraphNodeFile,
-  StoryLoopEventFile,
-  StoryOnceEventFile,
+  StoryPoolEventFile,
+  StoryScheduleEventFile,
   ValidationIssue,
   ValidationResult
 } from "./types"
@@ -18,7 +18,7 @@ import {
 } from "@story-mgr/runtime"
 import type { StoryValsFile } from "./types"
 
-type EventValidationGroupKey = "graphEvents" | "onceEvents" | "loopEvents"
+type EventValidationGroupKey = "chainEvents" | "poolEvents" | "scheduleEvents"
 
 interface StoryEventValidationShape {
   id: string
@@ -62,7 +62,7 @@ function buildCombinedStoryScriptVals(document: StoryDocument): StoryValsFile {
   }
 }
 
-function buildGraphActionScriptContext(action: StoryActionFile) {
+function buildChainActionScriptContext(action: StoryActionFile) {
   const values = Object.fromEntries(
     (action.vars ?? [])
       .map((actionVar) => actionVar.name.trim())
@@ -87,11 +87,11 @@ function pushIssue(
   issues.push({ level, code, message, path })
 }
 
-function isGraphActionNode(event: StoryGraphNodeFile): event is StoryActionFile {
+function isChainActionNode(event: StoryChainNodeFile): event is StoryActionFile {
   return "exec_script" in event
 }
 
-function isGraphEventNode(event: StoryGraphNodeFile): event is StoryEventFile {
+function isChainEventNode(event: StoryChainNodeFile): event is StoryEventFile {
   return "next" in event && !("exec_script" in event)
 }
 
@@ -121,7 +121,7 @@ function collectGlobalValKeys(document: StoryDocument) {
 
 function validateDialogueTemplates(
   issues: ValidationIssue[],
-  eventGroupKey: "graphEvents" | "onceEvents" | "loopEvents",
+  eventGroupKey: EventValidationGroupKey,
   eventIndex: number,
   eventId: string,
   dialogues: Array<{ content: string }>
@@ -140,15 +140,15 @@ function validateDialogueTemplates(
 }
 
 function getEventValidationMeta(eventGroupKey: EventValidationGroupKey) {
-  if (eventGroupKey === "graphEvents") {
-    return { codePrefix: "graph", label: "Graph event" }
+  if (eventGroupKey === "chainEvents") {
+    return { codePrefix: "chain", label: "Chain event" }
   }
 
-  if (eventGroupKey === "loopEvents") {
-    return { codePrefix: "loop", label: "Loop event" }
+  if (eventGroupKey === "scheduleEvents") {
+    return { codePrefix: "schedule", label: "Schedule event" }
   }
 
-  return { codePrefix: "once", label: "Once event" }
+  return { codePrefix: "pool", label: "Pool event" }
 }
 
 function validateInvokeParamDefinitions(
@@ -311,32 +311,32 @@ function validatePlayableEvent(
   )
 }
 
-function validateOnceEvent(
-  event: StoryOnceEventFile,
+function validatePoolEvent(
+  event: StoryPoolEventFile,
   eventIndex: number,
   document: StoryDocument,
   issues: ValidationIssue[]
 ) {
-  validatePlayableEvent(event, eventIndex, "onceEvents", document, issues)
+  validatePlayableEvent(event, eventIndex, "poolEvents", document, issues)
 }
 
-function validateLoopEvent(
-  event: StoryLoopEventFile,
+function validateScheduleEvent(
+  event: StoryScheduleEventFile,
   eventIndex: number,
   document: StoryDocument,
   issues: ValidationIssue[]
 ) {
-  validatePlayableEvent(event, eventIndex, "loopEvents", document, issues)
+  validatePlayableEvent(event, eventIndex, "scheduleEvents", document, issues)
 
-  const loopPath = ["loopEvents", String(eventIndex), "loop"] as const
+  const schedulePath = ["scheduleEvents", String(eventIndex), "loop"] as const
 
   if (event.loop.mode === "weekly" && !event.loop.weekday) {
     pushIssue(
       issues,
       "error",
-      "loop.schedule-weekday-missing",
-      `Loop event "${event.id}" requires weekday when mode is weekly.`,
-      [...loopPath, "weekday"]
+      "schedule.weekday-missing",
+      `Schedule event "${event.id}" requires weekday when mode is weekly.`,
+      [...schedulePath, "weekday"]
     )
   }
 
@@ -344,9 +344,9 @@ function validateLoopEvent(
     pushIssue(
       issues,
       "error",
-      "loop.schedule-month-day-missing",
-      `Loop event "${event.id}" requires month_day when mode is monthly.`,
-      [...loopPath, "month_day"]
+      "schedule.month-day-missing",
+      `Schedule event "${event.id}" requires month_day when mode is monthly.`,
+      [...schedulePath, "month_day"]
     )
   }
 
@@ -354,52 +354,52 @@ function validateLoopEvent(
     pushIssue(
       issues,
       "error",
-      "loop.schedule-interval-missing",
-      `Loop event "${event.id}" requires interval_days when mode is interval_days.`,
-      [...loopPath, "interval_days"]
+      "schedule.interval-missing",
+      `Schedule event "${event.id}" requires interval_days when mode is interval_days.`,
+      [...schedulePath, "interval_days"]
     )
   }
 }
 
-function validateGraphEvent(
+function validateChainEvent(
   event: StoryEventFile,
   eventIndex: number,
   document: StoryDocument,
   issues: ValidationIssue[]
 ) {
-  validatePlayableEvent(event, eventIndex, "graphEvents", document, issues)
+  validatePlayableEvent(event, eventIndex, "chainEvents", document, issues)
 }
 
-function validateGraphAction(
+function validateChainAction(
   action: StoryActionFile,
   actionIndex: number,
   document: StoryDocument,
   issues: ValidationIssue[],
-  graphEvents: StoryEventFile[],
-  graphActions: StoryActionFile[]
+  chainEvents: StoryEventFile[],
+  chainActions: StoryActionFile[]
 ) {
-  const incomingGraphEvents = graphEvents.filter((event) => event.next.includes(action.id))
-  const incomingGraphActions = graphActions.filter((event) => event.next.includes(action.id))
-  const graphEventIds = new Set(graphEvents.map((event) => event.id))
-  const graphActionIds = new Set(graphActions.map((event) => event.id))
+  const incomingChainEvents = chainEvents.filter((event) => event.next.includes(action.id))
+  const incomingChainActions = chainActions.filter((event) => event.next.includes(action.id))
+  const chainEventIds = new Set(chainEvents.map((event) => event.id))
+  const chainActionIds = new Set(chainActions.map((event) => event.id))
 
-  if (incomingGraphEvents.length > 1) {
+  if (incomingChainEvents.length > 1) {
       pushIssue(
         issues,
         "error",
-        "graph-action.multiple-parents",
-        `Graph action "${action.id}" can only have one parent event.`,
-        ["graphEvents", String(actionIndex), "id"]
+        "chain-action.multiple-parents",
+        `Chain action "${action.id}" can only have one parent event.`,
+        ["chainEvents", String(actionIndex), "id"]
       )
   }
 
-  if (incomingGraphActions.length > 0) {
+  if (incomingChainActions.length > 0) {
       pushIssue(
         issues,
         "error",
-        "graph-action.invalid-parent",
-        `Graph action "${action.id}" cannot be linked from another action.`,
-        ["graphEvents", String(actionIndex), "id"]
+        "chain-action.invalid-parent",
+        `Chain action "${action.id}" cannot be linked from another action.`,
+        ["chainEvents", String(actionIndex), "id"]
       )
   }
 
@@ -407,24 +407,24 @@ function validateGraphAction(
       pushIssue(
         issues,
         "error",
-        "graph-action.multiple-next",
-        `Graph action "${action.id}" can only point to one next event.`,
-        ["graphEvents", String(actionIndex), "next"]
+        "chain-action.multiple-next",
+        `Chain action "${action.id}" can only point to one next event.`,
+        ["chainEvents", String(actionIndex), "next"]
       )
   }
 
   for (const [nextIndex, nextId] of action.next.entries()) {
-    if (graphActionIds.has(nextId)) {
+    if (chainActionIds.has(nextId)) {
         pushIssue(
           issues,
           "error",
-          "graph-action.invalid-next-target",
-          `Graph action "${action.id}" cannot point to another action "${nextId}".`,
-          ["graphEvents", String(actionIndex), "next", String(nextIndex)]
+          "chain-action.invalid-next-target",
+          `Chain action "${action.id}" cannot point to another action "${nextId}".`,
+          ["chainEvents", String(actionIndex), "next", String(nextIndex)]
         )
     }
 
-    if (!graphEventIds.has(nextId) && !graphActionIds.has(nextId)) {
+    if (!chainEventIds.has(nextId) && !chainActionIds.has(nextId)) {
       continue
     }
   }
@@ -436,9 +436,9 @@ function validateGraphAction(
       pushIssue(
         issues,
         "error",
-        "graph-action.duplicate-var",
-        `Graph action "${action.id}" has duplicate variable "${actionVar.name}".`,
-        ["graphEvents", String(actionIndex), "vars", String(varIndex), "name"]
+        "chain-action.duplicate-var",
+        `Chain action "${action.id}" has duplicate variable "${actionVar.name}".`,
+        ["chainEvents", String(actionIndex), "vars", String(varIndex), "name"]
       )
     }
   }
@@ -447,43 +447,43 @@ function validateGraphAction(
     buildCombinedStoryScriptVals(document),
     action.exec_script,
     undefined,
-    buildGraphActionScriptContext(action)
+    buildChainActionScriptContext(action)
   )) {
     pushIssue(
       issues,
       "error",
-      "graph-action.exec-script-invalid",
-      `Graph action "${action.id}" exec_script is invalid at line ${issue.lineNumber}: ${issue.message}`,
-      ["graphEvents", String(actionIndex), "exec_script"]
+      "chain-action.exec-script-invalid",
+      `Chain action "${action.id}" exec_script is invalid at line ${issue.lineNumber}: ${issue.message}`,
+      ["chainEvents", String(actionIndex), "exec_script"]
     )
   }
 }
 
 export function validateStoryDocument(document: StoryDocument): ValidationResult {
   const issues: ValidationIssue[] = []
-  const graphNodes = document.graphEvents
-  const graphEvents = graphNodes.filter(isGraphEventNode)
-  const graphActions = graphNodes.filter(isGraphActionNode)
-  const onceEvents = document.onceEvents
-  const loopEvents = document.loopEvents
-  const graphNodeMap = new Map(graphNodes.map((event) => [event.id, event]))
+  const chainNodes = document.chainEvents
+  const chainEvents = chainNodes.filter(isChainEventNode)
+  const chainActions = chainNodes.filter(isChainActionNode)
+  const poolEvents = document.poolEvents
+  const scheduleEvents = document.scheduleEvents
+  const chainNodeMap = new Map(chainNodes.map((event) => [event.id, event]))
 
-  if (graphEvents.length === 0) {
+  if (chainEvents.length === 0) {
     pushIssue(
       issues,
       "warning",
       "story.no-events",
       "The story does not contain any events yet.",
-      ["graphEvents"]
+      ["chainEvents"]
     )
   }
 
   const eventGroups = [
-    { key: "graphEvents", events: graphNodes },
-    { key: "onceEvents", events: onceEvents },
-    { key: "loopEvents", events: loopEvents }
+    { key: "chainEvents", events: chainNodes },
+    { key: "poolEvents", events: poolEvents },
+    { key: "scheduleEvents", events: scheduleEvents }
   ] as const satisfies Array<{
-    key: "graphEvents" | "onceEvents" | "loopEvents"
+    key: EventValidationGroupKey
     events: StoryAnyEventFile[]
   }>
 
@@ -506,38 +506,38 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
 
       if ("next" in event) {
         for (const [nextIndex, nextId] of event.next.entries()) {
-          if (!graphNodeMap.has(nextId)) {
+          if (!chainNodeMap.has(nextId)) {
             pushIssue(
               issues,
               "error",
               "event.missing-link",
-              `Graph node "${event.id}" points to missing graph node "${nextId}".`,
+              `Chain node "${event.id}" points to missing chain node "${nextId}".`,
               [group.key, String(eventIndex), "next", String(nextIndex)]
             )
           }
         }
       }
 
-      if (group.key === "onceEvents") {
-        validateOnceEvent(event as StoryOnceEventFile, eventIndex, document, issues)
+      if (group.key === "poolEvents") {
+        validatePoolEvent(event as StoryPoolEventFile, eventIndex, document, issues)
       }
 
-      if (group.key === "loopEvents") {
-        validateLoopEvent(event as StoryLoopEventFile, eventIndex, document, issues)
+      if (group.key === "scheduleEvents") {
+        validateScheduleEvent(event as StoryScheduleEventFile, eventIndex, document, issues)
       }
 
-      if (group.key === "graphEvents" && isGraphEventNode(event as StoryGraphNodeFile)) {
-        validateGraphEvent(event as StoryEventFile, eventIndex, document, issues)
+      if (group.key === "chainEvents" && isChainEventNode(event as StoryChainNodeFile)) {
+        validateChainEvent(event as StoryEventFile, eventIndex, document, issues)
       }
 
-      if (group.key === "graphEvents" && isGraphActionNode(event as StoryGraphNodeFile)) {
-        validateGraphAction(
+      if (group.key === "chainEvents" && isChainActionNode(event as StoryChainNodeFile)) {
+        validateChainAction(
           event as StoryActionFile,
           eventIndex,
           document,
           issues,
-          graphEvents,
-          graphActions
+          chainEvents,
+          chainActions
         )
       }
     }

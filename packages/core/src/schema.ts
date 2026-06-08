@@ -418,6 +418,7 @@ export const storyEventTriggerSchema = z.object({
 
 export const storyGraphNodeSchema = z.union([storyEventSchema, storyActionSchema])
 export const storyGraphEventsSchema = z.array(storyGraphNodeSchema).default([])
+export const storyChainEventsSchema = storyGraphEventsSchema
 
 export const storyOnceEventSchema = storyEventBaseSchema.extend({
   id: z.string().min(1),
@@ -430,7 +431,8 @@ export const storyOnceEventSchema = storyEventBaseSchema.extend({
   dialogues: z.array(storyOnceDialogueSchema).default([]),
   location: z.string().default(""),
   bgm: z.string().default(""),
-  end_script: z.string().default("")
+  end_script: z.string().default(""),
+  meta: z.record(z.unknown()).optional()
 }).omit({
   next: true
 }).superRefine((event, context) => {
@@ -439,6 +441,7 @@ export const storyOnceEventSchema = storyEventBaseSchema.extend({
 })
 
 export const storyOnceEventsSchema = z.array(storyOnceEventSchema).default([])
+export const storyPoolEventsSchema = storyOnceEventsSchema
 
 export const storyLoopRuleSchema = z.object({
   mode: z.enum(["daily", "weekly", "monthly", "interval_days"]),
@@ -459,6 +462,7 @@ export const storyLoopEventSchema = z.object({
   location: z.string().default(""),
   bgm: z.string().default(""),
   end_script: z.string().default(""),
+  meta: z.record(z.unknown()).optional(),
   loop: storyLoopRuleSchema
 }).superRefine((event, context) => {
   validateEventTriggerConfig(event, context)
@@ -466,6 +470,7 @@ export const storyLoopEventSchema = z.object({
 })
 
 export const storyLoopEventsSchema = z.array(storyLoopEventSchema).default([])
+export const storyScheduleEventsSchema = storyLoopEventsSchema
 
 export const storyDocumentSchema = z.object({
   story: storyMetaSchema,
@@ -475,7 +480,24 @@ export const storyDocumentSchema = z.object({
   scenes: storySceneSchema,
   roles: storyRolesSchema,
   eventLocations: storyEventLocationSchema,
-  graphEvents: storyGraphEventsSchema,
-  onceEvents: storyOnceEventsSchema,
-  loopEvents: storyLoopEventsSchema
+  chainEvents: storyChainEventsSchema.default([]),
+  poolEvents: storyPoolEventsSchema.default([]),
+  scheduleEvents: storyScheduleEventsSchema.default([]),
+  graphEvents: storyGraphEventsSchema.default([]),
+  onceEvents: storyOnceEventsSchema.default([]),
+  loopEvents: storyLoopEventsSchema.default([])
+}).transform((document) => {
+  const chainEvents = document.chainEvents.length > 0 ? document.chainEvents : document.graphEvents
+  const poolEvents = document.poolEvents.length > 0 ? document.poolEvents : document.onceEvents
+  const scheduleEvents = document.scheduleEvents.length > 0 ? document.scheduleEvents : document.loopEvents
+
+  return {
+    ...document,
+    chainEvents,
+    poolEvents,
+    scheduleEvents,
+    graphEvents: chainEvents,
+    onceEvents: poolEvents,
+    loopEvents: scheduleEvents
+  }
 })

@@ -40,7 +40,7 @@ import {
   type StoryScriptAutocompleteItem
 } from "./storyScriptEditor"
 
-type EventCanvasTab = StoryEventCollectionType
+type EventCanvasTab = Extract<StoryEventCollectionType, "chain" | "pool" | "schedule">
 type EventTriggerFilter = "all" | "normal" | "invoke"
 
 const props = defineProps<{
@@ -85,13 +85,13 @@ const isSettingsDialogOpen = shallowRef(false)
 const scenesSaveSuccessMessage = shallowRef<string | null>(null)
 const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
-const activeEventTab = shallowRef<EventCanvasTab>("graph")
+const activeEventTab = shallowRef<EventCanvasTab>("chain")
 const eventTriggerFilter = shallowRef<EventTriggerFilter>("all")
 
 const eventTabOptions: Array<{ key: EventCanvasTab; label: string }> = [
-  { key: "graph", label: "普通剧情推进事件" },
-  { key: "once", label: "一次性事件" },
-  { key: "loop", label: "定时循环事件" }
+  { key: "chain", label: "链式剧情线" },
+  { key: "pool", label: "平面事件池" },
+  { key: "schedule", label: "定时规则事件" }
 ]
 
 const eventTriggerFilterOptions: Array<{ key: EventTriggerFilter; label: string }> = [
@@ -105,15 +105,15 @@ function getEventsByCollectionType(collectionType: EventCanvasTab) {
     return []
   }
 
-  if (collectionType === "once") {
-    return storyDocument.value.onceEvents
+  if (collectionType === "pool") {
+    return storyDocument.value.poolEvents
   }
 
-  if (collectionType === "loop") {
-    return storyDocument.value.loopEvents
+  if (collectionType === "schedule") {
+    return storyDocument.value.scheduleEvents
   }
 
-  return storyDocument.value.graphEvents
+  return storyDocument.value.chainEvents
 }
 
 function getGraphNodes() {
@@ -121,7 +121,7 @@ function getGraphNodes() {
     return []
   }
 
-  return storyDocument.value.graphEvents
+  return storyDocument.value.chainEvents
 }
 
 function isGraphActionNode(event: StoryAnyEventFile): event is StoryActionFile {
@@ -152,7 +152,7 @@ function matchesEventTriggerFilter(
 }
 
 const activeEvents = computed<StoryAnyEventFile[]>(() => {
-  if (activeEventTab.value === "graph") {
+  if (activeEventTab.value === "chain") {
     return getGraphNodes()
   }
 
@@ -160,27 +160,27 @@ const activeEvents = computed<StoryAnyEventFile[]>(() => {
 })
 
 const activeGraphEvents = computed<StoryEventFile[]>(() => {
-  if (activeEventTab.value !== "graph") {
+  if (activeEventTab.value !== "chain") {
     return []
   }
 
-  return getEventsByCollectionType("graph") as StoryEventFile[]
+  return getEventsByCollectionType("chain") as StoryEventFile[]
 })
 
 const activeOnceEvents = computed<StoryOnceEventFile[]>(() => {
-  if (activeEventTab.value !== "once") {
+  if (activeEventTab.value !== "pool") {
     return []
   }
 
-  return getEventsByCollectionType("once") as StoryOnceEventFile[]
+  return getEventsByCollectionType("pool") as StoryOnceEventFile[]
 })
 
 const activeLoopEvents = computed<StoryLoopEventFile[]>(() => {
-  if (activeEventTab.value !== "loop") {
+  if (activeEventTab.value !== "schedule") {
     return []
   }
 
-  return getEventsByCollectionType("loop") as StoryLoopEventFile[]
+  return getEventsByCollectionType("schedule") as StoryLoopEventFile[]
 })
 
 const filteredGraphCanvasEvents = computed<StoryAnyEventFile[]>(() => {
@@ -250,7 +250,7 @@ const activeDraftEvent = computed(() => {
 })
 
 const activeGraphParentNodeId = computed<string | null>(() => {
-  if (activeEventTab.value !== "graph") {
+  if (activeEventTab.value !== "chain") {
     return null
   }
 
@@ -270,7 +270,7 @@ const activeGraphParentNodeId = computed<string | null>(() => {
 })
 
 const activeGraphDraftEvent = computed<StoryEventFile | null>(() => {
-  if (activeEventTab.value !== "graph") {
+  if (activeEventTab.value !== "chain") {
     return null
   }
 
@@ -284,7 +284,7 @@ const activeGraphDraftEvent = computed<StoryEventFile | null>(() => {
 })
 
 const activeGraphDraftAction = computed<StoryActionFile | null>(() => {
-  if (activeEventTab.value !== "graph") {
+  if (activeEventTab.value !== "chain") {
     return null
   }
 
@@ -298,7 +298,7 @@ const activeGraphDraftAction = computed<StoryActionFile | null>(() => {
 })
 
 const graphNodeOptions = computed(() => {
-  if (activeEventTab.value !== "graph") {
+  if (activeEventTab.value !== "chain") {
     return []
   }
 
@@ -353,11 +353,11 @@ function buildGraphEventBranchAutocompleteItemsFromActions(
 }
 
 const activeGraphBranchAutocompleteItems = computed<StoryScriptAutocompleteItem[]>(() => {
-  if (activeEventTab.value !== "graph" || !storyDocument.value) {
+  if (activeEventTab.value !== "chain" || !storyDocument.value) {
     return []
   }
 
-  const graphActions = storyDocument.value.graphEvents.filter(isGraphActionNode)
+  const graphActions = storyDocument.value.chainEvents.filter(isGraphActionNode)
   const currentEventId = activeGraphDraftEvent.value?.id ?? null
 
   if (currentEventId) {
@@ -369,7 +369,7 @@ const activeGraphBranchAutocompleteItems = computed<StoryScriptAutocompleteItem[
     return []
   }
 
-  const parentNode = storyDocument.value.graphEvents.find(
+  const parentNode = storyDocument.value.chainEvents.find(
     (node) => node.id === activeGraphParentNodeId.value
   )
 
@@ -403,8 +403,8 @@ function replaceEventInDocument(
     return
   }
 
-  if (collectionType === "once") {
-    const sourceEvents = storyDocument.value.onceEvents
+  if (collectionType === "pool") {
+    const sourceEvents = storyDocument.value.poolEvents
     const typedSavedEvent = savedEvent as StoryOnceEventFile
     const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
     const nextEvents = hasExistingEvent
@@ -415,13 +415,14 @@ function replaceEventInDocument(
 
     storyDocument.value = {
       ...storyDocument.value,
+      poolEvents: nextEvents,
       onceEvents: nextEvents
     }
     return
   }
 
-  if (collectionType === "loop") {
-    const sourceEvents = storyDocument.value.loopEvents
+  if (collectionType === "schedule") {
+    const sourceEvents = storyDocument.value.scheduleEvents
     const typedSavedEvent = savedEvent as StoryLoopEventFile
     const hasExistingEvent = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
     const nextEvents = hasExistingEvent
@@ -432,12 +433,13 @@ function replaceEventInDocument(
 
     storyDocument.value = {
       ...storyDocument.value,
+      scheduleEvents: nextEvents,
       loopEvents: nextEvents
     }
     return
   }
 
-  const sourceEvents = storyDocument.value.graphEvents
+  const sourceEvents = storyDocument.value.chainEvents
   if ("exec_script" in savedEvent) {
     const typedSavedAction = savedEvent as StoryActionFile
     const hasExistingAction = sourceEvents.some((currentEvent) => currentEvent.id === matchEventId)
@@ -449,6 +451,7 @@ function replaceEventInDocument(
 
     storyDocument.value = {
       ...storyDocument.value,
+      chainEvents: nextEvents,
       graphEvents: nextEvents
     }
     return
@@ -464,6 +467,7 @@ function replaceEventInDocument(
 
   storyDocument.value = {
     ...storyDocument.value,
+    chainEvents: nextEvents,
     graphEvents: nextEvents
   }
 }
@@ -476,34 +480,41 @@ function removeEventFromDocument(
     return
   }
 
-  if (collectionType === "once") {
+  if (collectionType === "pool") {
+    const nextEvents = storyDocument.value.poolEvents.filter((event) => event.id !== eventId)
     storyDocument.value = {
       ...storyDocument.value,
-      onceEvents: storyDocument.value.onceEvents.filter((event) => event.id !== eventId)
+      poolEvents: nextEvents,
+      onceEvents: nextEvents
     }
     return
   }
 
-  if (collectionType === "loop") {
+  if (collectionType === "schedule") {
+    const nextEvents = storyDocument.value.scheduleEvents.filter((event) => event.id !== eventId)
     storyDocument.value = {
       ...storyDocument.value,
-      loopEvents: storyDocument.value.loopEvents.filter((event) => event.id !== eventId)
+      scheduleEvents: nextEvents,
+      loopEvents: nextEvents
     }
     return
   }
+
+  const nextEvents = storyDocument.value.chainEvents
+    .filter((event) => event.id !== eventId)
+    .map((event) =>
+      event.next.includes(eventId)
+        ? {
+            ...event,
+            next: event.next.filter((nextEventId) => nextEventId !== eventId)
+          }
+        : event
+    )
 
   storyDocument.value = {
     ...storyDocument.value,
-    graphEvents: storyDocument.value.graphEvents
-      .filter((event) => event.id !== eventId)
-      .map((event) =>
-        event.next.includes(eventId)
-          ? {
-              ...event,
-              next: event.next.filter((nextEventId) => nextEventId !== eventId)
-            }
-          : event
-      )
+    chainEvents: nextEvents,
+    graphEvents: nextEvents
   }
 }
 
@@ -653,7 +664,7 @@ async function loadStory() {
     storyDocument.value = story
     appSettings.value = settings
 
-    for (const collectionType of ["graph", "once", "loop"] as EventCanvasTab[]) {
+    for (const collectionType of ["chain", "pool", "schedule"] as EventCanvasTab[]) {
       const events = getEventsByCollectionType(collectionType)
       const currentSelection = projectStore.getSelectedEventId(props.storyId, collectionType)
       const fallbackEventId = events[0]?.id
@@ -765,9 +776,9 @@ function buildNewRootEvent(): StoryEventFile {
 }
 
 function buildNewStandaloneEvent(): StoryAnyEventFile {
-  if (activeEventTab.value === "once") {
+  if (activeEventTab.value === "pool") {
     const event: StoryOnceEventFile = {
-      id: createUniqueEventId("once-event"),
+      id: createUniqueEventId("pool-event"),
       title: "新事件",
       trigger_mode: "default",
       trigger_expr: "",
@@ -783,10 +794,10 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
     return event
   }
 
-  if (activeEventTab.value === "loop") {
+  if (activeEventTab.value === "schedule") {
     const event: StoryLoopEventFile = {
-      id: createUniqueEventId("loop-event"),
-      title: "新循环事件",
+      id: createUniqueEventId("schedule-event"),
+      title: "新定时事件",
       trigger_mode: "default",
       trigger_expr: "",
       invoke_params: [],
@@ -876,10 +887,10 @@ async function handleSaveEvent(event: StoryAnyEventFile) {
   try {
     const collectionType = activeEventTab.value
     const isCreatingDraft = isCreateMode.value
-    const parentEventId = collectionType === "graph" ? creatingFromEventId.value : null
+    const parentEventId = collectionType === "chain" ? creatingFromEventId.value : null
     const previousEventId = projectStore.getSelectedEventId(props.storyId, collectionType) ?? event.id
     const currentEvents =
-      collectionType === "graph" ? getGraphNodes() : getEventsByCollectionType(collectionType)
+      collectionType === "chain" ? getGraphNodes() : getEventsByCollectionType(collectionType)
     const savedEvent = await saveEvent(props.storyId, event, collectionType)
 
     if (parentEventId) {
@@ -1148,7 +1159,7 @@ async function handleToggleLink(payload: {
 
   try {
     const collectionType = activeEventTab.value
-    if (collectionType !== "graph") {
+    if (collectionType !== "chain") {
       return
     }
 
@@ -1349,7 +1360,7 @@ watch(
       </div>
 
       <StoryGraphCanvas
-        v-if="activeEventTab === 'graph'"
+        v-if="activeEventTab === 'chain'"
         :events="filteredGraphCanvasEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
@@ -1362,7 +1373,7 @@ watch(
       />
 
       <StoryOnceCanvas
-        v-else-if="activeEventTab === 'once'"
+        v-else-if="activeEventTab === 'pool'"
         :events="filteredOnceCanvasEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
@@ -1391,7 +1402,7 @@ watch(
         >
           <div class="editor-modal__panel">
             <GraphEventDetailPanel
-              v-if="activeEventTab === 'graph' && activeGraphDraftEvent"
+              v-if="activeEventTab === 'chain' && activeGraphDraftEvent"
               :event="activeGraphDraftEvent"
               :branch-autocomplete-items="activeGraphBranchAutocompleteItems"
               :event-locations="storyDocument.eventLocations"
@@ -1407,7 +1418,7 @@ watch(
               @save="handleSaveEvent"
             />
             <GraphActionDetailPanel
-              v-else-if="activeEventTab === 'graph' && activeGraphDraftAction"
+              v-else-if="activeEventTab === 'chain' && activeGraphDraftAction"
               :action="activeGraphDraftAction"
               :graph-node-options="graphNodeOptions"
               :mode="isCreateMode ? 'create' : 'edit'"
@@ -1417,7 +1428,7 @@ watch(
               @save="handleSaveEvent"
             />
             <OnceEventDetailPanel
-              v-else-if="activeEventTab === 'once'"
+              v-else-if="activeEventTab === 'pool'"
               :event="activeDraftEvent as StoryOnceEventFile | null"
               :event-locations="storyDocument.eventLocations"
               :mode="isCreateMode ? 'create' : 'edit'"

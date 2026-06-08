@@ -1252,7 +1252,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                 <span class="field-label">循环方式</span>
                 <div class="detail-panel__param-empty">
                   当前事件为“被调用”模式，不参与循环定时扫描；只有通过
-                  `invoke_once loop {{ draft.id || 'event_id' }}` 调用后才会进入事件队列。
+                  `invoke_once schedule {{ draft.id || 'event_id' }}` 调用后才会进入事件队列。
                 </div>
               </div>
             </div>
@@ -1412,7 +1412,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                   </div>
 
                   <div v-else class="detail-panel__param-empty">
-                    这个事件不会自动扫描，只有通过 `invoke_once loop {{ draft.id || 'event_id' }}`
+                    这个事件不会自动扫描，只有通过 `invoke_once schedule {{ draft.id || 'event_id' }}`
                     传参后才会入队。
                   </div>
                 </template>

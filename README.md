@@ -27,8 +27,8 @@ pnpm dev
 - `story.json5`：故事元信息
 - `vals.json5`：全局变量
 - `scene.json5`：场景信息
-- `roles.json5`：角色信息
+- `nomal_roles.json5` / `import_roles.json5`：角色信息
 - `event_location.json5`：事件场所
-- `events/events.json5`：网状剧情事件
-- `events/once_events.json5`：一次性事件
-- `events/loop_events.json5`：循环事件
+- `events/chains.json5`：链式剧情线
+- `events/pool_events.json5`：平面事件池
+- `events/schedule_events.json5`：定时规则事件

@@ -61,11 +61,19 @@ function requireQueryString(value: unknown, name: string) {
 }
 
 function normalizeEventCollectionType(value: unknown): StoryEventCollectionType {
-  if (value === "once" || value === "loop") {
+  if (value === "pool" || value === "schedule" || value === "chain") {
     return value
   }
 
-  return "graph"
+  if (value === "once") {
+    return "pool"
+  }
+
+  if (value === "loop") {
+    return "schedule"
+  }
+
+  return "chain"
 }
 
 export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {

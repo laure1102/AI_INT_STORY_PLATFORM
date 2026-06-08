@@ -5,8 +5,11 @@ export function compileStory(document: StoryDocument): {
   compiled: CompiledStory
   result: ReturnType<typeof validateStoryDocument>
 } {
-  const graphEvents = Object.fromEntries(
-    document.graphEvents.map((event) => [
+  const chainEventsSource = document.chainEvents ?? document.graphEvents
+  const poolEventsSource = document.poolEvents ?? document.onceEvents
+  const scheduleEventsSource = document.scheduleEvents ?? document.loopEvents
+  const chainEvents = Object.fromEntries(
+    chainEventsSource.map((event) => [
       event.id,
       "exec_script" in event
         ? {
@@ -47,9 +50,12 @@ export function compileStory(document: StoryDocument): {
       scenes: document.scenes,
       roles: document.roles,
       eventLocations: document.eventLocations,
-      graphEvents,
-      onceEvents: document.onceEvents,
-      loopEvents: document.loopEvents
+      chainEvents,
+      poolEvents: poolEventsSource,
+      scheduleEvents: scheduleEventsSource,
+      graphEvents: chainEvents,
+      onceEvents: poolEventsSource,
+      loopEvents: scheduleEventsSource
     },
     result: validateStoryDocument(document)
   }
