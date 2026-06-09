@@ -8,6 +8,13 @@ interface LocationPromptInput {
   storyTitle?: string
 }
 
+interface ItemPromptInput {
+  categoryName: string
+  descr: string
+  itemName: string
+  storyTitle?: string
+}
+
 interface RolePromptInput {
   descr: string
   gender: "common" | "male" | "female"
@@ -609,6 +616,56 @@ export async function generateLocationPrompt(
   return prompt
 }
 
+export async function generateItemPrompt(
+  settings: AppSettingsFile,
+  input: ItemPromptInput
+) {
+  const ai = requireTextProvider(settings)
+
+  if (!input.descr.trim()) {
+    throw new FileStoreError("Item description is required.", 400, "item.descr-required")
+  }
+
+  const systemPrompt = [
+    "You are a game item asset prompt designer.",
+    "Return only the final English image prompt.",
+    "The prompt should describe a single recognizable game item asset or icon.",
+    "Focus on shape, material, color, detail, lighting, and clean presentation.",
+    "Keep the item centered, isolated, readable at small size, and without characters or hands.",
+    "Do not add explanation or markdown."
+  ].join("\n")
+
+  const userPrompt = [
+    `Story title: ${input.storyTitle?.trim() || "Not provided"}`,
+    `Item name: ${input.itemName.trim()}`,
+    `Item category: ${input.categoryName.trim() || "Not provided"}`,
+    `Item description: ${input.descr.trim()}`
+  ].join("\n")
+
+  const payload = await postJson<OpenAiChatCompletionResponse>(
+    buildCompatibleUrl(ai.baseUrl, "/chat/completions"),
+    ai.apiKey,
+    {
+      model: ai.model,
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ]
+    },
+    "ai.item-text-generation-failed",
+    "Failed to generate item prompt"
+  )
+
+  const prompt = extractTextContent(payload.choices?.[0]?.message?.content)
+
+  if (!prompt) {
+    throw new FileStoreError("AI returned an empty item prompt.", 502, "ai.empty-item-prompt")
+  }
+
+  return prompt
+}
+
 export async function generateRolePrompt(
   settings: AppSettingsFile,
   input: RolePromptInput
@@ -747,6 +804,26 @@ export async function generateRoleImage(
   return generateLocationImage(
     settings,
     `${prompt.trim()}\n${genderPromptSuffix}`,
+    globalPrompt,
+    width,
+    height
+  )
+}
+
+export async function generateItemImage(
+  settings: AppSettingsFile,
+  prompt: string,
+  globalPrompt: string,
+  width: number,
+  height: number
+): Promise<GeneratedImageResult> {
+  if (!prompt.trim()) {
+    throw new FileStoreError("Item prompt is required.", 400, "item.prompt-required")
+  }
+
+  return generateLocationImage(
+    settings,
+    `${prompt.trim()}\nsingle game item asset, centered object, isolated, no people, no hands`,
     globalPrompt,
     width,
     height

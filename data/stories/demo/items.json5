@@ -1,0 +1,78 @@
+{
+  ai: {
+    compress_quality_1: 10,
+    compress_quality_2: 40,
+    global_prompt: 'single game item asset, centered object, clean background, readable silhouette, high detail, modern web novel game style, no people, no hands, no text, no watermark',
+    height: 1024,
+    width: 1024,
+  },
+  categories: [
+    {
+      descr: '化妆品、护肤品、香水、美容护理套装等用于个人形象、送礼和消费升级的物品。',
+      id: 'cosmetics',
+      name: '化妆护肤',
+      sort_order: 30,
+    },
+    {
+      descr: '名牌包、皮具、高端服饰、限量礼盒等体现暴富爽点和社交身份变化的消费品。',
+      id: 'luxury_goods',
+      name: '奢侈品',
+      sort_order: 40,
+    },
+    {
+      descr: '名表、珠宝、金饰、钻石首饰等适合炫富、送礼、拍卖和人情场景的高价值物品。',
+      id: 'watch_jewelry',
+      name: '手表珠宝',
+      sort_order: 50,
+    },
+    {
+      descr: '西装、礼服、鞋履、墨镜、腰带等改变主角外在形象和社交气场的物品。',
+      id: 'fashion_clothing',
+      name: '服装配饰',
+      sort_order: 60,
+    },
+    {
+      descr: '住宅、商铺、写字楼、地块、厂房、民宿等固定资产和县城开发相关物品。',
+      id: 'real_estate',
+      name: '房产地产',
+      sort_order: 70,
+    },
+    {
+      descr: '轿车、SUV、商务车、跑车、货车、工程车等个人享乐和产业建设都会用到的载具。',
+      id: 'vehicles',
+      name: '汽车载具',
+      sort_order: 80,
+    },
+    {
+      descr: '手机、电脑、相机、无人机、直播设备、监控终端等现代剧情和舆论传播相关物品。',
+      id: 'digital_devices',
+      name: '数码设备',
+      sort_order: 90,
+    },
+    {
+      descr: '办公桌椅、电脑、会议设备、公司牌照、印章等主角建立公司或团队时需要的资产。',
+      id: 'office_supplies',
+      name: '办公资产',
+      sort_order: 100,
+    },
+    {
+      descr: '店铺设备、仓储设施、生产线、股权凭证、加盟资料等商业扩张和县域产业布局相关资产。',
+      id: 'business_assets',
+      name: '商业资产',
+      sort_order: 110,
+    },
+    {
+      descr: '学校、医院、道路、产业园、人才公寓等民生建设项目中的关键资产或项目凭证。',
+      id: 'county_project',
+      name: '县域项目',
+      sort_order: 120,
+    },
+    {
+      descr: '烟酒茶、土特产、节礼、请客礼盒等县城熟人社会、人情往来和关系试探场景中的物品。',
+      id: 'gift_social',
+      name: '人情礼品',
+      sort_order: 130,
+    },
+  ],
+  items: [],
+}

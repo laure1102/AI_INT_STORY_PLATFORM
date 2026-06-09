@@ -273,6 +273,103 @@ export const storyEventLocationSchema = z.object({
   assignments: z.array(storyEventLocationAssignmentSchema).default([])
 })
 
+export const storyItemAiConfigSchema = z.object({
+  width: z.number().int().min(1).default(1024),
+  height: z.number().int().min(1).default(1024),
+  global_prompt: z.string().default(""),
+  compress_quality_1: z.number().int().min(1).max(100).default(60),
+  compress_quality_2: z.number().int().min(1).max(100).default(80)
+})
+
+export const storyItemCategorySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().default(""),
+  descr: z.string().default(""),
+  sort_order: z.number().int().default(0)
+}).transform((category) => ({
+  id: category.id.trim(),
+  name: category.name.trim(),
+  descr: category.descr,
+  sort_order: category.sort_order
+}))
+
+export const storyItemDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().default(""),
+  category_id: z.string().min(1),
+  descr: z.string().default(""),
+  prompt: z.string().default(""),
+  tags: z.array(z.string()).default([]),
+  rarity: z.string().default("common"),
+  stackable: z.boolean().default(true),
+  max_stack: z.number().int().min(1).default(1),
+  usable: z.boolean().default(false),
+  img_raw: z.string().default(""),
+  img_compress_1: z.string().default(""),
+  img_compress_2: z.string().default("")
+}).transform((item) => ({
+  id: item.id.trim(),
+  name: item.name.trim(),
+  category_id: item.category_id.trim(),
+  descr: item.descr,
+  prompt: item.prompt,
+  tags: item.tags.map((tag) => tag.trim()).filter(Boolean),
+  rarity: item.rarity.trim() || "common",
+  stackable: item.stackable,
+  max_stack: item.max_stack,
+  usable: item.usable,
+  img_raw: item.img_raw,
+  img_compress_1: item.img_compress_1,
+  img_compress_2: item.img_compress_2
+}))
+
+export const storyItemsSchema = z.object({
+  ai: storyItemAiConfigSchema.default({
+    width: 1024,
+    height: 1024,
+    global_prompt: "",
+    compress_quality_1: 60,
+    compress_quality_2: 80
+  }),
+  categories: z.array(storyItemCategorySchema).default([]),
+  items: z.array(storyItemDefinitionSchema).default([])
+}).superRefine((itemsFile, context) => {
+  const categoryIds = new Set<string>()
+  const itemIds = new Set<string>()
+
+  for (const [categoryIndex, category] of itemsFile.categories.entries()) {
+    if (categoryIds.has(category.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate item category id "${category.id}".`,
+        path: ["categories", categoryIndex, "id"]
+      })
+    }
+
+    categoryIds.add(category.id)
+  }
+
+  for (const [itemIndex, item] of itemsFile.items.entries()) {
+    if (itemIds.has(item.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate item id "${item.id}".`,
+        path: ["items", itemIndex, "id"]
+      })
+    }
+
+    itemIds.add(item.id)
+
+    if (!categoryIds.has(item.category_id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Item "${item.id}" references missing category "${item.category_id}".`,
+        path: ["items", itemIndex, "category_id"]
+      })
+    }
+  }
+})
+
 export const storyBibleSchema = z.object({
   background: z.string().default(""),
   golden_finger: z.string().default(""),
@@ -527,6 +624,7 @@ export const storyDocumentSchema = z.object({
   scenes: storySceneSchema,
   roles: storyRolesSchema,
   eventLocations: storyEventLocationSchema,
+  items: storyItemsSchema.default({}),
   chainEvents: storyChainEventsSchema.default([]),
   poolEvents: storyPoolEventsSchema.default([]),
   scheduleEvents: storyScheduleEventsSchema.default([]),

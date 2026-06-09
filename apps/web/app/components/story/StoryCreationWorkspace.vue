@@ -6,6 +6,7 @@ import type {
   StoryCreationAgentRole,
   StoryCreationDraft,
   StoryCreationDraftEvent,
+  StoryCreationDraftItem,
   StoryCreationDraftRole,
   StoryCreationDraftVariable
 } from "@story-mgr/shared"
@@ -62,6 +63,7 @@ const activeBibleField = shallowRef<BibleFieldKey>("background")
 const selectedEventKeys = shallowRef<string[]>([])
 const selectedLocationIds = shallowRef<string[]>([])
 const selectedRoleKeys = shallowRef<string[]>([])
+const selectedItemIds = shallowRef<string[]>([])
 const selectedVariableKeys = shallowRef<string[]>([])
 const feedbackHistory = ref<FeedbackHistoryItem[]>([])
 const editableDraft = ref<StoryCreationDraft | null>(null)
@@ -190,7 +192,7 @@ const runStatus = computed(() => {
   }
 
   if (editableDraft.value) {
-    return `已生成 ${editableDraft.value.events.length} 个事件草稿`
+    return `已生成 ${editableDraft.value.events.length} 个事件草稿、${editableDraft.value.items.length} 个物品草稿`
   }
 
   return "等待创作指令"
@@ -226,6 +228,7 @@ const selectedApplyCount = computed(() => {
   return selectedEventKeys.value.length
     + selectedLocationIds.value.length
     + selectedRoleKeys.value.length
+    + selectedItemIds.value.length
     + selectedVariableKeys.value.length
 })
 
@@ -242,6 +245,14 @@ const existingRoleKeys = computed(() => {
     ...props.story.roles.normal.roles.map((role) => `normal:${role.id}`),
     ...props.story.roles.important.roles.map((role) => `important:${role.id}`)
   ])
+})
+
+const existingItemIds = computed(() => {
+  return new Set(props.story.items.items.map((item) => item.id))
+})
+
+const existingItemCategoryIds = computed(() => {
+  return new Set(props.story.items.categories.map((category) => category.id))
 })
 
 const existingVariableKeys = computed(() => {
@@ -323,6 +334,12 @@ const selectedImpactSummary = computed(() => {
     }
   }
 
+  for (const item of draft.items) {
+    if (selectedItemIds.value.includes(item.id)) {
+      addImpact(getItemImpact(item))
+    }
+  }
+
   for (const variable of draft.variables) {
     if (selectedVariableKeys.value.includes(getVariableKey(variable))) {
       addImpact(getVariableImpact(variable))
@@ -350,7 +367,7 @@ const applyPreviewMessage = computed(() => {
   ].filter(Boolean)
 
   if (parts.length === 0) {
-    return "确认后会写入所选地点、角色、变量和事件。"
+    return "确认后会写入所选地点、角色、物品、变量和事件。"
   }
 
   return `确认后将${parts.join("、")}。`
@@ -481,7 +498,9 @@ function getVariableKey(variable: StoryCreationDraftVariable) {
 }
 
 function cloneCreationDraft(draft: StoryCreationDraft): StoryCreationDraft {
-  return JSON.parse(JSON.stringify(toRaw(draft))) as StoryCreationDraft
+  const cloned = JSON.parse(JSON.stringify(toRaw(draft))) as StoryCreationDraft
+  cloned.items = cloned.items ?? []
+  return cloned
 }
 
 function syncEditableDraft(result: RunStoryCreationAgentResponse | null) {
@@ -497,6 +516,7 @@ function syncApplySelection(draft: StoryCreationDraft | null) {
   selectedEventKeys.value = draft?.events.map(getEventKey) ?? []
   selectedLocationIds.value = draft?.locations.map((location) => location.id) ?? []
   selectedRoleKeys.value = draft?.roles.map(getRoleKey) ?? []
+  selectedItemIds.value = draft?.items.map((item) => item.id) ?? []
   selectedVariableKeys.value = draft?.variables.map(getVariableKey) ?? []
 }
 
@@ -520,6 +540,10 @@ function setRoleSelected(role: StoryCreationDraftRole, checked: boolean) {
   selectedRoleKeys.value = toggleStringSelection(selectedRoleKeys.value, getRoleKey(role), checked)
 }
 
+function setItemSelected(itemId: string, checked: boolean) {
+  selectedItemIds.value = toggleStringSelection(selectedItemIds.value, itemId, checked)
+}
+
 function setVariableSelected(variable: StoryCreationDraftVariable, checked: boolean) {
   selectedVariableKeys.value = toggleStringSelection(
     selectedVariableKeys.value,
@@ -540,6 +564,10 @@ function handleRoleSelectionChange(role: StoryCreationDraftRole, event: Event) {
   setRoleSelected(role, getCheckboxChecked(event))
 }
 
+function handleItemSelectionChange(itemId: string, event: Event) {
+  setItemSelected(itemId, getCheckboxChecked(event))
+}
+
 function handleVariableSelectionChange(variable: StoryCreationDraftVariable, event: Event) {
   setVariableSelected(variable, getCheckboxChecked(event))
 }
@@ -557,6 +585,7 @@ function applyDraft() {
     eventKeys: selectedEventKeys.value,
     locationIds: selectedLocationIds.value,
     roleKeys: selectedRoleKeys.value,
+    itemIds: selectedItemIds.value,
     variableKeys: selectedVariableKeys.value
   })
 }
@@ -617,6 +646,16 @@ function getRoleImpact(role: StoryCreationDraftRole): DraftImpact {
     : createImpact("create", "新增", "应用后会新增角色。")
 }
 
+function getItemImpact(item: StoryCreationDraftItem): DraftImpact {
+  if (!existingItemCategoryIds.value.has(item.category_id)) {
+    return createImpact("skip", "跳过", "物品分类不存在，应用时不会写入。")
+  }
+
+  return existingItemIds.value.has(item.id)
+    ? createImpact("update", "覆盖", "同 id 物品已存在，应用后会更新文字设定，并保留已有图片。")
+    : createImpact("create", "新增", "应用后会写入 items.json5。")
+}
+
 function getVariableImpact(variable: StoryCreationDraftVariable): DraftImpact {
   const key = getVariableKey(variable)
 
@@ -637,6 +676,27 @@ function getEventImpact(event: StoryCreationDraftEvent): DraftImpact {
 
 function getImpactClass(impact: DraftImpact) {
   return `creation-impact--${impact.kind}`
+}
+
+function getItemCategoryName(categoryId: string) {
+  const category = props.story.items.categories.find((item) => item.id === categoryId)
+  return category?.name || categoryId
+}
+
+function getItemTagsText(item: StoryCreationDraftItem) {
+  return item.tags.join(", ")
+}
+
+function setItemTagsText(item: StoryCreationDraftItem, rawValue: string) {
+  item.tags = rawValue
+    .split(/[,\n，、]/g)
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+}
+
+function setItemMaxStackFromInput(item: StoryCreationDraftItem, rawValue: string) {
+  const parsed = Number(rawValue)
+  item.max_stack = Number.isInteger(parsed) && parsed > 0 ? parsed : 1
 }
 
 function getEventApplyWarnings(event: StoryCreationDraftEvent) {
@@ -1007,6 +1067,99 @@ watch(
                 </li>
               </ul>
               <p v-else class="creation-result__muted">未生成角色草稿。</p>
+            </section>
+
+            <section class="creation-result__section">
+              <h4 class="creation-result__section-title">物品</h4>
+              <ul v-if="draftPreview.items.length" class="creation-chip-list">
+                <li
+                  v-for="item in draftPreview.items"
+                  :key="item.id"
+                  class="creation-chip-list__item"
+                >
+                  <label class="creation-select">
+                    <input
+                      type="checkbox"
+                      :checked="selectedItemIds.includes(item.id)"
+                      @change="handleItemSelectionChange(item.id, $event)"
+                    >
+                  </label>
+                  <strong>{{ item.id }}</strong>
+                  <span
+                    class="creation-impact"
+                    :class="getImpactClass(getItemImpact(item))"
+                    :title="getItemImpact(item).detail"
+                  >
+                    {{ getItemImpact(item).label }}
+                  </span>
+                  <label class="creation-edit-field">
+                    <span>名称</span>
+                    <input v-model="item.name" class="creation-edit-input">
+                  </label>
+                  <label class="creation-edit-field">
+                    <span>分类</span>
+                    <select v-model="item.category_id" class="creation-edit-input">
+                      <option
+                        v-if="item.category_id && !existingItemCategoryIds.has(item.category_id)"
+                        :value="item.category_id"
+                      >
+                        缺失：{{ item.category_id }}
+                      </option>
+                      <option
+                        v-for="category in story.items.categories"
+                        :key="category.id"
+                        :value="category.id"
+                      >
+                        {{ category.name || category.id }}
+                      </option>
+                    </select>
+                  </label>
+                  <div class="creation-item-flags">
+                    <label class="creation-item-flags__check">
+                      <input v-model="item.stackable" type="checkbox">
+                      可堆叠
+                    </label>
+                    <label class="creation-item-flags__check">
+                      <input v-model="item.usable" type="checkbox">
+                      可使用
+                    </label>
+                  </div>
+                  <label class="creation-edit-field">
+                    <span>稀有度</span>
+                    <input v-model="item.rarity" class="creation-edit-input">
+                  </label>
+                  <label class="creation-edit-field">
+                    <span>最大堆叠</span>
+                    <input
+                      class="creation-edit-input"
+                      min="1"
+                      type="number"
+                      :value="item.max_stack"
+                      @input="setItemMaxStackFromInput(item, ($event.target as HTMLInputElement).value)"
+                    >
+                  </label>
+                  <label class="creation-edit-field">
+                    <span>标签</span>
+                    <input
+                      class="creation-edit-input"
+                      :value="getItemTagsText(item)"
+                      @input="setItemTagsText(item, ($event.target as HTMLInputElement).value)"
+                    >
+                  </label>
+                  <label class="creation-edit-field">
+                    <span>说明</span>
+                    <textarea v-model="item.descr" class="creation-edit-textarea" rows="2" />
+                  </label>
+                  <label class="creation-edit-field">
+                    <span>提示词</span>
+                    <textarea v-model="item.prompt" class="creation-edit-textarea" rows="2" />
+                  </label>
+                  <small class="creation-result__muted">
+                    分类：{{ getItemCategoryName(item.category_id) }}
+                  </small>
+                </li>
+              </ul>
+              <p v-else class="creation-result__muted">未生成物品草稿。</p>
             </section>
 
             <section class="creation-result__section">
@@ -1596,6 +1749,33 @@ watch(
   min-height: 48px;
   padding: 6px 8px;
   font-size: 0.8rem;
+}
+
+.creation-item-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.creation-item-flags__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.14);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.creation-item-flags__check input {
+  width: 14px;
+  height: 14px;
+  accent-color: #7ce3c3;
 }
 
 .creation-result__metrics,

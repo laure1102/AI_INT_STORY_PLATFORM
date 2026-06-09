@@ -12,6 +12,7 @@ import {
   storyEventLocationSchema,
   storyEventSchema,
   storyImportantRolesDataFileSchema,
+  storyItemsSchema,
   storyLoopEventSchema,
   storyScheduleEventsSchema,
   storyMetaSchema,
@@ -31,6 +32,7 @@ import {
   type StoryEventLocationFile,
   type StoryEventFile,
   type StoryGraphEventsFile,
+  type StoryItemsFile,
   type StoryLoopEventFile,
   type StoryLoopEventsFile,
   type StoryMetaFile,
@@ -92,6 +94,7 @@ export interface StoryFileStore {
     storyId: string,
     eventLocations: StoryEventLocationFile
   ): Promise<StoryEventLocationFile>
+  writeItems(storyId: string, items: StoryItemsFile): Promise<StoryItemsFile>
   writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile>
   writePlayerOverrideVals(
     storyId: string,
@@ -117,6 +120,16 @@ export interface StoryFileStore {
   compressLocationImage(
     storyId: string,
     payload: CompressLocationImagePayload
+  ): Promise<StoryAssetMetadata>
+  writeItemImageSource(
+    storyId: string,
+    targetName: string,
+    fileContent: Buffer,
+    mimeType?: string
+  ): Promise<StoryAssetMetadata>
+  compressItemImage(
+    storyId: string,
+    payload: CompressItemImagePayload
   ): Promise<StoryAssetMetadata>
   writeRoleImageSource(
     storyId: string,
@@ -149,6 +162,13 @@ export interface CompressSceneBackgroundPayload {
 }
 
 export interface CompressLocationImagePayload {
+  sourcePath: string
+  targetName: string
+  quality: number
+  slot: 1 | 2
+}
+
+export interface CompressItemImagePayload {
   sourcePath: string
   targetName: string
   quality: number
@@ -269,6 +289,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
     normalRolesFile: path.join(storyDir, "nomal_roles.json5"),
     importantRolesFile: path.join(storyDir, "import_roles.json5"),
     eventLocationFile: path.join(storyDir, "event_location.json5"),
+    itemsFile: path.join(storyDir, "items.json5"),
     assetsDir: path.join(storyDir, "assets"),
     backgroundDir: path.join(storyDir, "assets", "background"),
     backgroundRawDir: path.join(storyDir, "assets", "background", "raw"),
@@ -276,6 +297,8 @@ function createStoryPaths(dataDir: string, storyId: string) {
     roleRawDir: path.join(storyDir, "assets", "roles", "raw"),
     eventLocationAssetsDir: path.join(storyDir, "assets", "event_location"),
     eventLocationRawDir: path.join(storyDir, "assets", "event_location", "raw"),
+    itemAssetsDir: path.join(storyDir, "assets", "items"),
+    itemRawDir: path.join(storyDir, "assets", "items", "raw"),
     eventsDir: path.join(storyDir, "events"),
     chainEventsFile: path.join(storyDir, "events", "chains.json5"),
     poolEventsFile: path.join(storyDir, "events", "pool_events.json5"),
@@ -303,6 +326,20 @@ function createDefaultStoryBible(): StoryBibleFile {
     gameplay_design: "",
     style_guide: "",
     constraints: ""
+  }
+}
+
+function createDefaultStoryItems(): StoryItemsFile {
+  return {
+    ai: {
+      width: 1024,
+      height: 1024,
+      global_prompt: "",
+      compress_quality_1: 60,
+      compress_quality_2: 80
+    },
+    categories: [],
+    items: []
   }
 }
 
@@ -598,6 +635,22 @@ function collectReferencedLocationAssetPaths(eventLocations: StoryEventLocationF
   return references
 }
 
+function collectReferencedItemAssetPaths(items: StoryItemsFile) {
+  const references = new Set<string>()
+
+  for (const item of items.items) {
+    for (const assetPath of [item.img_raw, item.img_compress_1, item.img_compress_2]) {
+      const normalizedAssetPath = normalizeTextAssetPathForPrefix(assetPath, "assets/items/")
+
+      if (normalizedAssetPath) {
+        references.add(normalizedAssetPath)
+      }
+    }
+  }
+
+  return references
+}
+
 function collectReferencedRoleAssetPaths(roles: StoryRolesFile) {
   const references = new Set<string>()
 
@@ -677,6 +730,26 @@ async function pruneUnusedLocationAssets(
   const paths = createStoryPaths(dataDir, storyId)
   const referencedAssets = collectReferencedLocationAssetPaths(eventLocations)
   const existingFiles = await listFilesRecursively(paths.eventLocationAssetsDir)
+
+  await Promise.all(
+    existingFiles.map(async (filePath) => {
+      const relativePath = path.relative(paths.storyDir, filePath).replace(/\\/g, "/")
+
+      if (!referencedAssets.has(relativePath)) {
+        await removeFileWithRetry(filePath)
+      }
+    })
+  )
+}
+
+async function pruneUnusedItemAssets(
+  dataDir: string,
+  storyId: string,
+  items: StoryItemsFile
+) {
+  const paths = createStoryPaths(dataDir, storyId)
+  const referencedAssets = collectReferencedItemAssetPaths(items)
+  const existingFiles = await listFilesRecursively(paths.itemAssetsDir)
 
   await Promise.all(
     existingFiles.map(async (filePath) => {
@@ -858,6 +931,18 @@ async function readStoryEventLocations(
   return storyEventLocationSchema.parse(eventLocations)
 }
 
+async function readStoryItems(
+  dataDir: string,
+  storyId: string
+): Promise<StoryItemsFile> {
+  const paths = createStoryPaths(dataDir, storyId)
+  const items = await readOptionalJson5File<StoryItemsFile>(
+    paths.itemsFile,
+    createDefaultStoryItems()
+  )
+  return storyItemsSchema.parse(items)
+}
+
 async function readStoryGraphEvents(
   dataDir: string,
   storyId: string
@@ -974,6 +1059,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       scenes,
       roles,
       eventLocations,
+      items,
       chainEvents,
       poolEvents,
       scheduleEvents
@@ -987,6 +1073,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       readStoryScenes(dataDir, storyId),
       readStoryRoles(dataDir, storyId),
       readStoryEventLocations(dataDir, storyId),
+      readStoryItems(dataDir, storyId),
       readStoryGraphEvents(dataDir, storyId),
       readStoryOnceEvents(dataDir, storyId),
       readStoryLoopEvents(dataDir, storyId)
@@ -1001,6 +1088,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       scenes,
       roles,
       eventLocations,
+      items,
       chainEvents,
       poolEvents,
       scheduleEvents,
@@ -1253,6 +1341,16 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return parsedEventLocations
   }
 
+  async function writeItems(storyId: string, items: StoryItemsFile): Promise<StoryItemsFile> {
+    const parsedItems = storyItemsSchema.parse(items)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(paths.itemsFile, parsedItems satisfies StoryItemsFile)
+    await pruneUnusedItemAssets(dataDir, storyId, parsedItems)
+
+    return parsedItems
+  }
+
   async function writeScenes(storyId: string, scenes: StorySceneFile): Promise<StorySceneFile> {
     const parsedScenes = storySceneSchema.parse(scenes)
     const paths = createStoryPaths(dataDir, storyId)
@@ -1375,6 +1473,60 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return createStoryAssetMetadata(dataDir, storyId, assetPath)
   }
 
+  async function writeItemImageSource(
+    storyId: string,
+    targetName: string,
+    fileContent: Buffer,
+    mimeType?: string
+  ): Promise<StoryAssetMetadata> {
+    await ensureStoryExists(dataDir, storyId)
+    const paths = createStoryPaths(dataDir, storyId)
+    const fileStem = sanitizeAssetStem(targetName)
+    const extension = resolveExtensionFromMimeType(mimeType)
+    const uniqueName = `${Date.now().toString(36)}-${fileStem}${extension}`
+    const assetPath = path.posix.join("assets", "items", "raw", uniqueName)
+    const outputPath = path.join(paths.itemRawDir, uniqueName)
+
+    await ensureReadableImage(fileContent)
+    await mkdir(paths.itemRawDir, { recursive: true })
+    await writeFile(outputPath, fileContent)
+
+    return createStoryAssetMetadata(dataDir, storyId, assetPath)
+  }
+
+  async function compressItemImage(
+    storyId: string,
+    payload: CompressItemImagePayload
+  ): Promise<StoryAssetMetadata> {
+    await ensureStoryExists(dataDir, storyId)
+
+    const normalizedTargetName = sanitizeAssetStem(payload.targetName)
+
+    if (!normalizedTargetName) {
+      throw new FileStoreError("Item image target name is required.", 400, "item.invalid-name")
+    }
+
+    const paths = createStoryPaths(dataDir, storyId)
+    const source = resolveStoryAssetPath(dataDir, storyId, payload.sourcePath)
+    const normalizedSlot = payload.slot === 2 ? 2 : 1
+    const targetName = `${normalizedTargetName}_c${normalizedSlot}.webp`
+    const assetPath = path.posix.join("assets", "items", targetName)
+    const outputPath = path.join(paths.itemAssetsDir, targetName)
+    const sourceBuffer = await readFile(source.resolvedPath)
+    const quality = Math.max(1, Math.min(100, Math.round(payload.quality ?? 60)))
+    const compressedBuffer = await sharp(sourceBuffer)
+      .webp({
+        quality,
+        effort: 6
+      })
+      .toBuffer()
+
+    await mkdir(paths.itemAssetsDir, { recursive: true })
+    await writeFile(outputPath, compressedBuffer)
+
+    return createStoryAssetMetadata(dataDir, storyId, assetPath)
+  }
+
   async function writeRoleImageSource(
     storyId: string,
     targetName: string,
@@ -1450,6 +1602,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     deleteEvent,
     writeRoles,
     writeEventLocations,
+    writeItems,
     writeVals,
     writePlayerOverrideVals,
     writeSystemVals,
@@ -1458,6 +1611,8 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     compressSceneBackground,
     writeLocationImageSource,
     compressLocationImage,
+    writeItemImageSource,
+    compressItemImage,
     writeRoleImageSource,
     compressRoleImage,
     readStoryAssetMeta,

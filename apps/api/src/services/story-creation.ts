@@ -11,6 +11,8 @@ import {
   type StoryEventLocationFile,
   type StoryEventTriggerMode,
   type StoryImportantRoleDefinition,
+  type StoryItemDefinition,
+  type StoryItemsFile,
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
@@ -28,6 +30,7 @@ import type {
   StoryCreationAgentRole,
   StoryCreationDraft,
   StoryCreationDraftEvent,
+  StoryCreationDraftItem,
   StoryCreationDraftRole,
   StoryCreationDraftVariable
 } from "@story-mgr/shared"
@@ -72,6 +75,9 @@ const ROLE_ERROR_CODES: Record<StoryCreationAgentRole, string> = {
   scriptDoctor: "ai.agent-script-doctor-failed",
   consistencyChecker: "ai.agent-consistency-checker-failed"
 }
+
+const RELEVANT_ITEM_DETAIL_LIMIT = 40
+const MAX_ITEM_SEARCH_TERMS = 180
 
 const draftDialogueSchema = z.object({
   speaker_type: z.enum(["player", "object"]).describe("player 表示玩家主角，object 表示事件对象。"),
@@ -134,6 +140,19 @@ const draftRoleSchema = z.object({
   important: z.boolean().describe("true 写入重要角色池，false 写入普通角色池。")
 })
 
+const draftItemSchema = z.object({
+  id: z.string().min(1).describe("ASCII 风格物品 id，例如 population_flow_report。"),
+  name: z.string().default("").describe("物品显示名。"),
+  category_id: z.string().min(1).describe("必须引用现有物品分类 id。"),
+  descr: z.string().default("").describe("物品说明、用途、来源和剧情价值。"),
+  prompt: z.string().default("").describe("英文物品美术提示词草稿。"),
+  tags: z.array(z.string()).default([]).describe("物品标签。"),
+  rarity: z.string().default("common").describe("稀有度，例如 common、rare、legendary。"),
+  stackable: z.boolean().default(true).describe("是否可堆叠。"),
+  max_stack: z.number().int().min(1).default(1).describe("最大堆叠数量。"),
+  usable: z.boolean().default(false).describe("是否可作为可使用道具。")
+})
+
 const draftEventSchema = z.object({
   collectionType: z.enum(["chain", "pool", "schedule"]).describe("目标事件集合。"),
   id: z.string().min(1).describe("ASCII 风格事件 id。"),
@@ -157,6 +176,7 @@ const draftSchema = z.object({
   arc: z.string().describe("所属篇章或小剧情线。"),
   locations: z.array(draftLocationSchema).describe("建议新增或复用的地点。"),
   roles: z.array(draftRoleSchema).describe("建议新增或复用的角色。"),
+  items: z.array(draftItemSchema).default([]).describe("建议新增或复用的物品。"),
   events: z.array(draftEventSchema).describe("建议新增的剧情事件草稿。"),
   variables: z.array(draftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),
@@ -198,6 +218,19 @@ const structuredDraftRoleSchema = z.object({
   important: z.boolean().describe("true 写入重要角色池，false 写入普通角色池。")
 })
 
+const structuredDraftItemSchema = z.object({
+  id: z.string().min(1).describe("ASCII 风格物品 id，例如 population_flow_report。"),
+  name: z.string().describe("物品显示名。"),
+  category_id: z.string().min(1).describe("必须引用现有物品分类 id。"),
+  descr: z.string().describe("物品说明、用途、来源和剧情价值。"),
+  prompt: z.string().describe("英文物品美术提示词草稿；如果复用已有物品可留空字符串。"),
+  tags: z.array(z.string()).describe("物品标签；没有时填空数组。"),
+  rarity: z.string().describe("稀有度，例如 common、rare、legendary。"),
+  stackable: z.boolean().describe("是否可堆叠。"),
+  max_stack: z.number().int().min(1).describe("最大堆叠数量。"),
+  usable: z.boolean().describe("是否可作为可使用道具。")
+})
+
 const structuredDraftEventSchema = z.object({
   collectionType: z.enum(["chain", "pool", "schedule"]).describe("目标事件集合。"),
   id: z.string().min(1).describe("ASCII 风格事件 id。"),
@@ -223,6 +256,7 @@ const structuredDraftSchema = z.object({
   arc: z.string().describe("所属篇章或小剧情线。"),
   locations: z.array(structuredDraftLocationSchema).describe("建议新增或复用的地点。"),
   roles: z.array(structuredDraftRoleSchema).describe("建议新增或复用的角色。"),
+  items: z.array(structuredDraftItemSchema).describe("建议新增或复用的物品；没有物品时填空数组。"),
   events: z.array(structuredDraftEventSchema).describe("建议新增的剧情事件草稿。"),
   variables: z.array(structuredDraftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),
@@ -251,6 +285,7 @@ const assetDesignerOutputSchema = z.object({
   log: z.string(),
   locations: z.array(structuredDraftLocationSchema),
   roles: z.array(structuredDraftRoleSchema),
+  items: z.array(structuredDraftItemSchema),
   notes: z.array(z.string())
 })
 
@@ -394,30 +429,275 @@ function formatVariables(story: StoryDocument) {
   }, 9000)
 }
 
-function formatExistingAssets(story: StoryDocument) {
-  return formatJson({
-    locations: story.eventLocations.assignments.map((location) => ({
-      id: location.id,
-      descr: location.descr
-    })),
-    normalRoles: story.roles.normal.roles.map((role) => ({
-      id: role.id,
-      name: role.name,
-      zhiye: role.zhiye,
-      descr: role.descr
-    })),
-    importantRoles: story.roles.important.roles.map((role) => ({
-      id: role.id,
-      name: role.name,
-      zhiye: role.zhiye,
-      descr: role.descr,
-      xingge: role.xingge
-    })),
-    scenes: story.scenes.scenes.map((scene) => ({
-      level: scene.level,
-      description: scene.description
+const COMMON_ITEM_SEARCH_TERMS = new Set([
+  "一个",
+  "不会",
+  "之前",
+  "之后",
+  "什么",
+  "他们",
+  "任务",
+  "优化",
+  "修改",
+  "全部",
+  "可以",
+  "反馈",
+  "已有",
+  "当前",
+  "我们",
+  "故事",
+  "新增",
+  "方式",
+  "是否",
+  "玩家",
+  "生成",
+  "用户",
+  "角色",
+  "规则",
+  "设置",
+  "这个",
+  "进行",
+  "选择",
+  "通过",
+  "需要",
+  "剧情",
+  "地点",
+  "物品",
+  "事件",
+  "agent",
+  "and",
+  "for",
+  "the",
+  "with"
+])
+
+function appendSearchTerm(terms: Set<string>, rawTerm: string) {
+  const term = rawTerm.trim().toLowerCase()
+
+  if (term.length < 2 || COMMON_ITEM_SEARCH_TERMS.has(term)) {
+    return
+  }
+
+  terms.add(term)
+}
+
+function collectSearchTerms(rawText: string) {
+  const terms = new Set<string>()
+  const normalizedText = rawText.toLowerCase()
+  const matches = normalizedText.match(/[a-z0-9_-]{2,}|[\u4e00-\u9fff]{2,}/g) ?? []
+
+  for (const match of matches) {
+    appendSearchTerm(terms, match)
+
+    if (/^[\u4e00-\u9fff]+$/.test(match)) {
+      for (const size of [2, 3, 4]) {
+        for (let index = 0; index <= match.length - size; index += 1) {
+          appendSearchTerm(terms, match.slice(index, index + size))
+        }
+      }
+    }
+
+    if (terms.size >= MAX_ITEM_SEARCH_TERMS) {
+      break
+    }
+  }
+
+  return terms
+}
+
+function buildItemSearchCorpus(
+  story: StoryDocument,
+  instruction: string,
+  baseDraft: StoryCreationDraft | null
+) {
+  const bible = story.storyBible
+  return [
+    instruction,
+    story.story.title,
+    story.story.description ?? "",
+    ...(story.story.tags ?? []),
+    bible.background,
+    bible.golden_finger,
+    bible.protagonist,
+    bible.world_rules,
+    bible.outline,
+    bible.current_arc,
+    bible.gameplay_design,
+    bible.style_guide,
+    bible.constraints,
+    baseDraft ? formatJson(baseDraft, 8000) : ""
+  ].join("\n")
+}
+
+function buildItemSearchText(
+  item: StoryItemDefinition,
+  categoryById: Map<string, { name: string; descr: string }>
+) {
+  const category = categoryById.get(item.category_id)
+  return [
+    item.id,
+    item.name,
+    item.category_id,
+    category?.name ?? "",
+    category?.descr ?? "",
+    item.descr,
+    item.prompt,
+    item.rarity,
+    item.tags.join(" ")
+  ].join("\n").toLowerCase()
+}
+
+function scoreRelevantItem(
+  item: StoryItemDefinition,
+  categoryById: Map<string, { name: string; descr: string }>,
+  terms: Set<string>
+) {
+  if (terms.size === 0) {
+    return 0
+  }
+
+  const itemId = item.id.toLowerCase()
+  const itemName = item.name.toLowerCase()
+  const categoryId = item.category_id.toLowerCase()
+  const categoryName = categoryById.get(item.category_id)?.name.toLowerCase() ?? ""
+  const tags = item.tags.map((tag) => tag.toLowerCase())
+  const searchText = buildItemSearchText(item, categoryById)
+  let score = 0
+
+  for (const term of terms) {
+    if (itemId === term || itemName === term) {
+      score += 50
+      continue
+    }
+
+    if (categoryId === term || categoryName === term) {
+      score += 18
+      continue
+    }
+
+    if (tags.includes(term)) {
+      score += 16
+      continue
+    }
+
+    if (itemId.includes(term) || itemName.includes(term)) {
+      score += term.length >= 4 ? 12 : 7
+      continue
+    }
+
+    if (searchText.includes(term)) {
+      score += term.length >= 4 ? 5 : 2
+    }
+  }
+
+  return score
+}
+
+function selectRelevantItemDetails(
+  story: StoryDocument,
+  instruction: string,
+  baseDraft: StoryCreationDraft | null
+) {
+  const categoryById = new Map(
+    story.items.categories.map((category) => [
+      category.id,
+      {
+        descr: category.descr,
+        name: category.name
+      }
+    ])
+  )
+  const terms = collectSearchTerms(buildItemSearchCorpus(story, instruction, baseDraft))
+
+  return story.items.items
+    .map((item, index) => ({
+      index,
+      item,
+      score: scoreRelevantItem(item, categoryById, terms)
     }))
-  }, 9000)
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, RELEVANT_ITEM_DETAIL_LIMIT)
+    .map(({ item, score }) => ({
+      id: item.id,
+      name: item.name,
+      category_id: item.category_id,
+      descr: item.descr,
+      prompt: item.prompt,
+      tags: item.tags,
+      rarity: item.rarity,
+      stackable: item.stackable,
+      max_stack: item.max_stack,
+      usable: item.usable,
+      relevance_score: score
+    }))
+}
+
+function formatItemIndex(story: StoryDocument) {
+  if (story.items.items.length === 0) {
+    return "(empty)"
+  }
+
+  return story.items.items
+    .map((item) => {
+      const flags = [
+        item.stackable ? "stackable" : "",
+        item.usable ? "usable" : ""
+      ].filter(Boolean).join(",")
+
+      return [
+        item.id,
+        item.name,
+        item.category_id,
+        item.tags.join(","),
+        item.rarity,
+        flags || "-"
+      ].join(" | ")
+    })
+    .join("\n")
+}
+
+function formatExistingAssets(
+  story: StoryDocument,
+  instruction: string,
+  baseDraft: StoryCreationDraft | null
+) {
+  return [
+    formatJson({
+      locations: story.eventLocations.assignments.map((location) => ({
+        id: location.id,
+        descr: location.descr
+      })),
+      normalRoles: story.roles.normal.roles.map((role) => ({
+        id: role.id,
+        name: role.name,
+        zhiye: role.zhiye,
+        descr: role.descr
+      })),
+      importantRoles: story.roles.important.roles.map((role) => ({
+        id: role.id,
+        name: role.name,
+        zhiye: role.zhiye,
+        descr: role.descr,
+        xingge: role.xingge
+      })),
+      scenes: story.scenes.scenes.map((scene) => ({
+        level: scene.level,
+        description: scene.description
+      })),
+      itemCategories: story.items.categories.map((category) => ({
+        id: category.id,
+        name: category.name,
+        descr: category.descr
+      }))
+    }, 9000),
+    "",
+    "itemIndexAll: all existing items, compact format `id | name | category_id | tags | rarity | flags`.",
+    formatItemIndex(story),
+    "",
+    `relevantItemDetails: top ${RELEVANT_ITEM_DETAIL_LIMIT} local keyword matches with richer fields. Empty does not mean the item library is empty; use itemIndexAll for full existence checks.`,
+    formatJson(selectRelevantItemDetails(story, instruction, baseDraft), 14000)
+  ].join("\n")
 }
 
 function formatExistingEvents(story: StoryDocument) {
@@ -457,7 +737,11 @@ function formatExistingEvents(story: StoryDocument) {
   }, 12000)
 }
 
-function buildStoryContext(story: StoryDocument) {
+function buildStoryContext(
+  story: StoryDocument,
+  instruction: string,
+  baseDraft: StoryCreationDraft | null
+) {
   return [
     `故事: ${story.story.title} (${story.story.id})`,
     `简介: ${story.story.description ?? ""}`,
@@ -469,8 +753,8 @@ function buildStoryContext(story: StoryDocument) {
     "【现有变量】",
     formatVariables(story),
     "",
-    "【现有地点/角色/场景】",
-    formatExistingAssets(story),
+    "【现有地点/角色/场景/物品】",
+    formatExistingAssets(story, instruction, baseDraft),
     "",
     "【现有事件简表】",
     formatExistingEvents(story)
@@ -488,6 +772,9 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "chain/pool/schedule 中 trigger_mode 为 invoke 的事件只供脚本调用，不参与普通调度。",
     "角色引用使用 player、normal:<roleId>、important:<roleId>。",
     "地点使用地点 id。所有 id 尽量使用 ASCII 小写、数字、下划线或短横线。",
+    "物品必须优先复用现有物品 id；确需新增时输出 items 草稿，category_id 必须来自现有物品分类。",
+    "判断物品是否已存在时必须先查 itemIndexAll 全量轻量索引；relevantItemDetails 只提供本次更相关物品的详细字段，不代表完整物品库。",
+    "当前事件数据结构还没有正式物品奖励/消耗字段；如果剧情需要获得、消耗或检查物品，请在事件对白、脚本或 notes 中保守说明物品 id，不要编造未知事件字段。",
     "StoryScript 不确定时留空，不要编造复杂脚本。",
     "",
     `故事标题: ${state.storyTitle}`,
@@ -558,6 +845,7 @@ function buildAssetPlanText(output: z.infer<typeof assetDesignerOutputSchema>) {
   return formatJson({
     locations: output.locations,
     roles: output.roles,
+    items: output.items,
     notes: output.notes
   }, 12000)
 }
@@ -607,6 +895,18 @@ function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryCreation
       prompt: role.prompt,
       important: role.important,
       ...(role.xingge === null ? {} : { xingge: role.xingge })
+    })),
+    items: draft.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      category_id: item.category_id,
+      descr: item.descr,
+      prompt: item.prompt,
+      tags: item.tags,
+      rarity: item.rarity,
+      stackable: item.stackable,
+      max_stack: item.max_stack,
+      usable: item.usable
     })),
     events: draft.events.map((event) => {
       const loop = toDraftLoopRule(event.loop)
@@ -718,6 +1018,7 @@ function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
   const roleIdMap = new Map<string, string>()
   const eventIdMap = new Map<string, string>()
   const usedLocationIds = new Set<string>()
+  const usedItemIds = new Set<string>()
   const usedVariableKeys = new Set<string>()
   const usedRoleIdsByNamespace = {
     normal: new Set<string>(),
@@ -748,6 +1049,27 @@ function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
     return {
       ...role,
       id
+    }
+  })
+
+  const items = (draft.items ?? []).map((item, index) => {
+    const id = makeUniqueId(item.id, `item-${index + 1}`, usedItemIds)
+    const maxStack = Number.isInteger(item.max_stack) && item.max_stack > 0
+      ? item.max_stack
+      : 1
+
+    return {
+      ...item,
+      id,
+      name: item.name?.trim() ?? "",
+      category_id: makeLooseId(item.category_id),
+      descr: item.descr ?? "",
+      prompt: item.prompt ?? "",
+      tags: Array.isArray(item.tags) ? item.tags.map((tag) => tag.trim()).filter(Boolean) : [],
+      rarity: item.rarity?.trim() || "common",
+      stackable: item.stackable ?? true,
+      max_stack: maxStack,
+      usable: item.usable ?? false
     }
   })
 
@@ -816,6 +1138,7 @@ function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
     ...draft,
     locations,
     roles,
+    items,
     events,
     variables
   }
@@ -903,6 +1226,27 @@ function toImportantRole(
     img_female_raw: existing?.img_female_raw ?? "",
     img_female_compress_1: existing?.img_female_compress_1 ?? "",
     img_female_compress_2: existing?.img_female_compress_2 ?? ""
+  }
+}
+
+function toStoryItem(
+  draftItem: StoryCreationDraftItem,
+  existing?: StoryItemDefinition
+): StoryItemDefinition {
+  return {
+    id: draftItem.id,
+    name: draftItem.name,
+    category_id: draftItem.category_id,
+    descr: draftItem.descr,
+    prompt: draftItem.prompt,
+    tags: draftItem.tags,
+    rarity: draftItem.rarity,
+    stackable: draftItem.stackable,
+    max_stack: draftItem.max_stack,
+    usable: draftItem.usable,
+    img_raw: existing?.img_raw ?? "",
+    img_compress_1: existing?.img_compress_1 ?? "",
+    img_compress_2: existing?.img_compress_2 ?? ""
   }
 }
 
@@ -1263,6 +1607,7 @@ export async function applyStoryCreationDraft(
   const selectedLocationIds = toSelectionSet(request.selection.locationIds)
   const selectedRoleKeys = toSelectionSet(request.selection.roleKeys ?? [])
   const selectedLegacyRoleIds = toSelectionSet(request.selection.roleIds ?? [])
+  const selectedItemIds = toSelectionSet(request.selection.itemIds ?? [])
   const selectedEventKeys = toSelectionSet(request.selection.eventKeys)
   const selectedVariableKeys = toSelectionSet([
     ...(request.selection.variableKeys ?? []),
@@ -1272,6 +1617,7 @@ export async function applyStoryCreationDraft(
   const warnings: string[] = [...draft.warnings]
   let appliedLocations = 0
   let appliedRoles = 0
+  let appliedItems = 0
   let appliedVariables = 0
 
   const nextEventLocations: StoryEventLocationFile = {
@@ -1325,6 +1671,31 @@ export async function applyStoryCreationDraft(
     appliedRoles += 1
   }
 
+  const nextItems: StoryItemsFile = {
+    ...story.items,
+    categories: story.items.categories,
+    items: story.items.items
+  }
+  const itemCategoryIds = new Set(nextItems.categories.map((category) => category.id))
+
+  for (const item of draft.items) {
+    if (!selectedItemIds.has(item.id)) {
+      continue
+    }
+
+    if (!itemCategoryIds.has(item.category_id)) {
+      warnings.push(`物品 ${item.id} 引用了不存在的分类 ${item.category_id}，未写入 items.json5。`)
+      continue
+    }
+
+    const existingItem = nextItems.items.find((existing) => existing.id === item.id)
+    nextItems.items = upsertById(
+      nextItems.items,
+      toStoryItem(item, existingItem)
+    )
+    appliedItems += 1
+  }
+
   const selectedEvents = draft.events.filter((event) => selectedEventKeys.has(draftEventKey(event)))
   const availableChainIds = new Set([
     ...story.chainEvents.map((event) => event.id),
@@ -1349,6 +1720,10 @@ export async function applyStoryCreationDraft(
 
   if (appliedRoles > 0) {
     await store.writeRoles(storyId, nextRoles)
+  }
+
+  if (appliedItems > 0) {
+    await store.writeItems(storyId, nextItems)
   }
 
   for (const item of eventsToWrite) {
@@ -1382,6 +1757,7 @@ export async function applyStoryCreationDraft(
       events: eventsToWrite.length,
       locations: appliedLocations,
       roles: appliedRoles,
+      items: appliedItems,
       variables: appliedVariables
     },
     warnings
@@ -1467,8 +1843,8 @@ export async function runStoryCreationAgents(
         `总主编简报:\n${state.creativeBrief}`,
         `剧情规划:\n${state.plotPlan}`,
         state.baseDraft
-          ? "你的任务：检查当前草稿的地点和角色是否足够支撑反馈要求。优先保留已有 id；只在确有必要时新增或调整资产草稿。"
-          : "你的任务：为本次生成内容提出必要的地点和角色草稿。优先复用已有资产；确需新增时给出可落地 id、说明和英文美术提示词。"
+          ? "你的任务：检查当前草稿的地点、角色和物品是否足够支撑反馈要求。优先保留已有 id；只在确有必要时新增或调整资产草稿。物品必须引用已有分类。"
+          : "你的任务：为本次生成内容提出必要的地点、角色和物品草稿。优先复用已有资产；确需新增时给出可落地 id、说明和英文美术提示词。物品必须引用已有分类。"
       ].join("\n\n")
     )
 
@@ -1492,7 +1868,7 @@ export async function runStoryCreationAgents(
           ? "你的任务：基于当前待优化草稿输出完整修订版。除非反馈要求重做，否则保留已有 id、变量 key、角色 key、事件 next 和集合类型，必要时补充或重写具体字段。"
           : "你的任务：生成可预览的结构化剧情草稿，默认 3 到 8 个事件。",
         "chain 事件可以通过 next 组成小剧情线；pool 事件必须是可被 AI 剧情导演挑选的平面事件；schedule 事件必须适合时间循环。",
-        "不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、事件、变量建议和风险说明。"
+        "不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议和风险说明。"
       ].join("\n\n")
     )
 
@@ -1542,7 +1918,7 @@ export async function runStoryCreationAgents(
       [
         buildBasePrompt("一致性检查", state),
         `待检查草稿:\n${formatJson(state.draft, 16000)}`,
-        "你的任务：检查角色引用、地点引用、事件 next、触发方式和玩家自由度是否一致。",
+        "你的任务：检查角色引用、地点引用、物品分类、事件 next、触发方式和玩家自由度是否一致。",
         "保留草稿预览性质，不要声称已经写入数据文件。"
       ].join("\n\n")
     )
@@ -1582,7 +1958,7 @@ export async function runStoryCreationAgents(
     instruction: normalizedInstruction,
     logs: [],
     plotPlan: "",
-    storyContext: buildStoryContext(story),
+    storyContext: buildStoryContext(story, normalizedInstruction, normalizedBaseDraft),
     storyTitle: story.story.title
   })
 

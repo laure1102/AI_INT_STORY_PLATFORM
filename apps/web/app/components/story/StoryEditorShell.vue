@@ -9,6 +9,7 @@ import type {
   StoryEventFile,
   StoryEventLocationFile,
   StoryEventTriggerMode,
+  StoryItemsFile,
   StoryLoopEventFile,
   StoryOnceEventFile,
   StoryPlayerOverrideValsFile,
@@ -32,6 +33,7 @@ import LoopEventDetailPanel from "./LoopEventDetailPanel.vue"
 import OnceEventDetailPanel from "./OnceEventDetailPanel.vue"
 import StoryCreationWorkspace from "./StoryCreationWorkspace.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
+import StoryItemsDialog from "./StoryItemsDialog.vue"
 import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
 import StoryLocationsDialog from "./StoryLocationsDialog.vue"
 import StoryOnceCanvas from "./StoryOnceCanvas.vue"
@@ -67,6 +69,7 @@ const {
   saveAppSettings,
   saveEvent,
   saveEventLocations,
+  saveItems,
   savePlayerOverrideVals,
   saveRoles,
   saveScenes,
@@ -99,10 +102,12 @@ const isPlayerOverrideValsDialogOpen = shallowRef(false)
 const isSystemValsDialogOpen = shallowRef(false)
 const isScenesDialogOpen = shallowRef(false)
 const isLocationsDialogOpen = shallowRef(false)
+const isItemsDialogOpen = shallowRef(false)
 const isRolesDialogOpen = shallowRef(false)
 const isSettingsDialogOpen = shallowRef(false)
 const scenesSaveSuccessMessage = shallowRef<string | null>(null)
 const locationsSaveSuccessMessage = shallowRef<string | null>(null)
+const itemsSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
 const activeWorkspaceTab = shallowRef<StoryWorkspaceTab>("creation")
 const activeEventTab = shallowRef<EventCanvasTab>("chain")
@@ -563,6 +568,7 @@ function openValsDialog() {
   isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
+  isItemsDialogOpen.value = false
   isRolesDialogOpen.value = false
   isValsDialogOpen.value = true
 }
@@ -581,6 +587,7 @@ function openPlayerOverrideValsDialog() {
   isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
+  isItemsDialogOpen.value = false
   isRolesDialogOpen.value = false
   isPlayerOverrideValsDialogOpen.value = true
 }
@@ -599,6 +606,7 @@ function openSystemValsDialog() {
   isPlayerOverrideValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
+  isItemsDialogOpen.value = false
   isRolesDialogOpen.value = false
   isSystemValsDialogOpen.value = true
 }
@@ -617,6 +625,7 @@ function openScenesDialog() {
   isPlayerOverrideValsDialogOpen.value = false
   isSystemValsDialogOpen.value = false
   isLocationsDialogOpen.value = false
+  isItemsDialogOpen.value = false
   isRolesDialogOpen.value = false
   scenesSaveSuccessMessage.value = null
   isScenesDialogOpen.value = true
@@ -637,6 +646,7 @@ function openLocationsDialog() {
   isPlayerOverrideValsDialogOpen.value = false
   isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
+  isItemsDialogOpen.value = false
   isRolesDialogOpen.value = false
   locationsSaveSuccessMessage.value = null
   isLocationsDialogOpen.value = true
@@ -645,6 +655,27 @@ function openLocationsDialog() {
 function closeLocationsDialog() {
   locationsSaveSuccessMessage.value = null
   isLocationsDialogOpen.value = false
+}
+
+function openItemsDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  closeEditor()
+  isValsDialogOpen.value = false
+  isPlayerOverrideValsDialogOpen.value = false
+  isSystemValsDialogOpen.value = false
+  isScenesDialogOpen.value = false
+  isLocationsDialogOpen.value = false
+  isRolesDialogOpen.value = false
+  itemsSaveSuccessMessage.value = null
+  isItemsDialogOpen.value = true
+}
+
+function closeItemsDialog() {
+  itemsSaveSuccessMessage.value = null
+  isItemsDialogOpen.value = false
 }
 
 function openRolesDialog() {
@@ -658,6 +689,7 @@ function openRolesDialog() {
   isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
+  isItemsDialogOpen.value = false
   rolesSaveSuccessMessage.value = null
   isRolesDialogOpen.value = true
 }
@@ -1129,6 +1161,30 @@ async function handleSaveEventLocations(eventLocations: StoryEventLocationFile) 
   }
 }
 
+async function handleSaveItems(items: StoryItemsFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+  itemsSaveSuccessMessage.value = null
+
+  try {
+    const savedItems = await saveItems(props.storyId, items)
+    storyDocument.value = {
+      ...storyDocument.value,
+      items: savedItems
+    }
+    itemsSaveSuccessMessage.value = "已保存"
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存物品失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
 async function handleSaveRoles(roles: StoryRolesFile) {
   if (!storyDocument.value) {
     return
@@ -1260,7 +1316,7 @@ async function handleApplyCreationDraft(
     storyDocument.value = response.story
     validation.value = response.result
     creationApplyWarnings.value = response.warnings
-    creationApplyMessage.value = `已应用 ${response.applied.events} 个事件、${response.applied.locations} 个地点、${response.applied.roles} 个角色、${response.applied.variables} 个变量。`
+    creationApplyMessage.value = `已应用 ${response.applied.events} 个事件、${response.applied.locations} 个地点、${response.applied.roles} 个角色、${response.applied.items} 个物品、${response.applied.variables} 个变量。`
     closeEditor()
     selectAppliedEvent(selection)
   } catch (error) {
@@ -1360,6 +1416,7 @@ watch(
     isSystemValsDialogOpen.value = false
     isScenesDialogOpen.value = false
     isLocationsDialogOpen.value = false
+    isItemsDialogOpen.value = false
     isRolesDialogOpen.value = false
     activeWorkspaceTab.value = "creation"
     creationAgentResult.value = null
@@ -1369,6 +1426,7 @@ watch(
     creationApplyWarnings.value = []
     scenesSaveSuccessMessage.value = null
     locationsSaveSuccessMessage.value = null
+    itemsSaveSuccessMessage.value = null
     rolesSaveSuccessMessage.value = null
     void loadStory()
   },
@@ -1403,6 +1461,9 @@ watch(
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openLocationsDialog">
             地点
+          </button>
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openItemsDialog">
+            物品
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openRolesDialog">
             角色
@@ -1682,6 +1743,17 @@ watch(
       :story-title="storyDocument.story.title"
       @close="closeLocationsDialog"
       @save="handleSaveEventLocations"
+    />
+
+    <StoryItemsDialog
+      v-if="storyDocument && isItemsDialogOpen"
+      :items="storyDocument.items"
+      :save-success-message="itemsSaveSuccessMessage"
+      :saving="isSaving"
+      :story-id="storyId"
+      :story-title="storyDocument.story.title"
+      @close="closeItemsDialog"
+      @save="handleSaveItems"
     />
 
     <StoryRolesDialog

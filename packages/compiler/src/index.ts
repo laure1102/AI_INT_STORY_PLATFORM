@@ -50,6 +50,7 @@ export function compileStory(document: StoryDocument): {
       scenes: document.scenes,
       roles: document.roles,
       eventLocations: document.eventLocations,
+      items: document.items,
       chainEvents,
       poolEvents: poolEventsSource,
       scheduleEvents: scheduleEventsSource,

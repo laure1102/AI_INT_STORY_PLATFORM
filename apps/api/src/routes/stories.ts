@@ -9,9 +9,14 @@ import type {
   ApplyStoryCreationDraftRequest,
   ApplyStoryCreationDraftResponse,
   AppSettingsResponse,
+  CompressItemImageRequest,
   CompressLocationImageRequest,
   CompressRoleImageRequest,
   CompressSceneBackgroundRequest,
+  GenerateItemImageRequest,
+  GenerateItemImageResponse,
+  GenerateItemPromptRequest,
+  GenerateItemPromptResponse,
   GenerateLocationImageRequest,
   GenerateLocationImageResponse,
   GenerateLocationPromptRequest,
@@ -25,6 +30,7 @@ import type {
   SaveAppSettingsRequest,
   SaveEventRequest,
   SaveEventLocationsRequest,
+  SaveStoryItemsRequest,
   SavePlayerOverrideValsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
@@ -34,12 +40,15 @@ import type {
   StoryBibleResponse,
   StoryPlayerOverrideValsResponse,
   StoryRolesResponse,
+  StoryItemsResponse,
   SaveValsRequest,
   StorySystemValsResponse,
   StoryAssetResponse
 } from "@story-mgr/shared"
 import type { ApiConfig } from "../config"
 import {
+  generateItemImage,
+  generateItemPrompt,
   generateLocationImage,
   generateLocationPrompt,
   generateRoleImage,
@@ -250,6 +259,15 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     }
   })
 
+  router.put("/stories/:storyId/items", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as SaveStoryItemsRequest
+
+    context.body = {
+      items: await store.writeItems(storyId, body.items)
+    } satisfies StoryItemsResponse
+  })
+
   router.post("/stories/:storyId/event-locations/prompt", async (context) => {
     const storyId = requireParam(context.params.storyId, "storyId")
     const body = context.request.body as GenerateLocationPromptRequest
@@ -265,6 +283,24 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
         storyTitle: body.storyTitle ?? story.story.title
       })
     } satisfies GenerateLocationPromptResponse
+  })
+
+  router.post("/stories/:storyId/items/prompt", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as GenerateItemPromptRequest
+    const [settings, story] = await Promise.all([
+      store.readAppSettings(),
+      store.readStoryDocument(storyId)
+    ])
+
+    context.body = {
+      prompt: await generateItemPrompt(settings, {
+        categoryName: body.categoryName,
+        descr: body.descr,
+        itemName: body.itemName,
+        storyTitle: body.storyTitle ?? story.story.title
+      })
+    } satisfies GenerateItemPromptResponse
   })
 
   router.post("/stories/:storyId/roles/prompt", async (context) => {
@@ -310,6 +346,28 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     } satisfies GenerateLocationImageResponse
   })
 
+  router.post("/stories/:storyId/items/image", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as GenerateItemImageRequest
+    const settings = await store.readAppSettings()
+    const image = await generateItemImage(
+      settings,
+      body.prompt,
+      body.globalPrompt,
+      body.width,
+      body.height
+    )
+
+    context.body = {
+      asset: await store.writeItemImageSource(
+        storyId,
+        body.targetName,
+        image.buffer,
+        image.mimeType
+      )
+    } satisfies GenerateItemImageResponse
+  })
+
   router.post("/stories/:storyId/roles/image", async (context) => {
     const storyId = requireParam(context.params.storyId, "storyId")
     const body = context.request.body as GenerateRoleImageRequest
@@ -339,6 +397,20 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
 
     context.body = {
       asset: await store.compressLocationImage(storyId, {
+        sourcePath: body.sourcePath,
+        slot: body.slot,
+        targetName: body.targetName,
+        quality: body.quality
+      })
+    } satisfies StoryAssetResponse
+  })
+
+  router.post("/stories/:storyId/items/compress", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as CompressItemImageRequest
+
+    context.body = {
+      asset: await store.compressItemImage(storyId, {
         sourcePath: body.sourcePath,
         slot: body.slot,
         targetName: body.targetName,

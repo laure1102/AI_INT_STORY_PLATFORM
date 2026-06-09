@@ -63,6 +63,7 @@ Core files:
 - `nomal_roles.json5`
 - `import_roles.json5`
 - `event_location.json5`
+- `items.json5`
 
 Event files:
 
@@ -76,6 +77,7 @@ Notes:
 - `nomal_roles.json5` and `import_roles.json5` are the active file names, even though `nomal` is misspelled.
 - Old `roles.json5` and `roles_setting.json5` should not be restored.
 - Chain event nodes and action nodes now live together in `events/chains.json5`.
+- `items.json5` is the story-level item asset library; it is separate from event/location/role assets and includes editable item categories.
 - `events/events.json5`, `events/once_events.json5`, and `events/loop_events.json5` are legacy fallback file names only.
 
 ## 4. Current story data contracts
@@ -190,6 +192,56 @@ Both use the same structure:
 }
 ```
 
+### `items.json5`
+
+Story-level item asset library:
+
+```json5
+{
+  ai: {
+    width: 1024,
+    height: 1024,
+    global_prompt: "",
+    compress_quality_1: 60,
+    compress_quality_2: 80
+  },
+  categories: [
+    {
+      id: "prop",
+      name: "道具",
+      descr: "",
+      sort_order: 20
+    }
+  ],
+  items: [
+    {
+      id: "population_flow_report",
+      name: "人口流动统计表",
+      category_id: "prop",
+      descr: "",
+      prompt: "",
+      tags: [],
+      rarity: "common",
+      stackable: false,
+      max_stack: 1,
+      usable: false,
+      img_raw: "",
+      img_compress_1: "",
+      img_compress_2: ""
+    }
+  ]
+}
+```
+
+Rules:
+
+- item category ids must be unique
+- item ids must be unique
+- each item must reference an existing `category_id`
+- item images live under `assets/items/`, with original images under `assets/items/raw/`
+- the web editor has a `物品` tool button for category management, item editing, prompt generation, image generation, and compression
+- the compiler includes `items` in `CompiledStory`; runtime item inventory/equipment semantics are not implemented yet
+
 ### `player_override_vals.json5`
 
 ```json5
@@ -253,7 +305,7 @@ Rules:
 
 - this file is per-story creative source material for the editor and backend generation agents
 - it should describe playable web-novel game design, not only prose-writing instructions
-- generated output must target project data files: chain events, pool events, schedule events, scenes, roles, locations, and variables
+- generated output must target project data files: chain events, pool events, schedule events, scenes, roles, locations, items, and variables
 - runtime ignores this file; the compiler should not include it in `CompiledStory`
 
 ## 5. Event model
@@ -478,14 +530,17 @@ Current foundation:
 - `apps/api` exposes `POST /api/stories/:storyId/creation-agent/apply`
 - `creation-agent/run` starts a new creation when called with only `instruction`; when called with `baseDraft`, the same multi-Agent workflow revises the current draft and must return a complete revised draft, not a patch
 - the LangGraph workflow returns a structured draft preview and does not directly mutate story files
-- the editor creation workspace can run the backend multi-Agent workflow and display Agent logs, draft events, locations, roles, variable suggestions, notes, and warnings
-- the editor creation workspace can select draft locations, roles, variables, and events, then explicitly apply the selected subset
-- the editor creation workspace keeps an editable local copy of the Agent draft before apply; users can revise safe fields such as title, summary, arc, location/role text, variable description/value, event title, event location, trigger mode, condition expression, first dialogue, init script, and end script
+- the editor creation workspace can run the backend multi-Agent workflow and display Agent logs, draft events, locations, roles, items, variable suggestions, notes, and warnings
+- the editor creation workspace can select draft locations, roles, items, variables, and events, then explicitly apply the selected subset
+- the backend creation Agent gives item context in two layers:
+  - `itemIndexAll` is the full compact item index for existence checks and reuse decisions
+  - `relevantItemDetails` is a local keyword-ranked detail pool for richer item fields; it is not the full library
+- the editor creation workspace keeps an editable local copy of the Agent draft before apply; users can revise safe fields such as title, summary, arc, location/role/item text, item category/basic flags, variable description/value, event title, event location, trigger mode, condition expression, first dialogue, init script, and end script
 - the creation workspace can reset the editable draft back to the latest Agent result
 - after a draft exists, the new-creation command area is collapsed by default; the feedback box sends the editable current draft as `baseDraft` so the Agent can optimize the existing result instead of starting over
 - feedback optimization shows a dedicated running state and local feedback history; each submitted feedback item is marked as running, completed, or failed
 - the editor creation workspace previews apply impact before confirmation: create, overwrite, skip, and likely reference cleanups
-- draft apply can write selected data into `events/chains.json5`, `events/pool_events.json5`, `events/schedule_events.json5`, `event_location.json5`, `nomal_roles.json5`, `import_roles.json5`, and `vals.json5`
+- draft apply can write selected data into `events/chains.json5`, `events/pool_events.json5`, `events/schedule_events.json5`, `event_location.json5`, `nomal_roles.json5`, `import_roles.json5`, `items.json5`, and `vals.json5`
 - draft apply returns the updated story document, validation result, applied counts, and warnings for any downgraded or skipped references
 - variable suggestions are structured draft rows and can be written to `vals.json5` after user confirmation
 
@@ -494,12 +549,15 @@ Current draft-apply rules:
 - apply is human-confirmed; Agent runs must not write files by themselves
 - locations are selected by location id
 - roles are selected by role keys, using `normal:<id>` or `important:<id>`; legacy pure role ids are only accepted for backward compatibility
+- items are selected by item id and must reference an existing `items.json5` category id
 - events are selected by event keys, using `chain:<id>`, `pool:<id>`, or `schedule:<id>`
 - variables are selected by variable keys, using `group.name`; legacy string suggestions are accepted for backward compatibility
 - draft object ids and variable keys are not editable in the creation workspace yet; this keeps selection state and event references stable
 - draft ids are normalized to ASCII-like ids before apply
 - draft variables are normalized to lowercase ASCII-like group and row names
 - selected variables are written only to `vals.json5`, not `system_vals.json5`
+- selected items are written to `items.json5`; existing item images are preserved when a draft overwrites an item
+- selected items with missing categories are skipped with a warning
 - selected `system.*` variables are skipped with a warning
 - selected variables never overwrite existing `vals.json5` rows; existing rows are skipped with a warning
 - the creation workspace impact preview is client-side guidance; the backend apply service remains the final authority and returns authoritative warnings

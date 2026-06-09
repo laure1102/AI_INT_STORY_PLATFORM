@@ -7,6 +7,7 @@ import type {
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryItemsFile,
   StoryPlayerOverrideValsFile,
   StoryRolesFile,
   StorySceneBackgroundVariant,
@@ -71,6 +72,19 @@ export interface StoryCreationDraftRole {
   important: boolean
 }
 
+export interface StoryCreationDraftItem {
+  id: string
+  name: string
+  category_id: string
+  descr: string
+  prompt: string
+  tags: string[]
+  rarity: string
+  stackable: boolean
+  max_stack: number
+  usable: boolean
+}
+
 export interface StoryCreationDraftDialogue {
   speaker_type: "player" | "object"
   speaker_key: string
@@ -123,6 +137,7 @@ export interface StoryCreationDraft {
   arc: string
   locations: StoryCreationDraftLocation[]
   roles: StoryCreationDraftRole[]
+  items: StoryCreationDraftItem[]
   events: StoryCreationDraftEvent[]
   variables: StoryCreationDraftVariable[]
   notes: string[]
@@ -143,6 +158,7 @@ export interface ApplyStoryCreationDraftSelection {
   eventKeys: string[]
   locationIds: string[]
   roleKeys?: string[]
+  itemIds?: string[]
   /** @deprecated 请改用 roleKeys，格式为 normal:<id> 或 important:<id> */
   roleIds?: string[]
   variableKeys?: string[]
@@ -162,6 +178,7 @@ export interface ApplyStoryCreationDraftResponse {
     events: number
     locations: number
     roles: number
+    items: number
     variables: number
   }
   warnings: string[]
@@ -226,6 +243,14 @@ export interface StoryEventLocationsResponse {
 
 export interface SaveEventLocationsRequest {
   eventLocations: StoryEventLocationFile
+}
+
+export interface StoryItemsResponse {
+  items: StoryItemsFile
+}
+
+export interface SaveStoryItemsRequest {
+  items: StoryItemsFile
 }
 
 export interface AppSettingsResponse {
@@ -313,6 +338,36 @@ export interface GenerateLocationImageResponse {
 }
 
 export interface CompressLocationImageRequest {
+  sourcePath: string
+  targetName: string
+  quality: number
+  slot: 1 | 2
+}
+
+export interface GenerateItemPromptRequest {
+  categoryName: string
+  descr: string
+  itemName: string
+  storyTitle?: string
+}
+
+export interface GenerateItemPromptResponse {
+  prompt: string
+}
+
+export interface GenerateItemImageRequest {
+  globalPrompt: string
+  width: number
+  height: number
+  prompt: string
+  targetName: string
+}
+
+export interface GenerateItemImageResponse {
+  asset: StoryAssetMetadata
+}
+
+export interface CompressItemImageRequest {
   sourcePath: string
   targetName: string
   quality: number

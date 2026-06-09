@@ -5,6 +5,7 @@ import type {
   StoryEventCollectionType,
   StoryDocument,
   StoryEventLocationFile,
+  StoryItemsFile,
   StoryPlayerOverrideValsFile,
   StoryRolesFile,
   StorySceneFile,
@@ -14,10 +15,15 @@ import type {
   ApplyStoryCreationDraftRequest,
   ApplyStoryCreationDraftResponse,
   AppSettingsResponse,
+  CompressItemImageRequest,
   CompressLocationImageRequest,
   CompressRoleImageRequest,
   CompressSceneBackgroundRequest,
   ExportResponse,
+  GenerateItemImageRequest,
+  GenerateItemImageResponse,
+  GenerateItemPromptRequest,
+  GenerateItemPromptResponse,
   GenerateLocationImageRequest,
   GenerateLocationImageResponse,
   GenerateLocationPromptRequest,
@@ -31,6 +37,7 @@ import type {
   SaveAppSettingsRequest,
   SaveEventRequest,
   SaveEventLocationsRequest,
+  SaveStoryItemsRequest,
   SavePlayerOverrideValsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
@@ -42,6 +49,7 @@ import type {
   StoryDeleteEventResponse,
   StoryEventResponse,
   StoryEventLocationsResponse,
+  StoryItemsResponse,
   StoryPlayerOverrideValsResponse,
   StoryRolesResponse,
   StoryListResponse,
@@ -253,6 +261,17 @@ export function useStoryApi() {
     return response.eventLocations
   }
 
+  async function saveItems(storyId: string, items: StoryItemsFile): Promise<StoryItemsFile> {
+    const response = await $fetch<StoryItemsResponse>(`${apiBase}/stories/${storyId}/items`, {
+      method: "PUT",
+      body: {
+        items
+      } satisfies SaveStoryItemsRequest
+    })
+
+    return response.items
+  }
+
   async function saveAppSettings(settings: AppSettingsFile): Promise<AppSettingsFile> {
     const response = await $fetch<AppSettingsResponse>(`${apiBase}/settings`, {
       method: "PUT",
@@ -316,6 +335,21 @@ export function useStoryApi() {
     return response.prompt
   }
 
+  async function generateItemPrompt(
+    storyId: string,
+    payload: GenerateItemPromptRequest
+  ): Promise<string> {
+    const response = await $fetch<GenerateItemPromptResponse>(
+      `${apiBase}/stories/${storyId}/items/prompt`,
+      {
+        method: "POST",
+        body: payload
+      }
+    )
+
+    return response.prompt
+  }
+
   async function generateRolePrompt(
     storyId: string,
     payload: GenerateRolePromptRequest
@@ -337,6 +371,21 @@ export function useStoryApi() {
   ): Promise<StoryAssetMetadata> {
     const response = await $fetch<GenerateLocationImageResponse>(
       `${apiBase}/stories/${storyId}/event-locations/image`,
+      {
+        method: "POST",
+        body: payload
+      }
+    )
+
+    return response.asset
+  }
+
+  async function generateItemImage(
+    storyId: string,
+    payload: GenerateItemImageRequest
+  ): Promise<StoryAssetMetadata> {
+    const response = await $fetch<GenerateItemImageResponse>(
+      `${apiBase}/stories/${storyId}/items/image`,
       {
         method: "POST",
         body: payload
@@ -372,6 +421,18 @@ export function useStoryApi() {
         body: payload
       }
     )
+
+    return response.asset
+  }
+
+  async function compressItemImage(
+    storyId: string,
+    payload: CompressItemImageRequest
+  ): Promise<StoryAssetMetadata> {
+    const response = await $fetch<StoryAssetResponse>(`${apiBase}/stories/${storyId}/items/compress`, {
+      method: "POST",
+      body: payload
+    })
 
     return response.asset
   }
@@ -412,10 +473,13 @@ export function useStoryApi() {
 
   return {
     applyStoryCreationDraft,
+    compressItemImage,
     compressLocationImage,
     compressRoleImage,
     compressSceneAsset,
     exportStory,
+    generateItemImage,
+    generateItemPrompt,
     generateLocationImage,
     generateLocationPrompt,
     generateRoleImage,
@@ -431,6 +495,7 @@ export function useStoryApi() {
     saveAppSettings,
     saveEvent,
     saveEventLocations,
+    saveItems,
     savePlayerOverrideVals,
     saveRoles,
     saveScenes,

@@ -134,6 +134,43 @@ export interface StoryEventLocationFile {
   assignments: StoryEventLocationAssignment[]
 }
 
+export interface StoryItemAiConfig {
+  width: number
+  height: number
+  global_prompt: string
+  compress_quality_1: number
+  compress_quality_2: number
+}
+
+export interface StoryItemCategory {
+  id: string
+  name: string
+  descr: string
+  sort_order: number
+}
+
+export interface StoryItemDefinition {
+  id: string
+  name: string
+  category_id: string
+  descr: string
+  prompt: string
+  tags: string[]
+  rarity: string
+  stackable: boolean
+  max_stack: number
+  usable: boolean
+  img_raw: string
+  img_compress_1: string
+  img_compress_2: string
+}
+
+export interface StoryItemsFile {
+  ai: StoryItemAiConfig
+  categories: StoryItemCategory[]
+  items: StoryItemDefinition[]
+}
+
 export interface StoryBibleFile {
   background: string
   golden_finger: string
@@ -299,6 +336,7 @@ export interface StoryDocument {
   scenes: StorySceneFile
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
+  items: StoryItemsFile
   chainEvents: StoryChainEventsFile
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile
@@ -366,6 +404,7 @@ export interface CompiledStory {
   scenes: StorySceneFile
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
+  items: StoryItemsFile
   chainEvents: Record<string, CompiledEvent | CompiledAction>
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile
