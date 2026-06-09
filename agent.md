@@ -64,6 +64,7 @@ Core files:
 - `import_roles.json5`
 - `event_location.json5`
 - `items.json5`
+- `initial_bags.json5`
 
 Event files:
 
@@ -78,6 +79,7 @@ Notes:
 - Old `roles.json5` and `roles_setting.json5` should not be restored.
 - Chain event nodes and action nodes now live together in `events/chains.json5`.
 - `items.json5` is the story-level item asset library; it is separate from event/location/role assets and includes editable item categories.
+- `initial_bags.json5` is only a new-save initialization template; live inventory is stored in the runtime session snapshot as `bags`.
 - `events/events.json5`, `events/once_events.json5`, and `events/loop_events.json5` are legacy fallback file names only.
 
 ## 4. Current story data contracts
@@ -240,7 +242,33 @@ Rules:
 - each item must reference an existing `category_id`
 - item images live under `assets/items/`, with original images under `assets/items/raw/`
 - the web editor has a `物品` tool button for category management, item editing, prompt generation, image generation, and compression
-- the compiler includes `items` in `CompiledStory`; runtime item inventory/equipment semantics are not implemented yet
+- the compiler includes `items` in `CompiledStory`; runtime mutable inventory is stored in `snapshot.bags`; equipment semantics are not implemented yet
+
+### `initial_bags.json5`
+
+Story-level initial bag template used only when creating a new runtime session:
+
+```json5
+{
+  player: {
+    entries: [
+      {
+        item_id: "population_flow_report",
+        quantity: 1,
+        bound: false,
+        meta: {}
+      }
+    ]
+  }
+}
+```
+
+Rules:
+
+- `player` is the default owner id for the protagonist/player character
+- every `item_id` must exist in `items.json5`
+- runtime inventory is mutable save data in `snapshot.bags`; it is not written back to `items.json5` or `initial_bags.json5`
+- runtime view models expose a read-only `bagSummary` for clients/debug panels; scripts should still mutate inventory only through StoryScript bag helpers
 
 ### `player_override_vals.json5`
 
@@ -440,6 +468,7 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - `trigger_mode: "default"` is the explicit always-eligible mode
 - predicate mode is read-only and rejects external assignment
 - predicate mode rejects `invoke_once`
+- predicate mode only exposes read-only bag helpers: `bag_count` and `bag_has`
 
 ### current script engine summary
 
@@ -456,6 +485,9 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - legacy `{...}` placeholders are invalid in StoryScript fields and text templates
 - `branch.xxx` is only available when runtime provides action-branch context
 - `call.xxx` is only available for `invoke` mode event scripts/dialogue after runtime provides invocation args
+- event/action scripts can use `bag_add("player", "item_id", 1)` and `bag_remove("player", "item_id", 1)` to mutate runtime inventory
+- scripts and conditions can use `bag_count("player", "item_id")` and `bag_has("player", "item_id", 1)` to inspect runtime inventory
+- literal `item_id` arguments are validated against `items.json5`; dynamic ids are checked at runtime
 - runtime text substitution for dialogue/template content is implemented in `packages/runtime`
 - editor `?` help popovers for condition/script/dialogue fields should eventually be sourced from `StoryScript.md`
 - regression entry: `pnpm tui:storyscript-regression`

@@ -171,6 +171,22 @@ export interface StoryItemsFile {
   items: StoryItemDefinition[]
 }
 
+export interface StoryInitialBagEntry {
+  item_id: string
+  quantity: number
+  bound?: boolean
+  meta?: Record<string, unknown>
+}
+
+export interface StoryInitialBagDefinition {
+  entries: StoryInitialBagEntry[]
+}
+
+export interface StoryInitialBagsFile {
+  player: StoryInitialBagDefinition
+  [ownerId: string]: StoryInitialBagDefinition
+}
+
 export interface StoryBibleFile {
   background: string
   golden_finger: string
@@ -337,6 +353,7 @@ export interface StoryDocument {
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
   items: StoryItemsFile
+  initialBags: StoryInitialBagsFile
   chainEvents: StoryChainEventsFile
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile
@@ -405,6 +422,7 @@ export interface CompiledStory {
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
   items: StoryItemsFile
+  initialBags: StoryInitialBagsFile
   chainEvents: Record<string, CompiledEvent | CompiledAction>
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile

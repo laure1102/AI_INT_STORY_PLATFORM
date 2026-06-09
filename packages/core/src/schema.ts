@@ -370,6 +370,57 @@ export const storyItemsSchema = z.object({
   }
 })
 
+export const storyInitialBagEntrySchema = z.object({
+  item_id: z.string().min(1),
+  quantity: z.number().int().min(1).default(1),
+  bound: z.boolean().default(false),
+  meta: z.record(z.unknown()).default({})
+}).transform((entry) => ({
+  item_id: entry.item_id.trim(),
+  quantity: entry.quantity,
+  bound: entry.bound,
+  meta: entry.meta
+}))
+
+export const storyInitialBagSchema = z.object({
+  entries: z.array(storyInitialBagEntrySchema).default([])
+})
+
+export const storyInitialBagsSchema = z.record(storyInitialBagSchema)
+  .default({
+    player: {
+      entries: []
+    }
+  })
+  .transform((bags) => ({
+    player: bags.player ?? { entries: [] },
+    ...bags
+  }))
+  .superRefine((bags, context) => {
+    for (const [ownerId, bag] of Object.entries(bags)) {
+      if (!ownerId.trim()) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Bag owner id is required.",
+          path: [ownerId]
+        })
+      }
+
+      const itemIds = new Set<string>()
+      for (const [entryIndex, entry] of bag.entries.entries()) {
+        if (itemIds.has(entry.item_id)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Duplicate initial bag item "${entry.item_id}" for owner "${ownerId}".`,
+            path: [ownerId, "entries", entryIndex, "item_id"]
+          })
+        }
+
+        itemIds.add(entry.item_id)
+      }
+    }
+  })
+
 export const storyBibleSchema = z.object({
   background: z.string().default(""),
   golden_finger: z.string().default(""),
@@ -625,6 +676,7 @@ export const storyDocumentSchema = z.object({
   roles: storyRolesSchema,
   eventLocations: storyEventLocationSchema,
   items: storyItemsSchema.default({}),
+  initialBags: storyInitialBagsSchema,
   chainEvents: storyChainEventsSchema.default([]),
   poolEvents: storyPoolEventsSchema.default([]),
   scheduleEvents: storyScheduleEventsSchema.default([]),

@@ -76,7 +76,6 @@
     ],
     node_type: 'event',
     object_keys: [
-      'player',
       'normal:xitong',
     ],
     title: '回到县城',
@@ -103,10 +102,10 @@
     ],
     end_script: '',
     id: '1st_give_money',
-    init_script: '${player.money} += ${player.first_day_give_money}',
+    init_script: '${player.money} += ${player.first_day_give_money}\nbag_add("player", "population_flow_report", 1)\nbag_add("player", "daily_cash_card", 1)',
     location: '',
     next: [
-      'game_start',
+      'bag_report_check',
     ],
     node_type: 'event',
     object_keys: [
@@ -115,6 +114,39 @@
     title: '第一次给钱',
     trigger_mode: 'default',
     trigger_expr: '',
+  },
+  {
+    dialogues: [
+      {
+        content: '宿主，系统已同步生成第一份人口流动统计表。',
+        speaker_key: 'normal:xitong',
+        speaker_type: 'object',
+      },
+      {
+        content: '以后每日发钱前，会先根据教育、就业和县城级别统计前一日人口流入流出。',
+        speaker_key: 'normal:xitong',
+        speaker_type: 'object',
+      },
+      {
+        content: '也就是说，想让每天到账变多，我得真把县城经营起来。',
+        speaker_key: 'player',
+        speaker_type: 'player',
+      },
+    ],
+    end_script: '',
+    id: 'bag_report_check',
+    init_script: '',
+    location: '',
+    next: [
+      'game_start',
+    ],
+    node_type: 'event',
+    object_keys: [
+      'normal:xitong',
+    ],
+    title: '查看人口流动统计表',
+    trigger_mode: 'condition',
+    trigger_expr: 'bag_has("player", "population_flow_report", 1)',
   },
   {
     dialogues: [],

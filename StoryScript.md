@@ -1,6 +1,6 @@
 # StoryScript 规范
 
-Last updated: `2026-06-08`
+Last updated: `2026-06-09`
 
 本文档定义 Story Manager 项目的统一脚本语言规范。
 
@@ -266,6 +266,7 @@ ${player.money} += 100 // 行尾注释
 - 若使用完整写法，应保证所有执行路径满足布尔语义
 - 条件脚本只读，不允许修改全局变量、系统变量、分支变量、调用参数
 - 条件脚本不允许使用 `invoke_once`
+- 条件脚本只开放只读背包函数：`bag_count`、`bag_has`
 
 ### 6.2 过程脚本规则
 
@@ -297,6 +298,35 @@ invoke_once schedule daily_tax day=${system.now_day}
 - 第二个参数为目标事件 `id`
 - 后续参数使用 `name=expression`
 - 不同步执行
+
+### 6.5 背包函数
+
+运行时背包是玩家存档数据，物品 id 必须来自故事的 `items.json5`。
+
+只读函数：
+
+```ts
+bag_count("player", "item_id")
+bag_has("player", "item_id", 1)
+```
+
+可写函数：
+
+```ts
+bag_add("player", "item_id", 1)
+bag_remove("player", "item_id", 1)
+```
+
+规则：
+
+- `player` 是默认主角/玩家背包 owner id
+- `bag_count` 返回当前数量
+- `bag_has` 返回 `boolean`
+- `bag_add` 添加物品并返回添加后的数量
+- `bag_remove` 在数量足够时扣除物品并返回 `true`，否则返回 `false`
+- `trigger_expr` 只允许使用 `bag_count`、`bag_has`
+- `init_script`、`end_script`、`action.exec_script` 可以使用四个背包函数
+- 静态校验会检查字面量 `item_id` 是否存在；动态 `item_id` 在运行时检查
 
 ---
 
@@ -345,6 +375,14 @@ if (${call.mama} > 60) {
 老板，现在县城等级是 ${county.level}，账上还有 ${player.money}。
 ```
 
+### 7.6 背包
+
+```ts
+if (!bag_has("player", "population_flow_report", 1)) {
+  bag_add("player", "population_flow_report", 1)
+}
+```
+
 ---
 
 ## 8. 编译与运行时约束
@@ -386,5 +424,9 @@ if (${call.mama} > 60) {
 - `branch.xxx`
 - `call.xxx`
 - `Math.xxx`
+- `bag_count`
+- `bag_has`
+- `bag_add`
+- `bag_remove`
 
 ---

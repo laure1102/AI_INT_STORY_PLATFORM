@@ -774,7 +774,9 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "地点使用地点 id。所有 id 尽量使用 ASCII 小写、数字、下划线或短横线。",
     "物品必须优先复用现有物品 id；确需新增时输出 items 草稿，category_id 必须来自现有物品分类。",
     "判断物品是否已存在时必须先查 itemIndexAll 全量轻量索引；relevantItemDetails 只提供本次更相关物品的详细字段，不代表完整物品库。",
-    "当前事件数据结构还没有正式物品奖励/消耗字段；如果剧情需要获得、消耗或检查物品，请在事件对白、脚本或 notes 中保守说明物品 id，不要编造未知事件字段。",
+    "物品获得、消耗和检查必须走 StoryScript 背包函数，不要编造 reward/items/consume 等未知事件字段。",
+    "背包函数：bag_add(\"player\", \"item_id\", 1) 添加物品；bag_remove(\"player\", \"item_id\", 1) 扣除物品并返回 boolean；bag_count(\"player\", \"item_id\") 返回数量；bag_has(\"player\", \"item_id\", 1) 检查数量。",
+    "背包函数里的 item_id 必须来自现有物品或本次 items 草稿；如果新增物品，事件脚本必须引用该新增物品 id。",
     "StoryScript 不确定时留空，不要编造复杂脚本。",
     "",
     `故事标题: ${state.storyTitle}`,
@@ -1868,6 +1870,7 @@ export async function runStoryCreationAgents(
           ? "你的任务：基于当前待优化草稿输出完整修订版。除非反馈要求重做，否则保留已有 id、变量 key、角色 key、事件 next 和集合类型，必要时补充或重写具体字段。"
           : "你的任务：生成可预览的结构化剧情草稿，默认 3 到 8 个事件。",
         "chain 事件可以通过 next 组成小剧情线；pool 事件必须是可被 AI 剧情导演挑选的平面事件；schedule 事件必须适合时间循环。",
+        "如剧情涉及玩家获得、消耗或检查物品，在 init_script/end_script/操作脚本中使用 bag_add、bag_remove、bag_count、bag_has；不要在事件 JSON 中新增奖励或消耗字段。",
         "不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议和风险说明。"
       ].join("\n\n")
     )

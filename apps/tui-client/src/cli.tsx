@@ -490,6 +490,18 @@ function formatGameMinuteLabel(gameMinute: number | null | undefined) {
   return `第${dayNumber}天 ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
 }
 
+function formatClockMinuteLabel(gameMinute: number | null | undefined) {
+  if (typeof gameMinute !== "number" || !Number.isFinite(gameMinute) || gameMinute < 0) {
+    return "--:--"
+  }
+
+  const safeMinute = Math.trunc(gameMinute)
+  const minuteOfDay = ((safeMinute % (24 * 60)) + (24 * 60)) % (24 * 60)
+  const hour = Math.floor(minuteOfDay / 60)
+  const minute = minuteOfDay % 60
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+}
+
 function buildGlobalValueLines(state: TuiClientAppState) {
   const snapshot = state.session?.getSnapshot()
   if (!snapshot) {
@@ -733,6 +745,41 @@ function buildSchedulerMonitorLines(state: TuiClientAppState) {
       lines.push(
         `${formatSchedulerGameMinuteLabel(item.game_minute, baseDay)} · ${formatSchedulerAuditKindLabel(item.kind)}${sourceLabel} · ${item.message}`
       )
+    }
+  }
+
+  return lines
+}
+
+function buildBagDebugLines(view: RuntimeStoryViewModel) {
+  const lines: string[] = []
+  const maxInlineEntries = 8
+
+  if (view.bagSummary.length === 0) {
+    return ["暂无背包 owner"]
+  }
+
+  for (const bag of view.bagSummary) {
+    lines.push(`${bag.ownerId}: ${bag.itemCount} 类 / ${bag.totalQuantity} 件`)
+
+    if (bag.entries.length === 0) {
+      lines.push("  空")
+      continue
+    }
+
+    for (const entry of bag.entries.slice(0, maxInlineEntries)) {
+      const itemLabel = entry.itemName === entry.itemId
+        ? entry.itemId
+        : `${entry.itemName} (${entry.itemId})`
+      const boundLabel = entry.bound ? " · bound" : ""
+      lines.push(
+        `  - ${itemLabel} x${entry.quantity} · 第${entry.obtainedAtDay}天 ${formatClockMinuteLabel(entry.obtainedAtMinute)}${boundLabel}`
+      )
+    }
+
+    const hiddenCount = bag.entries.length - maxInlineEntries
+    if (hiddenCount > 0) {
+      lines.push(`  ... 另有 ${hiddenCount} 类物品`)
     }
   }
 
@@ -1384,11 +1431,13 @@ function SettingsMenuScreen({
   onSelect: (value: string) => void
 }) {
   const options = useMemo<MenuOption[]>(() => {
-    return [
-      { value: "settings:save", label: "保存进度" },
-      { value: "settings:debug", label: "查看调试信息" },
-      { value: "settings:quit", label: "退出客户端" }
-    ]
+    return state.view
+      ? buildSettingsOptions(state.view)
+      : [
+          { value: "settings:save", label: "保存进度" },
+          { value: "settings:debug", label: "查看调试信息" },
+          { value: "settings:quit", label: "退出客户端" }
+        ]
   }, [state.view])
 
   return (
@@ -1446,6 +1495,7 @@ function GameScreen({
   const sceneImagePath = findCurrentSceneImagePath(state)
   const currentLocationId = findCurrentLocationId(state)
   const footerHint = "h 主界面  t 设置  空格 暂停/继续  l 消息流  i 全局变量  e 调度器"
+  const bagDebugLines = view.screen === "debug" ? buildBagDebugLines(view) : []
   const overlayLines = uiState.overlay === "notifications"
     ? mergedNotifications.slice().reverse()
     : uiState.overlay === "globalVals"
@@ -1485,6 +1535,20 @@ function GameScreen({
               lines={overlayLines}
               offset={uiState.overlayOffset}
             />
+          </Box>
+        ) : null}
+        {!uiState.overlay && view.screen === "debug" ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text color="yellow">[运行时摘要]</Text>
+            <Text color="gray">
+              全局变量组 {view.debugSummary.globalGroupCount} · 系统变量组 {view.debugSummary.systemGroupCount} · 历史 {view.debugSummary.historyCount} · 一次性 {view.debugSummary.triggeredOnceCount}
+            </Text>
+            <Text color="yellow">[背包状态]</Text>
+            {bagDebugLines.map((line, index) => (
+              <Text key={`${index}:${line}`} color={line.startsWith("  ") ? "gray" : "cyan"}>
+                {line}
+              </Text>
+            ))}
           </Box>
         ) : null}
         {!uiState.overlay && view.currentDialogue ? (

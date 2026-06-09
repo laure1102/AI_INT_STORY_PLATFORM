@@ -16,6 +16,7 @@ import {
   validateStoryTextTemplate,
   validateStoryValsCalcRules
 } from "@story-mgr/runtime"
+import type { StoryScriptExecutionContext } from "@story-mgr/runtime"
 import type { StoryValsFile } from "./types"
 
 type EventValidationGroupKey = "chainEvents" | "poolEvents" | "scheduleEvents"
@@ -39,20 +40,6 @@ interface StoryEventValidationShape {
   location: string
 }
 
-function buildInvokeScriptContext(event: StoryEventValidationShape) {
-  const values = Object.fromEntries(
-    (event.invoke_params ?? [])
-      .map((param) => param.name.trim())
-      .filter(Boolean)
-      .map((name) => [`call.${name}`, null] as const)
-  )
-
-  return {
-    values,
-    assignableValues: {}
-  }
-}
-
 function buildCombinedStoryScriptVals(document: StoryDocument): StoryValsFile {
   return {
     variables: [
@@ -62,7 +49,96 @@ function buildCombinedStoryScriptVals(document: StoryDocument): StoryValsFile {
   }
 }
 
-function buildChainActionScriptContext(action: StoryActionFile) {
+function buildValidationBagReadableFunctions(document: StoryDocument) {
+  const itemIds = new Set(document.items.items.map((item) => item.id.trim()).filter(Boolean))
+  const assertItemId = (itemId: unknown) => {
+    if (typeof itemId !== "string") {
+      return
+    }
+
+    const normalizedItemId = itemId.trim()
+    if (!normalizedItemId) {
+      throw new Error("bag item id is required.")
+    }
+
+    if (!itemIds.has(normalizedItemId)) {
+      throw new Error(`bag item "${normalizedItemId}" does not exist in item library.`)
+    }
+  }
+
+  return {
+    bag_count(_ownerId: unknown, itemId: unknown) {
+      assertItemId(itemId)
+      return 0
+    },
+    bag_has(_ownerId: unknown, itemId: unknown) {
+      assertItemId(itemId)
+      return false
+    }
+  }
+}
+
+function buildValidationBagScriptFunctions(document: StoryDocument) {
+  const readableFunctions = buildValidationBagReadableFunctions(document)
+
+  return {
+    bag_add(_ownerId: unknown, itemId: unknown, quantity?: unknown) {
+      readableFunctions.bag_count(_ownerId, itemId)
+      return typeof quantity === "number" && Number.isFinite(quantity) ? Math.max(0, Math.floor(quantity)) : 1
+    },
+    ...readableFunctions,
+    bag_remove(_ownerId: unknown, itemId: unknown) {
+      readableFunctions.bag_count(_ownerId, itemId)
+      return false
+    }
+  }
+}
+
+function buildValidationScriptContext(
+  document: StoryDocument,
+  context?: StoryScriptExecutionContext
+): StoryScriptExecutionContext {
+  return {
+    values: {
+      ...(context?.values ?? {})
+    },
+    assignableValues: {
+      ...(context?.assignableValues ?? {})
+    },
+    functions: {
+      ...buildValidationBagScriptFunctions(document),
+      ...(context?.functions ?? {})
+    }
+  }
+}
+
+function buildValidationReadableContext(document: StoryDocument): StoryScriptExecutionContext {
+  return {
+    functions: buildValidationBagReadableFunctions(document)
+  }
+}
+
+function buildInvokeScriptContext(
+  document: StoryDocument,
+  event: StoryEventValidationShape
+) {
+  const values = Object.fromEntries(
+    (event.invoke_params ?? [])
+      .map((param) => param.name.trim())
+      .filter(Boolean)
+      .map((name) => [`call.${name}`, null] as const)
+  )
+
+  return buildValidationScriptContext(document, {
+    values,
+    assignableValues: {}
+  })
+}
+
+function buildChainActionScriptContext(
+  document: StoryDocument,
+  action: StoryActionFile
+) {
   const values = Object.fromEntries(
     (action.vars ?? [])
       .map((actionVar) => actionVar.name.trim())
@@ -71,10 +147,10 @@ function buildChainActionScriptContext(action: StoryActionFile) {
   )
   const assignableValues = { ...values }
 
-  return {
+  return buildValidationScriptContext(document, {
     values,
     assignableValues
-  }
+  })
 }
 
 function pushIssue(
@@ -188,9 +264,9 @@ function validatePlayableEvent(
   const locationNames = collectLocationNames(document)
   const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
   const triggerMode = event.trigger_mode ?? "default"
-  const invokeScriptContext = triggerMode === "invoke"
-    ? buildInvokeScriptContext(event)
-    : undefined
+  const scriptContext = triggerMode === "invoke"
+    ? buildInvokeScriptContext(document, event)
+    : buildValidationScriptContext(document)
   const scriptVals = buildCombinedStoryScriptVals(document)
   const { codePrefix, label } = getEventValidationMeta(eventGroupKey)
 
@@ -207,7 +283,12 @@ function validatePlayableEvent(
 
     if (event.trigger_expr.trim()) {
       try {
-        evaluateStoryBooleanExpression(scriptVals, event.trigger_expr)
+        evaluateStoryBooleanExpression(
+          scriptVals,
+          event.trigger_expr,
+          undefined,
+          buildValidationReadableContext(document)
+        )
       } catch (error) {
         pushIssue(
           issues,
@@ -243,7 +324,7 @@ function validatePlayableEvent(
       scriptVals,
       scriptField.value,
       undefined,
-      invokeScriptContext
+      scriptContext
     )) {
       pushIssue(
         issues,
@@ -447,7 +528,7 @@ function validateChainAction(
     buildCombinedStoryScriptVals(document),
     action.exec_script,
     undefined,
-    buildChainActionScriptContext(action)
+    buildChainActionScriptContext(document, action)
   )) {
     pushIssue(
       issues,
@@ -538,6 +619,22 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
           issues,
           chainEvents,
           chainActions
+        )
+      }
+    }
+  }
+
+  const itemIds = new Set(document.items.items.map((item) => item.id.trim()).filter(Boolean))
+  for (const [ownerId, bag] of Object.entries(document.initialBags)) {
+    for (const [entryIndex, entry] of bag.entries.entries()) {
+      const normalizedItemId = entry.item_id.trim()
+      if (!itemIds.has(normalizedItemId)) {
+        pushIssue(
+          issues,
+          "error",
+          "initial-bag.missing-item",
+          `Initial bag "${ownerId}" references missing item "${normalizedItemId}".`,
+          ["initialBags", ownerId, "entries", String(entryIndex), "item_id"]
         )
       }
     }

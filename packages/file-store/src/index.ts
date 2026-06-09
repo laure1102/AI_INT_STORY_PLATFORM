@@ -12,6 +12,7 @@ import {
   storyEventLocationSchema,
   storyEventSchema,
   storyImportantRolesDataFileSchema,
+  storyInitialBagsSchema,
   storyItemsSchema,
   storyLoopEventSchema,
   storyScheduleEventsSchema,
@@ -32,6 +33,7 @@ import {
   type StoryEventLocationFile,
   type StoryEventFile,
   type StoryGraphEventsFile,
+  type StoryInitialBagsFile,
   type StoryItemsFile,
   type StoryLoopEventFile,
   type StoryLoopEventsFile,
@@ -95,6 +97,7 @@ export interface StoryFileStore {
     eventLocations: StoryEventLocationFile
   ): Promise<StoryEventLocationFile>
   writeItems(storyId: string, items: StoryItemsFile): Promise<StoryItemsFile>
+  writeInitialBags(storyId: string, initialBags: StoryInitialBagsFile): Promise<StoryInitialBagsFile>
   writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile>
   writePlayerOverrideVals(
     storyId: string,
@@ -290,6 +293,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
     importantRolesFile: path.join(storyDir, "import_roles.json5"),
     eventLocationFile: path.join(storyDir, "event_location.json5"),
     itemsFile: path.join(storyDir, "items.json5"),
+    initialBagsFile: path.join(storyDir, "initial_bags.json5"),
     assetsDir: path.join(storyDir, "assets"),
     backgroundDir: path.join(storyDir, "assets", "background"),
     backgroundRawDir: path.join(storyDir, "assets", "background", "raw"),
@@ -340,6 +344,14 @@ function createDefaultStoryItems(): StoryItemsFile {
     },
     categories: [],
     items: []
+  }
+}
+
+function createDefaultInitialBags(): StoryInitialBagsFile {
+  return {
+    player: {
+      entries: []
+    }
   }
 }
 
@@ -943,6 +955,18 @@ async function readStoryItems(
   return storyItemsSchema.parse(items)
 }
 
+async function readStoryInitialBags(
+  dataDir: string,
+  storyId: string
+): Promise<StoryInitialBagsFile> {
+  const paths = createStoryPaths(dataDir, storyId)
+  const initialBags = await readOptionalJson5File<StoryInitialBagsFile>(
+    paths.initialBagsFile,
+    createDefaultInitialBags()
+  )
+  return storyInitialBagsSchema.parse(initialBags)
+}
+
 async function readStoryGraphEvents(
   dataDir: string,
   storyId: string
@@ -1060,6 +1084,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       roles,
       eventLocations,
       items,
+      initialBags,
       chainEvents,
       poolEvents,
       scheduleEvents
@@ -1074,6 +1099,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       readStoryRoles(dataDir, storyId),
       readStoryEventLocations(dataDir, storyId),
       readStoryItems(dataDir, storyId),
+      readStoryInitialBags(dataDir, storyId),
       readStoryGraphEvents(dataDir, storyId),
       readStoryOnceEvents(dataDir, storyId),
       readStoryLoopEvents(dataDir, storyId)
@@ -1089,6 +1115,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       roles,
       eventLocations,
       items,
+      initialBags,
       chainEvents,
       poolEvents,
       scheduleEvents,
@@ -1351,6 +1378,18 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return parsedItems
   }
 
+  async function writeInitialBags(
+    storyId: string,
+    initialBags: StoryInitialBagsFile
+  ): Promise<StoryInitialBagsFile> {
+    const parsedInitialBags = storyInitialBagsSchema.parse(initialBags)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(paths.initialBagsFile, parsedInitialBags satisfies StoryInitialBagsFile)
+
+    return parsedInitialBags
+  }
+
   async function writeScenes(storyId: string, scenes: StorySceneFile): Promise<StorySceneFile> {
     const parsedScenes = storySceneSchema.parse(scenes)
     const paths = createStoryPaths(dataDir, storyId)
@@ -1603,6 +1642,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     writeRoles,
     writeEventLocations,
     writeItems,
+    writeInitialBags,
     writeVals,
     writePlayerOverrideVals,
     writeSystemVals,

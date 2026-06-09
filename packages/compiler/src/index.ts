@@ -51,6 +51,7 @@ export function compileStory(document: StoryDocument): {
       roles: document.roles,
       eventLocations: document.eventLocations,
       items: document.items,
+      initialBags: document.initialBags,
       chainEvents,
       poolEvents: poolEventsSource,
       scheduleEvents: scheduleEventsSource,

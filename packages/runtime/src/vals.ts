@@ -38,6 +38,7 @@ export interface StoryScriptValidationIssue {
 
 export interface StoryExpressionContext {
   values?: Record<string, unknown>
+  functions?: Record<string, (...args: unknown[]) => unknown>
 }
 
 export interface StoryScriptExecutionContext extends StoryExpressionContext {
@@ -479,6 +480,12 @@ function buildStoryReadableContextValues(
     ...(context?.values ?? {}),
     ...assignableValues
   }
+}
+
+function buildStoryContextFunctions(
+  context?: StoryExpressionContext | StoryScriptExecutionContext
+) {
+  return context?.functions ?? {}
 }
 
 function buildExpressionEvaluator(
@@ -1177,6 +1184,19 @@ function getStoryScriptSafeIdentifierValue(identifier: string) {
   return undefined
 }
 
+function getStoryScriptContextFunction(
+  identifier: string,
+  state: StoryScriptRuntimeState
+) {
+  const contextFunctions = buildStoryContextFunctions(state.executionContext)
+
+  if (Object.prototype.hasOwnProperty.call(contextFunctions, identifier)) {
+    return contextFunctions[identifier]
+  }
+
+  return undefined
+}
+
 function assertStoryScriptBooleanValue(
   value: unknown,
   state: StoryScriptRuntimeState,
@@ -1669,6 +1689,11 @@ function evaluateStoryScriptAstExpression(
       return safeValue
     }
 
+    const contextFunction = getStoryScriptContextFunction(expression.text, state)
+    if (contextFunction) {
+      return contextFunction
+    }
+
     throw createStoryScriptErrorFromNode(
       state.sourceFile,
       expression,
@@ -1971,7 +1996,8 @@ function executeCompiledStoryScript(
   const nextVals = cloneStoryValsFile(valsFile)
   const executionContext: StoryScriptExecutionContext = {
     values: { ...(context?.values ?? {}) },
-    assignableValues: { ...(context?.assignableValues ?? {}) }
+    assignableValues: { ...(context?.assignableValues ?? {}) },
+    functions: { ...(context?.functions ?? {}) }
   }
   const compiledSource = compileStoryScriptSource(source)
   const sourceFile = ts.createSourceFile(
@@ -2112,7 +2138,8 @@ export function evaluateStoryBooleanExpression(
     "predicate",
     maxDepth,
     {
-      values: { ...(context?.values ?? {}) }
+      values: { ...(context?.values ?? {}) },
+      functions: { ...(context?.functions ?? {}) }
     }
   )
 

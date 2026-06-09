@@ -36,6 +36,51 @@ interface RuntimeLocationAssignment {
   descr: string
 }
 
+interface RuntimeStoryItemDefinition {
+  id: string
+  name?: string
+  stackable?: boolean
+  max_stack?: number
+}
+
+interface RuntimeStoryItemsFile {
+  items: RuntimeStoryItemDefinition[]
+}
+
+export interface RuntimeBagEntry {
+  item_id: string
+  quantity: number
+  bound: boolean
+  obtained_at_day: number
+  obtained_at_minute: number
+  meta: Record<string, unknown>
+}
+
+export interface RuntimeBagState {
+  entries: RuntimeBagEntry[]
+}
+
+export interface RuntimeBagsState {
+  player: RuntimeBagState
+  [ownerId: string]: RuntimeBagState
+}
+
+interface RuntimeInitialBagEntry {
+  item_id: string
+  quantity: number
+  bound?: boolean
+  meta?: Record<string, unknown>
+}
+
+interface RuntimeInitialBagsFile {
+  player: {
+    entries: RuntimeInitialBagEntry[]
+  }
+  [ownerId: string]: {
+    entries: RuntimeInitialBagEntry[]
+  }
+}
+
 interface RuntimeNormalRoleDefinition {
   id: string
   name?: string
@@ -221,6 +266,7 @@ export interface RuntimeStorySessionSnapshot {
   system_vals: StoryValsFile
   clock: RuntimeClockState
   scheduler: RuntimeSchedulerState
+  bags: RuntimeBagsState
   triggered_once_events: RuntimeTriggeredOnceState[]
   /** @deprecated 请改用 triggered_once_events */
   loop_event_states: RuntimeLoopEventState[]
@@ -237,6 +283,8 @@ export interface RuntimeStoryBundle {
   scenes: unknown
   roles: unknown
   eventLocations: unknown
+  items?: RuntimeStoryItemsFile
+  initialBags?: RuntimeInitialBagsFile
   chainEvents?: Record<string, unknown>
   poolEvents?: unknown[]
   scheduleEvents?: unknown[]
@@ -292,6 +340,23 @@ export interface RuntimeBranchOptionView {
   }>
 }
 
+export interface RuntimeBagItemView {
+  ownerId: string
+  itemId: string
+  itemName: string
+  quantity: number
+  bound: boolean
+  obtainedAtDay: number
+  obtainedAtMinute: number
+}
+
+export interface RuntimeBagSummary {
+  ownerId: string
+  itemCount: number
+  totalQuantity: number
+  entries: RuntimeBagItemView[]
+}
+
 export interface RuntimeStoryViewModel {
   screen: "boot" | "profile" | "save-select" | "game" | "debug"
   storyTitle: string
@@ -308,6 +373,7 @@ export interface RuntimeStoryViewModel {
     key: string
     value: string
   }>
+  bagSummary: RuntimeBagSummary[]
   debugSummary: {
     globalGroupCount: number
     systemGroupCount: number
@@ -696,6 +762,87 @@ function createDefaultSchedulerState(): RuntimeSchedulerState {
   }
 }
 
+function createDefaultBagsState(): RuntimeBagsState {
+  return {
+    player: {
+      entries: []
+    }
+  }
+}
+
+function normalizeOwnerId(ownerId: unknown) {
+  return typeof ownerId === "string" ? ownerId.trim() : ""
+}
+
+function normalizeItemId(itemId: unknown) {
+  return typeof itemId === "string" ? itemId.trim() : ""
+}
+
+function normalizeBagQuantity(quantity: unknown, fallback = 1) {
+  if (typeof quantity !== "number" || !Number.isFinite(quantity)) {
+    return fallback
+  }
+
+  return Math.max(0, Math.trunc(quantity))
+}
+
+function normalizeBagState(bag: RuntimeBagState | undefined): RuntimeBagState {
+  const entries = Array.isArray(bag?.entries) ? bag.entries : []
+  const normalizedEntries = new Map<string, RuntimeBagEntry>()
+
+  for (const entry of entries) {
+    const itemId = normalizeItemId(entry.item_id)
+    const quantity = normalizeBagQuantity(entry.quantity, 0)
+
+    if (!itemId || quantity <= 0) {
+      continue
+    }
+
+    const existing = normalizedEntries.get(itemId)
+    if (existing) {
+      existing.quantity += quantity
+      continue
+    }
+
+    normalizedEntries.set(itemId, {
+      item_id: itemId,
+      quantity,
+      bound: Boolean(entry.bound),
+      obtained_at_day: Math.max(0, clampInteger(entry.obtained_at_day, 0)),
+      obtained_at_minute: Math.max(0, clampInteger(entry.obtained_at_minute, 0)),
+      meta: entry.meta && typeof entry.meta === "object"
+        ? cloneValue(entry.meta)
+        : {}
+    })
+  }
+
+  return {
+    entries: Array.from(normalizedEntries.values())
+  }
+}
+
+function normalizeBagsState(snapshot: RuntimeStorySessionSnapshot) {
+  const rawBags = snapshot.bags ?? createDefaultBagsState()
+  const nextBags: RuntimeBagsState = createDefaultBagsState()
+
+  for (const [ownerId, bag] of Object.entries(rawBags)) {
+    const normalizedOwnerId = normalizeOwnerId(ownerId)
+    if (!normalizedOwnerId) {
+      continue
+    }
+
+    nextBags[normalizedOwnerId] = normalizeBagState(bag)
+  }
+
+  if (!nextBags.player) {
+    nextBags.player = {
+      entries: []
+    }
+  }
+
+  snapshot.bags = nextBags
+}
+
 function createDefaultClockState(systemVals: StoryValsFile): RuntimeClockState {
   const nowDate = readSystemString(systemVals, "system.now_date", "1990-1-1")
   const parsedNowDate = parseStoryDate(nowDate) ?? { year: 1990, month: 1, day: 1 }
@@ -1044,14 +1191,97 @@ function syncSystemTimeFieldsFromClock(snapshot: RuntimeStorySessionSnapshot) {
   writeSystemValue(snapshot.system_vals, "system.time_pause", isRuntimeTimePaused(snapshot))
 }
 
+function getBundleItemIds(bundle: RuntimeStoryBundle) {
+  return new Set((bundle.items?.items ?? []).map((item) => item.id.trim()).filter(Boolean))
+}
+
+function getBundleItemNameMap(bundle: RuntimeStoryBundle) {
+  const result = new Map<string, string>()
+
+  for (const item of bundle.items?.items ?? []) {
+    const itemId = normalizeItemId(item.id)
+    if (!itemId) {
+      continue
+    }
+
+    result.set(itemId, normalizeText(item.name) || itemId)
+  }
+
+  return result
+}
+
+function createInitialBagsState(bundle: RuntimeStoryBundle, clock: RuntimeClockState): RuntimeBagsState {
+  const initialBags = bundle.initialBags ?? {
+    player: {
+      entries: []
+    }
+  }
+  const itemIds = getBundleItemIds(bundle)
+  const bags: RuntimeBagsState = createDefaultBagsState()
+  const currentDay = Math.max(1, clock.base_day + Math.floor(clock.total_minutes / MINUTES_PER_DAY))
+  const currentMinute = clock.total_minutes
+
+  for (const [ownerId, bag] of Object.entries(initialBags)) {
+    const normalizedOwnerId = normalizeOwnerId(ownerId)
+    if (!normalizedOwnerId) {
+      continue
+    }
+
+    const entries: RuntimeBagEntry[] = []
+    const quantities = new Map<string, RuntimeBagEntry>()
+
+    for (const entry of bag.entries ?? []) {
+      const itemId = normalizeItemId(entry.item_id)
+      const quantity = normalizeBagQuantity(entry.quantity, 1)
+
+      if (!itemId || quantity <= 0 || !itemIds.has(itemId)) {
+        continue
+      }
+
+      const existing = quantities.get(itemId)
+      if (existing) {
+        existing.quantity += quantity
+        continue
+      }
+
+      const nextEntry: RuntimeBagEntry = {
+        item_id: itemId,
+        quantity,
+        bound: Boolean(entry.bound),
+        obtained_at_day: currentDay,
+        obtained_at_minute: currentMinute,
+        meta: entry.meta && typeof entry.meta === "object"
+          ? cloneValue(entry.meta)
+          : {}
+      }
+      quantities.set(itemId, nextEntry)
+      entries.push(nextEntry)
+    }
+
+    bags[normalizedOwnerId] = {
+      entries
+    }
+  }
+
+  if (!bags.player) {
+    bags.player = {
+      entries: []
+    }
+  }
+
+  return bags
+}
+
 function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnapshot {
   const systemVals = cloneValsFile(bundle.systemVals)
+  const clock = createDefaultClockState(systemVals)
   const snapshot: RuntimeStorySessionSnapshot = {
     current_event_id: null,
     vals: cloneValsFile(bundle.vals),
     system_vals: systemVals,
-    clock: createDefaultClockState(systemVals),
+    clock,
     scheduler: createDefaultSchedulerState(),
+    bags: createInitialBagsState(bundle, clock),
     triggered_once_events: [],
     loop_event_states: [],
     history: []
@@ -1497,7 +1727,7 @@ function promoteDueScheduledEvents(
 
       const standaloneLoopEvent = createStandaloneEvent("schedule", loopEvent)
       // 循环事件只有在到点时条件成立，才真正进入就绪队列。
-      if (!canEnterEvent(snapshot, standaloneLoopEvent, {})) {
+      if (!canEnterEvent(bundle, snapshot, standaloneLoopEvent, {})) {
         const loopState = getLoopSchedulerState(snapshot, loopEvent.id)
         loopState.next_due_game_minute = calculateNextLoopDueGameMinute(
           snapshot,
@@ -1606,7 +1836,7 @@ function scanDirectorEntryEvents(
     if (
       !isCompiledEvent(rootNode)
       || !isRuntimeEventScannable(rootNode)
-      || !canEnterEvent(runtimeState.snapshot, rootNode, {})
+      || !canEnterEvent(bundle, runtimeState.snapshot, rootNode, {})
     ) {
       continue
     }
@@ -1645,7 +1875,7 @@ function scanDirectorEntryEvents(
     }
 
     const standaloneEvent = createStandaloneEvent("pool", event)
-    if (!canEnterEvent(runtimeState.snapshot, standaloneEvent, {})) {
+    if (!canEnterEvent(bundle, runtimeState.snapshot, standaloneEvent, {})) {
       continue
     }
 
@@ -2100,6 +2330,7 @@ function getRuntimePlayableEventCallValues(
 }
 
 function buildRuntimeContextValues(
+  bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   branchValues: Record<string, unknown>,
   callValues: Record<string, unknown> = {}
@@ -2115,11 +2346,162 @@ function buildRuntimeContextValues(
   }
 
   return {
-    values: combinedValues
+    values: combinedValues,
+    functions: createRuntimeBagReadableFunctions(bundle, snapshot)
   } satisfies StoryScriptExecutionContext
 }
 
+function getCurrentRuntimeBagTimestamp(snapshot: RuntimeStorySessionSnapshot) {
+  normalizeClockState(snapshot)
+  return {
+    day: Math.max(1, snapshot.clock.base_day + Math.floor(snapshot.clock.total_minutes / MINUTES_PER_DAY)),
+    minute: snapshot.clock.total_minutes
+  }
+}
+
+function getBag(snapshot: RuntimeStorySessionSnapshot, ownerId: string) {
+  normalizeBagsState(snapshot)
+
+  if (!snapshot.bags[ownerId]) {
+    snapshot.bags[ownerId] = {
+      entries: []
+    }
+  }
+
+  return snapshot.bags[ownerId]
+}
+
+function getBagEntry(snapshot: RuntimeStorySessionSnapshot, ownerId: string, itemId: string) {
+  return getBag(snapshot, ownerId).entries.find((entry) => entry.item_id === itemId) ?? null
+}
+
+function findBagEntry(snapshot: RuntimeStorySessionSnapshot, ownerId: string, itemId: string) {
+  normalizeBagsState(snapshot)
+  return snapshot.bags[ownerId]?.entries.find((entry) => entry.item_id === itemId) ?? null
+}
+
+function assertRuntimeBagArgs(ownerId: unknown, itemId: unknown, quantity?: unknown) {
+  const normalizedOwnerId = normalizeOwnerId(ownerId)
+  const normalizedItemId = normalizeItemId(itemId)
+  const normalizedQuantity = normalizeBagQuantity(quantity, 1)
+
+  if (!normalizedOwnerId) {
+    throw new Error("bag owner id is required.")
+  }
+
+  if (!normalizedItemId) {
+    throw new Error("bag item id is required.")
+  }
+
+  if (normalizedQuantity <= 0) {
+    throw new Error("bag quantity must be greater than 0.")
+  }
+
+  return {
+    itemId: normalizedItemId,
+    ownerId: normalizedOwnerId,
+    quantity: normalizedQuantity
+  }
+}
+
+function createRuntimeBagReadableFunctions(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+) {
+  const itemIds = getBundleItemIds(bundle)
+  const getReadArgs = (ownerId: unknown, itemId: unknown) => {
+    const normalizedOwnerId = normalizeOwnerId(ownerId)
+    const normalizedItemId = normalizeItemId(itemId)
+
+    if (!normalizedOwnerId || !normalizedItemId) {
+      return null
+    }
+
+    if (!itemIds.has(normalizedItemId)) {
+      throw new Error(`bag item "${normalizedItemId}" does not exist in runtime item library.`)
+    }
+
+    return {
+      itemId: normalizedItemId,
+      ownerId: normalizedOwnerId
+    }
+  }
+
+  return {
+    bag_count(ownerId: unknown, itemId: unknown) {
+      const args = getReadArgs(ownerId, itemId)
+      return args ? (findBagEntry(snapshot, args.ownerId, args.itemId)?.quantity ?? 0) : 0
+    },
+    bag_has(ownerId: unknown, itemId: unknown, quantity?: unknown) {
+      const normalizedQuantity = normalizeBagQuantity(quantity, 1)
+
+      if (normalizedQuantity <= 0) {
+        return true
+      }
+
+      const args = getReadArgs(ownerId, itemId)
+      return args
+        ? (findBagEntry(snapshot, args.ownerId, args.itemId)?.quantity ?? 0) >= normalizedQuantity
+        : false
+    }
+  }
+}
+
+function createRuntimeBagScriptFunctions(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+) {
+  const itemIds = getBundleItemIds(bundle)
+  const readableFunctions = createRuntimeBagReadableFunctions(bundle, snapshot)
+
+  return {
+    bag_add(ownerId: unknown, itemId: unknown, quantity?: unknown) {
+      const args = assertRuntimeBagArgs(ownerId, itemId, quantity)
+      const existingEntry = getBagEntry(snapshot, args.ownerId, args.itemId)
+
+      if (!itemIds.has(args.itemId)) {
+        throw new Error(`bag item "${args.itemId}" does not exist in runtime item library.`)
+      }
+
+      if (existingEntry) {
+        existingEntry.quantity += args.quantity
+        return existingEntry.quantity
+      }
+
+      const timestamp = getCurrentRuntimeBagTimestamp(snapshot)
+      getBag(snapshot, args.ownerId).entries.push({
+        item_id: args.itemId,
+        quantity: args.quantity,
+        bound: false,
+        obtained_at_day: timestamp.day,
+        obtained_at_minute: timestamp.minute,
+        meta: {}
+      })
+
+      return args.quantity
+    },
+    ...readableFunctions,
+    bag_remove(ownerId: unknown, itemId: unknown, quantity?: unknown) {
+      const args = assertRuntimeBagArgs(ownerId, itemId, quantity)
+      const bag = getBag(snapshot, args.ownerId)
+      const entry = bag.entries.find((item) => item.item_id === args.itemId)
+
+      if (!entry || entry.quantity < args.quantity) {
+        return false
+      }
+
+      entry.quantity -= args.quantity
+      if (entry.quantity <= 0) {
+        bag.entries = bag.entries.filter((item) => item.item_id !== args.itemId)
+      }
+
+      return true
+    }
+  }
+}
+
 function buildRuntimeScriptContext(
+  bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   branchValues: Record<string, unknown>,
   callValues: Record<string, unknown> = {}
@@ -2138,7 +2520,8 @@ function buildRuntimeScriptContext(
 
   return {
     values: combinedValues,
-    assignableValues
+    assignableValues,
+    functions: createRuntimeBagScriptFunctions(bundle, snapshot)
   } satisfies StoryScriptExecutionContext
 }
 
@@ -2179,7 +2562,7 @@ function executeEventScript(
     return branchValues
   }
 
-  const executionContext = buildRuntimeScriptContext(runtimeState.snapshot, branchValues, callValues)
+  const executionContext = buildRuntimeScriptContext(bundle, runtimeState.snapshot, branchValues, callValues)
   const combinedValsFile = createCombinedValsFile(runtimeState.snapshot)
   const result = executeStoryScript(
     combinedValsFile,
@@ -2342,6 +2725,7 @@ function enqueueStoryScriptInvocations(
 }
 
 function renderDialogueContent(
+  bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   content: string,
   branchValues: Record<string, unknown>,
@@ -2352,7 +2736,7 @@ function renderDialogueContent(
     combinedValsFile,
     content,
     DEFAULT_MAX_CALC_NESTING_DEPTH,
-    buildRuntimeContextValues(snapshot, branchValues, callValues)
+    buildRuntimeContextValues(bundle, snapshot, branchValues, callValues)
   )
 }
 
@@ -2374,7 +2758,7 @@ function buildDialogueView(
     total,
     speakerLabel,
     speakerKey: dialogue.speaker_key,
-    content: renderDialogueContent(snapshot, dialogue.content, branchValues, callValues)
+    content: renderDialogueContent(bundle, snapshot, dialogue.content, branchValues, callValues)
   }
 }
 
@@ -2427,7 +2811,7 @@ function pickFirstEnterableNextEventId(
       continue
     }
 
-    if (canEnterEvent(snapshot, candidateNode, branchValues, callValues)) {
+    if (canEnterEvent(bundle, snapshot, candidateNode, branchValues, callValues)) {
       return candidateNode.id
     }
   }
@@ -2451,6 +2835,7 @@ function completeScheduledChain(
 }
 
 function canEnterEvent(
+  bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   event: RuntimePlayableEvent,
   branchValues: Record<string, unknown>,
@@ -2475,7 +2860,7 @@ function canEnterEvent(
     combinedValsFile,
     triggerExpr,
     DEFAULT_MAX_CALC_NESTING_DEPTH,
-    buildRuntimeContextValues(snapshot, branchValues, callValues ?? getRuntimeEventCallValues(event))
+    buildRuntimeContextValues(bundle, snapshot, branchValues, callValues ?? getRuntimeEventCallValues(event))
   )
 
   return triggerResult.result
@@ -2721,7 +3106,7 @@ function promoteDueScheduledEventsResolved(
 
       const standaloneLoopEvent = createStandaloneEvent("schedule", loopEvent)
       // 循环事件在到点时才判断触发条件，不满足则跳过本周期并重排下次时间。
-      if (!canEnterEvent(snapshot, standaloneLoopEvent, {})) {
+      if (!canEnterEvent(bundle, snapshot, standaloneLoopEvent, {})) {
         const loopState = getLoopSchedulerState(snapshot, loopEvent.id)
         loopState.next_due_game_minute = calculateNextLoopDueGameMinute(
           snapshot,
@@ -2782,7 +3167,7 @@ function moveToEventResolved(
 
   if (
     !options.skipTriggerCheck
-    && !canEnterEvent(runtimeState.snapshot, targetNode, branchValues, getRuntimeActiveCallValues(runtimeState))
+    && !canEnterEvent(bundle, runtimeState.snapshot, targetNode, branchValues, getRuntimeActiveCallValues(runtimeState))
   ) {
     appendSchedulerAudit(runtimeState.snapshot, {
       kind: "skip-event",
@@ -2830,7 +3215,7 @@ function enterCurrentEventResolved(
   const branchValues = runtimeState.lastAction?.branchValues ?? {}
   const callValues = getRuntimePlayableEventCallValues(runtimeState, currentNode)
 
-  if (!options.skipTriggerCheck && !canEnterEvent(runtimeState.snapshot, currentNode, branchValues, callValues)) {
+  if (!options.skipTriggerCheck && !canEnterEvent(bundle, runtimeState.snapshot, currentNode, branchValues, callValues)) {
     appendSchedulerAudit(runtimeState.snapshot, {
       kind: "skip-event",
       source_type: runtimeState.snapshot.scheduler.active?.source_type,
@@ -2944,6 +3329,7 @@ function executeAction(
   }
 
   const executionContext = buildRuntimeScriptContext(
+    bundle,
     runtimeState.snapshot,
     targetActionState.branchValues,
     getRuntimePlayableEventCallValues(runtimeState, sourceEvent)
@@ -3028,6 +3414,58 @@ function getCurrentEventState(
   }
 }
 
+function buildRuntimeBagSummary(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+): RuntimeBagSummary[] {
+  normalizeBagsState(snapshot)
+
+  const itemNames = getBundleItemNameMap(bundle)
+
+  return Object.entries(snapshot.bags)
+    .map(([ownerId, bag]) => {
+      const normalizedOwnerId = normalizeOwnerId(ownerId)
+      const entries = bag.entries
+        .filter((entry) => entry.quantity > 0)
+        .map((entry) => {
+          const itemId = normalizeItemId(entry.item_id)
+          return {
+            ownerId: normalizedOwnerId,
+            itemId,
+            itemName: itemNames.get(itemId) ?? itemId,
+            quantity: entry.quantity,
+            bound: entry.bound,
+            obtainedAtDay: entry.obtained_at_day,
+            obtainedAtMinute: entry.obtained_at_minute
+          } satisfies RuntimeBagItemView
+        })
+        .filter((entry) => entry.itemId)
+        .sort((left, right) => {
+          const nameCompare = left.itemName.localeCompare(right.itemName, "zh-Hans-CN")
+          return nameCompare !== 0 ? nameCompare : left.itemId.localeCompare(right.itemId)
+        })
+
+      return {
+        ownerId: normalizedOwnerId,
+        itemCount: entries.length,
+        totalQuantity: entries.reduce((sum, entry) => sum + entry.quantity, 0),
+        entries
+      } satisfies RuntimeBagSummary
+    })
+    .filter((bag) => bag.ownerId)
+    .sort((left, right) => {
+      if (left.ownerId === "player") {
+        return right.ownerId === "player" ? 0 : -1
+      }
+
+      if (right.ownerId === "player") {
+        return 1
+      }
+
+      return left.ownerId.localeCompare(right.ownerId)
+    })
+}
+
 function buildViewModel(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
@@ -3086,6 +3524,8 @@ function buildViewModel(
     })
   )
 
+  const bagSummary = buildRuntimeBagSummary(bundle, runtimeState.snapshot)
+
   const availableBranches = (currentEventState?.availableActions ?? []).flatMap((actionState) => {
     const actionNode = getBundleGraphNode(bundle, actionState.nodeId)
     if (!isCompiledAction(actionNode)) {
@@ -3117,6 +3557,7 @@ function buildViewModel(
     currentDialogue,
     availableBranches,
     branchContextSummary,
+    bagSummary,
     debugSummary: {
       globalGroupCount: runtimeState.snapshot.vals.variables.length,
       systemGroupCount: runtimeState.snapshot.system_vals.variables.length,
@@ -3152,6 +3593,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     runtimeState.snapshot.scheduler = createDefaultSchedulerState()
   }
 
+  normalizeBagsState(runtimeState.snapshot)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)
 
   if (!options.saveState && options.customOverrides) {
