@@ -3,6 +3,7 @@ import type {
   AppSettingsFile,
   StoryAnyEventFile,
   StoryActionFile,
+  StoryBibleFile,
   StoryDocument,
   StoryEventCollectionType,
   StoryEventFile,
@@ -17,6 +18,11 @@ import type {
   ValidationIssue,
   ValidationResult
 } from "@story-mgr/core"
+import type {
+  ApplyStoryCreationDraftSelection,
+  RunStoryCreationAgentResponse,
+  StoryCreationDraft
+} from "@story-mgr/shared"
 import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
 import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
 import AppSettingsDialog from "./AppSettingsDialog.vue"
@@ -24,6 +30,7 @@ import GraphActionDetailPanel from "./GraphActionDetailPanel.vue"
 import GraphEventDetailPanel from "./GraphEventDetailPanel.vue"
 import LoopEventDetailPanel from "./LoopEventDetailPanel.vue"
 import OnceEventDetailPanel from "./OnceEventDetailPanel.vue"
+import StoryCreationWorkspace from "./StoryCreationWorkspace.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
 import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
 import StoryLocationsDialog from "./StoryLocationsDialog.vue"
@@ -42,6 +49,8 @@ import {
 
 type EventCanvasTab = Extract<StoryEventCollectionType, "chain" | "pool" | "schedule">
 type EventTriggerFilter = "all" | "normal" | "invoke"
+type StoryWorkspaceTab = "creation" | "events"
+type StoryCreationAgentRunMode = "new" | "feedback"
 
 const props = defineProps<{
   storyId: string
@@ -49,16 +58,19 @@ const props = defineProps<{
 
 const projectStore = useProjectStore()
 const {
+  applyStoryCreationDraft,
   deleteEvent,
   exportStory,
   getAppSettings,
   getStory,
+  runStoryCreationAgent,
   saveAppSettings,
   saveEvent,
   saveEventLocations,
   savePlayerOverrideVals,
   saveRoles,
   saveScenes,
+  saveStoryBible,
   saveSystemVals,
   saveVals,
   validateStory
@@ -71,7 +83,14 @@ const exportPath = shallowRef<string | null>(null)
 const isLoading = shallowRef(true)
 const isSaving = shallowRef(false)
 const isExporting = shallowRef(false)
+const isAgentRunning = shallowRef(false)
+const isCreationDraftApplying = shallowRef(false)
 const errorMessage = shallowRef<string | null>(null)
+const creationAgentResult = shallowRef<RunStoryCreationAgentResponse | null>(null)
+const creationAgentRunMode = shallowRef<StoryCreationAgentRunMode | null>(null)
+const creationAgentError = shallowRef<string | null>(null)
+const creationApplyMessage = shallowRef<string | null>(null)
+const creationApplyWarnings = shallowRef<string[]>([])
 const editingEventId = shallowRef<string | null>(null)
 const creatingFromEventId = shallowRef<string | null>(null)
 const creatingEventDraft = shallowRef<StoryAnyEventFile | null>(null)
@@ -85,8 +104,14 @@ const isSettingsDialogOpen = shallowRef(false)
 const scenesSaveSuccessMessage = shallowRef<string | null>(null)
 const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
+const activeWorkspaceTab = shallowRef<StoryWorkspaceTab>("creation")
 const activeEventTab = shallowRef<EventCanvasTab>("chain")
 const eventTriggerFilter = shallowRef<EventTriggerFilter>("all")
+
+const workspaceTabOptions: Array<{ key: StoryWorkspaceTab; label: string }> = [
+  { key: "creation", label: "创作" },
+  { key: "events", label: "事件" }
+]
 
 const eventTabOptions: Array<{ key: EventCanvasTab; label: string }> = [
   { key: "chain", label: "链式剧情线" },
@@ -658,6 +683,11 @@ async function loadStory() {
   isLoading.value = true
   errorMessage.value = null
   exportPath.value = null
+  creationAgentResult.value = null
+  creationAgentRunMode.value = null
+  creationAgentError.value = null
+  creationApplyMessage.value = null
+  creationApplyWarnings.value = []
 
   try {
     const [story, settings] = await Promise.all([getStory(props.storyId), getAppSettings()])
@@ -867,6 +897,15 @@ function handleSwitchEventTab(tab: EventCanvasTab) {
 
   closeEditor()
   activeEventTab.value = tab
+}
+
+function handleSwitchWorkspaceTab(tab: StoryWorkspaceTab) {
+  if (activeWorkspaceTab.value === tab) {
+    return
+  }
+
+  closeEditor()
+  activeWorkspaceTab.value = tab
 }
 
 async function handleDeleteGraphNode(eventId: string) {
@@ -1132,6 +1171,105 @@ async function handleQuickCreateLocation(payload: StoryQuickCreateLocationPayloa
   )
 }
 
+async function handleSaveStoryBible(storyBible: StoryBibleFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    const savedStoryBible = await saveStoryBible(props.storyId, storyBible)
+    storyDocument.value = {
+      ...storyDocument.value,
+      storyBible: savedStoryBible
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存创作设定失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function handleRunCreationAgent(instruction: string, baseDraft?: StoryCreationDraft) {
+  if (!storyDocument.value || isAgentRunning.value) {
+    return
+  }
+
+  const runMode: StoryCreationAgentRunMode = baseDraft ? "feedback" : "new"
+  isAgentRunning.value = true
+  creationAgentRunMode.value = runMode
+  creationAgentError.value = null
+  errorMessage.value = null
+  if (!baseDraft) {
+    creationAgentResult.value = null
+  }
+  creationApplyMessage.value = null
+  creationApplyWarnings.value = []
+
+  try {
+    creationAgentResult.value = await runStoryCreationAgent(props.storyId, instruction, baseDraft)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "AI 创作 Agent 运行失败。"
+    creationAgentError.value = message
+    errorMessage.value = message
+  } finally {
+    isAgentRunning.value = false
+    creationAgentRunMode.value = null
+  }
+}
+
+function selectAppliedEvent(selection: ApplyStoryCreationDraftSelection) {
+  const firstEventKey = selection.eventKeys[0]
+  if (!firstEventKey) {
+    return
+  }
+
+  const [collectionType, eventId] = firstEventKey.split(":")
+  if (
+    !eventId ||
+    (collectionType !== "chain" && collectionType !== "pool" && collectionType !== "schedule")
+  ) {
+    return
+  }
+
+  activeEventTab.value = collectionType
+  projectStore.selectEvent(props.storyId, collectionType, eventId)
+}
+
+async function handleApplyCreationDraft(
+  draft: StoryCreationDraft,
+  selection: ApplyStoryCreationDraftSelection
+) {
+  if (!storyDocument.value || isCreationDraftApplying.value) {
+    return
+  }
+
+  isCreationDraftApplying.value = true
+  errorMessage.value = null
+  creationApplyMessage.value = null
+  creationApplyWarnings.value = []
+
+  try {
+    const response = await applyStoryCreationDraft(props.storyId, {
+      draft,
+      selection
+    })
+
+    storyDocument.value = response.story
+    validation.value = response.result
+    creationApplyWarnings.value = response.warnings
+    creationApplyMessage.value = `已应用 ${response.applied.events} 个事件、${response.applied.locations} 个地点、${response.applied.roles} 个角色、${response.applied.variables} 个变量。`
+    closeEditor()
+    selectAppliedEvent(selection)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "应用 AI 草稿失败。"
+  } finally {
+    isCreationDraftApplying.value = false
+  }
+}
+
 async function handleSaveAppSettings(settings: AppSettingsFile) {
   isSaving.value = true
   errorMessage.value = null
@@ -1223,6 +1361,12 @@ watch(
     isScenesDialogOpen.value = false
     isLocationsDialogOpen.value = false
     isRolesDialogOpen.value = false
+    activeWorkspaceTab.value = "creation"
+    creationAgentResult.value = null
+    creationAgentRunMode.value = null
+    creationAgentError.value = null
+    creationApplyMessage.value = null
+    creationApplyWarnings.value = []
     scenesSaveSuccessMessage.value = null
     locationsSaveSuccessMessage.value = null
     rolesSaveSuccessMessage.value = null
@@ -1287,7 +1431,22 @@ watch(
       运行时数据已导出到 {{ exportPath }}
     </div>
 
-    <section class="editor-main">
+    <div v-if="storyDocument" class="editor-workspace-tabs" role="tablist" aria-label="故事工作区">
+      <button
+        v-for="tab in workspaceTabOptions"
+        :key="tab.key"
+        class="editor-workspace-tabs__button"
+        :class="{ 'editor-workspace-tabs__button--active': activeWorkspaceTab === tab.key }"
+        type="button"
+        role="tab"
+        :aria-selected="activeWorkspaceTab === tab.key"
+        @click="handleSwitchWorkspaceTab(tab.key)"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <section v-if="activeWorkspaceTab === 'events' || (isLoading && !storyDocument)" class="editor-main">
       <div class="editor-validation-row">
         <div class="editor-status glass-panel">
           <div>
@@ -1327,7 +1486,24 @@ watch(
       <p v-if="isLoading && !storyDocument" class="muted">正在加载剧情数据...</p>
     </section>
 
-    <section v-if="storyDocument" class="editor-canvas-band">
+    <StoryCreationWorkspace
+      v-if="storyDocument && activeWorkspaceTab === 'creation'"
+      :agent-result="creationAgentResult"
+      :agent-run-mode="creationAgentRunMode"
+      :agent-running="isAgentRunning"
+      :agent-error="creationAgentError"
+      :apply-message="creationApplyMessage"
+      :apply-warnings="creationApplyWarnings"
+      :applying="isCreationDraftApplying"
+      :settings="appSettings"
+      :saving="isSaving"
+      :story="storyDocument"
+      @apply-draft="handleApplyCreationDraft"
+      @run-agent="handleRunCreationAgent"
+      @save-story-bible="handleSaveStoryBible"
+    />
+
+    <section v-if="storyDocument && activeWorkspaceTab === 'events'" class="editor-canvas-band">
       <div class="editor-event-tabs">
         <div class="editor-event-tabs__tablist" role="tablist" aria-label="剧情事件类型">
           <button
@@ -1396,7 +1572,7 @@ watch(
     <Teleport to="body">
       <Transition name="fade">
         <div
-          v-if="storyDocument && (editingEvent || creatingEventDraft)"
+          v-if="storyDocument && activeWorkspaceTab === 'events' && (editingEvent || creatingEventDraft)"
           class="editor-modal"
           @click.self="closeEditor"
         >
@@ -1623,6 +1799,39 @@ watch(
   display: grid;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.editor-workspace-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  margin: 0 0 6px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.editor-workspace-tabs__button {
+  min-height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.editor-workspace-tabs__button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.editor-workspace-tabs__button--active {
+  background: rgba(255, 180, 84, 0.9);
+  color: #1d1200;
+  font-weight: 700;
 }
 
 .editor-canvas-band {

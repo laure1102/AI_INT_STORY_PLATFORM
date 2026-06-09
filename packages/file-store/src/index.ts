@@ -4,6 +4,7 @@ import JSON5 from "json5"
 import sharp from "sharp"
 import {
   appSettingsSchema,
+  storyBibleSchema,
   storyChainEventsSchema,
   storyActionSchema,
   storyOnceEventSchema,
@@ -22,6 +23,7 @@ import {
   type AppSettingsFile,
   type StoryAnyEventFile,
   type StoryActionFile,
+  type StoryBibleFile,
   type StoryChainEventsFile,
   type StoryCanonicalEventCollectionType,
   type StoryEventCollectionType,
@@ -66,6 +68,7 @@ export interface StoryFileStore {
   readAppSettings(): Promise<AppSettingsFile>
   listStorySummaries(): Promise<StorySummary[]>
   readStoryDocument(storyId: string): Promise<StoryDocument>
+  readStoryBible(storyId: string): Promise<StoryBibleFile>
   readEvent(
     storyId: string,
     eventId: string,
@@ -83,6 +86,7 @@ export interface StoryFileStore {
     eventId: string,
     collectionType?: StoryEventCollectionType
   ): Promise<void>
+  writeStoryBible(storyId: string, storyBible: StoryBibleFile): Promise<StoryBibleFile>
   writeRoles(storyId: string, roles: StoryRolesFile): Promise<StoryRolesFile>
   writeEventLocations(
     storyId: string,
@@ -256,6 +260,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
   return {
     storyDir,
     metaFile: path.join(storyDir, "story.json5"),
+    storyBibleFile: path.join(storyDir, "story_bible.json5"),
     valsFile: path.join(storyDir, "vals.json5"),
     playerOverrideValsFile: path.join(storyDir, "player_override_vals.json5"),
     systemValsFile: path.join(storyDir, "system_vals.json5"),
@@ -284,6 +289,48 @@ function createStoryPaths(dataDir: string, storyId: string) {
 function createAppPaths(dataDir: string) {
   return {
     settingsFile: path.join(dataDir, "setting.json5")
+  }
+}
+
+function createDefaultStoryBible(): StoryBibleFile {
+  return {
+    background: "",
+    golden_finger: "",
+    protagonist: "",
+    world_rules: "",
+    outline: "",
+    current_arc: "",
+    gameplay_design: "",
+    style_guide: "",
+    constraints: ""
+  }
+}
+
+function createDefaultAppSettings(): AppSettingsFile {
+  return {
+    ai: {
+      image: {
+        apiKey: "",
+        baseUrl: "",
+        model: ""
+      },
+      text: {
+        apiKey: "",
+        baseUrl: "",
+        model: ""
+      },
+      agent: {
+        apiKey: "",
+        baseUrl: "",
+        chiefEditorModel: "",
+        plotPlannerModel: "",
+        assetDesignerModel: "",
+        eventWriterModel: "",
+        scriptDoctorModel: "",
+        consistencyCheckerModel: "",
+        temperature: 0.7
+      }
+    }
   }
 }
 
@@ -698,21 +745,20 @@ async function readStoryMeta(dataDir: string, storyId: string): Promise<StoryMet
 
 async function readAppSettingsFile(dataDir: string): Promise<AppSettingsFile> {
   const paths = createAppPaths(dataDir)
-  const settings = await readOptionalJson5File<AppSettingsFile>(paths.settingsFile, {
-    ai: {
-      image: {
-        apiKey: "",
-        baseUrl: "",
-        model: ""
-      },
-      text: {
-        apiKey: "",
-        baseUrl: "",
-        model: ""
-      }
-    }
-  })
+  const settings = await readOptionalJson5File<AppSettingsFile>(
+    paths.settingsFile,
+    createDefaultAppSettings()
+  )
   return appSettingsSchema.parse(settings)
+}
+
+async function readStoryBibleFile(dataDir: string, storyId: string): Promise<StoryBibleFile> {
+  const paths = createStoryPaths(dataDir, storyId)
+  const storyBible = await readOptionalJson5File<StoryBibleFile>(
+    paths.storyBibleFile,
+    createDefaultStoryBible()
+  )
+  return storyBibleSchema.parse(storyBible)
 }
 
 async function readStoryVals(dataDir: string, storyId: string): Promise<StoryValsFile> {
@@ -892,6 +938,10 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return readAppSettingsFile(dataDir)
   }
 
+  async function readStoryBible(storyId: string): Promise<StoryBibleFile> {
+    return readStoryBibleFile(dataDir, storyId)
+  }
+
   async function listStorySummaries(): Promise<StorySummary[]> {
     const storyIds = await listStoryIds(path.join(dataDir, "stories"))
 
@@ -917,6 +967,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   async function readStoryDocument(storyId: string): Promise<StoryDocument> {
     const [
       story,
+      storyBible,
       vals,
       playerOverrideVals,
       systemVals,
@@ -929,6 +980,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     ] =
       await Promise.all([
       readStoryMeta(dataDir, storyId),
+      readStoryBibleFile(dataDir, storyId),
       readStoryVals(dataDir, storyId),
       readStoryPlayerOverrideVals(dataDir, storyId),
       readStorySystemVals(dataDir, storyId),
@@ -942,6 +994,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
 
     return {
       story,
+      storyBible,
       vals,
       playerOverrideVals,
       systemVals,
@@ -1116,6 +1169,20 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     await writeJson5File(paths.settingsFile, parsedSettings satisfies AppSettingsFile)
 
     return parsedSettings
+  }
+
+  async function writeStoryBible(
+    storyId: string,
+    storyBible: StoryBibleFile
+  ): Promise<StoryBibleFile> {
+    await ensureStoryExists(dataDir, storyId)
+
+    const parsedStoryBible = storyBibleSchema.parse(storyBible)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(paths.storyBibleFile, parsedStoryBible satisfies StoryBibleFile)
+
+    return parsedStoryBible
   }
 
   async function writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile> {
@@ -1375,8 +1442,10 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     readAppSettings,
     listStorySummaries,
     readStoryDocument,
+    readStoryBible,
     readEvent,
     writeAppSettings,
+    writeStoryBible,
     writeEvent,
     deleteEvent,
     writeRoles,

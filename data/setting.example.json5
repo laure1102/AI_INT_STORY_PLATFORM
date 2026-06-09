@@ -9,6 +9,17 @@
       apiKey: "",
       baseUrl: "",
       model: ""
+    },
+    agent: {
+      apiKey: "",
+      baseUrl: "",
+      chiefEditorModel: "",
+      plotPlannerModel: "",
+      assetDesignerModel: "",
+      eventWriterModel: "",
+      scriptDoctorModel: "",
+      consistencyCheckerModel: "",
+      temperature: 0.7
     }
   }
 }

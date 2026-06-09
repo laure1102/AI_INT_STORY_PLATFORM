@@ -1,6 +1,6 @@
 # Story Manager Agent Guide
 
-Last updated: `2026-06-08`
+Last updated: `2026-06-09`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -55,6 +55,7 @@ Each story lives under `data/stories/<storyId>/`.
 Core files:
 
 - `story.json5`
+- `story_bible.json5`
 - `vals.json5`
 - `player_override_vals.json5`
 - `system_vals.json5`
@@ -71,6 +72,7 @@ Event files:
 
 Notes:
 
+- `story_bible.json5` is editor/backend creation context only; it is not compiled into runtime bundles.
 - `nomal_roles.json5` and `import_roles.json5` are the active file names, even though `nomal` is misspelled.
 - Old `roles.json5` and `roles_setting.json5` should not be restored.
 - Chain event nodes and action nodes now live together in `events/chains.json5`.
@@ -228,6 +230,31 @@ Notes:
 
 - `startEventId` has been removed from `story.json5`
 - runtime now auto-discovers chain start events by finding chain `event` nodes with no incoming chain-event parent
+
+### `story_bible.json5`
+
+Backend AI creation context for turning a web-novel premise into playable structured content:
+
+```json5
+{
+  background: "",
+  golden_finger: "",
+  protagonist: "",
+  world_rules: "",
+  outline: "",
+  current_arc: "",
+  gameplay_design: "",
+  style_guide: "",
+  constraints: ""
+}
+```
+
+Rules:
+
+- this file is per-story creative source material for the editor and backend generation agents
+- it should describe playable web-novel game design, not only prose-writing instructions
+- generated output must target project data files: chain events, pool events, schedule events, scenes, roles, locations, and variables
+- runtime ignores this file; the compiler should not include it in `CompiledStory`
 
 ## 5. Event model
 
@@ -413,6 +440,12 @@ The editor intentionally allows duplicate role names across normal and important
 
 App-level provider config lives in `data/setting.json5`.
 
+Current app-level AI config groups:
+
+- `ai.text`: text prompt generation for existing editor helpers
+- `ai.image`: image generation for locations and roles
+- `ai.agent`: backend multi-Agent story creation models, separate from `text` and `image`
+
 Image generation:
 
 - prompts use `global_prompt + item.prompt`
@@ -423,6 +456,73 @@ Compression:
 - original image is preserved
 - compressed variants use `compress_quality_1` and `compress_quality_2`
 - current UI mainly previews the original image thumbnail
+
+### Backend AI creation Agent
+
+The AI content creation module is separate from the runtime AI剧情导演.
+
+Purpose:
+
+- turn web-novel settings into playable/open/evolving game content
+- generate or modify structured files, not only prose
+- produce data that can be validated, edited, and later selected by the runtime director
+
+Current foundation:
+
+- per-story creative context lives in `story_bible.json5`
+- app-level creation models live in `data/setting.json5` under `ai.agent`
+- the web story editor now defaults to the `创作` workspace
+- the previous event editor is behind the `事件` workspace tab
+- `apps/api` exposes `GET/PUT /api/stories/:storyId/story-bible`
+- `apps/api` exposes `POST /api/stories/:storyId/creation-agent/run`
+- `apps/api` exposes `POST /api/stories/:storyId/creation-agent/apply`
+- `creation-agent/run` starts a new creation when called with only `instruction`; when called with `baseDraft`, the same multi-Agent workflow revises the current draft and must return a complete revised draft, not a patch
+- the LangGraph workflow returns a structured draft preview and does not directly mutate story files
+- the editor creation workspace can run the backend multi-Agent workflow and display Agent logs, draft events, locations, roles, variable suggestions, notes, and warnings
+- the editor creation workspace can select draft locations, roles, variables, and events, then explicitly apply the selected subset
+- the editor creation workspace keeps an editable local copy of the Agent draft before apply; users can revise safe fields such as title, summary, arc, location/role text, variable description/value, event title, event location, trigger mode, condition expression, first dialogue, init script, and end script
+- the creation workspace can reset the editable draft back to the latest Agent result
+- after a draft exists, the new-creation command area is collapsed by default; the feedback box sends the editable current draft as `baseDraft` so the Agent can optimize the existing result instead of starting over
+- feedback optimization shows a dedicated running state and local feedback history; each submitted feedback item is marked as running, completed, or failed
+- the editor creation workspace previews apply impact before confirmation: create, overwrite, skip, and likely reference cleanups
+- draft apply can write selected data into `events/chains.json5`, `events/pool_events.json5`, `events/schedule_events.json5`, `event_location.json5`, `nomal_roles.json5`, `import_roles.json5`, and `vals.json5`
+- draft apply returns the updated story document, validation result, applied counts, and warnings for any downgraded or skipped references
+- variable suggestions are structured draft rows and can be written to `vals.json5` after user confirmation
+
+Current draft-apply rules:
+
+- apply is human-confirmed; Agent runs must not write files by themselves
+- locations are selected by location id
+- roles are selected by role keys, using `normal:<id>` or `important:<id>`; legacy pure role ids are only accepted for backward compatibility
+- events are selected by event keys, using `chain:<id>`, `pool:<id>`, or `schedule:<id>`
+- variables are selected by variable keys, using `group.name`; legacy string suggestions are accepted for backward compatibility
+- draft object ids and variable keys are not editable in the creation workspace yet; this keeps selection state and event references stable
+- draft ids are normalized to ASCII-like ids before apply
+- draft variables are normalized to lowercase ASCII-like group and row names
+- selected variables are written only to `vals.json5`, not `system_vals.json5`
+- selected `system.*` variables are skipped with a warning
+- selected variables never overwrite existing `vals.json5` rows; existing rows are skipped with a warning
+- the creation workspace impact preview is client-side guidance; the backend apply service remains the final authority and returns authoritative warnings
+- event ids are unique only inside their own collection; `chain:foo`, `pool:foo`, and `schedule:foo` may coexist
+- selected chain event `next` references are kept only when the target chain event is selected or already exists
+- missing or unselected locations are cleared from applied events with a warning
+- missing or unselected role speakers are downgraded to `player` with a warning
+- invalid `condition` or `invoke` trigger details are downgraded to `default` with a warning
+- schedule draft events require `loop`; missing loop rules are applied as `daily` with a warning
+
+Required architecture:
+
+- multi-Agent is mandatory for this module
+- planned roles are chief editor, plot planner, asset designer, event writer, script doctor, and consistency checker
+- LangChain/LangGraph are the expected workflow layer for the backend execution graph
+- execution APIs are backend/editor-only and must not be coupled to `packages/runtime`
+- draft application must remain an explicit confirm/apply step, not an automatic generation side effect
+
+Boundary:
+
+- AI剧情导演 runs during gameplay and selects from existing events
+- backend AI creation Agent runs during authoring and writes structured story assets
+- `story_bible.json5` and `ai.agent` are not part of `CompiledStory`
 
 ## 9. Shared runtime status
 

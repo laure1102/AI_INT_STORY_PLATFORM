@@ -134,10 +134,34 @@ export interface StoryEventLocationFile {
   assignments: StoryEventLocationAssignment[]
 }
 
+export interface StoryBibleFile {
+  background: string
+  golden_finger: string
+  protagonist: string
+  world_rules: string
+  outline: string
+  current_arc: string
+  gameplay_design: string
+  style_guide: string
+  constraints: string
+}
+
 export interface AppAiProviderSettings {
   apiKey: string
   baseUrl: string
   model: string
+}
+
+export interface AppAiAgentSettings {
+  apiKey: string
+  baseUrl: string
+  chiefEditorModel: string
+  plotPlannerModel: string
+  assetDesignerModel: string
+  eventWriterModel: string
+  scriptDoctorModel: string
+  consistencyCheckerModel: string
+  temperature: number
 }
 
 export interface AppSettingsFile {
@@ -147,6 +171,7 @@ export interface AppSettingsFile {
 export interface AppAiSettings {
   image: AppAiProviderSettings
   text: AppAiProviderSettings
+  agent: AppAiAgentSettings
 }
 
 export interface StoryEventFile {
@@ -267,6 +292,7 @@ export type StoryAnyEventFile =
 
 export interface StoryDocument {
   story: StoryMetaFile
+  storyBible: StoryBibleFile
   vals: StoryValsFile
   playerOverrideVals: StoryPlayerOverrideValsFile
   systemVals: StoryValsFile

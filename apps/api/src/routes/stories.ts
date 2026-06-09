@@ -6,6 +6,8 @@ import { compileStory } from "@story-mgr/compiler"
 import { validateStoryDocument, type StoryEventCollectionType } from "@story-mgr/core"
 import { FileStoreError, type StoryFileStore } from "@story-mgr/file-store"
 import type {
+  ApplyStoryCreationDraftRequest,
+  ApplyStoryCreationDraftResponse,
   AppSettingsResponse,
   CompressLocationImageRequest,
   CompressRoleImageRequest,
@@ -18,14 +20,18 @@ import type {
   GenerateRoleImageResponse,
   GenerateRolePromptRequest,
   GenerateRolePromptResponse,
+  RunStoryCreationAgentRequest,
+  RunStoryCreationAgentResponse,
   SaveAppSettingsRequest,
   SaveEventRequest,
   SaveEventLocationsRequest,
   SavePlayerOverrideValsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
+  SaveStoryBibleRequest,
   SaveSystemValsRequest,
   StoryDeleteEventResponse,
+  StoryBibleResponse,
   StoryPlayerOverrideValsResponse,
   StoryRolesResponse,
   SaveValsRequest,
@@ -39,6 +45,7 @@ import {
   generateRoleImage,
   generateRolePrompt
 } from "../services/ai"
+import { applyStoryCreationDraft, runStoryCreationAgents } from "../services/story-creation"
 
 const upload = multer({
   storage: multer.memoryStorage()
@@ -108,6 +115,49 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       story: await store.readStoryDocument(storyId)
     }
+  })
+
+  router.get("/stories/:storyId/story-bible", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    context.body = {
+      storyBible: await store.readStoryBible(storyId)
+    } satisfies StoryBibleResponse
+  })
+
+  router.put("/stories/:storyId/story-bible", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as SaveStoryBibleRequest
+
+    context.body = {
+      storyBible: await store.writeStoryBible(storyId, body.storyBible)
+    } satisfies StoryBibleResponse
+  })
+
+  router.post("/stories/:storyId/creation-agent/run", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as RunStoryCreationAgentRequest
+    const [settings, story] = await Promise.all([
+      store.readAppSettings(),
+      store.readStoryDocument(storyId)
+    ])
+
+    context.body = await runStoryCreationAgents(
+      settings,
+      story,
+      body.instruction,
+      body.baseDraft
+    ) satisfies RunStoryCreationAgentResponse
+  })
+
+  router.post("/stories/:storyId/creation-agent/apply", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as ApplyStoryCreationDraftRequest
+
+    context.body = await applyStoryCreationDraft(
+      store,
+      storyId,
+      body
+    ) satisfies ApplyStoryCreationDraftResponse
   })
 
   router.get("/stories/:storyId/events/:eventId", async (context) => {

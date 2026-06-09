@@ -273,10 +273,34 @@ export const storyEventLocationSchema = z.object({
   assignments: z.array(storyEventLocationAssignmentSchema).default([])
 })
 
+export const storyBibleSchema = z.object({
+  background: z.string().default(""),
+  golden_finger: z.string().default(""),
+  protagonist: z.string().default(""),
+  world_rules: z.string().default(""),
+  outline: z.string().default(""),
+  current_arc: z.string().default(""),
+  gameplay_design: z.string().default(""),
+  style_guide: z.string().default(""),
+  constraints: z.string().default("")
+})
+
 export const appAiProviderSettingsSchema = z.object({
   apiKey: z.string().default(""),
   baseUrl: z.string().default(""),
   model: z.string().default("")
+})
+
+export const appAiAgentSettingsSchema = z.object({
+  apiKey: z.string().default(""),
+  baseUrl: z.string().default(""),
+  chiefEditorModel: z.string().default(""),
+  plotPlannerModel: z.string().default(""),
+  assetDesignerModel: z.string().default(""),
+  eventWriterModel: z.string().default(""),
+  scriptDoctorModel: z.string().default(""),
+  consistencyCheckerModel: z.string().default(""),
+  temperature: z.number().min(0).max(2).default(0.7)
 })
 
 export const appAiSettingsSchema = z.object({
@@ -289,6 +313,17 @@ export const appAiSettingsSchema = z.object({
     apiKey: "",
     baseUrl: "",
     model: ""
+  }),
+  agent: appAiAgentSettingsSchema.default({
+    apiKey: "",
+    baseUrl: "",
+    chiefEditorModel: "",
+    plotPlannerModel: "",
+    assetDesignerModel: "",
+    eventWriterModel: "",
+    scriptDoctorModel: "",
+    consistencyCheckerModel: "",
+    temperature: 0.7
   })
 })
 
@@ -303,6 +338,17 @@ export const appSettingsSchema = z.object({
       apiKey: "",
       baseUrl: "",
       model: ""
+    },
+    agent: {
+      apiKey: "",
+      baseUrl: "",
+      chiefEditorModel: "",
+      plotPlannerModel: "",
+      assetDesignerModel: "",
+      eventWriterModel: "",
+      scriptDoctorModel: "",
+      consistencyCheckerModel: "",
+      temperature: 0.7
     }
   })
 })
@@ -474,6 +520,7 @@ export const storyScheduleEventsSchema = storyLoopEventsSchema
 
 export const storyDocumentSchema = z.object({
   story: storyMetaSchema,
+  storyBible: storyBibleSchema.default({}),
   vals: storyValsSchema,
   playerOverrideVals: storyPlayerOverrideValsSchema,
   systemVals: storyValsSchema,

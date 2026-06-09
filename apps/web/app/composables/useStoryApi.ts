@@ -1,6 +1,7 @@
 import type {
   AppSettingsFile,
   StoryAnyEventFile,
+  StoryBibleFile,
   StoryEventCollectionType,
   StoryDocument,
   StoryEventLocationFile,
@@ -10,6 +11,8 @@ import type {
   StoryValsFile
 } from "@story-mgr/core"
 import type {
+  ApplyStoryCreationDraftRequest,
+  ApplyStoryCreationDraftResponse,
   AppSettingsResponse,
   CompressLocationImageRequest,
   CompressRoleImageRequest,
@@ -23,12 +26,15 @@ import type {
   GenerateRoleImageResponse,
   GenerateRolePromptRequest,
   GenerateRolePromptResponse,
+  RunStoryCreationAgentRequest,
+  RunStoryCreationAgentResponse,
   SaveAppSettingsRequest,
   SaveEventRequest,
   SaveEventLocationsRequest,
   SavePlayerOverrideValsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
+  SaveStoryBibleRequest,
   SaveSystemValsRequest,
   SaveValsRequest,
   StoryAssetMetadata,
@@ -40,6 +46,7 @@ import type {
   StoryRolesResponse,
   StoryListResponse,
   StoryAssetResponse,
+  StoryBibleResponse,
   StoryScenesResponse,
   StorySystemValsResponse,
   StoryValsResponse,
@@ -58,6 +65,55 @@ export function useStoryApi() {
   async function getStory(storyId: string): Promise<StoryDocument> {
     const response = await $fetch<StoryDocumentResponse>(`${apiBase}/stories/${storyId}`)
     return response.story
+  }
+
+  async function saveStoryBible(
+    storyId: string,
+    storyBible: StoryBibleFile
+  ): Promise<StoryBibleFile> {
+    const response = await $fetch<StoryBibleResponse>(
+      `${apiBase}/stories/${storyId}/story-bible`,
+      {
+        method: "PUT",
+        body: {
+          storyBible
+        } satisfies SaveStoryBibleRequest
+      }
+    )
+
+    return response.storyBible
+  }
+
+  async function runStoryCreationAgent(
+    storyId: string,
+    instruction: string,
+    baseDraft?: RunStoryCreationAgentRequest["baseDraft"]
+  ): Promise<RunStoryCreationAgentResponse> {
+    const body = {
+      instruction,
+      ...(baseDraft ? { baseDraft } : {})
+    } satisfies RunStoryCreationAgentRequest
+
+    return $fetch<RunStoryCreationAgentResponse>(
+      `${apiBase}/stories/${storyId}/creation-agent/run`,
+      {
+        method: "POST",
+        body
+      }
+    )
+  }
+
+  async function applyStoryCreationDraft(
+    storyId: string,
+    payload: ApplyStoryCreationDraftRequest
+  ): Promise<ApplyStoryCreationDraftResponse> {
+    return $fetch<ApplyStoryCreationDraftResponse>(
+      `${apiBase}/stories/${storyId}/creation-agent/apply`,
+      {
+        method: "POST",
+        body: payload
+      }
+    )
   }
 
   async function getAppSettings(): Promise<AppSettingsFile> {
@@ -355,6 +411,7 @@ export function useStoryApi() {
   }
 
   return {
+    applyStoryCreationDraft,
     compressLocationImage,
     compressRoleImage,
     compressSceneAsset,
@@ -369,6 +426,7 @@ export function useStoryApi() {
     getStoryAssetUrl,
     getStory,
     listStories,
+    runStoryCreationAgent,
     deleteEvent,
     saveAppSettings,
     saveEvent,
@@ -376,6 +434,7 @@ export function useStoryApi() {
     savePlayerOverrideVals,
     saveRoles,
     saveScenes,
+    saveStoryBible,
     saveSystemVals,
     saveVals,
     uploadStoryAsset,

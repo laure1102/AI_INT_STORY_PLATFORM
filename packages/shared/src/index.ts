@@ -1,6 +1,7 @@
 import type {
   AppSettingsFile,
   StoryAnyEventFile,
+  StoryBibleFile,
   CompiledStory,
   StoryDocument,
   StoryEventCollectionType,
@@ -30,6 +31,140 @@ export interface StoryListResponse {
 
 export interface StoryDocumentResponse {
   story: StoryDocument
+}
+
+export interface StoryBibleResponse {
+  storyBible: StoryBibleFile
+}
+
+export interface SaveStoryBibleRequest {
+  storyBible: StoryBibleFile
+}
+
+export type StoryCreationAgentRole =
+  | "chiefEditor"
+  | "plotPlanner"
+  | "assetDesigner"
+  | "eventWriter"
+  | "scriptDoctor"
+  | "consistencyChecker"
+
+export interface StoryCreationAgentLog {
+  role: StoryCreationAgentRole
+  title: string
+  summary: string
+}
+
+export interface StoryCreationDraftLocation {
+  id: string
+  descr: string
+  prompt: string
+}
+
+export interface StoryCreationDraftRole {
+  id: string
+  name: string
+  zhiye: string
+  descr: string
+  prompt: string
+  xingge?: string
+  important: boolean
+}
+
+export interface StoryCreationDraftDialogue {
+  speaker_type: "player" | "object"
+  speaker_key: string
+  content: string
+}
+
+export interface StoryCreationDraftInvokeParam {
+  name: string
+  descr?: string
+}
+
+export interface StoryCreationDraftLoopRule {
+  mode: "daily" | "weekly" | "monthly" | "interval_days"
+  interval_days?: number
+  weekday?: number
+  month_day?: number
+}
+
+export type StoryCreationDraftVariableValue = string | number | boolean | null
+
+export interface StoryCreationDraftVariable {
+  group: string
+  name: string
+  description: string
+  value_type: "value" | "calc"
+  value?: StoryCreationDraftVariableValue
+  calc_rule: string
+}
+
+export interface StoryCreationDraftEvent {
+  collectionType: "chain" | "pool" | "schedule"
+  id: string
+  title: string
+  trigger_mode: "default" | "condition" | "invoke"
+  trigger_expr: string
+  invoke_params?: StoryCreationDraftInvokeParam[]
+  object_keys: string[]
+  location: string
+  dialogues: StoryCreationDraftDialogue[]
+  init_script: string
+  end_script: string
+  next: string[]
+  bgm?: string
+  loop?: StoryCreationDraftLoopRule
+}
+
+export interface StoryCreationDraft {
+  title: string
+  summary: string
+  arc: string
+  locations: StoryCreationDraftLocation[]
+  roles: StoryCreationDraftRole[]
+  events: StoryCreationDraftEvent[]
+  variables: StoryCreationDraftVariable[]
+  notes: string[]
+  warnings: string[]
+}
+
+export interface RunStoryCreationAgentRequest {
+  instruction: string
+  baseDraft?: StoryCreationDraft
+}
+
+export interface RunStoryCreationAgentResponse {
+  draft: StoryCreationDraft
+  logs: StoryCreationAgentLog[]
+}
+
+export interface ApplyStoryCreationDraftSelection {
+  eventKeys: string[]
+  locationIds: string[]
+  roleKeys?: string[]
+  /** @deprecated 请改用 roleKeys，格式为 normal:<id> 或 important:<id> */
+  roleIds?: string[]
+  variableKeys?: string[]
+  /** @deprecated 请改用 variableKeys，格式为 group.name */
+  variables?: string[]
+}
+
+export interface ApplyStoryCreationDraftRequest {
+  draft: StoryCreationDraft
+  selection: ApplyStoryCreationDraftSelection
+}
+
+export interface ApplyStoryCreationDraftResponse {
+  story: StoryDocument
+  result: ValidationResult
+  applied: {
+    events: number
+    locations: number
+    roles: number
+    variables: number
+  }
+  warnings: string[]
 }
 
 export interface StoryEventResponse {
