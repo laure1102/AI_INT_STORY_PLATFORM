@@ -2,6 +2,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { compileStory } from "@story-mgr/compiler"
 import type {
+  StoryEventPresentation,
   StoryOnceDialogueDefinition,
   StoryOnceEventFile,
   StoryEventTriggerMode,
@@ -135,7 +136,7 @@ interface RegressionGraphEventNode {
   init_script: string
   end_script: string
   object_keys: string[]
-  dialogues: StoryOnceDialogueDefinition[]
+  presentation: StoryEventPresentation
   location: string
   next: string[]
 }
@@ -295,7 +296,9 @@ function createGraphEventNode(input: {
     init_script: input.initScript ?? "",
     end_script: input.endScript ?? "",
     object_keys: [],
-    dialogues: input.dialogues ?? [],
+    presentation: input.dialogues?.length
+      ? { type: "dialogue", dialogues: input.dialogues }
+      : { type: "silent" },
     location: "",
     next: input.next ?? []
   } satisfies RegressionGraphEventNode
@@ -394,7 +397,9 @@ function createLoopEvent(input: {
     trigger_expr: input.triggerExpr ?? "",
     init_script: input.initScript ?? "",
     object_keys: [],
-    dialogues: input.dialogues ?? [],
+    presentation: input.dialogues?.length
+      ? { type: "dialogue", dialogues: input.dialogues }
+      : { type: "silent" },
     location: "",
     bgm: "",
     end_script: input.endScript,
@@ -1048,7 +1053,7 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
           trigger_expr: "${player.flag} === 0",
           init_script: "",
           object_keys: [],
-          dialogues: [],
+          presentation: { type: "silent" },
           location: "",
           bgm: "",
           end_script: "${player.money} += 20"
@@ -1091,7 +1096,7 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
           trigger_expr: "${player.flag} === 0",
           init_script: "",
           object_keys: [],
-          dialogues: [],
+          presentation: { type: "silent" },
           location: "",
           bgm: "",
           end_script: "${player.money} += 100",
@@ -1108,7 +1113,7 @@ function buildGraphQueueScenarios(): GraphQueueRegressionScenario[] {
           trigger_expr: "${player.flag} === 0",
           init_script: "",
           object_keys: [],
-          dialogues: [],
+          presentation: { type: "silent" },
           location: "",
           bgm: "",
           end_script: "${player.money} += 20\n${player.flag} = 1",

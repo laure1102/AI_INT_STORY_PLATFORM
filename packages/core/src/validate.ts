@@ -4,6 +4,7 @@ import type {
   StoryChainNodeFile,
   StoryDocument,
   StoryEventFile,
+  StoryEventPresentation,
   StoryPoolEventFile,
   StoryScheduleEventFile,
   ValidationIssue,
@@ -32,11 +33,7 @@ interface StoryEventValidationShape {
   init_script: string
   end_script: string
   object_keys: string[]
-  dialogues: Array<{
-    speaker_type: "player" | "object"
-    speaker_key: string
-    content: string
-  }>
+  presentation: StoryEventPresentation
   location: string
 }
 
@@ -195,13 +192,31 @@ function collectGlobalValKeys(document: StoryDocument) {
   return keys
 }
 
-function validateDialogueTemplates(
+function getPresentationDialogues(presentation: StoryEventPresentation) {
+  return presentation.type === "dialogue" ? presentation.dialogues : []
+}
+
+function validatePresentationTemplates(
   issues: ValidationIssue[],
   eventGroupKey: EventValidationGroupKey,
   eventIndex: number,
   eventId: string,
-  dialogues: Array<{ content: string }>
+  presentation: StoryEventPresentation
 ) {
+  if (presentation.type === "message") {
+    for (const issue of validateStoryTextTemplate(presentation.message.content)) {
+      pushIssue(
+        issues,
+        "error",
+        `${eventGroupKey}.message-template-invalid`,
+        `${eventId} message template is invalid at line ${issue.lineNumber}: ${issue.message}`,
+        [eventGroupKey, String(eventIndex), "presentation", "message", "content"]
+      )
+    }
+    return
+  }
+
+  const dialogues = getPresentationDialogues(presentation)
   for (const [dialogueIndex, dialogue] of dialogues.entries()) {
     for (const issue of validateStoryTextTemplate(dialogue.content)) {
       pushIssue(
@@ -209,7 +224,7 @@ function validateDialogueTemplates(
         "error",
         `${eventGroupKey}.dialogue-template-invalid`,
         `${eventId} dialogue template is invalid at line ${issue.lineNumber}: ${issue.message}`,
-        [eventGroupKey, String(eventIndex), "dialogues", String(dialogueIndex), "content"]
+        [eventGroupKey, String(eventIndex), "presentation", "dialogues", String(dialogueIndex), "content"]
       )
     }
   }
@@ -358,7 +373,8 @@ function validatePlayableEvent(
     )
   }
 
-  for (const [dialogueIndex, dialogue] of event.dialogues.entries()) {
+  const dialogues = getPresentationDialogues(event.presentation)
+  for (const [dialogueIndex, dialogue] of dialogues.entries()) {
     if (dialogue.speaker_type === "player") {
       if (dialogue.speaker_key !== "player") {
         pushIssue(
@@ -366,7 +382,7 @@ function validatePlayableEvent(
           "error",
           `${codePrefix}.invalid-player-speaker`,
           `${label} "${event.id}" player dialogue must use speaker_key "player".`,
-          [eventGroupKey, String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+          [eventGroupKey, String(eventIndex), "presentation", "dialogues", String(dialogueIndex), "speaker_key"]
         )
       }
       continue
@@ -378,17 +394,17 @@ function validatePlayableEvent(
         "error",
         `${codePrefix}.invalid-object-speaker`,
         `${label} "${event.id}" dialogue speaker "${dialogue.speaker_key}" is not in the current event objects.`,
-        [eventGroupKey, String(eventIndex), "dialogues", String(dialogueIndex), "speaker_key"]
+        [eventGroupKey, String(eventIndex), "presentation", "dialogues", String(dialogueIndex), "speaker_key"]
       )
     }
   }
 
-  validateDialogueTemplates(
+  validatePresentationTemplates(
     issues,
     eventGroupKey,
     eventIndex,
     `${label} "${event.id}"`,
-    event.dialogues
+    event.presentation
   )
 }
 

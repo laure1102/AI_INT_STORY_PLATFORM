@@ -355,7 +355,10 @@ Event node:
   init_script: "",
   end_script: "",
   object_keys: ["player"],
-  dialogues: [],
+  presentation: {
+    type: "dialogue",
+    dialogues: []
+  },
   location: "",
   next: []
 }
@@ -388,6 +391,12 @@ Chain rules:
 - `action -> action` is not allowed
 - an action node should have at most one outgoing `next`
 
+Event presentation:
+
+- `presentation: { type: "silent" }` runs scripts and advances without client-facing text
+- `presentation: { type: "message", message: { content: "...", duration_seconds: 3 } }` shows a transient client message
+- `presentation: { type: "dialogue", dialogues: [...] }` uses the current click-through dialogue flow
+
 ### Pool events: `events/pool_events.json5`
 
 ```json5
@@ -399,7 +408,9 @@ Chain rules:
   invoke_params: [],
   init_script: "",
   object_keys: [],
-  dialogues: [],
+  presentation: {
+    type: "silent"
+  },
   location: "",
   bgm: "",
   end_script: ""

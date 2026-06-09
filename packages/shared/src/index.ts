@@ -91,6 +91,22 @@ export interface StoryCreationDraftDialogue {
   content: string
 }
 
+export type StoryCreationDraftPresentation =
+  | {
+      type: "silent"
+    }
+  | {
+      type: "message"
+      message: {
+        content: string
+        duration_seconds: number
+      }
+    }
+  | {
+      type: "dialogue"
+      dialogues: StoryCreationDraftDialogue[]
+    }
+
 export interface StoryCreationDraftInvokeParam {
   name: string
   descr?: string
@@ -123,7 +139,7 @@ export interface StoryCreationDraftEvent {
   invoke_params?: StoryCreationDraftInvokeParam[]
   object_keys: string[]
   location: string
-  dialogues: StoryCreationDraftDialogue[]
+  presentation: StoryCreationDraftPresentation
   init_script: string
   end_script: string
   next: string[]

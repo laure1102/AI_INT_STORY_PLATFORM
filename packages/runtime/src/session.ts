@@ -29,6 +29,28 @@ interface RuntimeStoryDialogueDefinition {
   content: string
 }
 
+interface RuntimeStorySilentPresentation {
+  type: "silent"
+}
+
+interface RuntimeStoryMessagePresentation {
+  type: "message"
+  message: {
+    content: string
+    duration_seconds: number
+  }
+}
+
+interface RuntimeStoryDialoguePresentation {
+  type: "dialogue"
+  dialogues: RuntimeStoryDialogueDefinition[]
+}
+
+type RuntimeStoryPresentation =
+  | RuntimeStorySilentPresentation
+  | RuntimeStoryMessagePresentation
+  | RuntimeStoryDialoguePresentation
+
 type RuntimeEventTriggerMode = "default" | "condition" | "invoke"
 
 interface RuntimeLocationAssignment {
@@ -106,7 +128,7 @@ interface CompiledEvent {
   init_script: string
   end_script: string
   object_keys: string[]
-  dialogues: RuntimeStoryDialogueDefinition[]
+  presentation: RuntimeStoryPresentation
   location: string
   next: string[]
   meta?: Record<string, unknown>
@@ -329,6 +351,13 @@ export interface RuntimeRenderedDialogue {
   content: string
 }
 
+export interface RuntimeRenderedMessage {
+  content: string
+  durationSeconds: number
+  elapsedSeconds: number
+  remainingSeconds: number
+}
+
 export interface RuntimeBranchOptionView {
   id: string
   title: string
@@ -367,6 +396,7 @@ export interface RuntimeStoryViewModel {
   currentLocationId: string | null
   currentLocationName: string | null
   currentSceneLevel: number | null
+  currentMessage: RuntimeRenderedMessage | null
   currentDialogue: RuntimeRenderedDialogue | null
   availableBranches: RuntimeBranchOptionView[]
   branchContextSummary: Array<{
@@ -417,6 +447,7 @@ interface RuntimeState {
   snapshot: RuntimeStorySessionSnapshot
   currentEventEntered: boolean
   currentDialogueIndex: number
+  currentMessageElapsedMs: number
   pendingActions: RuntimeActionState[]
   lastAction: RuntimeActionState | null
   activeStandaloneEvent: RuntimeStandaloneEvent | null
@@ -429,6 +460,7 @@ interface RuntimeEnterEventOptions {
 
 interface RuntimeDialogueNodeState {
   node: CompiledEvent
+  currentMessage: RuntimeRenderedMessage | null
   currentDialogue: RuntimeRenderedDialogue | null
   availableActions: RuntimeActionState[]
   autoNextEventIds: string[]
@@ -470,7 +502,7 @@ interface RuntimeLoopEventDefinition {
   }>
   init_script: string
   object_keys: string[]
-  dialogues: RuntimeStoryDialogueDefinition[]
+  presentation: RuntimeStoryPresentation
   location: string
   bgm: string
   end_script: string
@@ -1772,6 +1804,7 @@ function clearCurrentEventState(runtimeState: RuntimeState) {
   runtimeState.activeStandaloneEvent = null
   runtimeState.currentEventEntered = false
   runtimeState.currentDialogueIndex = 0
+  runtimeState.currentMessageElapsedMs = 0
   runtimeState.pendingActions = []
   runtimeState.lastAction = null
 }
@@ -1963,7 +1996,7 @@ function getBundleOnceEvents(bundle: RuntimeStoryBundle) {
     }>
     init_script: string
     object_keys: string[]
-    dialogues: RuntimeStoryDialogueDefinition[]
+    presentation: RuntimeStoryPresentation
     location: string
     bgm: string
     end_script: string
@@ -2080,6 +2113,7 @@ function startNextReadyEventIfIdle(
       runtimeState.snapshot.current_event_id = event.id
       runtimeState.currentEventEntered = false
       runtimeState.currentDialogueIndex = 0
+      runtimeState.currentMessageElapsedMs = 0
       runtimeState.pendingActions = []
       runtimeState.lastAction = null
       enterCurrentEventResolved(bundle, runtimeState, notifications, {
@@ -2123,6 +2157,7 @@ function startNextReadyEventIfIdle(
       runtimeState.snapshot.current_event_id = event.id
       runtimeState.currentEventEntered = false
       runtimeState.currentDialogueIndex = 0
+      runtimeState.currentMessageElapsedMs = 0
       runtimeState.pendingActions = []
       runtimeState.lastAction = null
       enterCurrentEventResolved(bundle, runtimeState, notifications, {
@@ -2207,7 +2242,7 @@ function createStandaloneEvent(
     init_script: string
     end_script: string
     object_keys: string[]
-    dialogues: RuntimeStoryDialogueDefinition[]
+    presentation: RuntimeStoryPresentation
     location: string
     bgm: string
   },
@@ -2224,7 +2259,7 @@ function createStandaloneEvent(
     init_script: event.init_script,
     end_script: event.end_script,
     object_keys: cloneValue(event.object_keys),
-    dialogues: cloneValue(event.dialogues),
+    presentation: cloneValue(event.presentation),
     location: event.location,
     bgm: event.bgm,
     call_values: cloneValue(callValues),
@@ -2740,6 +2775,46 @@ function renderDialogueContent(
   )
 }
 
+function getPresentationDialogues(presentation: RuntimeStoryPresentation) {
+  return presentation.type === "dialogue" ? presentation.dialogues : []
+}
+
+function getMessageDurationMs(presentation: RuntimeStoryMessagePresentation) {
+  const durationSeconds = Number.isFinite(presentation.message.duration_seconds)
+    ? Math.max(0, presentation.message.duration_seconds)
+    : 0
+  return durationSeconds * 1000
+}
+
+function buildMessageView(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  presentation: RuntimeStoryMessagePresentation,
+  elapsedMs: number,
+  branchValues: Record<string, unknown>,
+  callValues: Record<string, unknown> = {}
+): RuntimeRenderedMessage | null {
+  const durationMs = getMessageDurationMs(presentation)
+  if (durationMs <= 0 || elapsedMs >= durationMs) {
+    return null
+  }
+
+  const elapsedSeconds = Math.max(0, elapsedMs) / 1000
+  const durationSeconds = durationMs / 1000
+  return {
+    content: renderDialogueContent(
+      bundle,
+      snapshot,
+      presentation.message.content,
+      branchValues,
+      callValues
+    ),
+    durationSeconds,
+    elapsedSeconds,
+    remainingSeconds: Math.max(0, durationSeconds - elapsedSeconds)
+  }
+}
+
 function buildDialogueView(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
@@ -2936,10 +3011,40 @@ function settlePassiveEvents(
       return
     }
 
+    if (currentEventState.currentMessage) {
+      return
+    }
+
     finishCurrentEvent(bundle, runtimeState, notifications)
   }
 
   notifications.push("自动推进的空事件链过长，已停止继续自动推进。")
+}
+
+function advanceCurrentMessagePresentation(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[],
+  deltaMs: number
+) {
+  const normalizedDeltaMs = Number.isFinite(deltaMs) ? Math.max(0, deltaMs) : 0
+  if (normalizedDeltaMs <= 0) {
+    return false
+  }
+
+  const currentEventState = getCurrentEventState(bundle, runtimeState)
+  if (!currentEventState?.currentMessage) {
+    return false
+  }
+
+  runtimeState.currentMessageElapsedMs += normalizedDeltaMs
+  const nextEventState = getCurrentEventState(bundle, runtimeState)
+  if (!nextEventState?.currentMessage) {
+    finishCurrentEvent(bundle, runtimeState, notifications)
+    settlePassiveEvents(bundle, runtimeState, notifications)
+  }
+
+  return true
 }
 
 function completeActiveScheduledEvent(snapshot: RuntimeStorySessionSnapshot) {
@@ -3191,6 +3296,7 @@ function moveToEventResolved(
   runtimeState.activeStandaloneEvent = null
   runtimeState.currentEventEntered = false
   runtimeState.currentDialogueIndex = 0
+  runtimeState.currentMessageElapsedMs = 0
   runtimeState.pendingActions = []
   runtimeState.lastAction = branchValues && Object.keys(branchValues).length > 0
     ? {
@@ -3253,6 +3359,7 @@ function enterCurrentEventResolved(
 
   runtimeState.currentEventEntered = true
   runtimeState.currentDialogueIndex = 0
+  runtimeState.currentMessageElapsedMs = 0
   runtimeState.lastAction = {
     nodeId: currentNode.id,
     branchValues: nextBranchValues
@@ -3285,6 +3392,7 @@ function finishCurrentEvent(
 
   if (actionResolution.actions.length > 0) {
     runtimeState.pendingActions = actionResolution.actions
+    runtimeState.currentMessageElapsedMs = 0
     runtimeState.lastAction = {
       nodeId: currentNode.id,
       branchValues: nextBranchValues
@@ -3387,8 +3495,21 @@ function getCurrentEventState(
 
   const branchValues = runtimeState.lastAction?.branchValues ?? {}
   const callValues = getRuntimePlayableEventCallValues(runtimeState, currentNode)
-  const dialogues = currentNode.dialogues ?? []
-  const currentDialogue = dialogues.length > 0 && runtimeState.currentDialogueIndex < dialogues.length
+  const presentation = currentNode.presentation
+  const currentMessage = presentation.type === "message"
+    ? buildMessageView(
+        bundle,
+        runtimeState.snapshot,
+        presentation,
+        runtimeState.currentMessageElapsedMs,
+        branchValues,
+        callValues
+      )
+    : null
+  const dialogues = getPresentationDialogues(presentation)
+  const currentDialogue = presentation.type === "dialogue"
+    && dialogues.length > 0
+    && runtimeState.currentDialogueIndex < dialogues.length
     ? buildDialogueView(
         bundle,
         runtimeState.snapshot,
@@ -3407,6 +3528,7 @@ function getCurrentEventState(
 
   return {
     node: currentNode,
+    currentMessage,
     currentDialogue,
     availableActions,
     autoNextEventIds: actionResolution.autoNextEventIds,
@@ -3474,12 +3596,15 @@ function buildViewModel(
 ): RuntimeStoryViewModel {
   const currentEventState = getCurrentEventState(bundle, runtimeState)
   const currentEvent = getCurrentPlayableEvent(bundle, runtimeState)
+  const currentMessage = currentEventState?.currentMessage ?? null
   const currentDialogue = currentEventState?.currentDialogue ?? null
 
   let interaction: RuntimeInteraction = null
 
   if (screen !== "debug") {
-    if (currentDialogue) {
+    if (currentMessage) {
+      interaction = null
+    } else if (currentDialogue) {
       interaction = {
         kind: "select",
         prompt: "请选择下一步。",
@@ -3554,6 +3679,7 @@ function buildViewModel(
     currentLocationId: normalizeText(currentEvent?.location ?? "") || null,
     currentLocationName: currentEventState?.locationName ?? null,
     currentSceneLevel: null,
+    currentMessage,
     currentDialogue,
     availableBranches,
     branchContextSummary,
@@ -3579,6 +3705,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     snapshot: baseSnapshot,
     currentEventEntered: false,
     currentDialogueIndex: 0,
+    currentMessageElapsedMs: 0,
     pendingActions: [],
     lastAction: null,
     activeStandaloneEvent: null,
@@ -3737,6 +3864,8 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
       return invokeOnceEventResolved(targetType, eventId, args)
     },
     tick(deltaMs) {
+      advanceCurrentMessagePresentation(options.bundle, runtimeState, notifications, deltaMs)
+
       const queued = queueClockProgress(runtimeState.snapshot, deltaMs)
       if (!queued) {
         syncSystemTimeFieldsFromClock(runtimeState.snapshot)

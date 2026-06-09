@@ -801,7 +801,7 @@ function buildNewEventFromParent(parentEventId: string): StoryEventFile {
     init_script: "",
     end_script: "",
     object_keys: [],
-    dialogues: [],
+    presentation: { type: "silent" },
     location: "",
     next: []
   }
@@ -831,7 +831,7 @@ function buildNewRootEvent(): StoryEventFile {
     init_script: "",
     end_script: "",
     object_keys: [],
-    dialogues: [],
+    presentation: { type: "silent" },
     location: "",
     next: []
   }
@@ -847,7 +847,7 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
       invoke_params: [],
       init_script: "",
       object_keys: [],
-      dialogues: [],
+      presentation: { type: "silent" },
       location: "",
       bgm: "",
       end_script: ""
@@ -865,7 +865,7 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
       invoke_params: [],
       init_script: "",
       object_keys: [],
-      dialogues: [],
+      presentation: { type: "silent" },
       location: "",
       bgm: "",
       end_script: "",
@@ -888,7 +888,7 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
     init_script: "",
     end_script: "",
     object_keys: [],
-    dialogues: [],
+    presentation: { type: "silent" },
     location: "",
     next: []
   }

@@ -1551,6 +1551,18 @@ function GameScreen({
             ))}
           </Box>
         ) : null}
+        {!uiState.overlay && view.currentMessage ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text color="yellow">
+              提示消息
+              {" "}
+              <Text color="gray">
+                {Math.ceil(view.currentMessage.remainingSeconds)}s
+              </Text>
+            </Text>
+            <Text color="yellow">{view.currentMessage.content}</Text>
+          </Box>
+        ) : null}
         {!uiState.overlay && view.currentDialogue ? (
           <Box flexDirection="column" marginTop={1}>
             <Text color="cyan">

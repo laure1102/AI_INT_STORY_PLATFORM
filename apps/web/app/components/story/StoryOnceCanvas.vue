@@ -41,6 +41,18 @@ function summarizeTrigger(event: StoryOnceEventFile) {
   return `${trimmed.slice(0, 56)}...`
 }
 
+function summarizePresentation(event: StoryOnceEventFile) {
+  if (event.presentation.type === "silent") {
+    return "静默"
+  }
+
+  if (event.presentation.type === "message") {
+    return "消息"
+  }
+
+  return `${event.presentation.dialogues.length} 条对白`
+}
+
 function handleEdit(eventId: string) {
   emit("select", eventId)
   emit("edit", eventId)
@@ -122,8 +134,8 @@ function handleDelete(event: StoryOnceEventFile) {
               <span>{{ event.object_keys.length }} 个</span>
             </span>
             <span class="once-card__fact">
-              <strong>对白</strong>
-              <span>{{ event.dialogues.length }} 条</span>
+              <strong>表现</strong>
+              <span>{{ summarizePresentation(event) }}</span>
             </span>
           </div>
         </button>

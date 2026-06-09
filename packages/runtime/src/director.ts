@@ -9,6 +9,22 @@ export interface RuntimeDirectorDialogue {
   content: string
 }
 
+export type RuntimeDirectorPresentation =
+  | {
+      type: "silent"
+    }
+  | {
+      type: "message"
+      message: {
+        content: string
+        duration_seconds: number
+      }
+    }
+  | {
+      type: "dialogue"
+      dialogues: RuntimeDirectorDialogue[]
+    }
+
 export interface RuntimeDirectorEvent {
   id: string
   title: string
@@ -16,7 +32,7 @@ export interface RuntimeDirectorEvent {
   trigger_expr: string
   init_script: string
   object_keys: string[]
-  dialogues: RuntimeDirectorDialogue[]
+  presentation: RuntimeDirectorPresentation
   location: string
   end_script: string
   meta?: Record<string, unknown>
@@ -195,9 +211,14 @@ function createRuleBasedScore(candidate: RuntimeDirectorCandidate): RuntimeDirec
     reasons.push("condition-trigger")
   }
 
-  if (event.dialogues.length > 0) {
-    score += Math.min(5, event.dialogues.length)
-    reasons.push(`dialogues=${event.dialogues.length}`)
+  if (event.presentation.type === "dialogue" && event.presentation.dialogues.length > 0) {
+    score += Math.min(5, event.presentation.dialogues.length)
+    reasons.push(`dialogues=${event.presentation.dialogues.length}`)
+  }
+
+  if (event.presentation.type === "message") {
+    score += 0.5
+    reasons.push("message-presentation")
   }
 
   if (event.object_keys.length > 0) {

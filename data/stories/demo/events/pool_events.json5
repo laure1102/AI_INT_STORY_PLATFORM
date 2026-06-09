@@ -1,7 +1,9 @@
 [
   {
     bgm: '',
-    dialogues: [
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
       {
         content: '老板，今天天气很好呢。',
         speaker_key: 'important:zhuli',
@@ -17,7 +19,8 @@
         speaker_key: 'player',
         speaker_type: 'player',
       },
-    ],
+      ],
+    },
     end_script: '${county.level} = 1',
     id: 'test1',
     init_script: 'let money = ${county.renkou} * 100\nmoney = money * 2',

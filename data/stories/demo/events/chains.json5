@@ -1,6 +1,8 @@
 [
   {
-    dialogues: [
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
       {
         content: '10个小时的高铁加2个小时的大巴……\n终于是回来了。',
         speaker_key: 'player',
@@ -66,7 +68,8 @@
         speaker_key: 'normal:xitong',
         speaker_type: 'object',
       },
-    ],
+      ],
+    },
     end_script: '',
     id: 'back_county',
     init_script: '',
@@ -83,7 +86,9 @@
     trigger_expr: '',
   },
   {
-    dialogues: [
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
       {
         content: '${player.first_day_give_money} 已到账，请宿主查收！',
         speaker_key: 'normal:xitong',
@@ -99,7 +104,8 @@
         speaker_key: 'player',
         speaker_type: 'player',
       },
-    ],
+      ],
+    },
     end_script: '',
     id: '1st_give_money',
     init_script: '${player.money} += ${player.first_day_give_money}\nbag_add("player", "population_flow_report", 1)\nbag_add("player", "daily_cash_card", 1)',
@@ -116,7 +122,9 @@
     trigger_expr: '',
   },
   {
-    dialogues: [
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
       {
         content: '宿主，系统已同步生成第一份人口流动统计表。',
         speaker_key: 'normal:xitong',
@@ -132,7 +140,8 @@
         speaker_key: 'player',
         speaker_type: 'player',
       },
-    ],
+      ],
+    },
     end_script: '',
     id: 'bag_report_check',
     init_script: '',
@@ -149,7 +158,9 @@
     trigger_expr: 'bag_has("player", "population_flow_report", 1)',
   },
   {
-    dialogues: [],
+    presentation: {
+      type: 'silent',
+    },
     end_script: '',
     id: 'game_start',
     init_script: '',

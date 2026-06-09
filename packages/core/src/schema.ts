@@ -507,6 +507,23 @@ export const storyOnceDialogueSchema = z.object({
   content: z.string().default("")
 })
 
+export const storyEventPresentationSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("silent")
+  }),
+  z.object({
+    type: z.literal("message"),
+    message: z.object({
+      content: z.string().default(""),
+      duration_seconds: z.number().min(0).default(3)
+    })
+  }),
+  z.object({
+    type: z.literal("dialogue"),
+    dialogues: z.array(storyOnceDialogueSchema).default([])
+  })
+])
+
 export const storyOnceInvokeParamSchema = z.object({
   name: z.string().min(1),
   descr: z.string().optional()
@@ -577,7 +594,7 @@ const storyEventBaseSchema = z.object({
   init_script: z.string().default(""),
   end_script: z.string().default(""),
   object_keys: z.array(z.string()).default([]),
-  dialogues: z.array(storyOnceDialogueSchema).default([]),
+  presentation: storyEventPresentationSchema,
   location: z.string().default(""),
   next: z.array(z.string()),
   meta: z.record(z.unknown()).optional()
@@ -622,7 +639,7 @@ export const storyOnceEventSchema = storyEventBaseSchema.extend({
   invoke_params: z.array(storyOnceInvokeParamSchema).default([]),
   init_script: z.string().default(""),
   object_keys: z.array(z.string()).default([]),
-  dialogues: z.array(storyOnceDialogueSchema).default([]),
+  presentation: storyEventPresentationSchema,
   location: z.string().default(""),
   bgm: z.string().default(""),
   end_script: z.string().default(""),
@@ -652,7 +669,7 @@ export const storyLoopEventSchema = z.object({
   invoke_params: z.array(storyOnceInvokeParamSchema).default([]),
   init_script: z.string().default(""),
   object_keys: z.array(z.string()).default([]),
-  dialogues: z.array(storyOnceDialogueSchema).default([]),
+  presentation: storyEventPresentationSchema,
   location: z.string().default(""),
   bgm: z.string().default(""),
   end_script: z.string().default(""),

@@ -674,6 +674,22 @@ function getEventImpact(event: StoryCreationDraftEvent): DraftImpact {
     : createImpact("create", "新增", "应用后会新增事件。")
 }
 
+function getDraftPresentationDialogues(event: StoryCreationDraftEvent) {
+  return event.presentation.type === "dialogue" ? event.presentation.dialogues : []
+}
+
+function getPresentationLabel(event: StoryCreationDraftEvent) {
+  if (event.presentation.type === "silent") {
+    return "静默执行"
+  }
+
+  if (event.presentation.type === "message") {
+    return "消息提示"
+  }
+
+  return `对白 ${event.presentation.dialogues.length} 条`
+}
+
 function getImpactClass(impact: DraftImpact) {
   return `creation-impact--${impact.kind}`
 }
@@ -713,7 +729,7 @@ function getEventApplyWarnings(event: StoryCreationDraftEvent) {
     }
   }
 
-  for (const dialogue of event.dialogues) {
+  for (const dialogue of getDraftPresentationDialogues(event)) {
     if (
       dialogue.speaker_type === "object"
       && dialogue.speaker_key !== "player"
@@ -1231,7 +1247,11 @@ watch(
                     aria-label="事件标题"
                   >
                   <div class="creation-event-list__badges">
-                    <span>{{ collectionTypeLabel(event.collectionType) }} / {{ triggerModeLabel(event.trigger_mode) }}</span>
+                    <span>
+                      {{ collectionTypeLabel(event.collectionType) }} /
+                      {{ triggerModeLabel(event.trigger_mode) }} /
+                      {{ getPresentationLabel(event) }}
+                    </span>
                     <span
                       class="creation-impact"
                       :class="getImpactClass(getEventImpact(event))"
@@ -1264,13 +1284,42 @@ watch(
                   </label>
                 </div>
                 <label
-                  v-if="event.dialogues[0]"
+                  v-if="event.presentation.type === 'dialogue' && event.presentation.dialogues[0]"
                   class="creation-edit-field"
                 >
                   <span>首句对白</span>
-                  <textarea v-model="event.dialogues[0].content" class="creation-edit-textarea" rows="3" />
+                  <textarea v-model="event.presentation.dialogues[0].content" class="creation-edit-textarea" rows="3" />
                 </label>
-                <p v-else>无对白预览</p>
+                <div
+                  v-else-if="event.presentation.type === 'message'"
+                  class="creation-event-edit-grid"
+                >
+                  <label class="creation-edit-field">
+                    <span>提示消息</span>
+                    <textarea
+                      v-model="event.presentation.message.content"
+                      class="creation-edit-textarea"
+                      rows="3"
+                    />
+                  </label>
+                  <label class="creation-edit-field">
+                    <span>显示秒数</span>
+                    <input
+                      v-model.number="event.presentation.message.duration_seconds"
+                      class="creation-edit-input"
+                      min="0"
+                      step="0.5"
+                      type="number"
+                    >
+                  </label>
+                </div>
+                <p v-else>
+                  {{
+                    event.presentation.type === "silent"
+                      ? "静默执行：只运行脚本和后续推进。"
+                      : "无对白预览"
+                  }}
+                </p>
                 <div class="creation-event-edit-grid">
                   <label class="creation-edit-field">
                     <span>开场脚本</span>

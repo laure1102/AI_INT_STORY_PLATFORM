@@ -3,6 +3,7 @@ import {
   buildStoryRoleKey,
   findStoryRoleReference,
   type StoryEventLocationFile,
+  type StoryEventPresentationType,
   type StoryOnceDialogueDefinition,
   type StoryOnceEventFile,
   type StoryOnceInvokeParamDefinition,
@@ -52,6 +53,9 @@ interface OnceEventDraft {
   location: string
   bgm: string
   endScript: string
+  presentationType: StoryEventPresentationType
+  messageContent: string
+  messageDurationSeconds: number
   dialogues: DialogueDraft[]
   selectedObjectKeys: string[]
 }
@@ -181,6 +185,9 @@ const draft = reactive<OnceEventDraft>({
   location: "",
   bgm: "",
   endScript: "",
+  presentationType: "silent",
+  messageContent: "",
+  messageDurationSeconds: 3,
   dialogues: [],
   selectedObjectKeys: []
 })
@@ -402,6 +409,38 @@ function normalizeStoredObjectKeys(objectKeys: string[]) {
   )
 }
 
+function syncPresentationDraft(event: StoryOnceEventFile | null) {
+  const presentation = event?.presentation ?? { type: "silent" as const }
+  draft.presentationType = presentation.type
+
+  if (presentation.type === "message") {
+    draft.messageContent = presentation.message.content
+    draft.messageDurationSeconds = presentation.message.duration_seconds
+    draft.dialogues = []
+    return
+  }
+
+  draft.messageContent = ""
+  draft.messageDurationSeconds = 3
+
+  if (presentation.type === "dialogue") {
+    draft.dialogues = presentation.dialogues.map((dialogue) => {
+      const normalizedSpeakerKey =
+        dialogue.speaker_type === "object"
+          ? findStoryRoleReference(props.roles, dialogue.speaker_key)?.key ?? dialogue.speaker_key
+          : dialogue.speaker_key
+
+      return cloneDialogue({
+        ...dialogue,
+        speaker_key: normalizedSpeakerKey
+      })
+    })
+    return
+  }
+
+  draft.dialogues = []
+}
+
 function syncDraft(event: StoryOnceEventFile | null) {
   draft.id = event?.id ?? ""
   draft.title = event?.title ?? ""
@@ -413,17 +452,7 @@ function syncDraft(event: StoryOnceEventFile | null) {
   draft.bgm = event?.bgm ?? ""
   draft.endScript = event?.end_script ?? ""
   draft.selectedObjectKeys = normalizeStoredObjectKeys(event?.object_keys ?? [])
-  draft.dialogues = (event?.dialogues ?? []).map((dialogue) => {
-    const normalizedSpeakerKey =
-      dialogue.speaker_type === "object"
-        ? findStoryRoleReference(props.roles, dialogue.speaker_key)?.key ?? dialogue.speaker_key
-        : dialogue.speaker_key
-
-    return cloneDialogue({
-      ...dialogue,
-      speaker_key: normalizedSpeakerKey
-    })
-  })
+  syncPresentationDraft(event)
 }
 
 function createDialogueEditorDraft(dialogue?: StoryOnceDialogueDefinition): DialogueEditorDraft {
@@ -912,6 +941,37 @@ function syncScriptEditorScroll(field: ScriptEditorFieldKey, event: Event) {
   highlightElement.scrollLeft = textarea.scrollLeft
 }
 
+function buildDraftPresentation(): StoryOnceEventFile["presentation"] {
+  if (draft.presentationType === "silent") {
+    return {
+      type: "silent"
+    }
+  }
+
+  if (draft.presentationType === "message") {
+    const durationSeconds = Number.isFinite(draft.messageDurationSeconds)
+      ? Math.max(0, draft.messageDurationSeconds)
+      : 3
+
+    return {
+      type: "message",
+      message: {
+        content: draft.messageContent.trim(),
+        duration_seconds: durationSeconds
+      }
+    }
+  }
+
+  return {
+    type: "dialogue",
+    dialogues: draft.dialogues.map((dialogue) => ({
+      speaker_type: dialogue.speaker_type,
+      speaker_key: dialogue.speaker_key.trim(),
+      content: dialogue.content.trim()
+    }))
+  }
+}
+
 function submitDraft() {
   if (!props.event) {
     return
@@ -946,11 +1006,7 @@ function submitDraft() {
     invoke_params: invokeParams,
     init_script: draft.initScript.trim(),
     object_keys: normalizeObjectKeys(draft.selectedObjectKeys),
-    dialogues: draft.dialogues.map((dialogue) => ({
-      speaker_type: dialogue.speaker_type,
-      speaker_key: dialogue.speaker_key.trim(),
-      content: dialogue.content.trim()
-    })),
+    presentation: buildDraftPresentation(),
     location: draft.location.trim(),
     bgm: draft.bgm.trim(),
     end_script: draft.endScript.trim()
@@ -1489,17 +1545,68 @@ function handleDocumentPointerDown(event: MouseEvent) {
         <aside class="detail-panel__dialogue-card">
           <div class="detail-panel__dialogue-head">
             <div>
-              <h3 class="detail-card__title">剧情对白</h3>
+              <h3 class="detail-card__title">事件表现</h3>
               <p class="detail-panel__dialogue-summary">
-                当前 {{ draft.dialogues.length }} 条对白。只有右侧列表会滚动。
+                {{
+                  draft.presentationType === "silent"
+                    ? "静默执行脚本，不显示客户端内容。"
+                    : draft.presentationType === "message"
+                      ? "显示一段短消息，随后自动继续。"
+                      : `当前 ${draft.dialogues.length} 条对白。只有右侧列表会滚动。`
+                }}
               </p>
             </div>
-            <button class="btn-secondary detail-panel__dialogue-add" type="button" @click="openCreateDialogueEditor">
+            <button
+              v-if="draft.presentationType === 'dialogue'"
+              class="btn-secondary detail-panel__dialogue-add"
+              type="button"
+              @click="openCreateDialogueEditor"
+            >
               添加对白
             </button>
           </div>
 
-          <div v-if="draft.dialogues.length" class="dialogue-list">
+          <div class="detail-panel__presentation-mode">
+            <label class="detail-panel__trigger-mode-option">
+              <input v-model="draft.presentationType" type="radio" value="silent" />
+              <span>静默执行</span>
+            </label>
+            <label class="detail-panel__trigger-mode-option">
+              <input v-model="draft.presentationType" type="radio" value="message" />
+              <span>消息提示</span>
+            </label>
+            <label class="detail-panel__trigger-mode-option">
+              <input v-model="draft.presentationType" type="radio" value="dialogue" />
+              <span>对白</span>
+            </label>
+          </div>
+
+          <div v-if="draft.presentationType === 'silent'" class="dialogue-empty">
+            静默执行事件只运行初始化脚本、结束脚本和后续推进。
+          </div>
+
+          <div v-else-if="draft.presentationType === 'message'" class="detail-panel__message-fields">
+            <label class="field">
+              <span class="field-label">提示消息</span>
+              <textarea
+                v-model="draft.messageContent"
+                class="text-area detail-panel__message-text"
+                placeholder="昨日人口流动统计已完成。"
+              />
+            </label>
+            <label class="field">
+              <span class="field-label">显示秒数</span>
+              <input
+                v-model.number="draft.messageDurationSeconds"
+                class="text-input"
+                min="0"
+                step="0.5"
+                type="number"
+              />
+            </label>
+          </div>
+
+          <div v-else-if="draft.dialogues.length" class="dialogue-list">
             <div class="dialogue-list__table">
               <div class="dialogue-list__table-head">
                 <span>排序</span>
@@ -1853,6 +1960,30 @@ function handleDocumentPointerDown(event: MouseEvent) {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.detail-panel__presentation-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.detail-panel__presentation-mode > .detail-panel__trigger-mode-option {
+  flex: 0 0 auto;
+  height: 36px;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.detail-panel__message-fields {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.detail-panel__message-text {
+  min-height: 180px;
 }
 
 .detail-panel__trigger-mode-option {

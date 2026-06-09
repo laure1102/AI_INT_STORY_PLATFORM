@@ -31,7 +31,7 @@ export function compileStory(document: StoryDocument): {
             init_script: event.init_script,
             end_script: event.end_script,
             object_keys: event.object_keys,
-            dialogues: event.dialogues,
+            presentation: event.presentation,
             location: event.location,
             next: event.next,
             meta: event.meta

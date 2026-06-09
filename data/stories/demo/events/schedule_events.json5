@@ -1,7 +1,9 @@
 [
   {
     bgm: '',
-    dialogues: [],
+    presentation: {
+      type: 'silent',
+    },
     end_script: '${player.money} += ${player.day_give_money}',
     id: 'daily_money',
     init_script: '',

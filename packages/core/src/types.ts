@@ -237,7 +237,7 @@ export interface StoryEventFile {
   init_script: string
   end_script: string
   object_keys: string[]
-  dialogues: StoryOnceDialogueDefinition[]
+  presentation: StoryEventPresentation
   location: string
   next: string[]
   meta?: Record<string, unknown>
@@ -286,6 +286,30 @@ export interface StoryOnceDialogueDefinition {
   content: string
 }
 
+export type StoryEventPresentationType = "silent" | "message" | "dialogue"
+
+export interface StoryEventSilentPresentation {
+  type: "silent"
+}
+
+export interface StoryEventMessagePresentation {
+  type: "message"
+  message: {
+    content: string
+    duration_seconds: number
+  }
+}
+
+export interface StoryEventDialoguePresentation {
+  type: "dialogue"
+  dialogues: StoryOnceDialogueDefinition[]
+}
+
+export type StoryEventPresentation =
+  | StoryEventSilentPresentation
+  | StoryEventMessagePresentation
+  | StoryEventDialoguePresentation
+
 export type StoryOnceTriggerMode = StoryEventTriggerMode
 
 export interface StoryEventInvokeParamDefinition {
@@ -303,7 +327,7 @@ export interface StoryOnceEventFile {
   invoke_params?: StoryEventInvokeParamDefinition[]
   init_script: string
   object_keys: string[]
-  dialogues: StoryOnceDialogueDefinition[]
+  presentation: StoryEventPresentation
   location: string
   bgm: string
   end_script: string
@@ -395,7 +419,7 @@ export interface CompiledEvent {
   init_script: string
   end_script: string
   object_keys: string[]
-  dialogues: StoryOnceDialogueDefinition[]
+  presentation: StoryEventPresentation
   location: string
   next: string[]
   meta?: Record<string, unknown>

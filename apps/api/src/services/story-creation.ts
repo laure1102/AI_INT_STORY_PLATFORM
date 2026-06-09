@@ -31,6 +31,7 @@ import type {
   StoryCreationDraft,
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
+  StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftVariable
 } from "@story-mgr/shared"
@@ -84,6 +85,23 @@ const draftDialogueSchema = z.object({
   speaker_key: z.string().describe("player 或 normal:<roleId> / important:<roleId>。"),
   content: z.string().describe("对白文本，可使用 ${group.value} 占位。")
 })
+
+const draftPresentationSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("silent").describe("静默执行：只执行脚本，不向客户端显示内容。")
+  }),
+  z.object({
+    type: z.literal("message").describe("消息提示：客户端显示短提示并自动消失。"),
+    message: z.object({
+      content: z.string().describe("提示消息文本，可使用 ${group.value} 占位。"),
+      duration_seconds: z.number().min(0).default(3).describe("提示显示秒数。")
+    })
+  }),
+  z.object({
+    type: z.literal("dialogue").describe("对白：客户端按对白列表逐条推进。"),
+    dialogues: z.array(draftDialogueSchema).describe("对白列表。")
+  })
+])
 
 const draftInvokeParamSchema = z.object({
   name: z.string().min(1).describe("调用参数名，必须是标识符。"),
@@ -162,7 +180,7 @@ const draftEventSchema = z.object({
   invoke_params: z.array(draftInvokeParamSchema).default([]).describe("invoke 事件的调用参数。"),
   object_keys: z.array(z.string()).describe("事件对象引用，例如 player、normal:xxx、important:xxx。"),
   location: z.string().describe("地点 id，可为空。"),
-  dialogues: z.array(draftDialogueSchema).describe("可直接转入事件文件的对白。"),
+  presentation: draftPresentationSchema.describe("事件表现：静默执行、消息提示或对白。"),
   init_script: z.string().describe("事件进入时 StoryScript；不确定时留空。"),
   end_script: z.string().describe("事件结束时 StoryScript；不确定时留空。"),
   next: z.array(z.string()).describe("chain 事件的后续事件 id；pool/schedule 使用空数组。"),
@@ -231,6 +249,15 @@ const structuredDraftItemSchema = z.object({
   usable: z.boolean().describe("是否可作为可使用道具。")
 })
 
+const structuredDraftPresentationSchema = z.object({
+  type: z.enum(["silent", "message", "dialogue"]).describe("事件表现类型：silent 静默执行、message 消息提示、dialogue 对白。"),
+  message: z.object({
+    content: z.string().describe("消息提示文本；非 message 类型填空字符串。"),
+    duration_seconds: z.number().min(0).describe("提示显示秒数；非 message 类型填 0。")
+  }).nullable().describe("message 类型必填对象；其他类型填 null。"),
+  dialogues: z.array(draftDialogueSchema).describe("dialogue 类型的对白列表；其他类型填空数组。")
+})
+
 const structuredDraftEventSchema = z.object({
   collectionType: z.enum(["chain", "pool", "schedule"]).describe("目标事件集合。"),
   id: z.string().min(1).describe("ASCII 风格事件 id。"),
@@ -240,7 +267,7 @@ const structuredDraftEventSchema = z.object({
   invoke_params: z.array(structuredDraftInvokeParamSchema).describe("invoke 事件的调用参数；没有时填空数组。"),
   object_keys: z.array(z.string()).describe("事件对象引用，例如 player、normal:xxx、important:xxx。"),
   location: z.string().describe("地点 id，可为空。"),
-  dialogues: z.array(draftDialogueSchema).describe("可直接转入事件文件的对白。"),
+  presentation: structuredDraftPresentationSchema.describe("事件表现：silent 静默执行、message 消息提示、dialogue 对白。"),
   init_script: z.string().describe("事件进入时 StoryScript；不确定时留空。"),
   end_script: z.string().describe("事件结束时 StoryScript；不确定时留空。"),
   next: z.array(z.string()).describe("chain 事件的后续事件 id；pool/schedule 使用空数组。"),
@@ -265,6 +292,7 @@ const structuredDraftSchema = z.object({
 
 type StructuredCreationDraft = z.infer<typeof structuredDraftSchema>
 type StructuredCreationDraftLoopRule = z.infer<typeof structuredDraftLoopRuleSchema>
+type StructuredCreationDraftPresentation = z.infer<typeof structuredDraftPresentationSchema>
 
 const chiefEditorOutputSchema = z.object({
   log: z.string(),
@@ -883,6 +911,35 @@ function toDraftLoopRule(loop: StructuredCreationDraftLoopRule | null): StoryCre
   }
 }
 
+function toDraftPresentation(
+  presentation: StructuredCreationDraftPresentation
+): StoryCreationDraftPresentation {
+  if (presentation.type === "silent") {
+    return {
+      type: "silent"
+    }
+  }
+
+  if (presentation.type === "message") {
+    const durationSeconds = presentation.message
+      ? Math.max(0, presentation.message.duration_seconds)
+      : 3
+
+    return {
+      type: "message",
+      message: {
+        content: presentation.message?.content ?? "",
+        duration_seconds: durationSeconds
+      }
+    }
+  }
+
+  return {
+    type: "dialogue",
+    dialogues: presentation.dialogues
+  }
+}
+
 function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryCreationDraft {
   return {
     title: draft.title,
@@ -925,7 +982,7 @@ function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryCreation
         })),
         object_keys: event.object_keys,
         location: event.location,
-        dialogues: event.dialogues,
+        presentation: toDraftPresentation(event.presentation),
         init_script: event.init_script,
         end_script: event.end_script,
         next: event.next,
@@ -1015,6 +1072,46 @@ function makeVariableName(rawName: string, fallback: string) {
   return normalizedName || fallback
 }
 
+function getDraftPresentationDialogues(presentation: StoryCreationDraftPresentation) {
+  return presentation.type === "dialogue" ? presentation.dialogues : []
+}
+
+function normalizeDraftPresentation(
+  presentation: StoryCreationDraftPresentation,
+  roleIdMap: Map<string, string>
+): StoryCreationDraftPresentation {
+  if (presentation.type === "silent") {
+    return {
+      type: "silent"
+    }
+  }
+
+  if (presentation.type === "message") {
+    const durationSeconds = Number.isFinite(presentation.message.duration_seconds)
+      ? Math.max(0, presentation.message.duration_seconds)
+      : 3
+
+    return {
+      type: "message",
+      message: {
+        content: presentation.message.content ?? "",
+        duration_seconds: durationSeconds
+      }
+    }
+  }
+
+  return {
+    type: "dialogue",
+    dialogues: presentation.dialogues.map((dialogue) => ({
+      ...dialogue,
+      speaker_key:
+        dialogue.speaker_type === "player"
+          ? "player"
+          : normalizeRoleReference(dialogue.speaker_key, roleIdMap)
+    }))
+  }
+}
+
 function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
   const locationIdMap = new Map<string, string>()
   const roleIdMap = new Map<string, string>()
@@ -1095,13 +1192,7 @@ function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
       object_keys: Array.from(
         new Set(event.object_keys.map((roleKey) => normalizeRoleReference(roleKey, roleIdMap)))
       ),
-      dialogues: event.dialogues.map((dialogue) => ({
-        ...dialogue,
-        speaker_key:
-          dialogue.speaker_type === "player"
-            ? "player"
-            : normalizeRoleReference(dialogue.speaker_key, roleIdMap)
-      })),
+      presentation: normalizeDraftPresentation(event.presentation, roleIdMap),
       invoke_params: event.invoke_params ?? [],
       loop: event.collectionType === "schedule" ? event.loop : undefined,
       next: event.collectionType === "chain"
@@ -1436,7 +1527,7 @@ function normalizeEventPeople(
     event.object_keys.map(normalizeObjectKey).filter(Boolean)
   )
 
-  for (const dialogue of event.dialogues) {
+  for (const dialogue of getDraftPresentationDialogues(event.presentation)) {
     if (dialogue.speaker_type === "object") {
       const speakerKey = normalizeObjectKey(dialogue.speaker_key)
       if (speakerKey) {
@@ -1455,7 +1546,14 @@ function normalizeEventPeople(
   })
   const objectKeySet = new Set(filteredObjectKeys)
 
-  const dialogues = event.dialogues.map((dialogue) => {
+  if (event.presentation.type !== "dialogue") {
+    return {
+      objectKeys: filteredObjectKeys,
+      presentation: event.presentation
+    }
+  }
+
+  const dialogues = event.presentation.dialogues.map((dialogue) => {
     if (dialogue.speaker_type === "player") {
       return {
         ...dialogue,
@@ -1481,7 +1579,10 @@ function normalizeEventPeople(
 
   return {
     objectKeys: filteredObjectKeys,
-    dialogues
+    presentation: {
+      type: "dialogue" as const,
+      dialogues
+    }
   }
 }
 
@@ -1555,7 +1656,7 @@ function toStoryEvent(
     invoke_params: triggerMode === "invoke" ? invokeParams : [],
     init_script: event.init_script,
     object_keys: people.objectKeys,
-    dialogues: people.dialogues,
+    presentation: people.presentation,
     location: normalizedLocation,
     end_script: event.end_script
   }
