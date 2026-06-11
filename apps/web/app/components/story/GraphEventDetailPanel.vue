@@ -1618,7 +1618,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
             </label>
           </div>
 
-          <div v-if="draft.presentationType === 'silent'" class="dialogue-empty">
+          <div v-if="draft.presentationType === 'silent'" class="detail-panel__presentation-empty">
             静默执行事件只运行初始化脚本、结束脚本和后续推进。
           </div>
 
@@ -2028,7 +2028,8 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
 .detail-card,
 .detail-panel__dialogue-card {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2161,10 +2162,6 @@ function handleDocumentPointerDown(event: MouseEvent) {
   grid-column: 1 / -1;
 }
 
-.detail-panel__dialogue-card {
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
 .detail-panel__dialogue-head {
   display: flex;
   align-items: flex-start;
@@ -2218,6 +2215,12 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
 .detail-panel__message-text {
   min-height: 180px;
+}
+
+.detail-panel__presentation-empty {
+  color: var(--text-muted);
+  line-height: 1.5;
+  padding: 2px 0 0;
 }
 
 .detail-panel__trigger-mode-option {
@@ -2416,6 +2419,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
 }
 
 .dialogue-list {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding-right: 6px;

@@ -1551,18 +1551,6 @@ function GameScreen({
             ))}
           </Box>
         ) : null}
-        {!uiState.overlay && view.currentMessage ? (
-          <Box flexDirection="column" marginTop={1}>
-            <Text color="yellow">
-              提示消息
-              {" "}
-              <Text color="gray">
-                {Math.ceil(view.currentMessage.remainingSeconds)}s
-              </Text>
-            </Text>
-            <Text color="yellow">{view.currentMessage.content}</Text>
-          </Box>
-        ) : null}
         {!uiState.overlay && view.currentDialogue ? (
           <Box flexDirection="column" marginTop={1}>
             <Text color="cyan">
@@ -1635,7 +1623,13 @@ function GameScreen({
           <Text color="gray">{`场景: ${sceneImagePath}`}</Text>
           <Text color="gray">{`地点: ${currentLocationId}`}</Text>
         </Box>
-        <Text color="gray">{`最新消息：${findLatestNotification(mergedNotifications) || "无"}`}</Text>
+        {view.currentMessage ? (
+          <Text color="yellow">
+            {`提示消息 (${Math.ceil(view.currentMessage.remainingSeconds)}s)：${view.currentMessage.content}`}
+          </Text>
+        ) : (
+          <Text color="gray">{`最新消息：${findLatestNotification(mergedNotifications) || "无"}`}</Text>
+        )}
       </Box>
 
       <Box>

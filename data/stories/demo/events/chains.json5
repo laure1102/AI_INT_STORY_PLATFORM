@@ -1,78 +1,9 @@
 [
   {
-    presentation: {
-      type: 'dialogue',
-      dialogues: [
-      {
-        content: '10个小时的高铁加2个小时的大巴……\n终于是回来了。',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      {
-        content: '累死大爷了。',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      {
-        content: '这些年过去了，${county.name_full}县还是老样子，一点没变。\n老旧的矮楼，破烂的街道……',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      {
-        content: '接下来，我做些什么呢？',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      {
-        content: '叮……',
-        speaker_key: 'normal:xitong',
-        speaker_type: 'object',
-      },
-      {
-        content: '刚才我脑袋里的那是什么声音？',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      {
-        content: '恭喜宿主，你的系统还有3秒抵达……',
-        speaker_key: 'normal:xitong',
-        speaker_type: 'object',
-      },
-      {
-        content: '3……2……1\n系统绑定成功。',
-        speaker_key: 'normal:xitong',
-        speaker_type: 'object',
-      },
-      {
-        content: '统子哥？！！',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      {
-        content: '竟然是统子哥！！\n那本大爷岂不是起飞了！',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      {
-        content: '统子哥，快介绍一下你的功能！',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      {
-        content: '本统的功能很简单。\n就是以${county.name_full}县常驻人口为基数，每天百倍为宿主发放资金。\n每天发放时间: 0点\n当前本县常驻人口数：${county.renkou}\n今日应发放金额：${player.day_give_money}',
-        speaker_key: 'normal:xitong',
-        speaker_type: 'object',
-      },
-      {
-        content: '由于今天是系统第一次激活，特给予宿主新手礼包：\n奖励翻倍！！！\n今日发放金额：${player.first_day_give_money}',
-        speaker_key: 'normal:xitong',
-        speaker_type: 'object',
-      },
-      ],
-    },
     end_script: '',
     id: 'back_county',
     init_script: '',
+    invoke_params: [],
     location: 'qichezhan_lvl1',
     next: [
       '1st_give_money',
@@ -81,70 +12,85 @@
     object_keys: [
       'normal:xitong',
     ],
+    presentation: {
+      dialogues: [
+        {
+          content: '10个小时的高铁加2个小时的大巴……\n终于是回来了。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '累死大爷了。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '这些年过去了，${county.name_full}县还是老样子，一点没变。\n老旧的矮楼，破烂的街道……',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '接下来，我做些什么呢？',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '叮……',
+          speaker_key: 'normal:xitong',
+          speaker_type: 'object',
+        },
+        {
+          content: '刚才我脑袋里的那是什么声音？',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '恭喜宿主，你的系统还有3秒抵达……',
+          speaker_key: 'normal:xitong',
+          speaker_type: 'object',
+        },
+        {
+          content: '3……2……1\n系统绑定成功。',
+          speaker_key: 'normal:xitong',
+          speaker_type: 'object',
+        },
+        {
+          content: '统子哥？！！',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '竟然是统子哥！！\n那本大爷岂不是起飞了！',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '统子哥，快介绍一下你的功能！',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '本统的功能很简单。\n就是以${county.name_full}县常驻人口为基数，每天百倍为宿主发放资金。\n每天发放时间: 0点\n当前本县常驻人口数：${county.renkou}\n今日应发放金额：${player.day_give_money}',
+          speaker_key: 'normal:xitong',
+          speaker_type: 'object',
+        },
+        {
+          content: '由于今天是系统第一次激活，特给予宿主新手礼包：\n奖励翻倍！！！\n今日发放金额：${player.first_day_give_money}',
+          speaker_key: 'normal:xitong',
+          speaker_type: 'object',
+        },
+      ],
+      type: 'dialogue',
+    },
     title: '回到县城',
-    trigger_mode: 'default',
     trigger_expr: '',
+    trigger_mode: 'default',
   },
   {
-    presentation: {
-      type: 'dialogue',
-      dialogues: [
-      {
-        content: '${player.first_day_give_money} 已到账，请宿主查收！',
-        speaker_key: 'normal:xitong',
-        speaker_type: 'object',
-      },
-      {
-        content: '牛皮！牛皮！\n个、十、百、千、万……真的到账这么多钱。\n现在整个${county.name_full}县，比我有钱的两只手也数得过来吧。',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      {
-        content: '这么多钱，我该怎么花才好呢？',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      ],
-    },
     end_script: '',
     id: '1st_give_money',
     init_script: '${player.money} += ${player.first_day_give_money}\nbag_add("player", "population_flow_report", 1)\nbag_add("player", "daily_cash_card", 1)',
-    location: '',
-    next: [
-      'bag_report_check',
-    ],
-    node_type: 'event',
-    object_keys: [
-      'normal:xitong',
-    ],
-    title: '第一次给钱',
-    trigger_mode: 'default',
-    trigger_expr: '',
-  },
-  {
-    presentation: {
-      type: 'dialogue',
-      dialogues: [
-      {
-        content: '宿主，系统已同步生成第一份人口流动统计表。',
-        speaker_key: 'normal:xitong',
-        speaker_type: 'object',
-      },
-      {
-        content: '以后每日发钱前，会先根据教育、就业和县城级别统计前一日人口流入流出。',
-        speaker_key: 'normal:xitong',
-        speaker_type: 'object',
-      },
-      {
-        content: '也就是说，想让每天到账变多，我得真把县城经营起来。',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
-      ],
-    },
-    end_script: '',
-    id: 'bag_report_check',
-    init_script: '',
+    invoke_params: [],
     location: '',
     next: [
       'game_start',
@@ -153,23 +99,44 @@
     object_keys: [
       'normal:xitong',
     ],
-    title: '查看人口流动统计表',
-    trigger_mode: 'condition',
-    trigger_expr: 'bag_has("player", "population_flow_report", 1)',
+    presentation: {
+      dialogues: [
+        {
+          content: '${player.first_day_give_money} 已到账，请宿主查收！',
+          speaker_key: 'normal:xitong',
+          speaker_type: 'object',
+        },
+        {
+          content: '牛皮！牛皮！\n个、十、百、千、万……真的到账这么多钱。\n现在整个${county.name_full}县，比我有钱的两只手也数得过来吧。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '这么多钱，我该怎么花才好呢？',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '第一次给钱',
+    trigger_expr: '',
+    trigger_mode: 'default',
   },
   {
-    presentation: {
-      type: 'silent',
-    },
     end_script: '',
     id: 'game_start',
     init_script: '',
+    invoke_params: [],
     location: '',
     next: [],
     node_type: 'event',
     object_keys: [],
+    presentation: {
+      type: 'silent',
+    },
     title: '游戏正式开始',
-    trigger_mode: 'default',
     trigger_expr: '',
+    trigger_mode: 'default',
   },
 ]
