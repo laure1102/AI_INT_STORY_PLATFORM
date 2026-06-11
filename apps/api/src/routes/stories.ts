@@ -150,11 +150,16 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
       store.readStoryDocument(storyId)
     ])
 
+    const controller = new AbortController()
+    context.req.on("aborted", () => controller.abort())
+    context.req.on("close", () => controller.abort())
+
     context.body = await runStoryCreationAgents(
       settings,
       story,
       body.instruction,
-      body.baseDraft
+      body.baseDraft,
+      controller.signal
     ) satisfies RunStoryCreationAgentResponse
   })
 

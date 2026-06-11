@@ -95,7 +95,8 @@ export function useStoryApi() {
   async function runStoryCreationAgent(
     storyId: string,
     instruction: string,
-    baseDraft?: RunStoryCreationAgentRequest["baseDraft"]
+    baseDraft?: RunStoryCreationAgentRequest["baseDraft"],
+    signal?: AbortSignal
   ): Promise<RunStoryCreationAgentResponse> {
     const body = {
       instruction,
@@ -106,7 +107,8 @@ export function useStoryApi() {
       `${apiBase}/stories/${storyId}/creation-agent/run`,
       {
         method: "POST",
-        body
+        body,
+        signal
       }
     )
   }

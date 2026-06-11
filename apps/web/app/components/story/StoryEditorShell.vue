@@ -88,6 +88,7 @@ const isSaving = shallowRef(false)
 const isExporting = shallowRef(false)
 const isAgentRunning = shallowRef(false)
 const isCreationDraftApplying = shallowRef(false)
+const creationAgentAbortController = shallowRef<AbortController | null>(null)
 const errorMessage = shallowRef<string | null>(null)
 const creationAgentResult = shallowRef<RunStoryCreationAgentResponse | null>(null)
 const creationAgentRunMode = shallowRef<StoryCreationAgentRunMode | null>(null)
@@ -1263,17 +1264,40 @@ async function handleRunCreationAgent(instruction: string, baseDraft?: StoryCrea
   }
   creationApplyMessage.value = null
   creationApplyWarnings.value = []
+  creationAgentAbortController.value = new AbortController()
 
   try {
-    creationAgentResult.value = await runStoryCreationAgent(props.storyId, instruction, baseDraft)
+    creationAgentResult.value = await runStoryCreationAgent(
+      props.storyId,
+      instruction,
+      baseDraft,
+      creationAgentAbortController.value.signal
+    )
   } catch (error) {
+    if (isAbortError(error)) {
+      return
+    }
+
     const message = error instanceof Error ? error.message : "AI 创作 Agent 运行失败。"
     creationAgentError.value = message
     errorMessage.value = message
   } finally {
     isAgentRunning.value = false
     creationAgentRunMode.value = null
+    creationAgentAbortController.value = null
   }
+}
+
+function handleAbortCreationAgent() {
+  creationAgentAbortController.value?.abort()
+}
+
+function isAbortError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  return error.name === "AbortError" || error.message.includes("aborted")
 }
 
 function selectAppliedEvent(selection: ApplyStoryCreationDraftSelection) {
@@ -1560,6 +1584,7 @@ watch(
       :saving="isSaving"
       :story="storyDocument"
       @apply-draft="handleApplyCreationDraft"
+      @abort-agent="handleAbortCreationAgent"
       @run-agent="handleRunCreationAgent"
       @save-story-bible="handleSaveStoryBible"
     />

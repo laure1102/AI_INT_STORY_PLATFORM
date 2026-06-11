@@ -51,6 +51,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   applyDraft: [draft: StoryCreationDraft, selection: ApplyStoryCreationDraftSelection]
+  abortAgent: []
   runAgent: [instruction: string, baseDraft?: StoryCreationDraft]
   saveStoryBible: [storyBible: StoryBibleFile]
 }>()
@@ -873,6 +874,14 @@ watch(
               @click="runAgent"
             >
               {{ isNewCreationRunning ? "运行中..." : "运行 Agent" }}
+            </button>
+            <button
+              v-if="agentRunning"
+              class="btn-secondary"
+              type="button"
+              @click="emit('abortAgent')"
+            >
+              中止当前任务
             </button>
             <span class="creation-actions__status">{{ runStatus }}</span>
           </div>

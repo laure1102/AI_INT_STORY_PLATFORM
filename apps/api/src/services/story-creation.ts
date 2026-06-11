@@ -1065,15 +1065,24 @@ async function invokeStructured<T extends Record<string, unknown>>(
   role: StoryCreationAgentRole,
   llm: ChatOpenAI,
   schema: z.ZodType<T>,
-  prompt: string
+  prompt: string,
+  signal?: AbortSignal
 ) {
   const structuredLlm = llm.withStructuredOutput<T>(schema, {
     name: `${role}Output`
   })
 
   try {
-    return await structuredLlm.invoke(prompt)
+    return await structuredLlm.invoke(prompt, signal ? { signal } : undefined)
   } catch (error) {
+    if (isAbortError(error)) {
+      throw new FileStoreError(
+        `${ROLE_TITLES[role]} Agent 已中止。`,
+        499,
+        `${ROLE_ERROR_CODES[role]}-aborted`
+      )
+    }
+
     const detail = error instanceof Error ? error.message : String(error)
     throw new FileStoreError(
       `${ROLE_TITLES[role]} Agent failed: ${detail}`,
@@ -1089,6 +1098,14 @@ function createLog(role: StoryCreationAgentRole, summary: string): StoryCreation
     title: ROLE_TITLES[role],
     summary
   }
+}
+
+function isAbortError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  return error.name === "AbortError" || error.message.toLowerCase().includes("aborted")
 }
 
 function buildPlotPlanText(output: z.infer<typeof plotPlannerOutputSchema>) {
@@ -2106,7 +2123,8 @@ export async function runStoryCreationAgents(
   settings: AppSettingsFile,
   story: StoryDocument,
   instruction: string,
-  baseDraft?: StoryCreationDraft
+  baseDraft?: StoryCreationDraft,
+  signal?: AbortSignal
 ): Promise<RunStoryCreationAgentResponse> {
   const normalizedInstruction = instruction.trim()
 
@@ -2134,7 +2152,8 @@ export async function runStoryCreationAgents(
           ? "你的任务：把用户反馈转成可执行修订简报，明确当前草稿需要保留、增强、删除或重写的部分。"
           : "你的任务：把用户指令转成可执行创作简报，明确本次要解决的可玩体验、爽点、玩家选择空间和风险。",
         "请避免只给文学大纲，必须面向后续结构化事件生成。"
-      ].join("\n\n")
+      ].join("\n\n"),
+      signal
     )
 
     return {
@@ -2162,7 +2181,8 @@ export async function runStoryCreationAgents(
         state.baseDraft
           ? "你的任务：根据反馈修订剧情规划。要说明如何调整现有事件、变量、地点和角色，避免无必要地重建整批草稿。"
           : "你的任务：规划一个可以进入游戏事件数据的短篇章。必须写出玩家可选分歧，而不是单向剧情段落。"
-      ].join("\n\n")
+      ].join("\n\n"),
+      signal
     )
 
     return {
@@ -2183,7 +2203,8 @@ export async function runStoryCreationAgents(
         state.baseDraft
           ? "你的任务：检查当前草稿的地点、角色和物品是否足够支撑反馈要求。优先保留已有 id；只在确有必要时新增或调整资产草稿。物品必须引用已有分类。"
           : "你的任务：为本次生成内容提出必要的地点、角色和物品草稿。优先复用已有资产；确需新增时给出可落地 id、说明和英文美术提示词。物品必须引用已有分类。"
-      ].join("\n\n")
+      ].join("\n\n"),
+      signal
     )
 
     return {
@@ -2208,7 +2229,8 @@ export async function runStoryCreationAgents(
         "chain 事件可以通过 next 组成小剧情线；pool 事件必须是可被 AI 剧情导演挑选的平面事件；schedule 事件必须适合时间循环。",
         "如剧情涉及玩家获得、消耗或检查物品，在 init_script/end_script/操作脚本中使用 bag_add、bag_remove、bag_count、bag_has；不要在事件 JSON 中新增奖励或消耗字段。",
         "不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议和风险说明。"
-      ].join("\n\n")
+      ].join("\n\n"),
+      signal
     )
 
     return {
@@ -2231,7 +2253,8 @@ export async function runStoryCreationAgents(
         `待审校草稿:\n${formatJson(state.draft, 16000)}`,
         "你的任务：检查 init_script、end_script、trigger_expr、dialogue 占位符是否保守可用。",
         "如果脚本不确定，宁可清空脚本并在 issues/warnings 说明，也不要生成不可执行的复杂脚本。"
-      ].join("\n\n")
+      ].join("\n\n"),
+      signal
     )
 
     return {
@@ -2259,7 +2282,8 @@ export async function runStoryCreationAgents(
         `待检查草稿:\n${formatJson(state.draft, 16000)}`,
         "你的任务：检查角色引用、地点引用、物品分类、事件 next、触发方式和玩家自由度是否一致。",
         "保留草稿预览性质，不要声称已经写入数据文件。"
-      ].join("\n\n")
+      ].join("\n\n"),
+      signal
     )
 
     const draft = normalizeStructuredDraft(output.draft)
@@ -2299,7 +2323,7 @@ export async function runStoryCreationAgents(
     plotPlan: "",
     storyContext: buildStoryContext(story, normalizedInstruction, normalizedBaseDraft),
     storyTitle: story.story.title
-  })
+  }, signal ? { signal } : undefined)
 
   if (!result.draft) {
     throw new FileStoreError("Agent workflow returned an empty draft.", 502, "ai.agent-empty-draft")
