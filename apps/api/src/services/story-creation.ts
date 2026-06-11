@@ -115,7 +115,11 @@ const draftLoopRuleSchema = z.object({
   mode: z.enum(["daily", "weekly", "monthly", "interval_days"]).describe("定时规则类型。"),
   interval_days: z.number().int().min(1).optional().describe("interval_days 模式的间隔天数。"),
   weekday: z.number().int().min(1).max(7).optional().describe("weekly 模式的星期几，1 到 7。"),
-  month_day: z.number().int().min(1).max(31).optional().describe("monthly 模式的日期，1 到 31。")
+  month_day: z.number().int().min(1).max(31).optional().describe("monthly 模式的日期，1 到 31。"),
+  at: z.string().optional().describe("触发时间，HH:mm，例如 00:00。"),
+  priority: z.number().int().optional().describe("同一触发时间内的优先级，数字越小越先执行；默认 100。"),
+  after: z.array(z.string()).optional().describe("必须排在这些 schedule 事件之后执行的事件 id。"),
+  before: z.array(z.string()).optional().describe("必须排在这些 schedule 事件之前执行的事件 id。")
 })
 
 const draftVariableValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()])
@@ -217,7 +221,11 @@ const structuredDraftLoopRuleSchema = z.object({
   mode: z.enum(["daily", "weekly", "monthly", "interval_days"]).describe("定时规则类型。"),
   interval_days: z.number().int().min(1).nullable().describe("interval_days 模式的间隔天数；其他模式填 null。"),
   weekday: z.number().int().min(1).max(7).nullable().describe("weekly 模式的星期几，1 到 7；其他模式填 null。"),
-  month_day: z.number().int().min(1).max(31).nullable().describe("monthly 模式的日期，1 到 31；其他模式填 null。")
+  month_day: z.number().int().min(1).max(31).nullable().describe("monthly 模式的日期，1 到 31；其他模式填 null。"),
+  at: z.string().nullable().describe("触发时间，HH:mm；默认或不确定时填 00:00。"),
+  priority: z.number().int().nullable().describe("同一触发时间内的优先级；结算类建议 10-49，发放/奖励类建议 50-99，展示/日报类建议 100+；默认填 100。"),
+  after: z.array(z.string()).describe("必须排在这些 schedule 事件之后执行的事件 id；没有时填空数组。"),
+  before: z.array(z.string()).describe("必须排在这些 schedule 事件之前执行的事件 id；没有时填空数组。")
 })
 
 const structuredDraftVariableSchema = z.object({
@@ -1057,11 +1065,14 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "StoryScript 过程脚本允许直接写回普通全局 value 变量，例如 `${player.money} += 100`、`${county.renkou_young} = Math.max(0, ${county.renkou_young} + delta)`。",
     "StoryScript 禁止写 calc、system.*、call.*：calc 是只读派生值；如果要改变 calc 汇总值，必须写它 calc_rule 依赖的普通 value 分项，或在 variables 草稿中新增普通 value 变量作为持久化字段。",
     "不要声称脚本接口缺少安全写回能力；当前引擎支持在 init_script、end_script、action.exec_script 中写普通 value 变量。",
+    "生成非空 StoryScript 过程脚本时必须写清楚中文注释：说明读取了哪些变量、计算规则为什么这样设计、最终写回哪些 value 变量。复杂脚本要分段注释，避免只有公式没有解释。",
     "物品必须优先复用现有物品 id；确需新增时输出 items 草稿，category_id 必须来自现有物品分类。",
     "判断物品是否已存在时必须先查 itemIndexAll 全量轻量索引；relevantItemDetails 只提供本次更相关物品的详细字段，不代表完整物品库。",
     "物品获得、消耗和检查必须走 StoryScript 背包函数，不要编造 reward/items/consume 等未知事件字段。",
     "背包函数：bag_add(\"player\", \"item_id\", 1) 添加物品；bag_remove(\"player\", \"item_id\", 1) 扣除物品并返回 boolean；bag_count(\"player\", \"item_id\") 返回数量；bag_has(\"player\", \"item_id\", 1) 检查数量。",
     "背包函数里的 item_id 必须来自现有物品或本次 items 草稿；如果新增物品，事件脚本必须引用该新增物品 id。",
+    "schedule 事件的 loop 必须包含 at、priority、after、before：at 用 HH:mm；同一时间点内 priority 数字越小越先执行；如果事件依赖另一个定时事件结果，必须把前置事件 id 写入 after。",
+    "schedule priority 建议：结算/统计类 10-49，发放/奖励类 50-99，展示/日报/提示类 100+。例如每日发钱依赖每日人口结算时，发钱事件 after 应包含人口结算事件 id。",
     "StoryScript 不确定时留空，不要编造复杂脚本。",
     "",
     `故事标题: ${state.storyTitle}`,
@@ -1154,14 +1165,41 @@ function buildAssetPlanText(output: z.infer<typeof assetDesignerOutputSchema>) {
   }, 12000)
 }
 
+function normalizeScheduleAt(value: string | null | undefined) {
+  const normalized = typeof value === "string" ? value.trim() : ""
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(normalized) ? normalized : "00:00"
+}
+
+function normalizeSchedulePriority(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : 100
+}
+
+function normalizeScheduleDependencyIds(value: string[] | null | undefined) {
+  return Array.from(
+    new Set((value ?? []).map((item) => item.trim()).filter(Boolean))
+  )
+}
+
+function toDraftLoopOrderFields(loop: StructuredCreationDraftLoopRule) {
+  return {
+    at: normalizeScheduleAt(loop.at),
+    priority: normalizeSchedulePriority(loop.priority),
+    after: normalizeScheduleDependencyIds(loop.after),
+    before: normalizeScheduleDependencyIds(loop.before)
+  }
+}
+
 function toDraftLoopRule(loop: StructuredCreationDraftLoopRule | null): StoryCreationDraftEvent["loop"] {
   if (!loop) {
     return undefined
   }
 
+  const orderFields = toDraftLoopOrderFields(loop)
+
   if (loop.mode === "weekly") {
     return {
       mode: "weekly",
+      ...orderFields,
       ...(loop.weekday === null ? {} : { weekday: loop.weekday })
     }
   }
@@ -1169,6 +1207,7 @@ function toDraftLoopRule(loop: StructuredCreationDraftLoopRule | null): StoryCre
   if (loop.mode === "monthly") {
     return {
       mode: "monthly",
+      ...orderFields,
       ...(loop.month_day === null ? {} : { month_day: loop.month_day })
     }
   }
@@ -1176,12 +1215,14 @@ function toDraftLoopRule(loop: StructuredCreationDraftLoopRule | null): StoryCre
   if (loop.mode === "interval_days") {
     return {
       mode: "interval_days",
+      ...orderFields,
       ...(loop.interval_days === null ? {} : { interval_days: loop.interval_days })
     }
   }
 
   return {
-    mode: "daily"
+    mode: "daily",
+    ...orderFields
   }
 }
 
@@ -1869,13 +1910,25 @@ function normalizeLoopRule(
   if (!loop) {
     warnings.push(`定时事件 ${event.id} 缺少 loop 规则，已使用 daily。`)
     return {
-      mode: "daily"
+      mode: "daily",
+      at: "00:00",
+      priority: 100,
+      after: [],
+      before: []
     }
+  }
+
+  const orderFields = {
+    at: normalizeScheduleAt(loop.at),
+    priority: normalizeSchedulePriority(loop.priority),
+    after: normalizeScheduleDependencyIds(loop.after).filter((id) => id !== event.id),
+    before: normalizeScheduleDependencyIds(loop.before).filter((id) => id !== event.id)
   }
 
   if (loop.mode === "weekly") {
     return {
       mode: "weekly",
+      ...orderFields,
       weekday: loop.weekday ?? 1
     }
   }
@@ -1883,6 +1936,7 @@ function normalizeLoopRule(
   if (loop.mode === "monthly") {
     return {
       mode: "monthly",
+      ...orderFields,
       month_day: loop.month_day ?? 1
     }
   }
@@ -1890,12 +1944,14 @@ function normalizeLoopRule(
   if (loop.mode === "interval_days") {
     return {
       mode: "interval_days",
+      ...orderFields,
       interval_days: loop.interval_days ?? 1
     }
   }
 
   return {
-    mode: "daily"
+    mode: "daily",
+    ...orderFields
   }
 }
 
@@ -2251,8 +2307,10 @@ export async function runStoryCreationAgents(
           ? "你的任务：基于当前待优化草稿输出完整修订版。除非反馈要求重做，否则保留已有 id、变量 key、角色 key、事件 next 和集合类型，必要时补充或重写具体字段。"
           : "你的任务：生成可预览的结构化剧情草稿，默认 3 到 8 个事件。",
         "chain 事件可以通过 next 组成小剧情线；pool 事件必须是可被 AI 剧情导演挑选的平面事件；schedule 事件必须适合时间循环。",
+        "生成 schedule 事件时必须显式配置 loop.at、loop.priority、loop.after、loop.before；同一时间点需要业务顺序时优先用 after 表达硬依赖，再用 priority 做排序。",
         "如果事件需要持久化改变数值，优先在 init_script 或 end_script 写普通 value 变量；可以读取 calc 变量参与计算，但不能给 calc 变量赋值。",
         "如果用户要求改变一个 calc 汇总，例如人口总量，应写入它依赖的普通 value 分项；如现有分项不足，在 variables 中新增普通 value 变量并在脚本中引用。",
+        "写 init_script/end_script 时，非空脚本必须包含中文注释。注释至少覆盖：规则目的、关键变量含义、核心公式含义、写回目标。不要只输出一串无解释的 Math 公式。",
         "如剧情涉及玩家获得、消耗或检查物品，在 init_script/end_script/操作脚本中使用 bag_add、bag_remove、bag_count、bag_has；不要在事件 JSON 中新增奖励或消耗字段。",
         "不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议和风险说明。"
       ].join("\n\n"),
@@ -2279,6 +2337,7 @@ export async function runStoryCreationAgents(
         `待审校草稿:\n${formatJson(state.draft, 16000)}`,
         "你的任务：检查 init_script、end_script、trigger_expr、dialogue 占位符是否保守可用。",
         "脚本权限审校重点：普通全局 value 变量可写；calc、system.*、call.* 不可写。发现写 calc 汇总时，改为写其 calc_rule 依赖的普通 value 分项。",
+        "脚本可读性审校重点：非空过程脚本必须保留或补充中文注释，说明规则意图、变量来源、计算依据和写回结果；不要删除有用注释。",
         "不要因为脚本涉及持久化变量写入就清空脚本；只有无法确定具体 value 写入目标时才清空并说明需要新增变量。",
         "如果脚本不确定，宁可清空脚本并在 issues/warnings 说明，也不要生成不可执行的复杂脚本。"
       ].join("\n\n"),

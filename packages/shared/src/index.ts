@@ -117,6 +117,10 @@ export interface StoryCreationDraftLoopRule {
   interval_days?: number
   weekday?: number
   month_day?: number
+  at?: string
+  priority?: number
+  after?: string[]
+  before?: string[]
 }
 
 export type StoryCreationDraftVariableValue = string | number | boolean | null
@@ -168,6 +172,59 @@ export interface RunStoryCreationAgentRequest {
 export interface RunStoryCreationAgentResponse {
   draft: StoryCreationDraft
   logs: StoryCreationAgentLog[]
+}
+
+export type StoryCreationHistoryTurnMode = "new" | "feedback"
+export type StoryCreationHistoryTurnStatus = "running" | "done" | "failed" | "cancelled"
+export type StoryCreationHistorySessionStatus = "running" | "draft" | "applied" | "failed" | "cancelled"
+
+export interface StoryCreationHistoryTurn {
+  id: string
+  mode: StoryCreationHistoryTurnMode
+  instruction: string
+  status: StoryCreationHistoryTurnStatus
+  createdAt: string
+  completedAt?: string
+  error?: string
+  response?: RunStoryCreationAgentResponse
+}
+
+export interface StoryCreationHistoryApplyResult {
+  appliedAt: string
+  message: string
+  selection: ApplyStoryCreationDraftSelection
+  applied: ApplyStoryCreationDraftResponse["applied"]
+  warnings: string[]
+  draft: StoryCreationDraft
+}
+
+export interface StoryCreationHistorySession {
+  id: string
+  title: string
+  status: StoryCreationHistorySessionStatus
+  createdAt: string
+  updatedAt: string
+  initialInstruction: string
+  turns: StoryCreationHistoryTurn[]
+  currentDraft?: StoryCreationDraft
+  applied?: StoryCreationHistoryApplyResult
+}
+
+export interface StoryCreationHistoryFile {
+  sessions: StoryCreationHistorySession[]
+}
+
+export interface StoryCreationHistoryResponse {
+  history: StoryCreationHistoryFile
+}
+
+export interface SaveStoryCreationHistorySessionRequest {
+  session: StoryCreationHistorySession
+}
+
+export interface SaveStoryCreationHistorySessionResponse {
+  session: StoryCreationHistorySession
+  history: StoryCreationHistoryFile
 }
 
 export interface ApplyStoryCreationDraftSelection {

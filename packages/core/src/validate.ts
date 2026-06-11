@@ -456,6 +456,58 @@ function validateScheduleEvent(
       [...schedulePath, "interval_days"]
     )
   }
+
+  if (event.loop.at && !/^([01]\d|2[0-3]):[0-5]\d$/.test(event.loop.at)) {
+    pushIssue(
+      issues,
+      "error",
+      "schedule.at-invalid",
+      `Schedule event "${event.id}" has invalid loop.at. Expected HH:mm, for example 00:00.`,
+      [...schedulePath, "at"]
+    )
+  }
+
+  if (
+    event.loop.priority !== undefined
+    && (!Number.isFinite(event.loop.priority) || !Number.isInteger(event.loop.priority))
+  ) {
+    pushIssue(
+      issues,
+      "error",
+      "schedule.priority-invalid",
+      `Schedule event "${event.id}" loop.priority must be an integer.`,
+      [...schedulePath, "priority"]
+    )
+  }
+
+  const scheduleEventIds = new Set(document.scheduleEvents.map((scheduleEvent) => scheduleEvent.id))
+  for (const [field, dependencies] of [
+    ["after", event.loop.after ?? []],
+    ["before", event.loop.before ?? []]
+  ] as const) {
+    dependencies.forEach((dependencyId, dependencyIndex) => {
+      if (dependencyId === event.id) {
+        pushIssue(
+          issues,
+          "error",
+          "schedule.dependency-self",
+          `Schedule event "${event.id}" cannot depend on itself in loop.${field}.`,
+          [...schedulePath, field, String(dependencyIndex)]
+        )
+        return
+      }
+
+      if (!scheduleEventIds.has(dependencyId)) {
+        pushIssue(
+          issues,
+          "error",
+          "schedule.dependency-missing",
+          `Schedule event "${event.id}" references missing schedule event "${dependencyId}" in loop.${field}.`,
+          [...schedulePath, field, String(dependencyIndex)]
+        )
+      }
+    })
+  }
 }
 
 function validateChainEvent(

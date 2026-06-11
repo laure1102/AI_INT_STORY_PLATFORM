@@ -28,6 +28,8 @@ import type {
   RunStoryCreationAgentRequest,
   RunStoryCreationAgentResponse,
   SaveAppSettingsRequest,
+  SaveStoryCreationHistorySessionRequest,
+  SaveStoryCreationHistorySessionResponse,
   SaveEventRequest,
   SaveEventLocationsRequest,
   SaveStoryItemsRequest,
@@ -38,6 +40,7 @@ import type {
   SaveSystemValsRequest,
   StoryDeleteEventResponse,
   StoryBibleResponse,
+  StoryCreationHistoryResponse,
   StoryPlayerOverrideValsResponse,
   StoryRolesResponse,
   StoryItemsResponse,
@@ -54,6 +57,10 @@ import {
   generateRoleImage,
   generateRolePrompt
 } from "../services/ai"
+import {
+  readStoryCreationHistory,
+  upsertStoryCreationHistorySession
+} from "../services/creation-history"
 import { applyStoryCreationDraft, runStoryCreationAgents } from "../services/story-creation"
 
 const upload = multer({
@@ -172,6 +179,32 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
       storyId,
       body
     ) satisfies ApplyStoryCreationDraftResponse
+  })
+
+  router.get("/stories/:storyId/creation-history", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+
+    context.body = {
+      history: await readStoryCreationHistory(config.dataDir, storyId)
+    } satisfies StoryCreationHistoryResponse
+  })
+
+  router.put("/stories/:storyId/creation-history/:sessionId", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const sessionId = requireParam(context.params.sessionId, "sessionId")
+    const body = context.request.body as SaveStoryCreationHistorySessionRequest
+
+    if (body.session.id !== sessionId) {
+      throw new FileStoreError(
+        "Creation history session id in path and payload must match.",
+        400,
+        "creation-history.session-id-mismatch"
+      )
+    }
+
+    const result = await upsertStoryCreationHistorySession(config.dataDir, storyId, body.session)
+
+    context.body = result satisfies SaveStoryCreationHistorySessionResponse
   })
 
   router.get("/stories/:storyId/events/:eventId", async (context) => {

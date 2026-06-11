@@ -348,6 +348,10 @@ export interface StoryLoopRule {
   interval_days?: number
   weekday?: number
   month_day?: number
+  at?: string
+  priority?: number
+  after?: string[]
+  before?: string[]
 }
 
 export interface StoryLoopEventFile extends StoryOnceEventFile {

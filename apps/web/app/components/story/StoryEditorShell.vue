@@ -22,7 +22,10 @@ import type {
 import type {
   ApplyStoryCreationDraftSelection,
   RunStoryCreationAgentResponse,
-  StoryCreationDraft
+  StoryCreationDraft,
+  StoryCreationHistoryFile,
+  StoryCreationHistorySession,
+  StoryCreationHistoryTurn
 } from "@story-mgr/shared"
 import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
 import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
@@ -64,11 +67,13 @@ const {
   deleteEvent,
   exportStory,
   getAppSettings,
+  getStoryCreationHistory,
   getStory,
   runStoryCreationAgent,
   saveAppSettings,
   saveEvent,
   saveEventLocations,
+  saveStoryCreationHistorySession,
   saveItems,
   savePlayerOverrideVals,
   saveRoles,
@@ -95,6 +100,8 @@ const creationAgentRunMode = shallowRef<StoryCreationAgentRunMode | null>(null)
 const creationAgentError = shallowRef<string | null>(null)
 const creationApplyMessage = shallowRef<string | null>(null)
 const creationApplyWarnings = shallowRef<string[]>([])
+const creationHistory = ref<StoryCreationHistoryFile>({ sessions: [] })
+const activeCreationHistorySessionId = shallowRef<string | null>(null)
 const editingEventId = shallowRef<string | null>(null)
 const creatingFromEventId = shallowRef<string | null>(null)
 const creatingEventDraft = shallowRef<StoryAnyEventFile | null>(null)
@@ -712,6 +719,82 @@ function closeSettingsDialog() {
   isSettingsDialogOpen.value = false
 }
 
+function createHistoryId(prefix: string) {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function getActiveCreationHistorySession() {
+  if (!activeCreationHistorySessionId.value) {
+    return null
+  }
+
+  return creationHistory.value.sessions.find((session) => session.id === activeCreationHistorySessionId.value) ?? null
+}
+
+function upsertLocalCreationHistorySession(session: StoryCreationHistorySession) {
+  creationHistory.value = {
+    sessions: [
+      session,
+      ...creationHistory.value.sessions.filter((item) => item.id !== session.id)
+    ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+  }
+}
+
+async function persistCreationHistorySession(session: StoryCreationHistorySession) {
+  try {
+    const response = await saveStoryCreationHistorySession(props.storyId, session)
+    creationHistory.value = response.history
+  } catch (error) {
+    console.error("[web] failed to save creation history", error)
+  }
+}
+
+function createCreationHistorySession(instruction: string): StoryCreationHistorySession {
+  const now = new Date().toISOString()
+  return {
+    id: createHistoryId("creation"),
+    title: instruction.slice(0, 40) || "未命名创作",
+    status: "running",
+    createdAt: now,
+    updatedAt: now,
+    initialInstruction: instruction,
+    turns: []
+  }
+}
+
+function buildCreationHistoryTurn(
+  mode: StoryCreationAgentRunMode,
+  instruction: string,
+  response: RunStoryCreationAgentResponse | null,
+  error?: string
+): StoryCreationHistoryTurn {
+  const now = new Date().toISOString()
+  return {
+    id: createHistoryId("turn"),
+    mode,
+    instruction,
+    status: error ? "failed" : "done",
+    createdAt: now,
+    completedAt: now,
+    ...(error ? { error } : {}),
+    ...(response ? { response } : {})
+  }
+}
+
+function handleRestoreCreationHistorySession(session: StoryCreationHistorySession) {
+  activeCreationHistorySessionId.value = session.id
+  creationAgentResult.value = session.currentDraft
+    ? {
+        draft: session.currentDraft,
+        logs: session.turns.at(-1)?.response?.logs ?? []
+      }
+    : (session.turns.at(-1)?.response ?? null)
+  creationApplyMessage.value = session.applied?.message ?? null
+  creationApplyWarnings.value = session.applied?.warnings ?? []
+  creationAgentError.value = null
+  errorMessage.value = null
+}
+
 async function loadStory() {
   isLoading.value = true
   errorMessage.value = null
@@ -721,11 +804,18 @@ async function loadStory() {
   creationAgentError.value = null
   creationApplyMessage.value = null
   creationApplyWarnings.value = []
+  creationHistory.value = { sessions: [] }
+  activeCreationHistorySessionId.value = null
 
   try {
-    const [story, settings] = await Promise.all([getStory(props.storyId), getAppSettings()])
+    const [story, settings, history] = await Promise.all([
+      getStory(props.storyId),
+      getAppSettings(),
+      getStoryCreationHistory(props.storyId)
+    ])
     storyDocument.value = story
     appSettings.value = settings
+    creationHistory.value = history
 
     for (const collectionType of ["chain", "pool", "schedule"] as EventCanvasTab[]) {
       const events = getEventsByCollectionType(collectionType)
@@ -871,7 +961,11 @@ function buildNewStandaloneEvent(): StoryAnyEventFile {
       bgm: "",
       end_script: "",
       loop: {
-        mode: "daily"
+        mode: "daily",
+        at: "00:00",
+        priority: 100,
+        after: [],
+        before: []
       }
     }
 
@@ -1255,6 +1349,23 @@ async function handleRunCreationAgent(instruction: string, baseDraft?: StoryCrea
   }
 
   const runMode: StoryCreationAgentRunMode = baseDraft ? "feedback" : "new"
+  const startedAt = new Date().toISOString()
+  let historySession = runMode === "new"
+    ? createCreationHistorySession(instruction)
+    : getActiveCreationHistorySession()
+
+  if (!historySession) {
+    historySession = createCreationHistorySession(instruction)
+  }
+
+  historySession = {
+    ...historySession,
+    status: "running",
+    updatedAt: startedAt
+  }
+  activeCreationHistorySessionId.value = historySession.id
+  upsertLocalCreationHistorySession(historySession)
+
   isAgentRunning.value = true
   creationAgentRunMode.value = runMode
   creationAgentError.value = null
@@ -1267,20 +1378,66 @@ async function handleRunCreationAgent(instruction: string, baseDraft?: StoryCrea
   creationAgentAbortController.value = new AbortController()
 
   try {
-    creationAgentResult.value = await runStoryCreationAgent(
+    const result = await runStoryCreationAgent(
       props.storyId,
       instruction,
       baseDraft,
       creationAgentAbortController.value.signal
     )
+    creationAgentResult.value = result
+
+    const now = new Date().toISOString()
+    const nextSession: StoryCreationHistorySession = {
+      ...historySession,
+      title: result.draft.title || historySession.title,
+      status: "draft",
+      updatedAt: now,
+      currentDraft: result.draft,
+      turns: [
+        ...historySession.turns,
+        buildCreationHistoryTurn(runMode, instruction, result)
+      ]
+    }
+    upsertLocalCreationHistorySession(nextSession)
+    activeCreationHistorySessionId.value = nextSession.id
+    await persistCreationHistorySession(nextSession)
   } catch (error) {
     if (isAbortError(error)) {
+      const now = new Date().toISOString()
+      const nextSession: StoryCreationHistorySession = {
+        ...historySession,
+        status: "cancelled",
+        updatedAt: now,
+        turns: [
+          ...historySession.turns,
+          {
+            ...buildCreationHistoryTurn(runMode, instruction, null, "已中止"),
+            status: "cancelled"
+          }
+        ]
+      }
+      upsertLocalCreationHistorySession(nextSession)
+      activeCreationHistorySessionId.value = nextSession.id
+      await persistCreationHistorySession(nextSession)
       return
     }
 
     const message = error instanceof Error ? error.message : "AI 创作 Agent 运行失败。"
     creationAgentError.value = message
     errorMessage.value = message
+    const now = new Date().toISOString()
+    const nextSession: StoryCreationHistorySession = {
+      ...historySession,
+      status: "failed",
+      updatedAt: now,
+      turns: [
+        ...historySession.turns,
+        buildCreationHistoryTurn(runMode, instruction, null, message)
+      ]
+    }
+    upsertLocalCreationHistorySession(nextSession)
+    activeCreationHistorySessionId.value = nextSession.id
+    await persistCreationHistorySession(nextSession)
   } finally {
     isAgentRunning.value = false
     creationAgentRunMode.value = null
@@ -1341,6 +1498,26 @@ async function handleApplyCreationDraft(
     validation.value = response.result
     creationApplyWarnings.value = response.warnings
     creationApplyMessage.value = `已应用 ${response.applied.events} 个事件、${response.applied.locations} 个地点、${response.applied.roles} 个角色、${response.applied.items} 个物品、${response.applied.variables} 个变量。`
+    const activeSession = getActiveCreationHistorySession()
+    if (activeSession) {
+      const now = new Date().toISOString()
+      const nextSession: StoryCreationHistorySession = {
+        ...activeSession,
+        status: "applied",
+        updatedAt: now,
+        currentDraft: draft,
+        applied: {
+          appliedAt: now,
+          message: creationApplyMessage.value,
+          selection,
+          applied: response.applied,
+          warnings: response.warnings,
+          draft
+        }
+      }
+      upsertLocalCreationHistorySession(nextSession)
+      await persistCreationHistorySession(nextSession)
+    }
     closeEditor()
     selectAppliedEvent(selection)
   } catch (error) {
@@ -1580,11 +1757,14 @@ watch(
       :apply-message="creationApplyMessage"
       :apply-warnings="creationApplyWarnings"
       :applying="isCreationDraftApplying"
+      :creation-history="creationHistory"
+      :active-history-session-id="activeCreationHistorySessionId"
       :settings="appSettings"
       :saving="isSaving"
       :story="storyDocument"
       @apply-draft="handleApplyCreationDraft"
       @abort-agent="handleAbortCreationAgent"
+      @restore-history-session="handleRestoreCreationHistorySession"
       @run-agent="handleRunCreationAgent"
       @save-story-bible="handleSaveStoryBible"
     />
@@ -1711,6 +1891,7 @@ watch(
               :roles="storyDocument.roles"
               :saving="isSaving"
               :scenes="storyDocument.scenes"
+              :schedule-events="storyDocument.scheduleEvents"
               :vals="storyScriptVals"
               @close="closeEditor"
               @quick-create-location="handleQuickCreateLocation"

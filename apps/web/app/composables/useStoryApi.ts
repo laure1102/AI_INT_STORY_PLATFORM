@@ -35,6 +35,8 @@ import type {
   RunStoryCreationAgentRequest,
   RunStoryCreationAgentResponse,
   SaveAppSettingsRequest,
+  SaveStoryCreationHistorySessionRequest,
+  SaveStoryCreationHistorySessionResponse,
   SaveEventRequest,
   SaveEventLocationsRequest,
   SaveStoryItemsRequest,
@@ -46,6 +48,9 @@ import type {
   SaveValsRequest,
   StoryAssetMetadata,
   StoryDocumentResponse,
+  StoryCreationHistoryFile,
+  StoryCreationHistoryResponse,
+  StoryCreationHistorySession,
   StoryDeleteEventResponse,
   StoryEventResponse,
   StoryEventLocationsResponse,
@@ -122,6 +127,29 @@ export function useStoryApi() {
       {
         method: "POST",
         body: payload
+      }
+    )
+  }
+
+  async function getStoryCreationHistory(storyId: string): Promise<StoryCreationHistoryFile> {
+    const response = await $fetch<StoryCreationHistoryResponse>(
+      `${apiBase}/stories/${storyId}/creation-history`
+    )
+
+    return response.history
+  }
+
+  async function saveStoryCreationHistorySession(
+    storyId: string,
+    session: StoryCreationHistorySession
+  ): Promise<SaveStoryCreationHistorySessionResponse> {
+    return $fetch<SaveStoryCreationHistorySessionResponse>(
+      `${apiBase}/stories/${storyId}/creation-history/${session.id}`,
+      {
+        method: "PUT",
+        body: {
+          session
+        } satisfies SaveStoryCreationHistorySessionRequest
       }
     )
   }
@@ -488,6 +516,7 @@ export function useStoryApi() {
     generateRolePrompt,
     getAppSettings,
     getEvent,
+    getStoryCreationHistory,
     getStoryAssetMeta,
     getStoryAssetUrl,
     getStory,
@@ -497,6 +526,7 @@ export function useStoryApi() {
     saveAppSettings,
     saveEvent,
     saveEventLocations,
+    saveStoryCreationHistorySession,
     saveItems,
     savePlayerOverrideVals,
     saveRoles,

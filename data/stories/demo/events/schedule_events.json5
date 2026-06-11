@@ -7,7 +7,12 @@
     invoke_params: [],
     location: '',
     loop: {
+      after: [
+        'daily_population_flow',
+      ],
+      at: '00:00',
       mode: 'daily',
+      priority: 50,
     },
     object_keys: [],
     presentation: {
@@ -18,30 +23,6 @@
       type: 'message',
     },
     title: '每日签到发钱',
-    trigger_expr: '',
-    trigger_mode: 'default',
-  },
-  {
-    bgm: '',
-    end_script: '',
-    id: 'daily_population_flow',
-    init_script: "let total = ${county.renkou};\nlet young = ${county.renkou_young};\nlet kid = ${county.renkou_kid};\nlet old = ${county.renkou_old};\n\nlet attract = ${county.jiuye} * 0.35 + ${county.jiaoyu} * 0.08 + ${county.jijian} * 0.22 + ${county.yiliao} * 4 + ${county.zhian} * 0.2 + ${county.wenti} * 0.01 + ${county.yule} * 0.03;\nlet pressure = (100 - ${county.jiuye}) * 0.35 + Math.max(0, 120 - ${county.jiaoyu}) * 0.06 + (100 - ${county.jijian}) * 0.18 + Math.max(0, 8 - ${county.yiliao}) * 3 + Math.max(0, 60 - ${county.zhian}) * 0.22;\n\nlet baseFlow = Math.max(60, Math.floor(total * 0.00012));\nlet maxFlow = Math.max(120, Math.floor(total * 0.0005));\n\nlet popIn = Math.min(maxFlow, Math.max(0, Math.floor(baseFlow * (0.6 + attract / 100))));\nlet popOut = Math.min(maxFlow, Math.max(0, Math.floor(baseFlow * (0.6 + pressure / 100))));\n\nlet inYoung = Math.floor(popIn * 0.78);\nlet inKid = Math.floor(popIn * 0.12);\nlet inOld = popIn - inYoung - inKid;\n\nlet outYoung = Math.floor(popOut * 0.82);\nlet outKid = Math.floor(popOut * 0.08);\nlet outOld = popOut - outYoung - outKid;\n\n${county.renkou_young} = Math.max(0, young + inYoung - outYoung);\n${county.renkou_kid} = Math.max(0, kid + inKid - outKid);\n${county.renkou_old} = Math.max(0, old + inOld - outOld);\n\n${county.daily_pop_in} = popIn;\n${county.daily_pop_out} = popOut;\n${county.daily_pop_net} = popIn - popOut;\n\nlet fmt = (n) => n < 10000 ? String(n) : ('大约' + (n / 10000).toFixed(2) + '万');\nlet netText = (popIn - popOut) >= 0 ? ('+' + fmt(popIn - popOut)) : ('-' + fmt(Math.abs(popIn - popOut)));\n${county.daily_pop_msg} = '【县域人口日报】昨日迁入 ' + fmt(popIn) + ' 人，迁出 ' + fmt(popOut) + ' 人，净变化 ' + netText + ' 人。常住人口变动已计入今日结算基数。';",
-    invoke_params: [],
-    location: '',
-    loop: {
-      mode: 'daily',
-    },
-    object_keys: [
-      'player',
-    ],
-    presentation: {
-      message: {
-        content: '【县域人口日报】昨日人口流动已完成统计，常住人口变动已计入今日结算基数。',
-        duration_seconds: 3,
-      },
-      type: 'message',
-    },
-    title: '每日人口流动结算',
     trigger_expr: '',
     trigger_mode: 'default',
   },

@@ -6,7 +6,10 @@ import type {
   StoryCreationAgentRole,
   StoryCreationDraft,
   StoryCreationDraftEvent,
+  StoryCreationHistoryFile,
+  StoryCreationHistorySession,
   StoryCreationDraftItem,
+  StoryCreationDraftLoopRule,
   StoryCreationDraftRole,
   StoryCreationDraftVariable
 } from "@story-mgr/shared"
@@ -14,7 +17,7 @@ import type {
 type BibleFieldKey = keyof StoryBibleFile
 type DraftImpactKind = "create" | "update" | "skip"
 type StoryCreationAgentRunMode = "new" | "feedback"
-type FeedbackHistoryStatus = "running" | "done" | "failed"
+type FeedbackHistoryStatus = "running" | "done" | "failed" | "cancelled"
 
 interface BibleFieldConfig {
   key: BibleFieldKey
@@ -44,6 +47,8 @@ const props = defineProps<{
   applying: boolean
   applyMessage: string | null
   applyWarnings: string[]
+  creationHistory: StoryCreationHistoryFile
+  activeHistorySessionId: string | null
   story: StoryDocument
   settings: AppSettingsFile | null
   saving: boolean
@@ -52,6 +57,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   applyDraft: [draft: StoryCreationDraft, selection: ApplyStoryCreationDraftSelection]
   abortAgent: []
+  restoreHistorySession: [session: StoryCreationHistorySession]
   runAgent: [instruction: string, baseDraft?: StoryCreationDraft]
   saveStoryBible: [storyBible: StoryBibleFile]
 }>()
@@ -59,6 +65,7 @@ const emit = defineEmits<{
 const commandText = shallowRef("")
 const feedbackText = shallowRef("")
 const newCreationExpanded = shallowRef(true)
+const creationHistoryExpanded = shallowRef(false)
 const feedbackSeq = shallowRef(0)
 const activeFeedbackId = shallowRef<number | null>(null)
 const activeBibleField = shallowRef<BibleFieldKey>("background")
@@ -69,6 +76,7 @@ const selectedItemIds = shallowRef<string[]>([])
 const selectedVariableKeys = shallowRef<string[]>([])
 const feedbackHistory = ref<FeedbackHistoryItem[]>([])
 const editableDraft = ref<StoryCreationDraft | null>(null)
+const draftApplied = shallowRef(false)
 const draft = reactive<StoryBibleFile>({
   background: "",
   golden_finger: "",
@@ -192,6 +200,14 @@ const activeFeedbackItem = computed(() => {
   return feedbackHistory.value.find((item) => item.id === activeFeedbackId.value) ?? null
 })
 
+const historySessions = computed(() => {
+  return [...props.creationHistory.sessions].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt)
+  )
+})
+
+const historySessionCount = computed(() => historySessions.value.length)
+
 const showNewCreationForm = computed(() => {
   return !editableDraft.value || newCreationExpanded.value
 })
@@ -247,7 +263,19 @@ const selectedApplyCount = computed(() => {
 })
 
 const canApplyDraft = computed(() => {
-  return !!editableDraft.value && selectedApplyCount.value > 0 && !props.applying
+  return !!editableDraft.value && selectedApplyCount.value > 0 && !props.applying && !draftApplied.value
+})
+
+const applyButtonLabel = computed(() => {
+  if (props.applying) {
+    return "应用中..."
+  }
+
+  if (draftApplied.value) {
+    return "已应用"
+  }
+
+  return "应用草稿"
 })
 
 const existingLocationIds = computed(() => {
@@ -370,7 +398,7 @@ const selectedImpactSummary = computed(() => {
 })
 
 const applyPreviewMessage = computed(() => {
-  if (props.applyMessage) {
+  if (draftApplied.value && props.applyMessage) {
     return props.applyMessage
   }
 
@@ -420,6 +448,7 @@ function runAgent() {
     return
   }
 
+  draftApplied.value = false
   clearFeedbackHistory()
   const runId = appendFeedbackHistory(instruction, "new")
   activeFeedbackId.value = runId
@@ -436,7 +465,13 @@ function refineDraft() {
   const feedbackId = appendFeedbackHistory(instruction, "feedback")
   activeFeedbackId.value = feedbackId
   feedbackText.value = ""
+  draftApplied.value = false
   emit("runAgent", instruction, cloneCreationDraft(editableDraft.value))
+}
+
+function abortAgent() {
+  finishActiveFeedback("cancelled", "已中止")
+  emit("abortAgent")
 }
 
 function appendFeedbackHistory(content: string, mode: StoryCreationAgentRunMode) {
@@ -495,11 +530,81 @@ function feedbackStatusLabel(status: FeedbackHistoryStatus, mode: StoryCreationA
     return "失败"
   }
 
+  if (status === "cancelled") {
+    return "已中止"
+  }
+
   return "已完成"
 }
 
 function getFeedbackStatusClass(status: FeedbackHistoryStatus) {
   return `creation-feedback-history__state--${status}`
+}
+
+function historyStatusLabel(status: StoryCreationHistorySession["status"]) {
+  if (status === "applied") {
+    return "已应用"
+  }
+
+  if (status === "draft") {
+    return "草稿"
+  }
+
+  if (status === "running") {
+    return "运行中"
+  }
+
+  if (status === "cancelled") {
+    return "已中止"
+  }
+
+  return "失败"
+}
+
+function historyStatusClass(status: StoryCreationHistorySession["status"]) {
+  return `creation-history__status--${status}`
+}
+
+function formatHistoryTime(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  })
+}
+
+function syncFeedbackHistoryFromSession(session: StoryCreationHistorySession) {
+  feedbackSeq.value = session.turns.length
+  feedbackHistory.value = session.turns
+    .map((turn, index) => ({
+      id: index + 1,
+      content: turn.instruction,
+      mode: turn.mode,
+      status: turn.status === "failed"
+        ? "failed" as const
+        : turn.status === "running"
+          ? "running" as const
+          : turn.status === "cancelled"
+            ? "cancelled" as const
+            : "done" as const,
+      error: turn.error
+    }))
+    .reverse()
+  activeFeedbackId.value = null
+}
+
+function restoreHistorySession(session: StoryCreationHistorySession) {
+  emit("restoreHistorySession", session)
+  syncFeedbackHistoryFromSession(session)
+  newCreationExpanded.value = false
+  creationHistoryExpanded.value = false
 }
 
 function getEventKey(event: StoryCreationDraftEvent) {
@@ -522,6 +627,7 @@ function cloneCreationDraft(draft: StoryCreationDraft): StoryCreationDraft {
 
 function syncEditableDraft(result: RunStoryCreationAgentResponse | null) {
   editableDraft.value = result ? cloneCreationDraft(result.draft) : null
+  draftApplied.value = false
 }
 
 function resetEditableDraft() {
@@ -538,6 +644,8 @@ function syncApplySelection(draft: StoryCreationDraft | null) {
 }
 
 function toggleStringSelection(source: string[], value: string, checked: boolean) {
+  draftApplied.value = false
+
   if (checked) {
     return source.includes(value) ? source : [...source, value]
   }
@@ -732,6 +840,52 @@ function setItemMaxStackFromInput(item: StoryCreationDraftItem, rawValue: string
   item.max_stack = Number.isInteger(parsed) && parsed > 0 ? parsed : 1
 }
 
+function ensureScheduleLoop(event: StoryCreationDraftEvent): StoryCreationDraftLoopRule {
+  if (!event.loop) {
+    event.loop = {
+      mode: "daily",
+      at: "00:00",
+      priority: 100,
+      after: [],
+      before: []
+    }
+  }
+
+  return event.loop
+}
+
+function getScheduleAt(event: StoryCreationDraftEvent) {
+  return event.loop?.at ?? "00:00"
+}
+
+function setScheduleAt(event: StoryCreationDraftEvent, rawValue: string) {
+  ensureScheduleLoop(event).at = rawValue.trim() || "00:00"
+}
+
+function getSchedulePriority(event: StoryCreationDraftEvent) {
+  return event.loop?.priority ?? 100
+}
+
+function setSchedulePriority(event: StoryCreationDraftEvent, rawValue: string) {
+  const parsed = Number(rawValue)
+  ensureScheduleLoop(event).priority = Number.isFinite(parsed) ? Math.trunc(parsed) : 100
+}
+
+function getScheduleAfterText(event: StoryCreationDraftEvent) {
+  return (event.loop?.after ?? []).join(", ")
+}
+
+function setScheduleAfterText(event: StoryCreationDraftEvent, rawValue: string) {
+  ensureScheduleLoop(event).after = Array.from(
+    new Set(
+      rawValue
+        .split(/[,\n，、]/g)
+        .map((id) => id.trim())
+        .filter((id) => id && id !== event.id)
+    )
+  )
+}
+
 function getEventApplyWarnings(event: StoryCreationDraftEvent) {
   const warnings: string[] = []
   const missingRoleKeys = new Set<string>()
@@ -778,6 +932,10 @@ function getEventApplyWarnings(event: StoryCreationDraftEvent) {
 
   if (event.collectionType === "schedule" && !event.loop) {
     warnings.push("定时事件缺少 loop，应用时会使用 daily。")
+  }
+
+  if (event.collectionType === "schedule" && event.loop?.at && !/^([01]\d|2[0-3]):[0-5]\d$/.test(event.loop.at)) {
+    warnings.push("定时事件执行时间应使用 HH:mm 格式，例如 00:00。")
   }
 
   return warnings
@@ -829,6 +987,15 @@ watch(
 )
 
 watch(
+  () => props.applyMessage,
+  (message) => {
+    if (message) {
+      draftApplied.value = true
+    }
+  }
+)
+
+watch(
   () => [props.agentRunning, props.agentRunMode, props.agentError] as const,
   ([running], [previousRunning, previousMode]) => {
     if (previousRunning && previousMode && !running) {
@@ -847,9 +1014,18 @@ watch(
           <h2 class="creation-workspace__title">AI 生成剧情</h2>
         </div>
 
-        <div class="creation-workspace__status">
-          <span class="creation-workspace__status-label">Agent 模型</span>
-          <strong>{{ agentModelSummary }}</strong>
+        <div class="creation-workspace__head-actions">
+          <button
+            class="btn-secondary creation-history__toggle"
+            type="button"
+            @click="creationHistoryExpanded = !creationHistoryExpanded"
+          >
+            创作记录 {{ historySessionCount }}
+          </button>
+          <div class="creation-workspace__status">
+            <span class="creation-workspace__status-label">Agent 模型</span>
+            <strong>{{ agentModelSummary }}</strong>
+          </div>
         </div>
       </div>
 
@@ -900,6 +1076,38 @@ watch(
         </template>
       </section>
 
+      <section v-if="creationHistoryExpanded" class="creation-history">
+        <div class="creation-history__head">
+          <strong>创作记录</strong>
+          <span>{{ historySessionCount }} 次创作</span>
+        </div>
+        <ul v-if="historySessions.length" class="creation-history__list">
+          <li
+            v-for="session in historySessions"
+            :key="session.id"
+            class="creation-history__item"
+            :class="{ 'creation-history__item--active': activeHistorySessionId === session.id }"
+          >
+            <button type="button" class="creation-history__button" @click="restoreHistorySession(session)">
+              <span
+                class="creation-history__status"
+                :class="historyStatusClass(session.status)"
+              >
+                {{ historyStatusLabel(session.status) }}
+              </span>
+              <span class="creation-history__content">
+                <strong>{{ session.title || "未命名创作" }}</strong>
+                <span>{{ session.initialInstruction }}</span>
+              </span>
+              <span class="creation-history__meta">
+                {{ formatHistoryTime(session.updatedAt) }} · {{ session.turns.length }} 轮
+              </span>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="creation-history__empty">还没有创作记录。</p>
+      </section>
+
       <div class="creation-pipeline">
         <div
           v-for="step in pipelineSteps"
@@ -935,7 +1143,7 @@ watch(
                   v-if="agentRunning"
                   class="btn-secondary"
                   type="button"
-                  @click="emit('abortAgent')"
+                  @click="abortAgent"
                 >
                   {{ abortAgentLabel }}
                 </button>
@@ -1001,13 +1209,19 @@ watch(
               </button>
               <button
                 class="btn-primary"
+                :class="{ 'btn-primary--success': draftApplied }"
                 type="button"
                 :disabled="!canApplyDraft"
                 @click="applyDraft"
               >
-                {{ applying ? "应用中..." : "应用草稿" }}
+                {{ applyButtonLabel }}
               </button>
             </div>
+          </div>
+
+          <div v-if="draftApplied && applyMessage" class="creation-apply-success" role="status">
+            <strong>应用成功</strong>
+            <span>{{ applyMessage }}</span>
           </div>
 
           <ul v-if="applyWarnings.length" class="creation-apply-warnings">
@@ -1318,6 +1532,39 @@ watch(
                     <textarea v-model="event.trigger_expr" class="creation-edit-textarea" rows="2" />
                   </label>
                 </div>
+                <div
+                  v-if="event.collectionType === 'schedule'"
+                  class="creation-event-edit-grid"
+                >
+                  <label class="creation-edit-field">
+                    <span>执行时间</span>
+                    <input
+                      class="creation-edit-input"
+                      type="time"
+                      step="60"
+                      :value="getScheduleAt(event)"
+                      @input="setScheduleAt(event, ($event.target as HTMLInputElement).value)"
+                    >
+                  </label>
+                  <label class="creation-edit-field">
+                    <span>优先级</span>
+                    <input
+                      class="creation-edit-input"
+                      type="number"
+                      step="1"
+                      :value="getSchedulePriority(event)"
+                      @input="setSchedulePriority(event, ($event.target as HTMLInputElement).value)"
+                    >
+                  </label>
+                  <label class="creation-edit-field creation-event-edit-grid__wide">
+                    <span>前置事件 after</span>
+                    <input
+                      class="creation-edit-input"
+                      :value="getScheduleAfterText(event)"
+                      @input="setScheduleAfterText(event, ($event.target as HTMLInputElement).value)"
+                    >
+                  </label>
+                </div>
                 <label
                   v-if="event.presentation.type === 'dialogue' && event.presentation.dialogues[0]"
                   class="creation-edit-field"
@@ -1470,7 +1717,7 @@ watch(
 
 .creation-workspace__main {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   gap: 12px;
   padding: 16px;
   border-radius: 18px 0 0 18px;
@@ -1524,6 +1771,21 @@ watch(
 
 .creation-workspace__status-label {
   color: var(--text-muted);
+}
+
+.creation-workspace__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.creation-history__toggle {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
 }
 
 .creation-command,
@@ -1713,7 +1975,8 @@ watch(
   color: #7ce3c3;
 }
 
-.creation-feedback-history__state--failed {
+.creation-feedback-history__state--failed,
+.creation-feedback-history__state--cancelled {
   border-color: rgba(255, 139, 123, 0.34);
   background: rgba(255, 139, 123, 0.1);
   color: #ff8b7b;
@@ -1729,6 +1992,136 @@ watch(
 .creation-actions__status {
   color: var(--text-muted);
   font-size: 0.84rem;
+}
+
+.creation-history {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.creation-history__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.creation-history__head strong {
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.creation-history__head span,
+.creation-history__empty {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.creation-history__list {
+  display: grid;
+  gap: 6px;
+  max-height: 188px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+}
+
+.creation-history__item {
+  min-width: 0;
+}
+
+.creation-history__button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.12);
+  color: inherit;
+  text-align: left;
+}
+
+.creation-history__button:hover,
+.creation-history__item--active .creation-history__button {
+  border-color: rgba(124, 227, 195, 0.35);
+  background: rgba(124, 227, 195, 0.08);
+}
+
+.creation-history__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.creation-history__status--applied {
+  border-color: rgba(124, 227, 195, 0.34);
+  background: rgba(124, 227, 195, 0.1);
+  color: #7ce3c3;
+}
+
+.creation-history__status--draft,
+.creation-history__status--running {
+  border-color: rgba(255, 180, 84, 0.34);
+  background: rgba(255, 180, 84, 0.1);
+  color: #ffb454;
+}
+
+.creation-history__status--failed,
+.creation-history__status--cancelled {
+  border-color: rgba(255, 139, 123, 0.34);
+  background: rgba(255, 139, 123, 0.1);
+  color: #ff8b7b;
+}
+
+.creation-history__content {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.creation-history__content strong,
+.creation-history__content span,
+.creation-history__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.creation-history__content strong {
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.creation-history__content span,
+.creation-history__meta {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.creation-history__meta {
+  justify-self: end;
+}
+
+.creation-history__empty {
+  margin: 0;
 }
 
 .creation-pipeline {
@@ -1927,6 +2320,41 @@ watch(
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.btn-primary--success {
+  background: linear-gradient(135deg, #9cf3da 0%, #49cba3 100%);
+  color: #042317;
+}
+
+.btn-primary--success:hover {
+  transform: none;
+}
+
+.creation-apply-success {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(124, 227, 195, 0.42);
+  border-radius: 10px;
+  background: rgba(124, 227, 195, 0.14);
+  color: var(--text);
+  box-shadow: 0 0 0 1px rgba(124, 227, 195, 0.08) inset;
+}
+
+.creation-apply-success strong {
+  flex: 0 0 auto;
+  color: #7ce3c3;
+  font-size: 0.86rem;
+}
+
+.creation-apply-success span {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .creation-apply-warnings {

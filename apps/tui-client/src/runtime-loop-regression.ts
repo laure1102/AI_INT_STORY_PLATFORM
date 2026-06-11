@@ -31,6 +31,8 @@ interface DemoRegressionResult {
   storyId: string
   loopEventId: string
   bootstrapSteps: number
+  settleSteps: number
+  orderedBeforeIds: string[]
   moneyBeforeLoop: number
   dayGiveMoney: number
   moneyAfterLoop: number
@@ -461,6 +463,11 @@ function stepUntilIdle(session: RuntimeStorySession, limit = 200) {
       }
     }
 
+    if (viewModel.currentMessage) {
+      session.tick(Math.max(1, Math.ceil(viewModel.currentMessage.remainingSeconds * 1000)))
+      continue
+    }
+
     if (viewModel.interaction?.kind !== "select") {
       return {
         completed: false,
@@ -522,6 +529,8 @@ async function runDemoDailyRegression(
   const store = createStoryFileStore(resolveDataDir())
   const document = await store.readStoryDocument(storyId)
   const { compiled } = compileStory(document)
+  const loopEvent = document.scheduleEvents.find((item) => item.id === loopEventId)
+  const orderedBeforeIds = (loopEvent?.loop.after ?? []).filter(Boolean)
   const session = createStorySession({
     bundle: compiled,
     now: new Date(REGRESSION_NOW)
@@ -532,15 +541,17 @@ async function runDemoDailyRegression(
 
   const beforeTickSnapshot = session.getSnapshot()
   const moneyBeforeLoop = readNumber(beforeTickSnapshot.vals, "player.money")
-  const dayGiveMoney = readNumber(beforeTickSnapshot.vals, "player.day_give_money")
   const beforeDay = readNumber(beforeTickSnapshot.system_vals, "system.now_day")
 
   assert(beforeDay === 1, `Expected bootstrap day to stay at 1, received ${beforeDay}`)
 
   advanceGameDays(session, 1)
+  const settleResult = stepUntilIdle(session)
+  assert(settleResult.completed, `Daily loop flow did not finish: ${JSON.stringify(settleResult)}`)
 
   const afterTickSnapshot = session.getSnapshot()
   const moneyAfterLoop = readNumber(afterTickSnapshot.vals, "player.money")
+  const dayGiveMoney = readNumber(afterTickSnapshot.vals, "player.day_give_money")
   const afterDay = readNumber(afterTickSnapshot.system_vals, "system.now_day")
   const afterHour = readNumber(afterTickSnapshot.system_vals, "system.now_hour")
   const afterMinute = readNumber(afterTickSnapshot.system_vals, "system.now_minute")
@@ -557,11 +568,29 @@ async function runDemoDailyRegression(
   assert(loopState?.next_due_game_minute === MINUTES_PER_DAY * 2, `Expected next loop due minute to be 2880, received ${loopState?.next_due_game_minute}`)
   assert(loopEventState?.last_triggered_day === 2, `Expected last triggered day to be 2, received ${loopEventState?.last_triggered_day}`)
 
+  const scheduleStartOrder = afterTickSnapshot.scheduler.audit_logs
+    .filter((item) => item.kind === "start-event" && item.source_type === "schedule")
+    .map((item) => item.entry_event_id)
+  const loopStartIndex = scheduleStartOrder.lastIndexOf(loopEventId)
+  assert(loopStartIndex >= 0, `Expected ${loopEventId} to appear in schedule start audit`)
+
+  for (const beforeId of orderedBeforeIds) {
+    const beforeLoopState = afterTickSnapshot.scheduler.loop_states.find((item) => item.event_id === beforeId)
+    const beforeStartIndex = scheduleStartOrder.lastIndexOf(beforeId)
+
+    assert(beforeLoopState?.trigger_count === 1, `Expected prerequisite loop ${beforeId} trigger_count to be 1, received ${beforeLoopState?.trigger_count}`)
+    assert(beforeLoopState?.last_triggered_game_minute === MINUTES_PER_DAY, `Expected prerequisite loop ${beforeId} to trigger at 1440, received ${beforeLoopState?.last_triggered_game_minute}`)
+    assert(beforeStartIndex >= 0, `Expected prerequisite loop ${beforeId} to appear in schedule start audit`)
+    assert(beforeStartIndex < loopStartIndex, `Expected prerequisite loop ${beforeId} to start before ${loopEventId}`)
+  }
+
   return {
     kind: "demo-daily",
     storyId,
     loopEventId,
     bootstrapSteps: bootstrapResult.steps,
+    settleSteps: settleResult.steps,
+    orderedBeforeIds,
     moneyBeforeLoop,
     dayGiveMoney,
     moneyAfterLoop,
@@ -917,8 +946,8 @@ function buildSyntheticScenarios(): SyntheticRegressionScenario[] {
       ]
     },
     {
-      id: "same-minute-stable-order",
-      title: "Same-minute loops execute in stable queue order",
+      id: "same-minute-dependency-order",
+      title: "Same-minute loop dependencies override priority",
       nowDate: "1990-1-1",
       nowDay: 1,
       advanceDays: 1,
@@ -929,7 +958,8 @@ function buildSyntheticScenarios(): SyntheticRegressionScenario[] {
           title: "Multiply First",
           endScript: "${player.money} *= 10",
           loop: {
-            mode: "daily"
+            mode: "daily",
+            priority: 100
           }
         }),
         createLoopEvent({
@@ -937,7 +967,9 @@ function buildSyntheticScenarios(): SyntheticRegressionScenario[] {
           title: "Add Second",
           endScript: "${player.money} += 5",
           loop: {
-            mode: "daily"
+            mode: "daily",
+            priority: 10,
+            after: ["multiply_first"]
           }
         })
       ],

@@ -234,6 +234,9 @@ export interface RuntimeScheduledEvent {
   invoke_target_type?: StoryInvokeTargetType
   entry_event_id: string
   due_game_minute: number
+  priority: number
+  after: string[]
+  before: string[]
   seq: number
   dedupe_key: string
   call_values: Record<string, unknown>
@@ -511,6 +514,10 @@ interface RuntimeLoopEventDefinition {
     interval_days?: number
     weekday?: number
     month_day?: number
+    at?: string
+    priority?: number
+    after?: string[]
+    before?: string[]
   }
 }
 
@@ -903,6 +910,24 @@ function normalizeClockState(snapshot: RuntimeStorySessionSnapshot) {
   clock.step_minutes = Math.max(1, clampInteger(clock.step_minutes, DEFAULT_CLOCK_STEP_MINUTES))
 }
 
+function normalizeSchedulePriority(value: unknown) {
+  return clampInteger(value, 100)
+}
+
+function normalizeScheduleDependencyIds(value: unknown) {
+  return Array.isArray(value)
+    ? Array.from(new Set(value.map((item) => normalizeText(item)).filter(Boolean)))
+    : []
+}
+
+function normalizeScheduledEventOrderFields(item: Partial<RuntimeScheduledEvent>) {
+  return {
+    priority: normalizeSchedulePriority(item.priority),
+    after: normalizeScheduleDependencyIds(item.after),
+    before: normalizeScheduleDependencyIds(item.before)
+  }
+}
+
 function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
   const scheduler = snapshot.scheduler ?? createDefaultSchedulerState()
   scheduler.scheduled = Array.isArray(scheduler.scheduled)
@@ -916,6 +941,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
           invoke_target_type: normalizeInvokeTargetType(item.invoke_target_type),
           entry_event_id: normalizeText(item.entry_event_id),
           due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
+          ...normalizeScheduledEventOrderFields(item),
           seq: Math.max(1, clampInteger(item.seq, 1)),
           dedupe_key: normalizeSchedulerDedupeKey(item.dedupe_key, sourceType),
           call_values: item.call_values && typeof item.call_values === "object"
@@ -937,6 +963,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
           invoke_target_type: normalizeInvokeTargetType(item.invoke_target_type),
           entry_event_id: normalizeText(item.entry_event_id),
           due_game_minute: Math.max(0, clampInteger(item.due_game_minute, 0)),
+          ...normalizeScheduledEventOrderFields(item),
           seq: Math.max(1, clampInteger(item.seq, 1)),
           dedupe_key: normalizeSchedulerDedupeKey(item.dedupe_key, sourceType),
           call_values: item.call_values && typeof item.call_values === "object"
@@ -958,6 +985,7 @@ function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
           invoke_target_type: normalizeInvokeTargetType(scheduler.active.invoke_target_type),
           entry_event_id: normalizeText(scheduler.active.entry_event_id),
           due_game_minute: Math.max(0, clampInteger(scheduler.active.due_game_minute, 0)),
+          ...normalizeScheduledEventOrderFields(scheduler.active),
           seq: Math.max(1, clampInteger(scheduler.active.seq, 1)),
           dedupe_key: normalizeSchedulerDedupeKey(scheduler.active.dedupe_key, sourceType),
           call_values: scheduler.active.call_values && typeof scheduler.active.call_values === "object"
@@ -1496,6 +1524,19 @@ function clampLoopIntervalDays(input: unknown) {
   return Math.max(1, value)
 }
 
+function getLoopTimeOffsetMinutes(loopEvent: RuntimeLoopEventDefinition) {
+  const rawAt = normalizeText(loopEvent.loop.at) || "00:00"
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(rawAt)
+
+  if (!match) {
+    return 0
+  }
+
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  return hour * 60 + minute
+}
+
 function buildDatePartsAtStartOfMonth(parts: RuntimeDateParts) {
   return {
     year: parts.year,
@@ -1577,16 +1618,19 @@ function calculateNextLoopDueGameMinute(
 ) {
   const currentDayStartGameMinute = getStartOfCurrentDayGameMinute(snapshot)
   const currentDateParts = getCurrentDatePartsFromSnapshot(snapshot)
+  const timeOffsetMinutes = getLoopTimeOffsetMinutes(loopEvent)
 
   if (loopEvent.loop.mode === "daily") {
-    const anchor = previousDueGameMinute ?? currentDayStartGameMinute
-    return anchor + MINUTES_PER_DAY
+    return previousDueGameMinute === null
+      ? currentDayStartGameMinute + MINUTES_PER_DAY + timeOffsetMinutes
+      : previousDueGameMinute + MINUTES_PER_DAY
   }
 
   if (loopEvent.loop.mode === "interval_days") {
     const intervalDays = clampLoopIntervalDays(loopEvent.loop.interval_days)
-    const anchor = previousDueGameMinute ?? currentDayStartGameMinute
-    return anchor + intervalDays * MINUTES_PER_DAY
+    return previousDueGameMinute === null
+      ? currentDayStartGameMinute + intervalDays * MINUTES_PER_DAY + timeOffsetMinutes
+      : previousDueGameMinute + intervalDays * MINUTES_PER_DAY
   }
 
   if (loopEvent.loop.mode === "weekly") {
@@ -1597,7 +1641,7 @@ function calculateNextLoopDueGameMinute(
     const targetWeekday = clampLoopWeekday(loopEvent.loop.weekday)
     const currentWeekday = resolveWeekday(datePartsToUtcDayNumber(currentDateParts))
     const offsetDays = ((targetWeekday - currentWeekday + 7) % 7) || 7
-    return currentDayStartGameMinute + offsetDays * MINUTES_PER_DAY
+    return currentDayStartGameMinute + offsetDays * MINUTES_PER_DAY + timeOffsetMinutes
   }
 
   const targetMonthDay = clampLoopMonthDay(loopEvent.loop.month_day)
@@ -1609,8 +1653,11 @@ function calculateNextLoopDueGameMinute(
     : getNextMonthlyDateParts(monthlyAnchorDateParts, targetMonthDay)
   const currentDayNumber = datePartsToUtcDayNumber(monthlyAnchorDateParts)
   const nextDayNumber = datePartsToUtcDayNumber(nextMonthlyDateParts)
-  const anchorGameMinute = previousDueGameMinute ?? currentDayStartGameMinute
-  return anchorGameMinute + (nextDayNumber - currentDayNumber) * MINUTES_PER_DAY
+  if (previousDueGameMinute !== null) {
+    return previousDueGameMinute + (nextDayNumber - currentDayNumber) * MINUTES_PER_DAY
+  }
+
+  return currentDayStartGameMinute + (nextDayNumber - currentDayNumber) * MINUTES_PER_DAY + timeOffsetMinutes
 }
 
 function isScheduledEventQueued(snapshot: RuntimeStorySessionSnapshot, dedupeKey: string) {
@@ -1627,6 +1674,20 @@ function isScheduledEventQueued(snapshot: RuntimeStorySessionSnapshot, dedupeKey
   )
 }
 
+interface RuntimeScheduleOrderConfig {
+  priority?: number
+  after?: string[]
+  before?: string[]
+}
+
+function getLoopScheduleOrderConfig(loopEvent: RuntimeLoopEventDefinition): RuntimeScheduleOrderConfig {
+  return {
+    priority: loopEvent.loop.priority,
+    after: loopEvent.loop.after,
+    before: loopEvent.loop.before
+  }
+}
+
 function createScheduledEvent(
   snapshot: RuntimeStorySessionSnapshot,
   sourceType: RuntimeSchedulerSourceType,
@@ -1636,7 +1697,8 @@ function createScheduledEvent(
   dedupeKey: string,
   triggerLocked = false,
   callValues: Record<string, unknown> = {},
-  invokeTargetType?: StoryInvokeTargetType
+  invokeTargetType?: StoryInvokeTargetType,
+  orderConfig: RuntimeScheduleOrderConfig = {}
 ): RuntimeScheduledEvent {
   normalizeSchedulerState(snapshot)
   const seq = snapshot.scheduler.next_seq
@@ -1649,6 +1711,9 @@ function createScheduledEvent(
     invoke_target_type: invokeTargetType,
     entry_event_id: normalizeText(entryEventId),
     due_game_minute: Math.max(0, clampInteger(dueGameMinute, 0)),
+    priority: normalizeSchedulePriority(orderConfig.priority),
+    after: normalizeScheduleDependencyIds(orderConfig.after),
+    before: normalizeScheduleDependencyIds(orderConfig.before),
     seq,
     dedupe_key: normalizeText(dedupeKey),
     trigger_locked: triggerLocked,
@@ -1657,15 +1722,58 @@ function createScheduledEvent(
   }
 }
 
-function sortReadyQueue(snapshot: RuntimeStorySessionSnapshot) {
-  normalizeSchedulerState(snapshot)
-  snapshot.scheduler.ready_queue.sort((left, right) => {
+function scheduledEventMatchesDependency(event: RuntimeScheduledEvent, dependencyId: string) {
+  const normalizedDependencyId = normalizeText(dependencyId)
+  return Boolean(
+    normalizedDependencyId
+    && (
+      event.source_id === normalizedDependencyId
+      || event.entry_event_id === normalizedDependencyId
+    )
+  )
+}
+
+function scheduledEventDependsOn(left: RuntimeScheduledEvent, right: RuntimeScheduledEvent) {
+  return left.after.some((dependencyId) => scheduledEventMatchesDependency(right, dependencyId))
+    || right.before.some((dependencyId) => scheduledEventMatchesDependency(left, dependencyId))
+}
+
+function compareScheduledEvents(left: RuntimeScheduledEvent, right: RuntimeScheduledEvent) {
+  if (left.due_game_minute !== right.due_game_minute) {
+    return left.due_game_minute - right.due_game_minute
+  }
+
+  const leftAfterRight = scheduledEventDependsOn(left, right)
+  const rightAfterLeft = scheduledEventDependsOn(right, left)
+
+  if (leftAfterRight && !rightAfterLeft) {
+    return 1
+  }
+
+  if (rightAfterLeft && !leftAfterRight) {
+    return -1
+  }
+
+  if (left.priority !== right.priority) {
+    return left.priority - right.priority
+  }
+
+  return left.seq - right.seq
+}
+
+function sortScheduledEvents(events: RuntimeScheduledEvent[]) {
+  events.sort((left, right) => {
     if (left.due_game_minute !== right.due_game_minute) {
       return left.due_game_minute - right.due_game_minute
     }
 
-    return left.seq - right.seq
+    return compareScheduledEvents(left, right)
   })
+}
+
+function sortReadyQueue(snapshot: RuntimeStorySessionSnapshot) {
+  normalizeSchedulerState(snapshot)
+  sortScheduledEvents(snapshot.scheduler.ready_queue)
 }
 
 function enqueueReadyEvent(snapshot: RuntimeStorySessionSnapshot, scheduledEvent: RuntimeScheduledEvent) {
@@ -1700,13 +1808,7 @@ function enqueueScheduledEvent(snapshot: RuntimeStorySessionSnapshot, scheduledE
     ...cloneValue(scheduledEvent),
     status: "scheduled"
   })
-  snapshot.scheduler.scheduled.sort((left, right) => {
-    if (left.due_game_minute !== right.due_game_minute) {
-      return left.due_game_minute - right.due_game_minute
-    }
-
-    return left.seq - right.seq
-  })
+  sortScheduledEvents(snapshot.scheduler.scheduled)
   appendSchedulerAudit(snapshot, {
     kind: "schedule-future",
     source_type: scheduledEvent.source_type,
@@ -2059,7 +2161,11 @@ function ensureLoopSchedules(
       loopEvent.id,
       loopEvent.id,
       nextDueGameMinute,
-      dedupeKey
+      dedupeKey,
+      false,
+      {},
+      undefined,
+      getLoopScheduleOrderConfig(loopEvent)
     )
     enqueueScheduledEvent(runtimeState.snapshot, scheduledEvent)
   }

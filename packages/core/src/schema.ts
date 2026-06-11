@@ -658,7 +658,11 @@ export const storyLoopRuleSchema = z.object({
   mode: z.enum(["daily", "weekly", "monthly", "interval_days"]),
   interval_days: z.number().int().min(1).optional(),
   weekday: z.number().int().min(1).max(7).optional(),
-  month_day: z.number().int().min(1).max(31).optional()
+  month_day: z.number().int().min(1).max(31).optional(),
+  at: z.string().optional(),
+  priority: z.number().int().optional(),
+  after: z.array(z.string()).optional(),
+  before: z.array(z.string()).optional()
 })
 
 export const storyLoopEventSchema = z.object({

@@ -1,6 +1,6 @@
 # Story Manager Agent Guide
 
-Last updated: `2026-06-09`
+Last updated: `2026-06-11`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -429,10 +429,23 @@ Schedule events extend pool events with:
     mode: "daily" | "weekly" | "monthly" | "interval_days",
     weekday?: 1..7,
     month_day?: 1..31,
-    interval_days?: number
+    interval_days?: number,
+    at?: "HH:mm",
+    priority?: number,
+    after?: ["other_schedule_event_id"],
+    before?: ["other_schedule_event_id"]
   }
 }
 ```
+
+Schedule loop ordering:
+
+- `at` is the in-game time of day for the loop, defaulting to `00:00`
+- lower `priority` runs earlier when multiple loops are due at the same minute; default is `100`
+- `after` means this schedule event must run after the listed schedule event ids when they are due together
+- `before` is the inverse relation and should be used sparingly; prefer `after` for business dependencies
+- validation rejects invalid `HH:mm`, non-integer priorities, self-dependencies, and dependencies that do not exist in `schedule_events.json5`
+- authoring Agent drafts should include `at`, `priority`, and dependency fields when generating schedule events; use `after` for rules such as "daily payout after daily population settlement"
 
 ### Trigger modes and invocation
 
@@ -747,6 +760,7 @@ Current behavior:
 - if a schedule event reaches due time but its `trigger_expr` is false, the current cycle is skipped and the next cycle is scheduled
 - a skipped loop cycle does not increment `scheduler.loop_states[].trigger_count`
 - a skipped loop cycle does not write `loop_event_states`
+- ready schedule items due at the same minute are ordered by dependency (`after` / `before`), then lower `priority`, then scheduler `seq`
 - only one front-stage event may run at a time through `scheduler.active`
 - while a front-stage event is running, `event_pause` is set to `true`, so story playback pauses game time automatically
 - runtime clock progression now uses stepwise reconciliation:
@@ -775,25 +789,27 @@ Current event-source coverage:
 Current loop timing rule:
 
 - scheduler stores due time in game minutes
-- schedule events currently trigger at day-boundary style times derived from the runtime clock
+- schedule events trigger at their configured `loop.at` time of day; missing `at` defaults to `00:00`
 - next cycle is recalculated after each schedule completion
 - verified behavior for the demo `daily_money` loop:
   - after the opening chain root / pool chain finishes
   - advancing game time to day `2` `00:00`
-  - triggers `daily_money`
-  - auto-runs its `end_script`
+  - triggers `daily_population_flow` first because `daily_money.loop.after` includes it
+  - then triggers `daily_money`
+  - auto-runs their script/end flow after message presentation finishes
   - increases `player.money`
   - records loop trigger state
   - reschedules the next due instance for day `3` `00:00`
 - refined first-due / next-due semantics:
-  - `daily`: first due is the next day `00:00`, then every `+1` day
-  - `interval_days`: first due is `N` days later at `00:00`, then every `+N` days
-  - `weekly`: first due is the next matching weekday at `00:00` (never same-day immediate), then every `+7` days from the last due minute
+  - `daily`: first due is the next day at `loop.at`, then every `+1` day
+  - `interval_days`: first due is `N` days later at `loop.at`, then every `+N` days
+  - `weekly`: first due is the next matching weekday at `loop.at` (never same-day immediate), then every `+7` days from the last due minute
   - `monthly`: first due can land later in the current month if `month_day` is still ahead; otherwise it lands in the next month; later cycles always advance month-by-month from the last due date
-- ready-queue ordering is now stabilized:
+- ready-queue ordering is deterministic:
   - ready items are sorted by `due_game_minute`
-  - ties are resolved by scheduler `seq`
-  - this gives deterministic ordering when multiple loop events become due at the same game minute
+  - same-minute ties honor `after` / `before`
+  - remaining ties use lower `priority`
+  - final ties use scheduler `seq`
 - loop trigger-day records now respect `clock.base_day`
   - `loop_event_states.last_triggered_day` is game-day aware, not just minute-offset based
 
@@ -871,11 +887,11 @@ pnpm tui:loop-regression
 
 Current regression coverage includes:
 
-- real demo `daily_money`
+- real demo `daily_money` after `daily_population_flow`
 - synthetic `weekly`
 - synthetic `monthly`
 - synthetic `interval_days`
-- same-minute multi-loop stable execution order
+- same-minute multi-loop dependency order overriding priority
 - due-time loop skip and reschedule when `trigger_expr` is false
 - graph-event auto-next fallback to the first enterable next event
 - graph-root queue continuation after an action branch cannot enter its next event
@@ -956,8 +972,8 @@ The intended rule is:
 - `system.now_jieqi` is still a placeholder and currently resolves to an empty string
 - long-term rule "system variables are runtime-owned and script read-only" is not fully enforced yet
 - scheduler state is present in snapshots, but save/load resume is not yet fine-grained enough to restore mid-dialogue playback cursor and branch pending state
-- loop scheduling is a first-pass implementation; future refinement is still needed for exact timing semantics and richer scheduling policies
-- no dedicated automated runtime regression suite exists yet; loop validation is still being done through manual or inline script verification
+- loop scheduling is implemented with `at`, dependency, and priority ordering; future refinement is still needed for richer scheduling policies
+- runtime regression coverage exists as script commands, but it is not yet integrated into a broader test runner
 
 ## 13. Next recommended steps
 
@@ -965,8 +981,7 @@ The intended rule is:
 - reuse the same player-creation contract in the future Cocos onboarding flow
 - persist transient runtime session state so save/load resumes mid-event correctly
 - enforce runtime-owned system-variable write protection where appropriate
-- refine loop scheduling semantics and add regression coverage for daily/weekly/monthly/interval rules
-- add a lightweight repeatable runtime regression harness for scheduler / loop verification
+- expand loop scheduling regression coverage beyond the current script harness
 - add scheduler-focused tests around root-event auto discovery
 - add scheduler-focused tests around once single-consume behavior
 - add scheduler-focused tests around loop due-time promotion

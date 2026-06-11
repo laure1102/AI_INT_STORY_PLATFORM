@@ -42,8 +42,10 @@ function summarizeTrigger(event: StoryLoopEventFile) {
 }
 
 function formatLoopMode(event: StoryLoopEventFile) {
+  const at = event.loop.at ?? "00:00"
+
   if (event.loop.mode === "daily") {
-    return "每天"
+    return `每天 ${at}`
   }
 
   if (event.loop.mode === "weekly") {
@@ -57,14 +59,25 @@ function formatLoopMode(event: StoryLoopEventFile) {
       7: "周日"
     }
 
-    return `每周 ${weekdayMap[event.loop.weekday ?? 1] ?? "周一"}`
+    return `每周 ${weekdayMap[event.loop.weekday ?? 1] ?? "周一"} ${at}`
   }
 
   if (event.loop.mode === "monthly") {
-    return `每月 ${event.loop.month_day ?? 1} 日`
+    return `每月 ${event.loop.month_day ?? 1} 日 ${at}`
   }
 
-  return `每 ${event.loop.interval_days ?? 1} 天`
+  return `每 ${event.loop.interval_days ?? 1} 天 ${at}`
+}
+
+function summarizeScheduleOrder(event: StoryLoopEventFile) {
+  const priority = event.loop.priority ?? 100
+  const after = event.loop.after ?? []
+
+  if (after.length === 0) {
+    return `优先级 ${priority}`
+  }
+
+  return `优先级 ${priority} · after ${after.join(", ")}`
 }
 
 function summarizePresentation(event: StoryLoopEventFile) {
@@ -161,6 +174,10 @@ function handleDelete(event: StoryLoopEventFile) {
             <span class="loop-card__fact">
               <strong>表现</strong>
               <span>{{ summarizePresentation(event) }}</span>
+            </span>
+            <span class="loop-card__fact loop-card__fact--wide">
+              <strong>顺序</strong>
+              <span>{{ summarizeScheduleOrder(event) }}</span>
             </span>
           </div>
         </button>
@@ -347,6 +364,10 @@ function handleDelete(event: StoryLoopEventFile) {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
+}
+
+.loop-card__fact--wide {
+  grid-column: 1 / -1;
 }
 
 .loop-card__fact strong {

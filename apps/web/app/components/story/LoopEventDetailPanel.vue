@@ -63,6 +63,9 @@ interface LoopEventDraft {
   intervalDays: number
   weekday: number
   monthDay: number
+  scheduleAt: string
+  schedulePriority: number
+  afterIds: string[]
 }
 
 interface RoleOption {
@@ -95,6 +98,7 @@ const props = defineProps<{
   roles: StoryRolesFile
   saving: boolean
   scenes: StorySceneFile
+  scheduleEvents: StoryLoopEventFile[]
   vals: StoryValsFile
 }>()
 
@@ -117,6 +121,8 @@ const isQuickLocationDialogOpen = shallowRef(false)
 const pendingQuickLocationId = shallowRef<string | null>(null)
 const isQuickRoleDialogOpen = shallowRef(false)
 const pendingQuickRoleKey = shallowRef<string | null>(null)
+const isScheduleDependencyDialogOpen = shallowRef(false)
+const scheduleDependencySearch = shallowRef("")
 const triggerAutocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
   query: "",
@@ -208,7 +214,10 @@ const draft = reactive<LoopEventDraft>({
   loopMode: "daily",
   intervalDays: 1,
   weekday: 1,
-  monthDay: 1
+  monthDay: 1,
+  scheduleAt: "00:00",
+  schedulePriority: 100,
+  afterIds: []
 })
 
 const dialogueEditorState = reactive<{
@@ -286,6 +295,46 @@ const loopModeOptions: Array<{ value: StoryLoopMode; label: string }> = [
   { value: "monthly", label: "每月" },
   { value: "interval_days", label: "每隔多少天" }
 ]
+const scheduleDependencyOptions = computed(() => {
+  const currentId = draft.id.trim()
+
+  return props.scheduleEvents
+    .filter((event) => event.id !== currentId)
+    .map((event) => ({
+      value: event.id,
+      label: event.title.trim() ? `${event.title} (${event.id})` : event.id
+    }))
+})
+const selectedScheduleDependencyLabels = computed(() => {
+  const selectedIds = new Set(draft.afterIds)
+
+  return scheduleDependencyOptions.value
+    .filter((option) => selectedIds.has(option.value))
+    .map((option) => option.label)
+})
+const scheduleDependencySummary = computed(() => {
+  const labels = selectedScheduleDependencyLabels.value
+  if (!labels.length) {
+    return "无前置事件"
+  }
+
+  if (labels.length <= 2) {
+    return labels.join("、")
+  }
+
+  return `${labels.slice(0, 2).join("、")} 等 ${labels.length} 个`
+})
+const filteredScheduleDependencyOptions = computed(() => {
+  const keyword = scheduleDependencySearch.value.trim().toLowerCase()
+  if (!keyword) {
+    return scheduleDependencyOptions.value
+  }
+
+  return scheduleDependencyOptions.value.filter((option) => {
+    return option.value.toLowerCase().includes(keyword)
+      || option.label.toLowerCase().includes(keyword)
+  })
+})
 const globalAutocompleteCandidates = computed(() => {
   return buildStoryScriptValAutocompleteItems(props.vals)
 })
@@ -413,6 +462,44 @@ function normalizeObjectKeys(objectKeys: string[]) {
   return Array.from(new Set(objectKeys.map((roleKey) => roleKey.trim()).filter(Boolean)))
 }
 
+function normalizeScheduleDependencyIds(ids: string[]) {
+  const currentId = draft.id.trim()
+  const availableIds = new Set(scheduleDependencyOptions.value.map((option) => option.value))
+
+  return Array.from(
+    new Set(
+      ids
+        .map((id) => id.trim())
+        .filter((id) => id && id !== currentId && availableIds.has(id))
+    )
+  )
+}
+
+function isValidScheduleAt(value: string) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value.trim())
+}
+
+function normalizeScheduleAt(value: string) {
+  return isValidScheduleAt(value) ? value.trim() : "00:00"
+}
+
+function normalizeSchedulePriority(value: number) {
+  return Number.isFinite(value) ? Math.trunc(value) : 100
+}
+
+function openScheduleDependencyDialog() {
+  scheduleDependencySearch.value = ""
+  isScheduleDependencyDialogOpen.value = true
+}
+
+function closeScheduleDependencyDialog() {
+  isScheduleDependencyDialogOpen.value = false
+}
+
+function clearScheduleDependencies() {
+  draft.afterIds = []
+}
+
 function normalizeAutocompleteText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
@@ -480,6 +567,9 @@ function syncDraft(event: StoryLoopEventFile | null) {
   draft.intervalDays = event?.loop.interval_days ?? 1
   draft.weekday = event?.loop.weekday ?? 1
   draft.monthDay = event?.loop.month_day ?? 1
+  draft.scheduleAt = normalizeScheduleAt(event?.loop.at ?? "00:00")
+  draft.schedulePriority = event?.loop.priority ?? 100
+  draft.afterIds = normalizeScheduleDependencyIds(event?.loop.after ?? [])
   draft.selectedObjectKeys = normalizeStoredObjectKeys(event?.object_keys ?? [])
   syncPresentationDraft(event)
 }
@@ -1027,6 +1117,11 @@ function submitDraft() {
     return
   }
 
+  if (triggerMode !== "invoke" && !isValidScheduleAt(draft.scheduleAt)) {
+    window.alert("执行时间必须使用 HH:mm 格式，例如 00:00。")
+    return
+  }
+
   emit("save", {
     id: draft.id.trim(),
     title: draft.title.trim(),
@@ -1043,7 +1138,11 @@ function submitDraft() {
       mode: draft.loopMode,
       interval_days: draft.loopMode === "interval_days" ? Math.max(1, Number(draft.intervalDays) || 1) : undefined,
       weekday: draft.loopMode === "weekly" ? Math.max(1, Math.min(7, Number(draft.weekday) || 1)) : undefined,
-      month_day: draft.loopMode === "monthly" ? Math.max(1, Math.min(31, Number(draft.monthDay) || 1)) : undefined
+      month_day: draft.loopMode === "monthly" ? Math.max(1, Math.min(31, Number(draft.monthDay) || 1)) : undefined,
+      at: normalizeScheduleAt(draft.scheduleAt),
+      priority: normalizeSchedulePriority(draft.schedulePriority),
+      after: normalizeScheduleDependencyIds(draft.afterIds),
+      before: []
     }
   })
 }
@@ -1235,7 +1334,57 @@ function handleDocumentPointerDown(event: MouseEvent) {
                 </datalist>
               </label>
 
-              <label v-if="draft.triggerMode !== 'invoke'" class="field field--full">
+              <div v-if="draft.triggerMode !== 'invoke'" class="field field--full">
+                <span class="field-label">调度顺序</span>
+                <div class="detail-panel__schedule-order">
+                  <label class="detail-panel__schedule-order-field">
+                    <span class="detail-panel__loop-config-label">执行时间</span>
+                    <input
+                      v-model="draft.scheduleAt"
+                      class="text-input"
+                      type="time"
+                      step="60"
+                    />
+                  </label>
+                  <label class="detail-panel__schedule-order-field">
+                    <span class="detail-panel__loop-config-label">优先级</span>
+                    <input
+                      v-model.number="draft.schedulePriority"
+                      class="text-input"
+                      type="number"
+                      step="1"
+                    />
+                  </label>
+                  <label class="detail-panel__schedule-order-field detail-panel__schedule-order-field--wide">
+                    <span class="detail-panel__loop-config-label">前置事件</span>
+                    <div class="detail-panel__dependency-picker-row">
+                      <button
+                        class="detail-panel__dependency-picker"
+                        type="button"
+                        :disabled="scheduleDependencyOptions.length === 0"
+                        @click="openScheduleDependencyDialog"
+                      >
+                        <span class="detail-panel__dependency-picker-summary">
+                          {{ scheduleDependencySummary }}
+                        </span>
+                        <span class="detail-panel__dependency-picker-hint">
+                          {{ scheduleDependencyOptions.length ? '点击搜索选择' : '暂无可选事件' }}
+                        </span>
+                      </button>
+                      <button
+                        v-if="draft.afterIds.length"
+                        class="btn-secondary detail-panel__dependency-clear"
+                        type="button"
+                        @click="clearScheduleDependencies"
+                      >
+                        清空
+                      </button>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div v-if="draft.triggerMode !== 'invoke'" class="field field--full">
                 <span class="field-label">循环方式</span>
                 <div class="detail-panel__loop-row">
                   <select v-model="draft.loopMode" class="select-input detail-panel__loop-mode">
@@ -1303,7 +1452,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
                     </template>
                   </div>
                 </div>
-              </label>
+              </div>
               <div v-else class="field field--full">
                 <span class="field-label">循环方式</span>
                 <div class="detail-panel__param-empty">
@@ -1921,6 +2070,71 @@ function handleDocumentPointerDown(event: MouseEvent) {
         </section>
       </div>
 
+      <div
+        v-if="isScheduleDependencyDialogOpen"
+        class="detail-panel__dependency-modal"
+        @click.self="closeScheduleDependencyDialog"
+      >
+        <section class="detail-panel__dependency-modal-panel glass-panel">
+          <div class="detail-panel__dependency-modal-head">
+            <div>
+              <h3 class="detail-panel__dialogue-modal-title">选择前置事件</h3>
+              <p class="detail-panel__dependency-modal-summary">
+                已选择 {{ draft.afterIds.length }} 个，同一时间到点时会先执行这些事件。
+              </p>
+            </div>
+            <button class="btn-secondary" type="button" @click="closeScheduleDependencyDialog">
+              完成
+            </button>
+          </div>
+
+          <input
+            v-model="scheduleDependencySearch"
+            class="text-input"
+            type="search"
+            placeholder="搜索事件标题或 ID"
+          />
+
+          <div class="detail-panel__dependency-list">
+            <label
+              v-for="option in filteredScheduleDependencyOptions"
+              :key="option.value"
+              class="detail-panel__dependency-option"
+              :class="{ 'detail-panel__dependency-option--active': draft.afterIds.includes(option.value) }"
+            >
+              <input
+                v-model="draft.afterIds"
+                class="detail-panel__dependency-checkbox"
+                type="checkbox"
+                :value="option.value"
+              />
+              <span class="detail-panel__dependency-option-text">{{ option.label }}</span>
+            </label>
+
+            <div
+              v-if="filteredScheduleDependencyOptions.length === 0"
+              class="detail-panel__dependency-empty"
+            >
+              没有匹配的定时事件。
+            </div>
+          </div>
+
+          <div class="detail-panel__dependency-modal-actions">
+            <button
+              class="btn-secondary"
+              type="button"
+              :disabled="draft.afterIds.length === 0"
+              @click="clearScheduleDependencies"
+            >
+              清空选择
+            </button>
+            <button class="btn-primary" type="button" @click="closeScheduleDependencyDialog">
+              完成
+            </button>
+          </div>
+        </section>
+      </div>
+
       <StoryQuickRoleCreateDialog
         v-if="isQuickRoleDialogOpen"
         :roles="props.roles"
@@ -1998,10 +2212,12 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
 .detail-panel__main {
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto;
+  align-content: start;
   gap: 14px;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .detail-card,
@@ -2060,6 +2276,83 @@ function handleDocumentPointerDown(event: MouseEvent) {
   color: var(--text-muted);
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+.detail-panel__schedule-order {
+  display: grid;
+  grid-template-columns: minmax(118px, 150px) minmax(96px, 120px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+.detail-panel__schedule-order-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detail-panel__schedule-order-field--wide {
+  overflow: hidden;
+}
+
+.detail-panel__dependency-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.detail-panel__dependency-picker {
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.detail-panel__dependency-picker:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.detail-panel__dependency-picker-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.detail-panel__dependency-picker-hint {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.detail-panel__dependency-clear {
+  min-width: 64px;
+  min-height: 42px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.detail-panel__dependency-select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 76px;
+  overflow-x: hidden;
+}
+
+.field--full .select-input.detail-panel__dependency-select[multiple] {
+  min-height: 76px;
 }
 
 .detail-panel__loop-interval {
@@ -2484,7 +2777,8 @@ function handleDocumentPointerDown(event: MouseEvent) {
   height: 14px;
 }
 
-.detail-panel__dialogue-modal {
+.detail-panel__dialogue-modal,
+.detail-panel__dependency-modal {
   position: fixed;
   inset: 0;
   z-index: 70;
@@ -2494,7 +2788,8 @@ function handleDocumentPointerDown(event: MouseEvent) {
   background: rgba(2, 8, 16, 0.72);
 }
 
-.detail-panel__dialogue-modal-panel {
+.detail-panel__dialogue-modal-panel,
+.detail-panel__dependency-modal-panel {
   width: min(840px, calc(100vw - 40px));
   padding: 20px;
   border-radius: 22px;
@@ -2502,7 +2797,13 @@ function handleDocumentPointerDown(event: MouseEvent) {
   gap: 16px;
 }
 
-.detail-panel__dialogue-modal-head {
+.detail-panel__dependency-modal-panel {
+  max-height: min(680px, calc(100dvh - 40px));
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.detail-panel__dialogue-modal-head,
+.detail-panel__dependency-modal-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -2525,6 +2826,64 @@ function handleDocumentPointerDown(event: MouseEvent) {
 }
 
 .detail-panel__dialogue-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.detail-panel__dependency-modal-summary {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.detail-panel__dependency-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.detail-panel__dependency-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+}
+
+.detail-panel__dependency-option--active {
+  border-color: rgba(255, 180, 84, 0.42);
+  background: rgba(255, 180, 84, 0.12);
+}
+
+.detail-panel__dependency-checkbox {
+  margin: 0;
+}
+
+.detail-panel__dependency-option-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-panel__dependency-empty {
+  padding: 18px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.detail-panel__dependency-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
@@ -2554,7 +2913,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
   }
 
   .detail-panel__main {
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
   }
 }
 
@@ -2567,7 +2926,8 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
   .detail-panel__header,
   .detail-panel__dialogue-head,
-  .detail-panel__dialogue-modal-head {
+  .detail-panel__dialogue-modal-head,
+  .detail-panel__dependency-modal-head {
     flex-direction: column;
     align-items: stretch;
   }
@@ -2579,7 +2939,8 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
   .detail-grid,
   .dialogue-editor__grid,
-  .detail-panel__loop-row {
+  .detail-panel__loop-row,
+  .detail-panel__schedule-order {
     grid-template-columns: 1fr;
   }
 
