@@ -1,8 +1,14 @@
 # StoryScript 规范
 
-Last updated: `2026-06-09`
+Last updated: `2026-06-11`
 
 本文档定义 Story Manager 项目的统一脚本语言规范。
+
+规范优先级：
+
+- `StoryScript.md` 是脚本语言的唯一规范来源
+- Agent、编辑器提示和运行时实现必须保持一致
+- 如果未来新增语法或权限，先更新本文档，再更新提示和运行时
 
 ---
 
@@ -182,6 +188,7 @@ let localName = ...
 
 - 仅在当前脚本内有效
 - 可读可写
+- 当前版本只允许使用 `let` 声明临时变量；`const` 和 `var` 不属于本规范
 
 ---
 
@@ -215,7 +222,22 @@ StoryScript 使用 TypeScript / JavaScript 风格的受限子集。
 - 复合赋值：`+= -= *= /= %=`
 - 三元表达式
 - `Math.xxx(...)`
+- 一组受限的常用全局函数：`Number(...)`、`String(...)`、`Boolean(...)`、`parseInt(...)`、`parseFloat(...)`、`isNaN(...)`、`isFinite(...)`
+- 一组受限的常用字符串函数：`trim(...)`、`includes(...)`、`startsWith(...)`、`endsWith(...)`、`slice(...)`、`toLowerCase(...)`、`toUpperCase(...)`
+- 一组受限的常用格式化函数：`toFixed(...)`、`formatWan(...)`
 - 圆括号表达式
+
+说明：
+
+- `Math` 仅开放白名单成员，不暴露其他全局对象
+- `Math.random()` 已开放，可用于轻微随机扰动；如果需要可复现结果，仍优先使用系统变量推导的确定性扰动
+- `Number`、`String`、`Boolean` 为函数调用形式，不表示开放完整构造器语义
+- `parseInt` 建议显式传入第二个参数，例如 `parseInt(text, 10)`
+- `isNaN`、`isFinite` 按数值转换后的结果工作
+- 同时支持少量白名单方法别名：`number.toFixed(...)`、`string.trim()`、`string.includes(...)`、`string.startsWith(...)`、`string.endsWith(...)`、`string.slice(...)`、`string.toLowerCase()`、`string.toUpperCase()`
+- 除上述白名单方法外，字符串处理仍应优先通过这些白名单函数完成，不支持任意对象方法调用
+- `toFixed(value, digits)` 返回字符串，`digits` 范围为 `0 ~ 100`
+- `formatWan(value, digits)` 返回面向中文数值展示的字符串；绝对值小于 `10000` 时返回普通数字文本，否则返回如 `12.3万`
 
 ### 5.3 注释
 
@@ -254,6 +276,7 @@ ${player.money} += 100 // 行尾注释
 - `import / export`
 - 任意全局对象访问
 - 原型链和动态反射能力
+- 除白名单外的内建对象与成员访问，例如 `Date.now()`、`JSON.stringify()`、`array.map()`、`text.replace()`
 
 ---
 
@@ -351,6 +374,50 @@ if (${player.money} < 0) {
 ${player.money} += reward
 ```
 
+### 7.2.1 常用函数
+
+```ts
+let rawLevel = "12"
+let level = Number(rawLevel)
+let safeLevel = parseInt(rawLevel, 10)
+let ratio = parseFloat("3.14")
+let hasBonus = Boolean(${player.is_vip})
+
+if (isFinite(level) && !isNaN(ratio)) {
+  ${player.money} += level + ratio
+}
+```
+
+```ts
+let rawTitle = "  新手县城人口日报  "
+let normalizedTitle = trim(rawTitle)
+let isDailyReport = includes(normalizedTitle, "日报")
+let startsWithNewbie = startsWith(normalizedTitle, "新手")
+let shortTitle = slice(normalizedTitle, 0, 4)
+let upperTag = toUpperCase("vip")
+
+if (isDailyReport && startsWithNewbie) {
+  ${county.report_title} = shortTitle + "-" + upperTag
+}
+```
+
+```ts
+let reward = ${county.population_resident} / 10000
+let rewardText = toFixed(reward, 2)
+let displayText = formatWan(${county.population_resident}, 1)
+
+${county.reward_preview} = rewardText
+${county.population_display} = displayText
+```
+
+```ts
+let inFudong = Number((Math.random() * 0.2 + 1).toFixed(4))
+let outFudong = Number((Math.random() * 0.2 + 1).toFixed(4))
+let tag = "  日报  ".trim().toUpperCase()
+
+${county.daily_tag} = tag
+```
+
 ### 7.3 分支变量
 
 ```ts
@@ -424,6 +491,22 @@ if (!bag_has("player", "population_flow_report", 1)) {
 - `branch.xxx`
 - `call.xxx`
 - `Math.xxx`
+- `Number`
+- `String`
+- `Boolean`
+- `parseInt`
+- `parseFloat`
+- `isNaN`
+- `isFinite`
+- `trim`
+- `includes`
+- `startsWith`
+- `endsWith`
+- `slice`
+- `toLowerCase`
+- `toUpperCase`
+- `toFixed`
+- `formatWan`
 - `bag_count`
 - `bag_has`
 - `bag_add`

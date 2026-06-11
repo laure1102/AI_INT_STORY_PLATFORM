@@ -20,6 +20,7 @@ import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
 import type { StoryQuickCreateLocationPayload } from "./storyQuickLocation"
 import {
   STORY_SCRIPT_TEMPLATE_PLACEHOLDER,
+  buildStoryScriptBuiltinAutocompleteItems,
   buildStoryScriptHighlightTokens,
   buildStoryScriptValAutocompleteItems,
   filterStoryScriptAutocompleteItems,
@@ -28,6 +29,10 @@ import {
   resolveStoryScriptAutocompletePlacement,
   type StoryScriptAutocompleteItem
 } from "./storyScriptEditor"
+import {
+  formatStoryScriptValidationIssue,
+  validateStoryScriptField
+} from "./storyScriptValidation"
 
 interface DialogueDraft extends StoryOnceDialogueDefinition {
   id: string
@@ -71,6 +76,7 @@ const PLAYER_OBJECT_OPTION: RoleOption = {
 }
 
 type ScriptFieldKey = "triggerExpr" | "initScript" | "endScript"
+type ScriptValidationStatus = "idle" | "checking" | "passed" | "failed"
 
 interface ScriptAutocompleteState {
   open: boolean
@@ -81,11 +87,17 @@ interface ScriptAutocompleteState {
   placement: "top" | "bottom"
 }
 
+interface ScriptValidationState {
+  status: ScriptValidationStatus
+  issues: string[]
+}
+
 type ScriptEditorFieldKey = Exclude<ScriptFieldKey, "triggerExpr">
 
 const props = defineProps<{
   event: StoryOnceEventFile | null
   eventLocations: StoryEventLocationFile
+  itemIds: string[]
   mode?: "create" | "edit"
   roles: StoryRolesFile
   saving: boolean
@@ -143,6 +155,20 @@ const dialogueContentAutocompleteState = reactive<ScriptAutocompleteState>({
   replaceEnd: 0,
   activeIndex: 0,
   placement: "bottom"
+})
+const scriptValidationState = reactive<Record<ScriptFieldKey, ScriptValidationState>>({
+  triggerExpr: {
+    status: "idle",
+    issues: []
+  },
+  initScript: {
+    status: "idle",
+    issues: []
+  },
+  endScript: {
+    status: "idle",
+    issues: []
+  }
 })
 
 let dialogueIdSeed = 0
@@ -262,7 +288,10 @@ const dialogueEditorTitle = computed(() => {
   return dialogueEditorState.mode === "create" ? "新增对白" : "编辑对白"
 })
 const globalAutocompleteCandidates = computed(() => {
-  return buildStoryScriptValAutocompleteItems(props.vals)
+  return mergeStoryScriptAutocompleteItems(
+    buildStoryScriptBuiltinAutocompleteItems(),
+    buildStoryScriptValAutocompleteItems(props.vals)
+  )
 })
 const invokeParamAutocompleteCandidates = computed<StoryScriptAutocompleteItem[]>(() => {
   if (draft.triggerMode !== "invoke") {
@@ -582,6 +611,87 @@ function toggleDialogueTemplateHelp() {
   openStoryScriptReferencePage()
 }
 
+function getInvokeParamValidationTokens() {
+  return invokeParamAutocompleteCandidates.value
+    .map((item) => normalizeAutocompleteText(item.name))
+    .filter(Boolean)
+}
+
+function getReadableValidationTokens(field: ScriptFieldKey) {
+  return field === "triggerExpr" ? [] : getInvokeParamValidationTokens()
+}
+
+function resetScriptValidation(field?: ScriptFieldKey) {
+  const fields = field ? [field] : (["triggerExpr", "initScript", "endScript"] as const)
+
+  for (const currentField of fields) {
+    scriptValidationState[currentField].status = "idle"
+    scriptValidationState[currentField].issues = []
+  }
+}
+
+async function validateScriptField(field: ScriptFieldKey) {
+  const state = scriptValidationState[field]
+  state.status = "checking"
+  state.issues = []
+  await Promise.resolve()
+
+  const source = getScriptFieldValue(field)
+
+  if (field === "triggerExpr" && draft.triggerMode === "condition" && !source.trim()) {
+    state.status = "failed"
+    state.issues = ["条件触发必须填写触发条件。"]
+    return
+  }
+
+  const result = validateStoryScriptField({
+    vals: props.vals,
+    source,
+    mode: field === "triggerExpr" ? "predicate" : "procedure",
+    itemIds: props.itemIds,
+    readableTokens: getReadableValidationTokens(field),
+    writableTokens: [],
+    bagMode: field === "triggerExpr" ? "read" : "write"
+  })
+
+  state.status = result.ok ? "passed" : "failed"
+  state.issues = result.issues.map((issue) => formatStoryScriptValidationIssue(issue))
+}
+
+function getScriptValidationLabel(field: ScriptFieldKey) {
+  const status = scriptValidationState[field].status
+
+  if (status === "checking") {
+    return "校验中"
+  }
+
+  if (status === "passed") {
+    return "校验通过"
+  }
+
+  if (status === "failed") {
+    return "有问题"
+  }
+
+  return ""
+}
+
+function getScriptValidationMessage(field: ScriptFieldKey) {
+  if (scriptValidationState[field].status !== "passed") {
+    return ""
+  }
+
+  if (!getScriptFieldValue(field).trim()) {
+    return field === "triggerExpr" ? "空条件，无需校验。" : "空脚本，无需校验。"
+  }
+
+  return field === "triggerExpr" ? "触发条件可以执行。" : "脚本可以执行。"
+}
+
+function getScriptValidationClass(field: ScriptFieldKey) {
+  return `detail-panel__validation--${scriptValidationState[field].status}`
+}
+
 function getScriptAutocompleteState(field: ScriptFieldKey) {
   if (field === "triggerExpr") {
     return triggerAutocompleteState
@@ -742,6 +852,7 @@ function insertScriptAutocompleteItem(field: ScriptFieldKey, itemName: string) {
 }
 
 function onTriggerExprInput() {
+  resetScriptValidation("triggerExpr")
   updateScriptAutocompleteFromCaret("triggerExpr")
 }
 
@@ -750,6 +861,7 @@ function onTriggerExprKeydown(event: KeyboardEvent) {
 }
 
 function onInitScriptInput() {
+  resetScriptValidation("initScript")
   updateScriptAutocompleteFromCaret("initScript")
 }
 
@@ -762,6 +874,7 @@ function onInitScriptScroll(event: Event) {
 }
 
 function onEndScriptInput() {
+  resetScriptValidation("endScript")
   updateScriptAutocompleteFromCaret("endScript")
 }
 
@@ -1059,8 +1172,14 @@ watch(
     syncDraft(event)
     closeAllScriptAutocomplete()
     closeDialogueContentAutocomplete()
+    resetScriptValidation()
   },
   { immediate: true }
+)
+
+watch(
+  () => draft.triggerMode,
+  () => resetScriptValidation("triggerExpr")
 )
 
 watch(
@@ -1267,6 +1386,18 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       ?
                     </button>
                   </div>
+                  <button
+                    class="detail-panel__validate-button"
+                    type="button"
+                    :disabled="scriptValidationState.triggerExpr.status === 'checking'"
+                    @click.stop="validateScriptField('triggerExpr')"
+                  >
+                    {{
+                      scriptValidationState.triggerExpr.status === "checking"
+                        ? "校验中"
+                        : "校验"
+                    }}
+                  </button>
                 </div>
                 <div class="detail-panel__expression-wrap">
                     <textarea
@@ -1315,6 +1446,29 @@ function handleDocumentPointerDown(event: MouseEvent) {
                         没有匹配的变量
                       </div>
                     </div>
+                  </div>
+                  <div
+                    v-if="scriptValidationState.triggerExpr.status !== 'idle'"
+                    class="detail-panel__validation"
+                    :class="getScriptValidationClass('triggerExpr')"
+                  >
+                    <strong class="detail-panel__validation-title">
+                      {{ getScriptValidationLabel("triggerExpr") }}
+                    </strong>
+                    <span
+                      v-if="!scriptValidationState.triggerExpr.issues.length"
+                      class="detail-panel__validation-message"
+                    >
+                      {{ getScriptValidationMessage("triggerExpr") }}
+                    </span>
+                    <ul v-else class="detail-panel__validation-list">
+                      <li
+                        v-for="issue in scriptValidationState.triggerExpr.issues"
+                        :key="issue"
+                      >
+                        {{ issue }}
+                      </li>
+                    </ul>
                   </div>
                 </template>
 
@@ -1390,6 +1544,18 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       ?
                     </button>
                   </div>
+                  <button
+                    class="detail-panel__validate-button"
+                    type="button"
+                    :disabled="scriptValidationState.initScript.status === 'checking'"
+                    @click.stop="validateScriptField('initScript')"
+                  >
+                    {{
+                      scriptValidationState.initScript.status === "checking"
+                        ? "校验中"
+                        : "校验"
+                    }}
+                  </button>
                 </div>
                 <div class="detail-panel__script-wrap">
                   <div class="detail-panel__script-editor">
@@ -1453,6 +1619,29 @@ function handleDocumentPointerDown(event: MouseEvent) {
                     </div>
                   </div>
                 </div>
+                <div
+                  v-if="scriptValidationState.initScript.status !== 'idle'"
+                  class="detail-panel__validation"
+                  :class="getScriptValidationClass('initScript')"
+                >
+                  <strong class="detail-panel__validation-title">
+                    {{ getScriptValidationLabel("initScript") }}
+                  </strong>
+                  <span
+                    v-if="!scriptValidationState.initScript.issues.length"
+                    class="detail-panel__validation-message"
+                  >
+                    {{ getScriptValidationMessage("initScript") }}
+                  </span>
+                  <ul v-else class="detail-panel__validation-list">
+                    <li
+                      v-for="issue in scriptValidationState.initScript.issues"
+                      :key="issue"
+                    >
+                      {{ issue }}
+                    </li>
+                  </ul>
+                </div>
                 <span class="detail-panel__script-hint">
                   支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
                 </span>
@@ -1471,6 +1660,18 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       ?
                     </button>
                   </div>
+                  <button
+                    class="detail-panel__validate-button"
+                    type="button"
+                    :disabled="scriptValidationState.endScript.status === 'checking'"
+                    @click.stop="validateScriptField('endScript')"
+                  >
+                    {{
+                      scriptValidationState.endScript.status === "checking"
+                        ? "校验中"
+                        : "校验"
+                    }}
+                  </button>
                 </div>
                 <div class="detail-panel__script-wrap">
                   <div class="detail-panel__script-editor">
@@ -1533,6 +1734,29 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       没有匹配的变量
                     </div>
                   </div>
+                </div>
+                <div
+                  v-if="scriptValidationState.endScript.status !== 'idle'"
+                  class="detail-panel__validation"
+                  :class="getScriptValidationClass('endScript')"
+                >
+                  <strong class="detail-panel__validation-title">
+                    {{ getScriptValidationLabel("endScript") }}
+                  </strong>
+                  <span
+                    v-if="!scriptValidationState.endScript.issues.length"
+                    class="detail-panel__validation-message"
+                  >
+                    {{ getScriptValidationMessage("endScript") }}
+                  </span>
+                  <ul v-else class="detail-panel__validation-list">
+                    <li
+                      v-for="issue in scriptValidationState.endScript.issues"
+                      :key="issue"
+                    >
+                      {{ issue }}
+                    </li>
+                  </ul>
                 </div>
                 <span class="detail-panel__script-hint">
                   支持多行、`let` 临时变量、`Math` 函数，以及 `=`、`+=`、`-=`、`*=`、`/=`、`%=` 赋值；可读取 `calc` 变量，但不能给 `calc` 变量赋值。
@@ -2029,6 +2253,65 @@ function handleDocumentPointerDown(event: MouseEvent) {
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1;
+}
+
+.detail-panel__validate-button {
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(99, 169, 255, 0.34);
+  border-radius: 6px;
+  background: rgba(99, 169, 255, 0.1);
+  color: #a8d1ff;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.detail-panel__validate-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.detail-panel__validation {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.detail-panel__validation--checking {
+  border-color: rgba(99, 169, 255, 0.24);
+  color: #a8d1ff;
+}
+
+.detail-panel__validation--passed {
+  border-color: rgba(82, 211, 145, 0.28);
+  color: #9ee6bd;
+}
+
+.detail-panel__validation--failed {
+  border-color: rgba(255, 111, 111, 0.34);
+  color: #ffb1b1;
+}
+
+.detail-panel__validation-title {
+  font-size: 0.82rem;
+}
+
+.detail-panel__validation-message {
+  color: inherit;
+}
+
+.detail-panel__validation-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .detail-panel__expression-wrap {

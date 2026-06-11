@@ -10,8 +10,31 @@ export interface StoryScriptHighlightToken {
   highlighted: boolean
 }
 
+const STORY_SCRIPT_BUILTIN_AUTOCOMPLETE_ITEMS: StoryScriptAutocompleteItem[] = [
+  { name: "Number", description: "将输入转成 number。" },
+  { name: "String", description: "将输入转成 string。" },
+  { name: "Boolean", description: "将输入转成 boolean。" },
+  { name: "parseInt", description: "解析整数，建议显式传入进制。" },
+  { name: "parseFloat", description: "解析浮点数。" },
+  { name: "isNaN", description: "按 Number 转换后的结果判断是否 NaN。" },
+  { name: "isFinite", description: "按 Number 转换后的结果判断是否为有限数。" },
+  { name: "trim", description: "去掉字符串首尾空白。" },
+  { name: "includes", description: "判断字符串是否包含目标文本。" },
+  { name: "startsWith", description: "判断字符串是否以目标文本开头。" },
+  { name: "endsWith", description: "判断字符串是否以目标文本结尾。" },
+  { name: "slice", description: "按 start/end 截取字符串。" },
+  { name: "toLowerCase", description: "把文本转成小写。" },
+  { name: "toUpperCase", description: "把文本转成大写。" },
+  { name: "toFixed", description: "按指定小数位格式化数字，返回字符串；支持函数形式和 number.toFixed(...) 别名。" },
+  { name: "formatWan", description: "把数值格式化为中文“万”显示文本。" },
+  { name: "bag_count", description: "读取背包中物品数量。" },
+  { name: "bag_has", description: "检查背包中是否有足够数量的物品。" },
+  { name: "bag_add", description: "向背包添加物品。" },
+  { name: "bag_remove", description: "从背包扣除物品。" }
+]
+
 const STORY_SCRIPT_HIGHLIGHT_PATTERN =
-  /\b(let|if|else|switch|case|default|for|while|break|continue|return|invoke_once|true|false|null)\b|\bMath\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
+  /\b(let|if|else|switch|case|default|for|while|break|continue|return|invoke_once|true|false|null)\b|\b(?:Math|Number|String|Boolean|parseInt|parseFloat|isNaN|isFinite|trim|includes|startsWith|endsWith|slice|toLowerCase|toUpperCase|toFixed|formatWan)\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|random|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
 
 export const STORY_SCRIPT_TEMPLATE_PLACEHOLDER =
   "例如：今天是第 ${system.now_day} 天，账上还有 ${player.money}。"
@@ -70,6 +93,10 @@ export function buildStoryScriptValAutocompleteItems(vals: StoryValsFile) {
       }]
     })
   })
+}
+
+export function buildStoryScriptBuiltinAutocompleteItems() {
+  return STORY_SCRIPT_BUILTIN_AUTOCOMPLETE_ITEMS.map((item) => ({ ...item }))
 }
 
 export function mergeStoryScriptAutocompleteItems(

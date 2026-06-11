@@ -1,7 +1,11 @@
+import { existsSync, readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph"
 import { ChatOpenAI } from "@langchain/openai"
 import {
+  createStoryScriptValidationContext,
   validateStoryDocument,
+  validateStoryScriptContent,
   type AppAiAgentSettings,
   type AppSettingsFile,
   type StoryDocument,
@@ -16,6 +20,7 @@ import {
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
+  type StoryScriptValidationIssue,
   type StoryOnceEventFile,
   type StoryRolesFile,
   type StoryValDefinition,
@@ -82,6 +87,55 @@ const RELEVANT_ITEM_DETAIL_LIMIT = 40
 const RELEVANT_VARIABLE_DETAIL_LIMIT = 40
 const MAX_ITEM_SEARCH_TERMS = 180
 const MAX_VARIABLE_SEARCH_TERMS = 180
+const SCRIPT_VALIDATION_REPAIR_ATTEMPTS = 2
+const STORYSCRIPT_PROMPT_SECTION_MAX_CHARS = 14000
+const STORYSCRIPT_DOC_PATH = resolve(process.cwd(), "StoryScript.md")
+const SCRIPT_REMOVAL_INTENT_PATTERNS = [
+  /(清空|删除|移除|去掉|禁用|取消|不要|留空).{0,10}(初始化脚本|结束脚本|条件脚本|trigger_expr|init_script|end_script|脚本)/i,
+  /(初始化脚本|结束脚本|条件脚本|trigger_expr|init_script|end_script|脚本).{0,10}(清空|删除|移除|去掉|禁用|取消|不要|留空)/i,
+  /\b(remove|delete|clear|disable)\b.{0,12}\b(script|init_script|end_script|trigger_expr)\b/i,
+  /\b(script|init_script|end_script|trigger_expr)\b.{0,12}\b(remove|delete|clear|disable)\b/i
+] as const
+
+let cachedStoryScriptPromptSection: string | null | undefined
+
+function loadStoryScriptPromptSection() {
+  if (cachedStoryScriptPromptSection !== undefined) {
+    return cachedStoryScriptPromptSection
+  }
+
+  if (!existsSync(STORYSCRIPT_DOC_PATH)) {
+    cachedStoryScriptPromptSection = null
+    return cachedStoryScriptPromptSection
+  }
+
+  const source = readFileSync(STORYSCRIPT_DOC_PATH, "utf8")
+  const startIndex = source.indexOf("## 2. 脚本类别")
+  const endIndex = source.indexOf("## 8. 编译与运行时约束")
+  const excerpt = startIndex >= 0
+    ? source.slice(startIndex, endIndex > startIndex ? endIndex : undefined)
+    : source
+
+  cachedStoryScriptPromptSection = excerpt.trim().slice(0, STORYSCRIPT_PROMPT_SECTION_MAX_CHARS)
+  return cachedStoryScriptPromptSection
+}
+
+function buildStoryScriptPromptSection() {
+  const promptSection = loadStoryScriptPromptSection()
+
+  if (!promptSection) {
+    return "【StoryScript.md】当前进程未读取到规范文件；语法与权限判断必须以运行时静态校验为准，不要自行脑补缺失语法。"
+  }
+
+  return [
+    "【StoryScript.md 摘要（唯一规范来源）】",
+    promptSection
+  ].join("\n")
+}
+
+function instructionAllowsScriptRemoval(instruction: string) {
+  return SCRIPT_REMOVAL_INTENT_PATTERNS.some((pattern) => pattern.test(instruction))
+}
 
 const draftDialogueSchema = z.object({
   speaker_type: z.enum(["player", "object"]).describe("player 表示玩家主角，object 表示事件对象。"),
@@ -1065,6 +1119,7 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "StoryScript 过程脚本允许直接写回普通全局 value 变量，例如 `${player.money} += 100`、`${county.renkou_young} = Math.max(0, ${county.renkou_young} + delta)`。",
     "StoryScript 禁止写 calc、system.*、call.*：calc 是只读派生值；如果要改变 calc 汇总值，必须写它 calc_rule 依赖的普通 value 分项，或在 variables 草稿中新增普通 value 变量作为持久化字段。",
     "不要声称脚本接口缺少安全写回能力；当前引擎支持在 init_script、end_script、action.exec_script 中写普通 value 变量。",
+    "StoryScript 过程脚本必须严格遵循 StoryScript.md 的当前规范；语句、变量权限、注释、invoke_once、背包函数都以 StoryScript.md 为唯一来源。不要使用文档未定义的语法；如果需要新能力，先升级规范文档和运行时，再生成脚本。",
     "生成非空 StoryScript 过程脚本时必须写清楚中文注释：说明读取了哪些变量、计算规则为什么这样设计、最终写回哪些 value 变量。复杂脚本要分段注释，避免只有公式没有解释。",
     "物品必须优先复用现有物品 id；确需新增时输出 items 草稿，category_id 必须来自现有物品分类。",
     "判断物品是否已存在时必须先查 itemIndexAll 全量轻量索引；relevantItemDetails 只提供本次更相关物品的详细字段，不代表完整物品库。",
@@ -1073,7 +1128,7 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "背包函数里的 item_id 必须来自现有物品或本次 items 草稿；如果新增物品，事件脚本必须引用该新增物品 id。",
     "schedule 事件的 loop 必须包含 at、priority、after、before：at 用 HH:mm；同一时间点内 priority 数字越小越先执行；如果事件依赖另一个定时事件结果，必须把前置事件 id 写入 after。",
     "schedule priority 建议：结算/统计类 10-49，发放/奖励类 50-99，展示/日报/提示类 100+。例如每日发钱依赖每日人口结算时，发钱事件 after 应包含人口结算事件 id。",
-    "StoryScript 不确定时留空，不要编造复杂脚本。",
+    "只有在新增脚本且 StoryScript.md 明确不支持所需能力时才允许留空；如果当前待优化草稿里已有非空脚本，除非用户明确要求删除，否则必须保留并按规范修正。",
     "",
     `故事标题: ${state.storyTitle}`,
     `用户创作指令:\n${state.instruction}`,
@@ -1087,7 +1142,7 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
       "【当前待优化草稿】",
       formatJson(state.baseDraft, 18000),
       "",
-      "当前任务是基于用户反馈修订这份草稿。输出必须是完整修订版，不是增量补丁。除非反馈要求重做，否则尽量保留已有 id、变量 key、角色 key 和事件引用。"
+      "当前任务是基于用户反馈修订这份草稿。输出必须是完整修订版，不是增量补丁。除非反馈要求重做，否则尽量保留已有 id、变量 key、角色 key、事件引用，以及已有非空脚本。不要因为保守或不确定就把脚本清空。"
     )
   }
 
@@ -1316,6 +1371,329 @@ function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryCreation
     notes: draft.notes,
     warnings: draft.warnings
   }
+}
+
+interface DraftStoryScriptValidationIssue {
+  collectionType: StoryCreationDraftEvent["collectionType"]
+  eventId: string
+  field: string
+  message: string
+}
+
+function cloneStoryValGroup(group: StoryValDefinition): StoryValDefinition {
+  return {
+    name: group.name,
+    description: group.description,
+    vals: group.vals.map((entry) => ({
+      name: entry.name,
+      description: entry.description,
+      value_type: entry.value_type,
+      value: entry.value,
+      calc_rule: entry.calc_rule
+    }))
+  }
+}
+
+function appendValidationValGroup(
+  groups: Map<string, StoryValDefinition>,
+  sourceGroup: StoryValDefinition
+) {
+  const groupName = sourceGroup.name.trim()
+
+  if (!groupName) {
+    return
+  }
+
+  const groupKey = groupName.toLowerCase()
+  const targetGroup = groups.get(groupKey)
+
+  if (!targetGroup) {
+    groups.set(groupKey, cloneStoryValGroup(sourceGroup))
+    return
+  }
+
+  const existingRows = new Set(targetGroup.vals.map((entry) => entry.name.trim().toLowerCase()))
+  for (const entry of sourceGroup.vals) {
+    const rowName = entry.name.trim()
+
+    if (!rowName || existingRows.has(rowName.toLowerCase())) {
+      continue
+    }
+
+    targetGroup.vals.push({
+      name: entry.name,
+      description: entry.description,
+      value_type: entry.value_type,
+      value: entry.value,
+      calc_rule: entry.calc_rule
+    })
+    existingRows.add(rowName.toLowerCase())
+  }
+}
+
+function buildDraftValidationVals(story: StoryDocument, draft: StoryCreationDraft): StoryValsFile {
+  const groups = new Map<string, StoryValDefinition>()
+
+  for (const group of story.vals.variables) {
+    appendValidationValGroup(groups, group)
+  }
+
+  for (const group of story.systemVals.variables) {
+    appendValidationValGroup(groups, group)
+  }
+
+  for (const variable of draft.variables) {
+    appendValidationValGroup(groups, {
+      name: variable.group,
+      vals: [{
+        name: variable.name,
+        description: variable.description,
+        value_type: variable.value_type,
+        value: variable.value_type === "value" ? variable.value : undefined,
+        calc_rule: variable.calc_rule
+      }]
+    })
+  }
+
+  return {
+    variables: Array.from(groups.values())
+  }
+}
+
+function collectDraftValidationItemIds(story: StoryDocument, draft: StoryCreationDraft) {
+  const itemIds = new Set<string>()
+
+  for (const item of story.items.items) {
+    const itemId = item.id.trim()
+    if (itemId) {
+      itemIds.add(itemId)
+    }
+  }
+
+  for (const item of draft.items) {
+    const itemId = item.id.trim()
+    if (!itemId) {
+      continue
+    }
+
+    itemIds.add(itemId)
+    itemIds.add(makeLooseId(itemId))
+  }
+
+  return Array.from(itemIds)
+}
+
+function formatStoryScriptIssue(issue: StoryScriptValidationIssue) {
+  return issue.lineNumber > 0
+    ? `第 ${issue.lineNumber} 行: ${issue.message}`
+    : issue.message
+}
+
+function pushDraftScriptValidationIssues(
+  issues: DraftStoryScriptValidationIssue[],
+  event: StoryCreationDraftEvent,
+  field: string,
+  scriptIssues: StoryScriptValidationIssue[]
+) {
+  for (const issue of scriptIssues) {
+    issues.push({
+      collectionType: event.collectionType,
+      eventId: event.id,
+      field,
+      message: formatStoryScriptIssue(issue)
+    })
+  }
+}
+
+function getDraftEventCallTokens(event: StoryCreationDraftEvent) {
+  return Object.fromEntries(
+    (event.invoke_params ?? [])
+      .map((param) => param.name.trim())
+      .filter(Boolean)
+      .map((name) => [`call.${name}`, null] as const)
+  )
+}
+
+function createDraftEventValidationContext(
+  event: StoryCreationDraftEvent,
+  itemIds: string[],
+  mode: "read" | "write"
+) {
+  return createStoryScriptValidationContext({
+    values: mode === "write" ? getDraftEventCallTokens(event) : {},
+    assignableValues: {},
+    itemIds,
+    bagMode: mode
+  })
+}
+
+function validateDraftEventPresentationTemplates(
+  vals: StoryValsFile,
+  event: StoryCreationDraftEvent,
+  issues: DraftStoryScriptValidationIssue[]
+) {
+  if (event.presentation.type === "message") {
+    pushDraftScriptValidationIssues(
+      issues,
+      event,
+      "presentation.message.content",
+      validateStoryScriptContent(vals, event.presentation.message.content, "template")
+    )
+    return
+  }
+
+  if (event.presentation.type !== "dialogue") {
+    return
+  }
+
+  event.presentation.dialogues.forEach((dialogue, index) => {
+    pushDraftScriptValidationIssues(
+      issues,
+      event,
+      `presentation.dialogues[${index}].content`,
+      validateStoryScriptContent(vals, dialogue.content, "template")
+    )
+  })
+}
+
+function collectDraftStoryScriptValidationIssues(
+  story: StoryDocument,
+  draft: StoryCreationDraft
+) {
+  const vals = buildDraftValidationVals(story, draft)
+  const itemIds = collectDraftValidationItemIds(story, draft)
+  const issues: DraftStoryScriptValidationIssue[] = []
+
+  for (const event of draft.events) {
+    if (event.trigger_mode === "condition") {
+      if (!event.trigger_expr.trim()) {
+        issues.push({
+          collectionType: event.collectionType,
+          eventId: event.id,
+          field: "trigger_expr",
+          message: "条件触发事件必须填写 trigger_expr。"
+        })
+      } else {
+        pushDraftScriptValidationIssues(
+          issues,
+          event,
+          "trigger_expr",
+          validateStoryScriptContent(
+            vals,
+            event.trigger_expr,
+            "predicate",
+            undefined,
+            createDraftEventValidationContext(event, itemIds, "read")
+          )
+        )
+      }
+    }
+
+    pushDraftScriptValidationIssues(
+      issues,
+      event,
+      "init_script",
+      validateStoryScriptContent(
+        vals,
+        event.init_script,
+        "procedure",
+        undefined,
+        createDraftEventValidationContext(event, itemIds, "write")
+      )
+    )
+
+    pushDraftScriptValidationIssues(
+      issues,
+      event,
+      "end_script",
+      validateStoryScriptContent(
+        vals,
+        event.end_script,
+        "procedure",
+        undefined,
+        createDraftEventValidationContext(event, itemIds, "write")
+      )
+    )
+
+    validateDraftEventPresentationTemplates(vals, event, issues)
+  }
+
+  return issues
+}
+
+function formatDraftStoryScriptValidationIssues(issues: DraftStoryScriptValidationIssue[]) {
+  return issues
+    .map((issue, index) => {
+      return [
+        `${index + 1}.`,
+        `${issue.collectionType}/${issue.eventId}`,
+        issue.field,
+        issue.message
+      ].join(" ")
+    })
+    .join("\n")
+}
+
+function preserveBaseDraftScripts(
+  baseDraft: StoryCreationDraft | null,
+  draft: StoryCreationDraft,
+  instruction: string
+): { draft: StoryCreationDraft; messages: string[] } {
+  if (!baseDraft || instructionAllowsScriptRemoval(instruction)) {
+    return {
+      draft,
+      messages: []
+    }
+  }
+
+  const baseEvents = new Map(
+    baseDraft.events.map((event) => [draftEventKey(event), event] as const)
+  )
+  const messages: string[] = []
+  let hasChanges = false
+
+  const events = draft.events.map((event) => {
+    const baseEvent = baseEvents.get(draftEventKey(event))
+
+    if (!baseEvent) {
+      return event
+    }
+
+    let nextEvent = event
+
+    for (const field of ["init_script", "end_script"] as const) {
+      const baseScript = baseEvent[field].trim()
+      const nextScript = nextEvent[field].trim()
+
+      if (!baseScript || nextScript) {
+        continue
+      }
+
+      nextEvent = {
+        ...nextEvent,
+        [field]: baseEvent[field]
+      }
+      hasChanges = true
+      messages.push(
+        `已恢复 ${event.collectionType}/${event.id} 的 ${field}：本次反馈未明确要求删脚本，不能把已有非空脚本静默清空。`
+      )
+    }
+
+    return nextEvent
+  })
+
+  return hasChanges
+    ? {
+        draft: {
+          ...draft,
+          events
+        },
+        messages
+      }
+    : {
+        draft,
+        messages
+      }
 }
 
 function makeUniqueId(rawId: string, fallback: string, usedIds: Set<string>) {
@@ -2294,20 +2672,21 @@ export async function runStoryCreationAgents(
   }
 
   const eventWriter = async (state: CreationStateValue) => {
-    const output = await invokeStructured(
-      "eventWriter",
-      eventWriterModel,
-      eventWriterOutputSchema,
-      [
-        buildBasePrompt("事件写作", state),
-        `总主编简报:\n${state.creativeBrief}`,
-        `剧情规划:\n${state.plotPlan}`,
-        `资产规划:\n${state.assetPlan}`,
-        state.baseDraft
-          ? "你的任务：基于当前待优化草稿输出完整修订版。除非反馈要求重做，否则保留已有 id、变量 key、角色 key、事件 next 和集合类型，必要时补充或重写具体字段。"
-          : "你的任务：生成可预览的结构化剧情草稿，默认 3 到 8 个事件。",
-        "chain 事件可以通过 next 组成小剧情线；pool 事件必须是可被 AI 剧情导演挑选的平面事件；schedule 事件必须适合时间循环。",
-        "生成 schedule 事件时必须显式配置 loop.at、loop.priority、loop.after、loop.before；同一时间点需要业务顺序时优先用 after 表达硬依赖，再用 priority 做排序。",
+      const output = await invokeStructured(
+        "eventWriter",
+        eventWriterModel,
+        eventWriterOutputSchema,
+        [
+          buildBasePrompt("事件写作", state),
+          buildStoryScriptPromptSection(),
+          `总主编简报:\n${state.creativeBrief}`,
+          `剧情规划:\n${state.plotPlan}`,
+          `资产规划:\n${state.assetPlan}`,
+          state.baseDraft
+            ? "你的任务：基于当前待优化草稿输出完整修订版。除非反馈要求重做，否则保留已有 id、变量 key、角色 key、事件 next、集合类型和已有非空脚本；脚本如需调整，优先改写成符合 StoryScript.md 的版本，不得静默清空。"
+            : "你的任务：生成可预览的结构化剧情草稿，默认 3 到 8 个事件。",
+          "chain 事件可以通过 next 组成小剧情线；pool 事件必须是可被 AI 剧情导演挑选的平面事件；schedule 事件必须适合时间循环。",
+          "生成 schedule 事件时必须显式配置 loop.at、loop.priority、loop.after、loop.before；同一时间点需要业务顺序时优先用 after 表达硬依赖，再用 priority 做排序。",
         "如果事件需要持久化改变数值，优先在 init_script 或 end_script 写普通 value 变量；可以读取 calc 变量参与计算，但不能给 calc 变量赋值。",
         "如果用户要求改变一个 calc 汇总，例如人口总量，应写入它依赖的普通 value 分项；如现有分项不足，在 variables 中新增普通 value 变量并在脚本中引用。",
         "写 init_script/end_script 时，非空脚本必须包含中文注释。注释至少覆盖：规则目的、关键变量含义、核心公式含义、写回目标。不要只输出一串无解释的 Math 公式。",
@@ -2318,8 +2697,83 @@ export async function runStoryCreationAgents(
     )
 
     return {
-      draft: normalizeStructuredDraft(output.draft),
+      draft: normalizeDraft(normalizeStructuredDraft(output.draft)),
       logs: [createLog("eventWriter", output.log)]
+    }
+  }
+
+    const repairDraftScripts = async (
+      state: CreationStateValue,
+      draft: StoryCreationDraft,
+      reason: string
+    ): Promise<{ draft: StoryCreationDraft; logLines: string[] }> => {
+      let currentDraft = normalizeDraft(draft)
+      const logLines: string[] = []
+      const initialPreserved = preserveBaseDraftScripts(state.baseDraft, currentDraft, state.instruction)
+      currentDraft = initialPreserved.draft
+      logLines.push(...initialPreserved.messages)
+
+      for (let attempt = 1; attempt <= SCRIPT_VALIDATION_REPAIR_ATTEMPTS; attempt += 1) {
+        const validationIssues = collectDraftStoryScriptValidationIssues(story, currentDraft)
+
+      if (validationIssues.length === 0) {
+        if (attempt > 1) {
+          logLines.push("确定性 StoryScript 校验已通过。")
+        }
+
+        return {
+          draft: currentDraft,
+          logLines
+        }
+      }
+
+      const formattedIssues = formatDraftStoryScriptValidationIssues(validationIssues)
+      logLines.push(`第 ${attempt} 轮确定性校验发现 ${validationIssues.length} 个问题:\n${formattedIssues}`)
+
+        const output = await invokeStructured(
+          "scriptDoctor",
+          scriptDoctorModel,
+          scriptDoctorOutputSchema,
+          [
+            buildBasePrompt("脚本审校", state),
+            buildStoryScriptPromptSection(),
+            `触发原因: ${reason}`,
+            `确定性 StoryScript 校验错误:\n${formattedIssues}`,
+            `待修复草稿:\n${formatJson(currentDraft, 18000)}`,
+            "你的任务：只修复脚本、触发条件和文本占位符相关问题，输出完整 draft。",
+            "必须按照每条确定性校验错误修改；不要用删除事件、删除变量、清空所有脚本来逃避问题。",
+            "如果当前待优化草稿里同一事件已有非空 init_script 或 end_script，而用户没有明确要求删除，你必须保留或修正它，不能把它清空。",
+            "如果脚本写入 calc、system.* 或 call.*，改成写普通 value 变量；如果引用不存在的物品 id，优先改为现有物品或本次 items 草稿里的合法 id。",
+            "非空过程脚本必须保留中文注释，解释变量来源、计算规则和写回目标。"
+          ].join("\n\n"),
+          signal
+        )
+
+        currentDraft = normalizeDraft(normalizeStructuredDraft(output.draft))
+        const preserved = preserveBaseDraftScripts(state.baseDraft, currentDraft, state.instruction)
+        currentDraft = preserved.draft
+        logLines.push(
+          [
+            `第 ${attempt} 轮修复说明: ${output.log}`,
+            ...output.issues.map((issue) => `修复提示: ${issue}`),
+            ...preserved.messages
+          ].join("\n")
+        )
+      }
+
+    const remainingIssues = collectDraftStoryScriptValidationIssues(story, currentDraft)
+
+    if (remainingIssues.length > 0) {
+      throw new FileStoreError(
+        `Script doctor could not fix StoryScript validation issues:\n${formatDraftStoryScriptValidationIssues(remainingIssues)}`,
+        502,
+        "ai.agent-script-validation-failed"
+      )
+    }
+
+    return {
+      draft: currentDraft,
+      logLines
     }
   }
 
@@ -2328,28 +2782,40 @@ export async function runStoryCreationAgents(
       throw new FileStoreError("Event writer did not return a draft.", 502, "ai.agent-empty-draft")
     }
 
-    const output = await invokeStructured(
-      "scriptDoctor",
-      scriptDoctorModel,
-      scriptDoctorOutputSchema,
-      [
-        buildBasePrompt("脚本审校", state),
-        `待审校草稿:\n${formatJson(state.draft, 16000)}`,
-        "你的任务：检查 init_script、end_script、trigger_expr、dialogue 占位符是否保守可用。",
-        "脚本权限审校重点：普通全局 value 变量可写；calc、system.*、call.* 不可写。发现写 calc 汇总时，改为写其 calc_rule 依赖的普通 value 分项。",
-        "脚本可读性审校重点：非空过程脚本必须保留或补充中文注释，说明规则意图、变量来源、计算依据和写回结果；不要删除有用注释。",
-        "不要因为脚本涉及持久化变量写入就清空脚本；只有无法确定具体 value 写入目标时才清空并说明需要新增变量。",
-        "如果脚本不确定，宁可清空脚本并在 issues/warnings 说明，也不要生成不可执行的复杂脚本。"
-      ].join("\n\n"),
-      signal
+      const output = await invokeStructured(
+        "scriptDoctor",
+        scriptDoctorModel,
+        scriptDoctorOutputSchema,
+        [
+          buildBasePrompt("脚本审校", state),
+          buildStoryScriptPromptSection(),
+          `待审校草稿:\n${formatJson(state.draft, 16000)}`,
+          "你的任务：检查 init_script、end_script、trigger_expr、dialogue 占位符是否保守可用。",
+          "脚本权限审校重点：普通全局 value 变量可写；calc、system.*、call.* 不可写。发现写 calc 汇总时，改为写其 calc_rule 依赖的普通 value 分项。",
+          "脚本可读性审校重点：非空过程脚本必须保留或补充中文注释，说明规则意图、变量来源、计算依据和写回结果；不要删除有用注释。",
+          "不要因为脚本涉及持久化变量写入就清空脚本；只有无法确定具体 value 写入目标时才允许对全新脚本留空并说明需要新增变量。",
+          "如果当前待优化草稿里同一事件已有非空 init_script 或 end_script，而用户没有明确要求删除，你必须保留或修正它，不能清空。",
+          "脚本是否支持，必须以 StoryScript.md 和确定性静态校验为准；不要自行声称“规范未说明”来回避修复。"
+        ].join("\n\n"),
+        signal
+      )
+
+    const repaired = await repairDraftScripts(
+      state,
+      normalizeDraft(normalizeStructuredDraft(output.draft)),
+      "脚本审校 Agent 输出后校验"
     )
 
     return {
-      draft: normalizeStructuredDraft(output.draft),
+      draft: repaired.draft,
       logs: [
         createLog(
           "scriptDoctor",
-          [output.log, ...output.issues.map((issue) => `问题: ${issue}`)].join("\n")
+          [
+            output.log,
+            ...output.issues.map((issue) => `问题: ${issue}`),
+            ...repaired.logLines
+          ].join("\n")
         )
       ]
     }
@@ -2373,14 +2839,25 @@ export async function runStoryCreationAgents(
       signal
     )
 
-    const draft = normalizeStructuredDraft(output.draft)
+    const draft = normalizeDraft(normalizeStructuredDraft(output.draft))
+    const draftWithWarnings = {
+      ...draft,
+      warnings: [...draft.warnings, ...output.warnings]
+    }
+    const repaired = await repairDraftScripts(
+      state,
+      draftWithWarnings,
+      "一致性检查 Agent 输出后校验"
+    )
+    const logs = [createLog("consistencyChecker", output.log)]
+
+    if (repaired.logLines.length > 0) {
+      logs.push(createLog("scriptDoctor", repaired.logLines.join("\n")))
+    }
 
     return {
-      draft: {
-        ...draft,
-        warnings: [...draft.warnings, ...output.warnings]
-      },
-      logs: [createLog("consistencyChecker", output.log)]
+      draft: repaired.draft,
+      logs
     }
   }
 

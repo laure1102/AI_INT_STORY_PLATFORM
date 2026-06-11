@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { StoryActionFile, StoryValsFile } from "@story-mgr/core"
 import {
+  buildStoryScriptBuiltinAutocompleteItems,
   buildStoryScriptHighlightTokens,
   buildStoryScriptValAutocompleteItems,
   filterStoryScriptAutocompleteItems,
@@ -83,7 +84,10 @@ function createVarDraft(value?: { descr?: string; initial_value?: string; name?:
 }
 
 const globalAutocompleteCandidates = computed(() => {
-  return buildStoryScriptValAutocompleteItems(props.vals)
+  return mergeStoryScriptAutocompleteItems(
+    buildStoryScriptBuiltinAutocompleteItems(),
+    buildStoryScriptValAutocompleteItems(props.vals)
+  )
 })
 
 const branchVarAutocompleteCandidates = computed<StoryScriptAutocompleteItem[]>(() => {

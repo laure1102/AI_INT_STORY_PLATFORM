@@ -501,6 +501,12 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - supports `if`, `else`, `switch`, `for`, `while`, `break`, `continue`, and `return`
 - supports `//` line comments and `/* */` block comments in script fields
 - supports `Math`
+- supports safe helper globals: `Number`, `String`, `Boolean`, `parseInt`, `parseFloat`, `isNaN`, `isFinite`
+- supports safe string helpers: `trim`, `includes`, `startsWith`, `endsWith`, `slice`, `toLowerCase`, `toUpperCase`
+- supports safe formatting helpers: `toFixed`, `formatWan`
+- supports `Math.random()`
+- also supports a small whitelist of method aliases: `number.toFixed(...)`, `string.trim()`, `string.includes(...)`, `string.startsWith(...)`, `string.endsWith(...)`, `string.slice(...)`, `string.toLowerCase()`, `string.toUpperCase()`
+- arbitrary method calls outside that whitelist remain unsupported unless `StoryScript.md` is updated first
 - supports `invoke_once chain|pool|schedule <eventId> name=expression`
 - legacy `invoke_once graph|once|loop ...` remains compatible
 - loops are protected by both a max step limit and a max iteration limit

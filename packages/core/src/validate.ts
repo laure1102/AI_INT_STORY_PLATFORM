@@ -12,15 +12,24 @@ import type {
 } from "./types"
 import { findStoryRoleReference } from "./roles"
 import {
+  DEFAULT_MAX_CALC_NESTING_DEPTH,
   evaluateStoryBooleanExpression,
   validateStoryScript,
   validateStoryTextTemplate,
   validateStoryValsCalcRules
 } from "@story-mgr/runtime"
-import type { StoryScriptExecutionContext } from "@story-mgr/runtime"
+import type {
+  StoryScriptExecutionContext,
+  StoryScriptValidationIssue
+} from "@story-mgr/runtime"
 import type { StoryValsFile } from "./types"
+export type { StoryScriptValidationIssue } from "@story-mgr/runtime"
 
 type EventValidationGroupKey = "chainEvents" | "poolEvents" | "scheduleEvents"
+
+function normalizeStoryScriptText(value: unknown) {
+  return typeof value === "string" ? value : ""
+}
 
 interface StoryEventValidationShape {
   id: string
@@ -46,11 +55,56 @@ function buildCombinedStoryScriptVals(document: StoryDocument): StoryValsFile {
   }
 }
 
-function buildValidationBagReadableFunctions(document: StoryDocument) {
-  const itemIds = new Set(document.items.items.map((item) => item.id.trim()).filter(Boolean))
+function collectValidationItemIds(document: StoryDocument) {
+  return document.items.items.map((item) => item.id)
+}
+
+function buildValidationScriptContext(
+  document: StoryDocument,
+  context?: StoryScriptExecutionContext
+): StoryScriptExecutionContext {
+  return createStoryScriptValidationContext({
+    values: {
+      ...(context?.values ?? {})
+    },
+    assignableValues: {
+      ...(context?.assignableValues ?? {})
+    },
+    functions: {
+      ...(context?.functions ?? {})
+    },
+    itemIds: collectValidationItemIds(document),
+    bagMode: "write"
+  })
+}
+
+function buildValidationReadableContext(document: StoryDocument): StoryScriptExecutionContext {
+  return createStoryScriptValidationContext({
+    itemIds: collectValidationItemIds(document),
+    bagMode: "read"
+  })
+}
+
+export type StoryScriptValidationMode = "predicate" | "procedure" | "template"
+
+export type StoryScriptValidationBagMode = "read" | "write"
+
+export interface StoryScriptValidationContextOptions {
+  values?: Record<string, unknown>
+  assignableValues?: Record<string, unknown>
+  functions?: Record<string, (...args: unknown[]) => unknown>
+  itemIds?: Iterable<string>
+  bagMode?: StoryScriptValidationBagMode
+}
+
+function buildValidationBagReadableFunctionsFromIds(itemIds: Iterable<string>) {
+  const itemIdSet = new Set(
+    Array.from(itemIds, (itemId) => normalizeStoryScriptText(itemId).trim()).filter(Boolean)
+  )
+
   const assertItemId = (itemId: unknown) => {
     if (typeof itemId !== "string") {
-      return
+      throw new Error("bag item id is required.")
     }
 
     const normalizedItemId = itemId.trim()
@@ -58,7 +112,7 @@ function buildValidationBagReadableFunctions(document: StoryDocument) {
       throw new Error("bag item id is required.")
     }
 
-    if (!itemIds.has(normalizedItemId)) {
+    if (!itemIdSet.has(normalizedItemId)) {
       throw new Error(`bag item "${normalizedItemId}" does not exist in item library.`)
     }
   }
@@ -75,8 +129,15 @@ function buildValidationBagReadableFunctions(document: StoryDocument) {
   }
 }
 
-function buildValidationBagScriptFunctions(document: StoryDocument) {
-  const readableFunctions = buildValidationBagReadableFunctions(document)
+function buildValidationBagScriptFunctionsFromIds(
+  itemIds: Iterable<string>,
+  bagMode: StoryScriptValidationBagMode
+) {
+  const readableFunctions = buildValidationBagReadableFunctionsFromIds(itemIds)
+
+  if (bagMode === "read") {
+    return readableFunctions
+  }
 
   return {
     bag_add(_ownerId: unknown, itemId: unknown, quantity?: unknown) {
@@ -91,27 +152,70 @@ function buildValidationBagScriptFunctions(document: StoryDocument) {
   }
 }
 
-function buildValidationScriptContext(
-  document: StoryDocument,
-  context?: StoryScriptExecutionContext
+export function createStoryScriptValidationContext(
+  options: StoryScriptValidationContextOptions = {}
 ): StoryScriptExecutionContext {
+  const bagMode = options.bagMode ?? "write"
+
   return {
     values: {
-      ...(context?.values ?? {})
+      ...(options.values ?? {})
     },
     assignableValues: {
-      ...(context?.assignableValues ?? {})
+      ...(options.assignableValues ?? {})
     },
     functions: {
-      ...buildValidationBagScriptFunctions(document),
-      ...(context?.functions ?? {})
+      ...buildValidationBagScriptFunctionsFromIds(options.itemIds ?? [], bagMode),
+      ...(options.functions ?? {})
     }
   }
 }
 
-function buildValidationReadableContext(document: StoryDocument): StoryScriptExecutionContext {
+function createStoryScriptValidationIssueFromError(error: unknown): StoryScriptValidationIssue {
+  if (
+    error &&
+    typeof error === "object" &&
+    "lineNumber" in error &&
+    typeof (error as { lineNumber?: unknown }).lineNumber === "number"
+  ) {
+    return {
+      lineNumber: (error as { lineNumber: number }).lineNumber,
+      message: error instanceof Error ? error.message : "Script validation failed."
+    }
+  }
+
   return {
-    functions: buildValidationBagReadableFunctions(document)
+    lineNumber: 0,
+    message: error instanceof Error ? error.message : "Script validation failed."
+  }
+}
+
+export function validateStoryScriptContent(
+  valsFile: StoryValsFile,
+  source: string,
+  mode: StoryScriptValidationMode,
+  maxDepth = DEFAULT_MAX_CALC_NESTING_DEPTH,
+  context?: StoryScriptExecutionContext
+): StoryScriptValidationIssue[] {
+  const trimmedSource = normalizeStoryScriptText(source).trim()
+
+  if (!trimmedSource) {
+    return []
+  }
+
+  if (mode === "template") {
+    return validateStoryTextTemplate(source)
+  }
+
+  if (mode === "procedure") {
+    return validateStoryScript(valsFile, source, maxDepth, context)
+  }
+
+  try {
+    evaluateStoryBooleanExpression(valsFile, source, maxDepth, context)
+    return []
+  } catch (error) {
+    return [createStoryScriptValidationIssueFromError(error)]
   }
 }
 

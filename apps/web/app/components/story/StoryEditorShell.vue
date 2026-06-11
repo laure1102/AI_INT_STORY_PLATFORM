@@ -362,6 +362,10 @@ const storyScriptVals = computed<StoryValsFile>(() => {
   }
 })
 
+const storyScriptItemIds = computed(() => {
+  return storyDocument.value?.items.items.map((item) => item.id) ?? []
+})
+
 function buildGraphEventBranchAutocompleteItemsFromActions(
   actions: StoryActionFile[]
 ): StoryScriptAutocompleteItem[] {
@@ -1853,6 +1857,7 @@ watch(
               :parent-event-id="activeGraphParentNodeId"
               :roles="storyDocument.roles"
               :saving="isSaving"
+              :item-ids="storyScriptItemIds"
               :vals="storyScriptVals"
               @close="closeEditor"
               @quick-create-location="handleQuickCreateLocation"
@@ -1877,6 +1882,7 @@ watch(
               :roles="storyDocument.roles"
               :saving="isSaving"
               :scenes="storyDocument.scenes"
+              :item-ids="storyScriptItemIds"
               :vals="storyScriptVals"
               @close="closeEditor"
               @quick-create-location="handleQuickCreateLocation"
@@ -1892,6 +1898,7 @@ watch(
               :saving="isSaving"
               :scenes="storyDocument.scenes"
               :schedule-events="storyDocument.scheduleEvents"
+              :item-ids="storyScriptItemIds"
               :vals="storyScriptVals"
               @close="closeEditor"
               @quick-create-location="handleQuickCreateLocation"

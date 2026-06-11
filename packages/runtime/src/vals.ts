@@ -51,6 +51,154 @@ export interface StoryScriptInvocation {
   args: Record<string, unknown>
 }
 
+function toStoryScriptStringValue(value: unknown) {
+  return String(value)
+}
+
+function toStoryScriptFiniteNumberValue(value: unknown, functionName: string) {
+  const numericValue = Number(value)
+
+  if (!Number.isFinite(numericValue)) {
+    throw new Error(`${functionName} expects a finite number.`)
+  }
+
+  return numericValue
+}
+
+function toStoryScriptPrecisionValue(value: unknown, functionName: string, defaultValue = 0) {
+  if (value === undefined) {
+    return defaultValue
+  }
+
+  const numericValue = Number(value)
+
+  if (!Number.isFinite(numericValue)) {
+    throw new Error(`${functionName} digits must be a finite number.`)
+  }
+
+  const normalizedValue = Math.trunc(numericValue)
+  if (normalizedValue < 0 || normalizedValue > 100) {
+    throw new Error(`${functionName} digits must be between 0 and 100.`)
+  }
+
+  return normalizedValue
+}
+
+function trimStoryScriptFormattedDecimalText(value: string) {
+  if (!value.includes(".")) {
+    return value
+  }
+
+  return value
+    .replace(/(\.\d*?[1-9])0+$/u, "$1")
+    .replace(/\.0+$/u, "")
+}
+
+const STORY_SCRIPT_COMMON_GLOBALS = {
+  Number: (value: unknown) => Number(value),
+  String: (value: unknown) => String(value),
+  Boolean: (value: unknown) => Boolean(value),
+  parseInt: (value: unknown, radix?: unknown) => {
+    const parsedRadix = radix === undefined ? undefined : Number(radix)
+    return parsedRadix === undefined
+      ? parseInt(String(value))
+      : parseInt(String(value), parsedRadix)
+  },
+  parseFloat: (value: unknown) => parseFloat(String(value)),
+  isNaN: (value: unknown) => Number.isNaN(Number(value)),
+  isFinite: (value: unknown) => Number.isFinite(Number(value))
+} as const
+
+const STORY_SCRIPT_STRING_GLOBALS = {
+  trim: (value: unknown) => toStoryScriptStringValue(value).trim(),
+  includes: (value: unknown, search: unknown, position?: unknown) => {
+    const text = toStoryScriptStringValue(value)
+    const normalizedPosition = position === undefined ? undefined : Number(position)
+    return text.includes(toStoryScriptStringValue(search), normalizedPosition)
+  },
+  startsWith: (value: unknown, search: unknown, position?: unknown) => {
+    const text = toStoryScriptStringValue(value)
+    const normalizedPosition = position === undefined ? undefined : Number(position)
+    return text.startsWith(toStoryScriptStringValue(search), normalizedPosition)
+  },
+  endsWith: (value: unknown, search: unknown, length?: unknown) => {
+    const text = toStoryScriptStringValue(value)
+    const normalizedLength = length === undefined ? undefined : Number(length)
+    return text.endsWith(toStoryScriptStringValue(search), normalizedLength)
+  },
+  slice: (value: unknown, start?: unknown, end?: unknown) => {
+    const text = toStoryScriptStringValue(value)
+    const normalizedStart = start === undefined ? undefined : Number(start)
+    const normalizedEnd = end === undefined ? undefined : Number(end)
+    return text.slice(normalizedStart, normalizedEnd)
+  },
+  toLowerCase: (value: unknown) => toStoryScriptStringValue(value).toLowerCase(),
+  toUpperCase: (value: unknown) => toStoryScriptStringValue(value).toUpperCase()
+} as const
+
+const STORY_SCRIPT_FORMAT_GLOBALS = {
+  toFixed: (value: unknown, digits?: unknown) => {
+    const numericValue = toStoryScriptFiniteNumberValue(value, "toFixed")
+    const normalizedDigits = toStoryScriptPrecisionValue(digits, "toFixed")
+    return numericValue.toFixed(normalizedDigits)
+  },
+  formatWan: (value: unknown, digits?: unknown) => {
+    const numericValue = toStoryScriptFiniteNumberValue(value, "formatWan")
+    const normalizedDigits = toStoryScriptPrecisionValue(digits, "formatWan", 1)
+
+    if (Math.abs(numericValue) < 10000) {
+      return trimStoryScriptFormattedDecimalText(numericValue.toFixed(normalizedDigits))
+    }
+
+    return `${trimStoryScriptFormattedDecimalText((numericValue / 10000).toFixed(normalizedDigits))}万`
+  }
+} as const
+
+interface StoryScriptMethodBindingDefinition {
+  expectedType: "number" | "string"
+  invoke: (target: unknown, ...args: unknown[]) => unknown
+}
+
+const STORY_SCRIPT_METHOD_BINDINGS = {
+  toFixed: {
+    expectedType: "number",
+    invoke: (target: unknown, digits?: unknown) =>
+      STORY_SCRIPT_FORMAT_GLOBALS.toFixed(target, digits)
+  },
+  trim: {
+    expectedType: "string",
+    invoke: (target: unknown) => STORY_SCRIPT_STRING_GLOBALS.trim(target)
+  },
+  includes: {
+    expectedType: "string",
+    invoke: (target: unknown, search: unknown, position?: unknown) =>
+      STORY_SCRIPT_STRING_GLOBALS.includes(target, search, position)
+  },
+  startsWith: {
+    expectedType: "string",
+    invoke: (target: unknown, search: unknown, position?: unknown) =>
+      STORY_SCRIPT_STRING_GLOBALS.startsWith(target, search, position)
+  },
+  endsWith: {
+    expectedType: "string",
+    invoke: (target: unknown, search: unknown, length?: unknown) =>
+      STORY_SCRIPT_STRING_GLOBALS.endsWith(target, search, length)
+  },
+  slice: {
+    expectedType: "string",
+    invoke: (target: unknown, start?: unknown, end?: unknown) =>
+      STORY_SCRIPT_STRING_GLOBALS.slice(target, start, end)
+  },
+  toLowerCase: {
+    expectedType: "string",
+    invoke: (target: unknown) => STORY_SCRIPT_STRING_GLOBALS.toLowerCase(target)
+  },
+  toUpperCase: {
+    expectedType: "string",
+    invoke: (target: unknown) => STORY_SCRIPT_STRING_GLOBALS.toUpperCase(target)
+  }
+} satisfies Record<string, StoryScriptMethodBindingDefinition>
+
 type StoryScriptMode = "predicate" | "procedure"
 
 type StoryScriptControlFlow =
@@ -209,7 +357,10 @@ const CALC_MATH_CONTEXT = {
   __math_sin: Math.sin,
   __math_sqrt: Math.sqrt,
   __math_tan: Math.tan,
-  __math_trunc: Math.trunc
+  __math_trunc: Math.trunc,
+  ...STORY_SCRIPT_COMMON_GLOBALS,
+  ...STORY_SCRIPT_STRING_GLOBALS,
+  ...STORY_SCRIPT_FORMAT_GLOBALS
 } as const
 
 const CALC_MATH_CONTEXT_KEYS = Object.keys(CALC_MATH_CONTEXT) as Array<
@@ -270,6 +421,22 @@ const CALC_BARE_MATH_FUNCTION_ALIASES: Array<[RegExp, string]> = [
 
 const SCRIPT_RESERVED_IDENTIFIERS = new Set([
   "Math",
+  "Number",
+  "String",
+  "Boolean",
+  "parseInt",
+  "parseFloat",
+  "isNaN",
+  "isFinite",
+  "trim",
+  "includes",
+  "startsWith",
+  "endsWith",
+  "slice",
+  "toLowerCase",
+  "toUpperCase",
+  "toFixed",
+  "formatWan",
   "E",
   "PI",
   "abs",
@@ -795,11 +962,19 @@ const STORY_SCRIPT_SAFE_MATH = Object.freeze({
   min: Math.min,
   pow: Math.pow,
   round: Math.round,
+  random: Math.random,
   sign: Math.sign,
   sin: Math.sin,
   sqrt: Math.sqrt,
   tan: Math.tan,
   trunc: Math.trunc
+})
+
+const STORY_SCRIPT_SAFE_GLOBALS = Object.freeze({
+  Math: STORY_SCRIPT_SAFE_MATH,
+  ...STORY_SCRIPT_COMMON_GLOBALS,
+  ...STORY_SCRIPT_STRING_GLOBALS,
+  ...STORY_SCRIPT_FORMAT_GLOBALS
 })
 
 function isStoryScriptPlaceholderToken(token: string) {
@@ -1173,12 +1348,47 @@ function resolveStoryScriptPlaceholderValue(
 }
 
 function getStoryScriptSafeIdentifierValue(identifier: string) {
-  if (identifier === "Math") {
-    return STORY_SCRIPT_SAFE_MATH
+  if (Object.prototype.hasOwnProperty.call(STORY_SCRIPT_SAFE_GLOBALS, identifier)) {
+    return STORY_SCRIPT_SAFE_GLOBALS[identifier as keyof typeof STORY_SCRIPT_SAFE_GLOBALS]
   }
 
   if (Object.prototype.hasOwnProperty.call(STORY_SCRIPT_SAFE_MATH, identifier)) {
     return STORY_SCRIPT_SAFE_MATH[identifier as keyof typeof STORY_SCRIPT_SAFE_MATH]
+  }
+
+  return undefined
+}
+
+function getStoryScriptPropertyAccessValue(target: unknown, propertyName: string) {
+  if (target === STORY_SCRIPT_SAFE_MATH) {
+    if (Object.prototype.hasOwnProperty.call(STORY_SCRIPT_SAFE_MATH, propertyName)) {
+      return STORY_SCRIPT_SAFE_MATH[propertyName as keyof typeof STORY_SCRIPT_SAFE_MATH]
+    }
+
+    return undefined
+  }
+
+  const binding = STORY_SCRIPT_METHOD_BINDINGS[
+    propertyName as keyof typeof STORY_SCRIPT_METHOD_BINDINGS
+  ]
+
+  if (!binding) {
+    return undefined
+  }
+
+  const createMethodInvoker = (
+    methodBinding: StoryScriptMethodBindingDefinition,
+    boundTarget: string | number
+  ) => {
+    return (...args: unknown[]) => methodBinding.invoke(boundTarget, ...args)
+  }
+
+  if (binding.expectedType === "number" && typeof target === "number") {
+    return createMethodInvoker(binding, target)
+  }
+
+  if (binding.expectedType === "string" && typeof target === "string") {
+    return createMethodInvoker(binding, target)
   }
 
   return undefined
@@ -1733,11 +1943,9 @@ function evaluateStoryScriptAstExpression(
 
   if (ts.isPropertyAccessExpression(expression)) {
     const target = evaluateStoryScriptAstExpression(expression.expression, state)
-    if (target === STORY_SCRIPT_SAFE_MATH) {
-      const member = expression.name.text
-      if (Object.prototype.hasOwnProperty.call(STORY_SCRIPT_SAFE_MATH, member)) {
-        return STORY_SCRIPT_SAFE_MATH[member as keyof typeof STORY_SCRIPT_SAFE_MATH]
-      }
+    const resolvedPropertyValue = getStoryScriptPropertyAccessValue(target, expression.name.text)
+    if (resolvedPropertyValue !== undefined) {
+      return resolvedPropertyValue
     }
 
     throw createStoryScriptErrorFromNode(
@@ -2239,6 +2447,10 @@ function assignStoryScriptGlobalValue(
   value: unknown,
   context?: StoryScriptExecutionContext
 ) {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new Error("StoryScript cannot assign NaN or infinite numbers to persistent values.")
+  }
+
   if (token.startsWith("call.")) {
     throw new Error(`Cannot assign to invoke parameter: \${${token}}`)
   }
