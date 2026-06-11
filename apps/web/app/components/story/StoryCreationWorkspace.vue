@@ -31,6 +31,7 @@ interface DraftImpact {
 interface FeedbackHistoryItem {
   id: number
   content: string
+  mode: StoryCreationAgentRunMode
   status: FeedbackHistoryStatus
   error?: string
 }
@@ -407,6 +408,8 @@ function runAgent() {
   }
 
   clearFeedbackHistory()
+  const runId = appendFeedbackHistory(instruction, "new")
+  activeFeedbackId.value = runId
   emit("runAgent", instruction)
 }
 
@@ -417,13 +420,13 @@ function refineDraft() {
     return
   }
 
-  const feedbackId = appendFeedbackHistory(instruction)
+  const feedbackId = appendFeedbackHistory(instruction, "feedback")
   activeFeedbackId.value = feedbackId
   feedbackText.value = ""
   emit("runAgent", instruction, cloneCreationDraft(editableDraft.value))
 }
 
-function appendFeedbackHistory(content: string) {
+function appendFeedbackHistory(content: string, mode: StoryCreationAgentRunMode) {
   feedbackSeq.value += 1
   const id = feedbackSeq.value
 
@@ -431,6 +434,7 @@ function appendFeedbackHistory(content: string) {
     {
       id,
       content,
+      mode,
       status: "running"
     },
     ...feedbackHistory.value
@@ -469,9 +473,9 @@ function clearFeedbackHistory() {
   activeFeedbackId.value = null
 }
 
-function feedbackStatusLabel(status: FeedbackHistoryStatus) {
+function feedbackStatusLabel(status: FeedbackHistoryStatus, mode: StoryCreationAgentRunMode) {
   if (status === "running") {
-    return "优化中"
+    return mode === "new" ? "创作中" : "优化中"
   }
 
   if (status === "failed") {
@@ -814,7 +818,7 @@ watch(
 watch(
   () => [props.agentRunning, props.agentRunMode, props.agentError] as const,
   ([running], [previousRunning, previousMode]) => {
-    if (previousRunning && previousMode === "feedback" && !running) {
+    if (previousRunning && previousMode && !running) {
       finishActiveFeedback(props.agentError ? "failed" : "done", props.agentError)
     }
   }
@@ -926,7 +930,7 @@ watch(
                   class="creation-feedback-history__state"
                   :class="getFeedbackStatusClass(item.status)"
                 >
-                  {{ feedbackStatusLabel(item.status) }}
+                  {{ feedbackStatusLabel(item.status, item.mode) }}
                 </span>
                 <p>{{ item.content }}</p>
                 <small v-if="item.error">{{ item.error }}</small>

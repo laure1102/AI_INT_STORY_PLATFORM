@@ -18,6 +18,7 @@ import {
   type StoryNormalRoleDefinition,
   type StoryOnceEventFile,
   type StoryRolesFile,
+  type StoryValDefinition,
   type StoryValEntryDefinition,
   type StoryValsFile
 } from "@story-mgr/core"
@@ -78,7 +79,9 @@ const ROLE_ERROR_CODES: Record<StoryCreationAgentRole, string> = {
 }
 
 const RELEVANT_ITEM_DETAIL_LIMIT = 40
+const RELEVANT_VARIABLE_DETAIL_LIMIT = 40
 const MAX_ITEM_SEARCH_TERMS = 180
+const MAX_VARIABLE_SEARCH_TERMS = 180
 
 const draftDialogueSchema = z.object({
   speaker_type: z.enum(["player", "object"]).describe("player 表示玩家主角，object 表示事件对象。"),
@@ -457,6 +460,26 @@ function formatVariables(story: StoryDocument) {
   }, 9000)
 }
 
+function formatValuePreview(value: unknown) {
+  if (value === undefined) {
+    return ""
+  }
+
+  if (typeof value === "string") {
+    return value
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value)
+  }
+
+  try {
+    return JSON.stringify(value) ?? ""
+  } catch {
+    return String(value)
+  }
+}
+
 const COMMON_ITEM_SEARCH_TERMS = new Set([
   "一个",
   "不会",
@@ -531,6 +554,216 @@ function collectSearchTerms(rawText: string) {
   }
 
   return terms
+}
+
+function buildVariableSearchCorpus(
+  story: StoryDocument,
+  instruction: string,
+  baseDraft: StoryCreationDraft | null
+) {
+  const bible = story.storyBible
+  return [
+    instruction,
+    story.story.title,
+    story.story.description ?? "",
+    ...(story.story.tags ?? []),
+    bible.background,
+    bible.golden_finger,
+    bible.protagonist,
+    bible.world_rules,
+    bible.outline,
+    bible.current_arc,
+    bible.gameplay_design,
+    bible.style_guide,
+    bible.constraints,
+    baseDraft ? formatJson(baseDraft, 8000) : ""
+  ].join("\n")
+}
+
+function buildVariableSearchText(
+  sourceLabel: string,
+  group: StoryValDefinition,
+  entry: StoryValEntryDefinition
+) {
+  return [
+    sourceLabel,
+    group.name,
+    group.description ?? "",
+    entry.name,
+    entry.description ?? "",
+    entry.value_type,
+    entry.calc_rule,
+    formatValuePreview(entry.value)
+  ].join("\n").toLowerCase()
+}
+
+function scoreRelevantVariable(
+  sourceLabel: string,
+  group: StoryValDefinition,
+  entry: StoryValEntryDefinition,
+  terms: Set<string>
+) {
+  if (terms.size === 0) {
+    return 0
+  }
+
+  const fullKey = `${sourceLabel}.${group.name}.${entry.name}`.toLowerCase()
+  const shortKey = `${group.name}.${entry.name}`.toLowerCase()
+  const groupName = group.name.toLowerCase()
+  const groupDescription = (group.description ?? "").toLowerCase()
+  const entryName = entry.name.toLowerCase()
+  const entryDescription = (entry.description ?? "").toLowerCase()
+  const calcRule = entry.calc_rule.toLowerCase()
+  const valuePreview = formatValuePreview(entry.value).toLowerCase()
+  const searchText = buildVariableSearchText(sourceLabel, group, entry)
+  let score = 0
+
+  for (const term of terms) {
+    if (fullKey === term || shortKey === term || entryName === term) {
+      score += 50
+      continue
+    }
+
+    if (groupName === term || groupDescription === term) {
+      score += 18
+      continue
+    }
+
+    if (entryDescription === term) {
+      score += 16
+      continue
+    }
+
+    if (calcRule.includes(term)) {
+      score += term.length >= 4 ? 8 : 4
+      continue
+    }
+
+    if (valuePreview.includes(term)) {
+      score += term.length >= 4 ? 8 : 4
+      continue
+    }
+
+    if (fullKey.includes(term) || shortKey.includes(term) || entryName.includes(term)) {
+      score += term.length >= 4 ? 12 : 7
+      continue
+    }
+
+    if (searchText.includes(term)) {
+      score += term.length >= 4 ? 5 : 2
+    }
+  }
+
+  return score
+}
+
+function selectRelevantVariableDetails(
+  story: StoryDocument,
+  instruction: string,
+  baseDraft: StoryCreationDraft | null
+) {
+  const terms = collectSearchTerms(buildVariableSearchCorpus(story, instruction, baseDraft))
+  const searchableVariables = [
+    ...story.vals.variables.flatMap((group, groupIndex) =>
+      group.vals.map((entry, entryIndex) => ({
+        source: "global" as const,
+        group,
+        groupIndex,
+        entry,
+        entryIndex
+      }))
+    ),
+    ...story.systemVals.variables.flatMap((group, groupIndex) =>
+      group.vals.map((entry, entryIndex) => ({
+        source: "system" as const,
+        group,
+        groupIndex,
+        entry,
+        entryIndex
+      }))
+    )
+  ]
+
+  return searchableVariables
+    .map((item) => ({
+      ...item,
+      score: scoreRelevantVariable(item.source, item.group, item.entry, terms)
+    }))
+    .filter((item) => item.score > 0)
+    .sort((left, right) => {
+      const sourceOrder = left.source === right.source
+        ? 0
+        : left.source === "global"
+          ? -1
+          : 1
+
+      return right.score - left.score
+        || sourceOrder
+        || left.groupIndex - right.groupIndex
+        || left.entryIndex - right.entryIndex
+    })
+    .slice(0, RELEVANT_VARIABLE_DETAIL_LIMIT)
+    .map(({ source, group, entry, score }) => ({
+      source,
+      group: group.name,
+      group_description: group.description ?? "",
+      key: `${source}.${group.name}.${entry.name}`,
+      name: entry.name,
+      description: entry.description ?? "",
+      value_type: entry.value_type,
+      value: entry.value ?? null,
+      calc_rule: entry.calc_rule,
+      relevance_score: score
+    }))
+}
+
+function formatVariableIndexSection(sourceLabel: string, groups: StoryValDefinition[]) {
+  if (groups.length === 0) {
+    return `${sourceLabel}: (empty)`
+  }
+
+  const lines: string[] = [`${sourceLabel}:`]
+
+  for (const group of groups) {
+    for (const entry of group.vals) {
+      const preview = entry.value_type === "calc"
+        ? truncateText(entry.calc_rule, 120)
+        : truncateText(formatValuePreview(entry.value), 120)
+
+      lines.push([
+        `${group.name}.${entry.name}`,
+        entry.description ?? "",
+        entry.value_type,
+        preview || "-"
+      ].join(" | "))
+    }
+  }
+
+  return lines.join("\n")
+}
+
+function formatVariableIndex(story: StoryDocument) {
+  return [
+    formatVariableIndexSection("global", story.vals.variables),
+    "",
+    formatVariableIndexSection("system", story.systemVals.variables)
+  ].join("\n")
+}
+
+function formatExistingVariables(
+  story: StoryDocument,
+  instruction: string,
+  baseDraft: StoryCreationDraft | null
+) {
+  return [
+    formatVariables(story),
+    "",
+    "variableIndexAll: all existing variables, compact format `group.name | description | value_type | value/calc_rule`. Global and system variables are the first place to look before creating new ones.",
+    formatVariableIndex(story),
+    "",
+    `relevantVariableDetails: top ${RELEVANT_VARIABLE_DETAIL_LIMIT} local keyword matches with richer fields. Empty does not mean the variable library is empty; use variableIndexAll for full existence checks.`,
+    formatJson(selectRelevantVariableDetails(story, instruction, baseDraft), 14000)
+  ].join("\n")
 }
 
 function buildItemSearchCorpus(
@@ -779,7 +1012,7 @@ function buildStoryContext(
     formatStoryBible(story),
     "",
     "【现有变量】",
-    formatVariables(story),
+    formatExistingVariables(story, instruction, baseDraft),
     "",
     "【现有地点/角色/场景/物品】",
     formatExistingAssets(story, instruction, baseDraft),
@@ -800,6 +1033,8 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "chain/pool/schedule 中 trigger_mode 为 invoke 的事件只供脚本调用，不参与普通调度。",
     "角色引用使用 player、normal:<roleId>、important:<roleId>。",
     "地点使用地点 id。所有 id 尽量使用 ASCII 小写、数字、下划线或短横线。",
+    "变量必须优先复用现有变量；判断变量是否已存在时必须先查 variableIndexAll 全量轻量索引；relevantVariableDetails 只提供本次更相关变量的详细字段，不代表完整变量库。",
+    "system 里的 calc 变量就是现成规则资产，尤其是教育、就业、医疗、治安、基础建设等指数，不要默认不存在，也不要为了表达方便新造同义变量。",
     "物品必须优先复用现有物品 id；确需新增时输出 items 草稿，category_id 必须来自现有物品分类。",
     "判断物品是否已存在时必须先查 itemIndexAll 全量轻量索引；relevantItemDetails 只提供本次更相关物品的详细字段，不代表完整物品库。",
     "物品获得、消耗和检查必须走 StoryScript 背包函数，不要编造 reward/items/consume 等未知事件字段。",
