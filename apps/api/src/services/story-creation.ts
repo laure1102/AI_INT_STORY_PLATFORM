@@ -711,10 +711,26 @@ function selectRelevantVariableDetails(
       name: entry.name,
       description: entry.description ?? "",
       value_type: entry.value_type,
+      write_permission: getVariableWritePermission(source, entry),
       value: entry.value ?? null,
       calc_rule: entry.calc_rule,
       relevance_score: score
     }))
+}
+
+function getVariableWritePermission(
+  sourceLabel: string,
+  entry: Pick<StoryValEntryDefinition, "value_type">
+) {
+  if (sourceLabel === "system") {
+    return "read_only: system"
+  }
+
+  if (entry.value_type === "calc") {
+    return "read_only: calc"
+  }
+
+  return "writable: value"
 }
 
 function formatVariableIndexSection(sourceLabel: string, groups: StoryValDefinition[]) {
@@ -734,6 +750,7 @@ function formatVariableIndexSection(sourceLabel: string, groups: StoryValDefinit
         `${group.name}.${entry.name}`,
         entry.description ?? "",
         entry.value_type,
+        getVariableWritePermission(sourceLabel, entry),
         preview || "-"
       ].join(" | "))
     }
@@ -758,8 +775,10 @@ function formatExistingVariables(
   return [
     formatVariables(story),
     "",
-    "variableIndexAll: all existing variables, compact format `group.name | description | value_type | value/calc_rule`. Global and system variables are the first place to look before creating new ones.",
+    "variableIndexAll: all existing variables, compact format `group.name | description | value_type | write_permission | value/calc_rule`. Global and system variables are the first place to look before creating new ones.",
     formatVariableIndex(story),
+    "",
+    "StoryScript write rules: global value variables are writable in init_script/end_script/action.exec_script; global calc variables are read-only derived rules; system.* and call.* are read-only. If a calc aggregate must change, write one or more writable value variables used by its calc_rule.",
     "",
     `relevantVariableDetails: top ${RELEVANT_VARIABLE_DETAIL_LIMIT} local keyword matches with richer fields. Empty does not mean the variable library is empty; use variableIndexAll for full existence checks.`,
     formatJson(selectRelevantVariableDetails(story, instruction, baseDraft), 14000)
@@ -1034,7 +1053,10 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "角色引用使用 player、normal:<roleId>、important:<roleId>。",
     "地点使用地点 id。所有 id 尽量使用 ASCII 小写、数字、下划线或短横线。",
     "变量必须优先复用现有变量；判断变量是否已存在时必须先查 variableIndexAll 全量轻量索引；relevantVariableDetails 只提供本次更相关变量的详细字段，不代表完整变量库。",
-    "system 里的 calc 变量就是现成规则资产，尤其是教育、就业、医疗、治安、基础建设等指数，不要默认不存在，也不要为了表达方便新造同义变量。",
+    "现有变量里的 calc 变量就是现成规则资产，尤其是教育、就业、医疗、治安、基础建设等指数；不要默认不存在，也不要为了表达方便新造同义变量。",
+    "StoryScript 过程脚本允许直接写回普通全局 value 变量，例如 `${player.money} += 100`、`${county.renkou_young} = Math.max(0, ${county.renkou_young} + delta)`。",
+    "StoryScript 禁止写 calc、system.*、call.*：calc 是只读派生值；如果要改变 calc 汇总值，必须写它 calc_rule 依赖的普通 value 分项，或在 variables 草稿中新增普通 value 变量作为持久化字段。",
+    "不要声称脚本接口缺少安全写回能力；当前引擎支持在 init_script、end_script、action.exec_script 中写普通 value 变量。",
     "物品必须优先复用现有物品 id；确需新增时输出 items 草稿，category_id 必须来自现有物品分类。",
     "判断物品是否已存在时必须先查 itemIndexAll 全量轻量索引；relevantItemDetails 只提供本次更相关物品的详细字段，不代表完整物品库。",
     "物品获得、消耗和检查必须走 StoryScript 背包函数，不要编造 reward/items/consume 等未知事件字段。",
@@ -2151,6 +2173,7 @@ export async function runStoryCreationAgents(
         state.baseDraft
           ? "你的任务：把用户反馈转成可执行修订简报，明确当前草稿需要保留、增强、删除或重写的部分。"
           : "你的任务：把用户指令转成可执行创作简报，明确本次要解决的可玩体验、爽点、玩家选择空间和风险。",
+        "如果用户要求修改或统计数值，必须区分只读 calc 汇总和可写 value 分项；不要把普通 value 变量写回误判为引擎不支持。",
         "请避免只给文学大纲，必须面向后续结构化事件生成。"
       ].join("\n\n"),
       signal
@@ -2180,7 +2203,8 @@ export async function runStoryCreationAgents(
         `总主编简报:\n${state.creativeBrief}`,
         state.baseDraft
           ? "你的任务：根据反馈修订剧情规划。要说明如何调整现有事件、变量、地点和角色，避免无必要地重建整批草稿。"
-          : "你的任务：规划一个可以进入游戏事件数据的短篇章。必须写出玩家可选分歧，而不是单向剧情段落。"
+          : "你的任务：规划一个可以进入游戏事件数据的短篇章。必须写出玩家可选分歧，而不是单向剧情段落。",
+        "涉及规则数值时，把读 calc、写 value 的落地路径写清楚；例如总人口是 calc 时，应写年轻/儿童/老人等 value 分项。"
       ].join("\n\n"),
       signal
     )
@@ -2227,6 +2251,8 @@ export async function runStoryCreationAgents(
           ? "你的任务：基于当前待优化草稿输出完整修订版。除非反馈要求重做，否则保留已有 id、变量 key、角色 key、事件 next 和集合类型，必要时补充或重写具体字段。"
           : "你的任务：生成可预览的结构化剧情草稿，默认 3 到 8 个事件。",
         "chain 事件可以通过 next 组成小剧情线；pool 事件必须是可被 AI 剧情导演挑选的平面事件；schedule 事件必须适合时间循环。",
+        "如果事件需要持久化改变数值，优先在 init_script 或 end_script 写普通 value 变量；可以读取 calc 变量参与计算，但不能给 calc 变量赋值。",
+        "如果用户要求改变一个 calc 汇总，例如人口总量，应写入它依赖的普通 value 分项；如现有分项不足，在 variables 中新增普通 value 变量并在脚本中引用。",
         "如剧情涉及玩家获得、消耗或检查物品，在 init_script/end_script/操作脚本中使用 bag_add、bag_remove、bag_count、bag_has；不要在事件 JSON 中新增奖励或消耗字段。",
         "不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议和风险说明。"
       ].join("\n\n"),
@@ -2252,6 +2278,8 @@ export async function runStoryCreationAgents(
         buildBasePrompt("脚本审校", state),
         `待审校草稿:\n${formatJson(state.draft, 16000)}`,
         "你的任务：检查 init_script、end_script、trigger_expr、dialogue 占位符是否保守可用。",
+        "脚本权限审校重点：普通全局 value 变量可写；calc、system.*、call.* 不可写。发现写 calc 汇总时，改为写其 calc_rule 依赖的普通 value 分项。",
+        "不要因为脚本涉及持久化变量写入就清空脚本；只有无法确定具体 value 写入目标时才清空并说明需要新增变量。",
         "如果脚本不确定，宁可清空脚本并在 issues/warnings 说明，也不要生成不可执行的复杂脚本。"
       ].join("\n\n"),
       signal

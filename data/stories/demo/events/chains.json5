@@ -89,7 +89,7 @@
   {
     end_script: '',
     id: '1st_give_money',
-    init_script: '${player.money} += ${player.first_day_give_money}\nbag_add("player", "population_flow_report", 1)\nbag_add("player", "daily_cash_card", 1)',
+    init_script: '${player.money} += ${player.first_day_give_money}',
     invoke_params: [],
     location: '',
     next: [

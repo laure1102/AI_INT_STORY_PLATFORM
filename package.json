@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.31.0",
   "scripts": {
-    "dev": "concurrently \"pnpm dev:api\" \"pnpm dev:web\"",
+    "dev": "concurrently -k --kill-timeout 5000 \"pnpm dev:api\" \"pnpm dev:web\"",
     "dev:api": "pnpm --filter @story-mgr/api dev",
     "dev:web": "pnpm --filter @story-mgr/web dev",
     "tui": "powershell -NoProfile -Command \"$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); chcp 65001 > $null; pnpm --filter @story-mgr/tui-client dev\"",

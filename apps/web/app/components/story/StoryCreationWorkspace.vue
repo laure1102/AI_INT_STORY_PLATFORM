@@ -172,6 +172,18 @@ const isNewCreationRunning = computed(() => {
   return props.agentRunning && props.agentRunMode === "new"
 })
 
+const abortAgentLabel = computed(() => {
+  if (props.agentRunMode === "feedback") {
+    return "中止优化"
+  }
+
+  if (props.agentRunMode === "new") {
+    return "中止生成"
+  }
+
+  return "中止当前任务"
+})
+
 const activeFeedbackItem = computed(() => {
   if (activeFeedbackId.value === null) {
     return null
@@ -910,15 +922,25 @@ watch(
                 <span class="eyebrow">Feedback</span>
                 <strong>反馈优化</strong>
               </div>
-              <button
-                class="btn-primary"
-                type="button"
-                :disabled="!canRefineDraft"
-                @click="refineDraft"
-              >
-                {{ isFeedbackRunning ? "优化中..." : "反馈优化" }}
-              </button>
-            </div>
+              <div class="creation-feedback__actions">
+                <button
+                  class="btn-primary"
+                  type="button"
+                  :disabled="!canRefineDraft"
+                  @click="refineDraft"
+                >
+                  {{ isFeedbackRunning ? "优化中..." : "反馈优化" }}
+                </button>
+                <button
+                  v-if="agentRunning"
+                  class="btn-secondary"
+                  type="button"
+                  @click="emit('abortAgent')"
+                >
+                  {{ abortAgentLabel }}
+                </button>
+              </div>
+          </div>
             <div v-if="isFeedbackRunning" class="creation-feedback__status">
               <span class="creation-feedback__dot" aria-hidden="true" />
               <strong>优化中</strong>
@@ -1525,6 +1547,14 @@ watch(
   gap: 10px;
 }
 
+.creation-feedback__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .creation-command-panel__head strong,
 .creation-feedback__head strong {
   display: block;
@@ -1634,6 +1664,10 @@ watch(
   background: rgba(0, 0, 0, 0.12);
 }
 
+.creation-feedback-history__item > * {
+  align-self: start;
+}
+
 .creation-feedback-history__item p {
   margin: 0;
   min-width: 0;
@@ -1652,6 +1686,10 @@ watch(
 }
 
 .creation-feedback-history__state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
   width: fit-content;
   padding: 2px 7px;
   border: 1px solid rgba(255, 255, 255, 0.12);
