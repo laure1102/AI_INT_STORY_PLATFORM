@@ -310,6 +310,10 @@ ${player.money} += 100 // 行尾注释
 invoke_once pool test1 mama=${county.level}
 invoke_once chain event_a mood=${county.level}
 invoke_once schedule daily_tax day=${system.now_day}
+invoke_once chain event_b delay_hours=6 mood=${county.level}
+invoke_once pool rumor_event delay_days=1 county_id=${county.id}
+invoke_once schedule monthly_tax delay_months=1
+invoke_once chain anniversary_event delay_years=1
 ```
 
 规则：
@@ -321,6 +325,38 @@ invoke_once schedule daily_tax day=${system.now_day}
 - 第二个参数为目标事件 `id`
 - 后续参数使用 `name=expression`
 - 不同步执行
+- 后续参数分为两类：
+  - 调用参数：会传入目标事件，目标事件内可通过 `${call.xxx}` 读取
+  - 调度元参数：只影响调度，不会传入目标事件，也不会出现在 `${call.xxx}` 中
+- 当前支持的调度元参数只有以下 4 个：
+  - `delay_hours`
+  - `delay_days`
+  - `delay_months`
+  - `delay_years`
+- 一条 `invoke_once` 最多只允许出现一个延迟字段
+- 延迟字段的表达式结果必须是 `>= 0` 的整数
+- 未填写延迟字段时，表示立即进入就绪队列
+- 填写延迟字段时，表示按游戏内时间进入未来调度队列
+- `delay_hours` / `delay_days` 按游戏分钟直接换算
+- `delay_months` / `delay_years` 按游戏内日历换算，不用固定 30 天 / 365 天近似
+- 月份与年份延迟保留当前游戏内时分
+- 月末溢出时按目标月最后一天截断，例如 `1990-01-31 + 1 个月 = 1990-02-28`
+
+推荐写法：
+
+```ts
+// 立即调用
+invoke_once chain tax_reward county_id=${county.id}
+
+// 6 小时后调用
+invoke_once chain tax_reward delay_hours=6 county_id=${county.id}
+
+// 1 天后调用
+invoke_once pool rumor_event delay_days=1 rumor_level=${county.level}
+
+// 1 个月后调用
+invoke_once schedule monthly_tax delay_months=1
+```
 
 ### 6.5 背包函数
 

@@ -1132,6 +1132,7 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "StoryScript 禁止写 calc、system.*、call.*：calc 是只读派生值；如果要改变 calc 汇总值，必须写它 calc_rule 依赖的普通 value 分项，或在 variables 草稿中新增普通 value 变量作为持久化字段。",
     "不要声称脚本接口缺少安全写回能力；当前引擎支持在 init_script、end_script、action.exec_script 中写普通 value 变量。",
     "StoryScript 过程脚本必须严格遵循 StoryScript.md 的当前规范；语句、变量权限、注释、invoke_once、背包函数都以 StoryScript.md 为唯一来源。不要使用文档未定义的语法；如果需要新能力，先升级规范文档和运行时，再生成脚本。",
+    "invoke_once 已支持 delay_hours、delay_days、delay_months、delay_years 这 4 个延迟调度元参数；它们只影响调度，不会进入目标事件的 ${call.xxx} 参数空间，也不能和多个 delay 字段混用。",
     "生成非空 StoryScript 过程脚本时必须写清楚中文注释：说明读取了哪些变量、计算规则为什么这样设计、最终写回哪些 value 变量。复杂脚本要分段注释，避免只有公式没有解释。",
     "物品必须优先复用现有物品 id；确需新增时输出 items 草稿，category_id 必须来自现有物品分类。",
     "判断物品是否已存在时必须先查 itemIndexAll 全量轻量索引；relevantItemDetails 只提供本次更相关物品的详细字段，不代表完整物品库。",

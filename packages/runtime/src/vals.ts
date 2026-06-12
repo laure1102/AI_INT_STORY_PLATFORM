@@ -36,6 +36,12 @@ export interface StoryScriptValidationIssue {
   message: string
 }
 
+export interface StoryScriptInvokeValidationTarget {
+  type: "chain" | "pool" | "schedule"
+  eventId: string
+  paramNames: string[]
+}
+
 export interface StoryExpressionContext {
   values?: Record<string, unknown>
   functions?: Record<string, (...args: unknown[]) => unknown>
@@ -49,6 +55,14 @@ export interface StoryScriptInvocation {
   targetType: StoryInvokeTargetType
   eventId: string
   args: Record<string, unknown>
+  delay?: StoryScriptInvokeDelay
+}
+
+export type StoryScriptInvokeDelayUnit = "hours" | "days" | "months" | "years"
+
+export interface StoryScriptInvokeDelay {
+  unit: StoryScriptInvokeDelayUnit
+  value: number
 }
 
 function toStoryScriptStringValue(value: unknown) {
@@ -257,6 +271,17 @@ interface StoryScriptAssignStatement {
 interface StoryScriptInvokeArgument {
   name: string
   expression: string
+}
+
+const STORY_SCRIPT_INVOKE_DELAY_FIELD_MAP = Object.freeze({
+  delay_hours: "hours",
+  delay_days: "days",
+  delay_months: "months",
+  delay_years: "years"
+} as const satisfies Record<string, StoryScriptInvokeDelayUnit>)
+
+function getStoryScriptInvokeDelayUnitFromFieldName(name: string): StoryScriptInvokeDelayUnit | null {
+  return STORY_SCRIPT_INVOKE_DELAY_FIELD_MAP[name as keyof typeof STORY_SCRIPT_INVOKE_DELAY_FIELD_MAP] ?? null
 }
 
 interface StoryScriptInvokeStatement {
@@ -1259,6 +1284,127 @@ function transformInvokeOnceStatements(script: string) {
     .join("\n")
 }
 
+function normalizeStoryScriptInvokeDelay(
+  delayFieldName: string,
+  delayValue: unknown,
+  state: StoryScriptRuntimeState,
+  node: ts.Node
+): StoryScriptInvokeDelay {
+  const unit = getStoryScriptInvokeDelayUnitFromFieldName(delayFieldName)
+  if (!unit) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      `Unsupported invoke_once delay field "${delayFieldName}".`
+    )
+  }
+
+  if (typeof delayValue !== "number" || !Number.isFinite(delayValue)) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      `invoke_once ${delayFieldName} must resolve to a finite number.`
+    )
+  }
+
+  const normalizedValue = Math.trunc(delayValue)
+  if (normalizedValue < 0) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      `invoke_once ${delayFieldName} must be greater than or equal to 0.`
+    )
+  }
+
+  if (normalizedValue !== delayValue) {
+    throw createStoryScriptErrorFromNode(
+      state.sourceFile,
+      node,
+      `invoke_once ${delayFieldName} must be an integer.`
+    )
+  }
+
+  return {
+    unit,
+    value: normalizedValue
+  }
+}
+
+function createStoryScriptValidationIssue(lineNumber: number, message: string): StoryScriptValidationIssue {
+  return {
+    lineNumber,
+    message
+  }
+}
+
+export function validateStoryScriptInvokeReferences(
+  script: string,
+  targets: StoryScriptInvokeValidationTarget[]
+): StoryScriptValidationIssue[] {
+  const normalizedScript = normalizeText(script)
+  if (!normalizedScript.trim()) {
+    return []
+  }
+
+  const normalizedTargets = targets.map((target) => ({
+    type: target.type,
+    eventId: normalizeText(target.eventId).trim(),
+    paramNames: target.paramNames.map((paramName) => normalizeText(paramName).trim()).filter(Boolean)
+  }))
+  const issues: StoryScriptValidationIssue[] = []
+  const lines = normalizedScript.split(/\r?\n/)
+
+  lines.forEach((line, index) => {
+    const match = line.match(/^\s*invoke_once\s+(chain|pool|schedule|graph|once|loop)\s+([A-Za-z0-9_\-:.]+)(?:\s+(.*))?\s*$/)
+    if (!match) {
+      return
+    }
+
+    const rawType = match[1] ?? ""
+    const targetType = rawType === "graph"
+      ? "chain"
+      : rawType === "once"
+        ? "pool"
+        : rawType === "loop"
+          ? "schedule"
+          : rawType
+    const eventId = normalizeText(match[2]).trim()
+    const argsSource = normalizeText(match[3]).trim()
+    const lineNumber = index + 1
+
+    const matchedTarget = normalizedTargets.find((target) => {
+      return target.type === targetType && target.eventId === eventId
+    })
+
+    if (!matchedTarget) {
+      issues.push(
+        createStoryScriptValidationIssue(
+          lineNumber,
+          `invoke_once 目标事件不存在，或不是 ${targetType} 类型中的“被调用”事件: ${eventId}`
+        )
+      )
+      return
+    }
+
+    const argNames = Array.from(argsSource.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*=/g))
+      .map((item) => normalizeText(item[1]).trim())
+      .filter(Boolean)
+
+    for (const paramName of matchedTarget.paramNames) {
+      if (!argNames.includes(paramName)) {
+        issues.push(
+          createStoryScriptValidationIssue(
+            lineNumber,
+            `invoke_once 调用 ${targetType}.${eventId} 时缺少参数 "${paramName}"。`
+          )
+        )
+      }
+    }
+  })
+
+  return issues
+}
+
 function compileStoryScriptSource(source: string): CompiledStoryScriptSource {
   const commentlessSource = stripStoryScriptComments(source)
   const transformedSource = transformInvokeOnceStatements(commentlessSource)
@@ -1823,6 +1969,7 @@ function executeStoryScriptInvokeCall(
   }
 
   const args: Record<string, unknown> = {}
+  let delay: StoryScriptInvokeDelay | undefined
   for (const property of argsNode.properties) {
     if (!ts.isPropertyAssignment(property)) {
       throw createStoryScriptErrorFromNode(
@@ -1843,13 +1990,30 @@ function executeStoryScriptInvokeCall(
       )
     }
 
-    args[name] = evaluateStoryScriptAstExpression(property.initializer, state)
+    const evaluatedValue = evaluateStoryScriptAstExpression(property.initializer, state)
+    const delayUnit = getStoryScriptInvokeDelayUnitFromFieldName(name)
+
+    if (delayUnit) {
+      if (delay) {
+        throw createStoryScriptErrorFromNode(
+          state.sourceFile,
+          property.name,
+          "invoke_once only supports one delay field at a time."
+        )
+      }
+
+      delay = normalizeStoryScriptInvokeDelay(name, evaluatedValue, state, property.initializer)
+      continue
+    }
+
+    args[name] = evaluatedValue
   }
 
   state.invocations.push({
     targetType: targetTypeNode.text as StoryInvokeTargetType,
     eventId: eventIdNode.text,
-    args
+    args,
+    delay
   })
 
   return null

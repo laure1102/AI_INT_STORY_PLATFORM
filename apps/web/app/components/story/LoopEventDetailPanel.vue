@@ -2,6 +2,7 @@
 import {
   buildStoryRoleKey,
   findStoryRoleReference,
+  type StoryDocument,
   type StoryEventInvokeParamDefinition,
   type StoryEventTriggerMode,
   type StoryEventLocationFile,
@@ -24,10 +25,12 @@ import {
   STORY_SCRIPT_TEMPLATE_PLACEHOLDER,
   buildStoryScriptBuiltinAutocompleteItems,
   buildStoryScriptHighlightTokens,
+  buildStoryScriptInvokeAutocompleteContext,
   buildStoryScriptValAutocompleteItems,
   filterStoryScriptAutocompleteItems,
   mergeStoryScriptAutocompleteItems,
   openStoryScriptReferencePage,
+  resolveStoryScriptCommandAutocomplete,
   resolveStoryScriptAutocompletePlacement,
   type StoryScriptAutocompleteItem
 } from "./storyScriptEditor"
@@ -95,6 +98,8 @@ interface ScriptAutocompleteState {
   replaceEnd: number
   activeIndex: number
   placement: "top" | "bottom"
+  mode?: "placeholder" | "invoke_once"
+  commandItems?: StoryScriptAutocompleteItem[]
 }
 
 interface ScriptValidationState {
@@ -113,6 +118,7 @@ const props = defineProps<{
   saving: boolean
   scenes: StorySceneFile
   scheduleEvents: StoryLoopEventFile[]
+  story?: StoryDocument | null
   vals: StoryValsFile
 }>()
 
@@ -145,7 +151,9 @@ const triggerAutocompleteState = reactive<ScriptAutocompleteState>({
   replaceStart: 0,
   replaceEnd: 0,
   activeIndex: 0,
-  placement: "bottom"
+  placement: "bottom",
+  mode: "placeholder",
+  commandItems: []
 })
 const initScriptAutocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
@@ -153,7 +161,9 @@ const initScriptAutocompleteState = reactive<ScriptAutocompleteState>({
   replaceStart: 0,
   replaceEnd: 0,
   activeIndex: 0,
-  placement: "bottom"
+  placement: "bottom",
+  mode: "placeholder",
+  commandItems: []
 })
 const endScriptAutocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
@@ -161,7 +171,9 @@ const endScriptAutocompleteState = reactive<ScriptAutocompleteState>({
   replaceStart: 0,
   replaceEnd: 0,
   activeIndex: 0,
-  placement: "bottom"
+  placement: "bottom",
+  mode: "placeholder",
+  commandItems: []
 })
 const dialogueContentAutocompleteState = reactive<ScriptAutocompleteState>({
   open: false,
@@ -403,6 +415,9 @@ const scriptAutocompleteCandidates = computed(() => {
     invokeParamAutocompleteCandidates.value
   )
 })
+const invokeAutocompleteContext = computed(() => {
+  return buildStoryScriptInvokeAutocompleteContext(props.story)
+})
 const triggerAutocompleteItems = computed(() => {
   return filterStoryScriptAutocompleteItems(
     triggerAutocompleteState.query,
@@ -410,12 +425,26 @@ const triggerAutocompleteItems = computed(() => {
   )
 })
 const initScriptAutocompleteItems = computed(() => {
+  if (initScriptAutocompleteState.mode === "invoke_once") {
+    return filterStoryScriptAutocompleteItems(
+      initScriptAutocompleteState.query,
+      initScriptAutocompleteState.commandItems ?? []
+    )
+  }
+
   return filterStoryScriptAutocompleteItems(
     initScriptAutocompleteState.query,
     scriptAutocompleteCandidates.value
   )
 })
 const endScriptAutocompleteItems = computed(() => {
+  if (endScriptAutocompleteState.mode === "invoke_once") {
+    return filterStoryScriptAutocompleteItems(
+      endScriptAutocompleteState.query,
+      endScriptAutocompleteState.commandItems ?? []
+    )
+  }
+
   return filterStoryScriptAutocompleteItems(
     endScriptAutocompleteState.query,
     scriptAutocompleteCandidates.value
@@ -475,6 +504,16 @@ const activeDialogueContentAutocompleteItem = computed(() => {
   return dialogueContentAutocompleteItems.value[
     dialogueContentAutocompleteState.activeIndex % dialogueContentAutocompleteItems.value.length
   ]
+})
+const activeInitScriptCommandDetail = computed(() => {
+  return initScriptAutocompleteState.mode === "invoke_once"
+    ? activeInitScriptAutocompleteItem.value
+    : null
+})
+const activeEndScriptCommandDetail = computed(() => {
+  return endScriptAutocompleteState.mode === "invoke_once"
+    ? activeEndScriptAutocompleteItem.value
+    : null
 })
 
 const panelTitle = computed(() => {
@@ -778,6 +817,7 @@ async function validateScriptField(field: ScriptFieldKey) {
     source,
     mode: field === "triggerExpr" ? "predicate" : "procedure",
     itemIds: props.itemIds,
+    story: props.story,
     readableTokens: getReadableValidationTokens(field),
     writableTokens: [],
     bagMode: field === "triggerExpr" ? "read" : "write"
@@ -915,6 +955,8 @@ function closeScriptAutocomplete(field: ScriptFieldKey) {
   state.replaceEnd = 0
   state.activeIndex = 0
   state.placement = "bottom"
+  state.mode = "placeholder"
+  state.commandItems = []
 }
 
 function closeAllScriptAutocomplete() {
@@ -934,22 +976,22 @@ function updateScriptAutocompleteFromCaret(field: ScriptFieldKey) {
   }
 
   const caret = textarea.selectionStart ?? fieldValue.length
-  const beforeCaret = fieldValue.slice(0, caret)
-  const openPlaceholderIndex = beforeCaret.lastIndexOf("${")
+  const autocomplete = resolveStoryScriptCommandAutocomplete(fieldValue, caret, {
+    invokeContext: field === "triggerExpr" ? undefined : invokeAutocompleteContext.value
+  })
 
-  if (
-    openPlaceholderIndex < 0 ||
-    beforeCaret.slice(openPlaceholderIndex + 2).includes("}")
-  ) {
+  if (!autocomplete) {
     closeScriptAutocomplete(field)
     return
   }
 
-  state.open = true
-  state.query = beforeCaret.slice(openPlaceholderIndex + 2)
-  state.replaceStart = openPlaceholderIndex
-  state.replaceEnd = caret
+  state.open = autocomplete.state.open
+  state.query = autocomplete.state.query
+  state.replaceStart = autocomplete.state.replaceStart
+  state.replaceEnd = autocomplete.state.replaceEnd
   state.placement = resolveStoryScriptAutocompletePlacement(textarea)
+  state.mode = autocomplete.state.mode
+  state.commandItems = autocomplete.state.mode === "invoke_once" ? autocomplete.items : []
 
   const items = getScriptAutocompleteItems(field)
 
@@ -964,17 +1006,19 @@ function insertScriptAutocompleteItem(field: ScriptFieldKey, itemName: string) {
   const textarea = getScriptTextareaRef(field)
   const state = getScriptAutocompleteState(field)
   const replaceStart = state.replaceStart
-  const nextValue =
-    getScriptFieldValue(field).slice(0, replaceStart + 2) +
-    itemName +
-    "}" +
-    getScriptFieldValue(field).slice(state.replaceEnd)
+  const currentValue = getScriptFieldValue(field)
+  const isPlaceholderMode = currentValue.slice(replaceStart, replaceStart + 2) === "${"
+  const nextValue = isPlaceholderMode
+    ? currentValue.slice(0, replaceStart + 2) + itemName + "}" + currentValue.slice(state.replaceEnd)
+    : currentValue.slice(0, replaceStart) + itemName + currentValue.slice(state.replaceEnd)
 
   setScriptFieldValue(field, nextValue)
   closeScriptAutocomplete(field)
 
   requestAnimationFrame(() => {
-    const nextCaret = replaceStart + itemName.length + 3
+    const nextCaret = isPlaceholderMode
+      ? replaceStart + itemName.length + 3
+      : replaceStart + itemName.length
     textarea?.focus()
     textarea?.setSelectionRange(nextCaret, nextCaret)
   })
@@ -1982,6 +2026,28 @@ function handleDocumentPointerDown(event: MouseEvent) {
                   </div>
                 </div>
                 <div
+                  v-if="activeInitScriptCommandDetail?.detailTitle || activeInitScriptCommandDetail?.detailLines?.length"
+                  class="detail-panel__autocomplete-detail"
+                >
+                  <strong
+                    v-if="activeInitScriptCommandDetail?.detailTitle"
+                    class="detail-panel__autocomplete-detail-title"
+                  >
+                    {{ activeInitScriptCommandDetail.detailTitle }}
+                  </strong>
+                  <ul
+                    v-if="activeInitScriptCommandDetail?.detailLines?.length"
+                    class="detail-panel__autocomplete-detail-list"
+                  >
+                    <li
+                      v-for="line in activeInitScriptCommandDetail.detailLines"
+                      :key="line"
+                    >
+                      {{ line }}
+                    </li>
+                  </ul>
+                </div>
+                <div
                   v-if="scriptValidationState.initScript.status !== 'idle'"
                   class="detail-panel__validation"
                   :class="getScriptValidationClass('initScript')"
@@ -2096,6 +2162,28 @@ function handleDocumentPointerDown(event: MouseEvent) {
                       没有匹配的变量
                     </div>
                   </div>
+                </div>
+                <div
+                  v-if="activeEndScriptCommandDetail?.detailTitle || activeEndScriptCommandDetail?.detailLines?.length"
+                  class="detail-panel__autocomplete-detail"
+                >
+                  <strong
+                    v-if="activeEndScriptCommandDetail?.detailTitle"
+                    class="detail-panel__autocomplete-detail-title"
+                  >
+                    {{ activeEndScriptCommandDetail.detailTitle }}
+                  </strong>
+                  <ul
+                    v-if="activeEndScriptCommandDetail?.detailLines?.length"
+                    class="detail-panel__autocomplete-detail-list"
+                  >
+                    <li
+                      v-for="line in activeEndScriptCommandDetail.detailLines"
+                      :key="line"
+                    >
+                      {{ line }}
+                    </li>
+                  </ul>
                 </div>
                 <div
                   v-if="scriptValidationState.endScript.status !== 'idle'"
@@ -3073,6 +3161,32 @@ function handleDocumentPointerDown(event: MouseEvent) {
   padding: 12px;
   color: var(--text-muted);
   text-align: center;
+}
+
+.detail-panel__autocomplete-detail {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  display: grid;
+  gap: 6px;
+}
+
+.detail-panel__autocomplete-detail-title {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.detail-panel__autocomplete-detail-list {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 
 .detail-panel__script--overlay {

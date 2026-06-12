@@ -15,6 +15,7 @@ import {
   DEFAULT_MAX_CALC_NESTING_DEPTH,
   evaluateStoryBooleanExpression,
   validateStoryScript,
+  validateStoryScriptInvokeReferences,
   validateStoryTextTemplate,
   validateStoryValsCalcRules
 } from "@story-mgr/runtime"
@@ -24,6 +25,9 @@ import type {
 } from "@story-mgr/runtime"
 import type { StoryValsFile } from "./types"
 export type { StoryScriptValidationIssue } from "@story-mgr/runtime"
+export {
+  validateStoryScriptInvokeReferences
+} from "@story-mgr/runtime"
 
 type EventValidationGroupKey = "chainEvents" | "poolEvents" | "scheduleEvents"
 
@@ -236,6 +240,34 @@ function buildInvokeScriptContext(
   })
 }
 
+function buildStoryInvokeValidationTargets(document: StoryDocument) {
+  const chainTargets = document.chainEvents
+    .filter((event): event is StoryEventFile => isChainEventNode(event) && (event.trigger_mode ?? "default") === "invoke")
+    .map((event) => ({
+      type: "chain" as const,
+      eventId: event.id,
+      paramNames: (event.invoke_params ?? []).map((param) => param.name)
+    }))
+
+  const poolTargets = document.poolEvents
+    .filter((event) => (event.trigger_mode ?? "default") === "invoke")
+    .map((event) => ({
+      type: "pool" as const,
+      eventId: event.id,
+      paramNames: (event.invoke_params ?? []).map((param) => param.name)
+    }))
+
+  const scheduleTargets = document.scheduleEvents
+    .filter((event) => (event.trigger_mode ?? "default") === "invoke")
+    .map((event) => ({
+      type: "schedule" as const,
+      eventId: event.id,
+      paramNames: (event.invoke_params ?? []).map((param) => param.name)
+    }))
+
+  return [...chainTargets, ...poolTargets, ...scheduleTargets]
+}
+
 function buildChainActionScriptContext(
   document: StoryDocument,
   action: StoryActionFile
@@ -382,6 +414,7 @@ function validatePlayableEvent(
 ) {
   const locationNames = collectLocationNames(document)
   const allowedSpeakerKeys = new Set(["player", ...event.object_keys])
+  const invokeTargets = buildStoryInvokeValidationTargets(document)
   const triggerMode = event.trigger_mode ?? "default"
   const scriptContext = triggerMode === "invoke"
     ? buildInvokeScriptContext(document, event)
@@ -450,6 +483,16 @@ function validatePlayableEvent(
         "error",
         scriptField.code,
         `${label} "${event.id}" ${scriptField.key} is invalid at line ${issue.lineNumber}: ${issue.message}`,
+        [eventGroupKey, String(eventIndex), scriptField.key]
+      )
+    }
+
+    for (const issue of validateStoryScriptInvokeReferences(scriptField.value, invokeTargets)) {
+      pushIssue(
+        issues,
+        "error",
+        `${codePrefix}.${scriptField.key === "init_script" ? "init" : "end"}-script-invoke-invalid`,
+        `${label} "${event.id}" ${scriptField.key} invoke_once 引用无效，第 ${issue.lineNumber} 行: ${issue.message}`,
         [eventGroupKey, String(eventIndex), scriptField.key]
       )
     }
@@ -635,6 +678,7 @@ function validateChainAction(
   const incomingChainActions = chainActions.filter((event) => event.next.includes(action.id))
   const chainEventIds = new Set(chainEvents.map((event) => event.id))
   const chainActionIds = new Set(chainActions.map((event) => event.id))
+  const invokeTargets = buildStoryInvokeValidationTargets(document)
 
   if (incomingChainEvents.length > 1) {
       pushIssue(
@@ -707,6 +751,16 @@ function validateChainAction(
       "error",
       "chain-action.exec-script-invalid",
       `Chain action "${action.id}" exec_script is invalid at line ${issue.lineNumber}: ${issue.message}`,
+      ["chainEvents", String(actionIndex), "exec_script"]
+    )
+  }
+
+  for (const issue of validateStoryScriptInvokeReferences(action.exec_script, invokeTargets)) {
+    pushIssue(
+      issues,
+      "error",
+      "chain-action.exec-script-invoke-invalid",
+      `Chain action "${action.id}" exec_script invoke_once 引用无效，第 ${issue.lineNumber} 行: ${issue.message}`,
       ["chainEvents", String(actionIndex), "exec_script"]
     )
   }

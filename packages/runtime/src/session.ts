@@ -14,7 +14,11 @@ import {
   type RuntimeDirectorHistoryEntry,
   type RuntimeStoryDirector
 } from "./director"
-import type { StoryScriptExecutionContext, StoryScriptInvocation } from "./vals"
+import type {
+  StoryScriptExecutionContext,
+  StoryScriptInvocation,
+  StoryScriptInvokeDelay
+} from "./vals"
 import type {
   StoryInvokeTargetType,
   StoryPlayerOverrideValsFile,
@@ -1601,6 +1605,101 @@ function getDatePartsFromGameMinute(
   return utcDayNumberToDateParts(baseDayNumberUtc + dayOffset)
 }
 
+function getMinuteOffsetWithinDay(gameMinute: number) {
+  const normalizedGameMinute = Math.max(0, clampInteger(gameMinute, 0))
+  return ((normalizedGameMinute % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+}
+
+function addMonthsToDateParts(parts: RuntimeDateParts, months: number) {
+  const normalizedMonths = Math.max(0, clampInteger(months, 0))
+  if (normalizedMonths === 0) {
+    return {
+      year: parts.year,
+      month: parts.month,
+      day: parts.day
+    }
+  }
+
+  const monthIndex = (parts.month - 1) + normalizedMonths
+  const targetYear = parts.year + Math.floor(monthIndex / 12)
+  const targetMonth = (monthIndex % 12) + 1
+  const targetMonthParts = {
+    year: targetYear,
+    month: targetMonth,
+    day: 1
+  }
+
+  return {
+    year: targetYear,
+    month: targetMonth,
+    day: Math.min(parts.day, getDaysInMonth(targetMonthParts))
+  }
+}
+
+function addYearsToDateParts(parts: RuntimeDateParts, years: number) {
+  const normalizedYears = Math.max(0, clampInteger(years, 0))
+  if (normalizedYears === 0) {
+    return {
+      year: parts.year,
+      month: parts.month,
+      day: parts.day
+    }
+  }
+
+  const targetYear = parts.year + normalizedYears
+  const targetMonthParts = {
+    year: targetYear,
+    month: parts.month,
+    day: 1
+  }
+
+  return {
+    year: targetYear,
+    month: parts.month,
+    day: Math.min(parts.day, getDaysInMonth(targetMonthParts))
+  }
+}
+
+function getGameMinuteFromDateParts(
+  snapshot: RuntimeStorySessionSnapshot,
+  parts: RuntimeDateParts,
+  minuteOffsetWithinDay: number
+) {
+  normalizeClockState(snapshot)
+  const normalizedBaseDate = parseStoryDate(snapshot.clock.base_date) ?? { year: 1990, month: 1, day: 1 }
+  const baseDayNumberUtc = datePartsToUtcDayNumber(normalizedBaseDate)
+  const targetDayNumberUtc = datePartsToUtcDayNumber(parts)
+  const dayOffset = targetDayNumberUtc - baseDayNumberUtc
+  return dayOffset * MINUTES_PER_DAY + minuteOffsetWithinDay
+}
+
+function resolveInvokeDelayDueGameMinute(
+  snapshot: RuntimeStorySessionSnapshot,
+  delay: StoryScriptInvokeDelay
+) {
+  const nowGameMinute = getCurrentGameMinute(snapshot)
+
+  if (delay.value <= 0) {
+    return nowGameMinute
+  }
+
+  if (delay.unit === "hours") {
+    return nowGameMinute + delay.value * 60
+  }
+
+  if (delay.unit === "days") {
+    return nowGameMinute + delay.value * MINUTES_PER_DAY
+  }
+
+  const currentDateParts = getDatePartsFromGameMinute(snapshot, nowGameMinute)
+  const minuteOffsetWithinDay = getMinuteOffsetWithinDay(nowGameMinute)
+  const targetDateParts = delay.unit === "months"
+    ? addMonthsToDateParts(currentDateParts, delay.value)
+    : addYearsToDateParts(currentDateParts, delay.value)
+
+  return getGameMinuteFromDateParts(snapshot, targetDateParts, minuteOffsetWithinDay)
+}
+
 function getGameDayFromGameMinute(
   snapshot: RuntimeStorySessionSnapshot,
   gameMinute: number
@@ -1776,7 +1875,11 @@ function sortReadyQueue(snapshot: RuntimeStorySessionSnapshot) {
   sortScheduledEvents(snapshot.scheduler.ready_queue)
 }
 
-function enqueueReadyEvent(snapshot: RuntimeStorySessionSnapshot, scheduledEvent: RuntimeScheduledEvent) {
+function enqueueReadyEvent(
+  snapshot: RuntimeStorySessionSnapshot,
+  scheduledEvent: RuntimeScheduledEvent,
+  auditMessage?: string
+) {
   normalizeSchedulerState(snapshot)
   if (!scheduledEvent.dedupe_key || isScheduledEventQueued(snapshot, scheduledEvent.dedupe_key)) {
     return false
@@ -1793,12 +1896,16 @@ function enqueueReadyEvent(snapshot: RuntimeStorySessionSnapshot, scheduledEvent
     source_id: scheduledEvent.source_id,
     entry_event_id: scheduledEvent.entry_event_id,
     due_game_minute: scheduledEvent.due_game_minute,
-    message: "加入就绪队列"
+    message: auditMessage ?? "加入就绪队列"
   })
   return true
 }
 
-function enqueueScheduledEvent(snapshot: RuntimeStorySessionSnapshot, scheduledEvent: RuntimeScheduledEvent) {
+function enqueueScheduledEvent(
+  snapshot: RuntimeStorySessionSnapshot,
+  scheduledEvent: RuntimeScheduledEvent,
+  auditMessage?: string
+) {
   normalizeSchedulerState(snapshot)
   if (!scheduledEvent.dedupe_key || isScheduledEventQueued(snapshot, scheduledEvent.dedupe_key)) {
     return false
@@ -1815,7 +1922,7 @@ function enqueueScheduledEvent(snapshot: RuntimeStorySessionSnapshot, scheduledE
     source_id: scheduledEvent.source_id,
     entry_event_id: scheduledEvent.entry_event_id,
     due_game_minute: scheduledEvent.due_game_minute,
-    message: "加入未来调度"
+    message: auditMessage ?? "加入未来调度"
   })
   return true
 }
@@ -2774,6 +2881,52 @@ function getInvokeTargetLabel(targetType: StoryInvokeTargetType) {
   return "链式剧情线事件"
 }
 
+function getInvokeDelayUnitLabel(unit: StoryScriptInvokeDelay["unit"]) {
+  switch (unit) {
+    case "hours":
+      return "小时"
+    case "days":
+      return "天"
+    case "months":
+      return "个月"
+    case "years":
+      return "年"
+    default:
+      return ""
+  }
+}
+
+function formatInvokeDelayAuditLabel(delay: StoryScriptInvokeDelay | undefined) {
+  if (!delay || delay.value <= 0) {
+    return "立即"
+  }
+
+  return `${delay.value}${getInvokeDelayUnitLabel(delay.unit)}后`
+}
+
+function buildInvokeAuditMessage(
+  targetType: StoryInvokeTargetType,
+  eventId: string,
+  args: Record<string, unknown>,
+  mode: "ready" | "scheduled" | "promoted",
+  delay?: StoryScriptInvokeDelay
+) {
+  const normalizedTargetType = normalizeInvokeTargetType(targetType) ?? "chain"
+  const targetLabel = `${normalizedTargetType}.${normalizeText(eventId)}`
+  const argKeys = Object.keys(args).filter(Boolean)
+  const argsLabel = argKeys.length > 0 ? `，参数: ${argKeys.join(", ")}` : ""
+
+  if (mode === "scheduled") {
+    return `invoke 延迟入队: ${targetLabel}，${formatInvokeDelayAuditLabel(delay)}${argsLabel}`
+  }
+
+  if (mode === "promoted") {
+    return `invoke 到时转入就绪队列: ${targetLabel}${argsLabel}`
+  }
+
+  return `invoke 进入就绪队列: ${targetLabel}${argsLabel}`
+}
+
 function validateInvokeArgs(
   targetType: StoryInvokeTargetType,
   event: ReturnType<typeof findBundleInvokeTargetEvent>,
@@ -2819,7 +2972,8 @@ function queueInvokeEvent(
   runtimeState: RuntimeState,
   targetType: StoryInvokeTargetType,
   eventId: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  delay?: StoryScriptInvokeDelay
 ) {
   const normalizedEventId = normalizeText(eventId)
   if (!normalizedEventId) {
@@ -2840,19 +2994,46 @@ function queueInvokeEvent(
 
   const nextSeq = runtimeState.snapshot.scheduler.next_seq
   const dedupeKey = `invoke:${normalizedTargetType}:${targetEvent.id}:${nextSeq}`
-
-  const readyEvent = createScheduledEvent(
+  const dueGameMinute = delay
+    ? resolveInvokeDelayDueGameMinute(runtimeState.snapshot, delay)
+    : getCurrentGameMinute(runtimeState.snapshot)
+  const scheduledEvent = createScheduledEvent(
     runtimeState.snapshot,
     "invoke",
     `${normalizedTargetType}:${targetEvent.id}`,
     targetEvent.id,
-    getCurrentGameMinute(runtimeState.snapshot),
+    dueGameMinute,
     dedupeKey,
     true,
     normalizedArgs,
     normalizedTargetType
   )
-  return enqueueReadyEvent(runtimeState.snapshot, readyEvent)
+
+  if (delay && dueGameMinute > getCurrentGameMinute(runtimeState.snapshot)) {
+    return enqueueScheduledEvent(
+      runtimeState.snapshot,
+      scheduledEvent,
+      buildInvokeAuditMessage(
+        normalizedTargetType,
+        targetEvent.id,
+        normalizedArgs,
+        "scheduled",
+        delay
+      )
+    )
+  }
+
+  return enqueueReadyEvent(
+    runtimeState.snapshot,
+    scheduledEvent,
+    buildInvokeAuditMessage(
+      normalizedTargetType,
+      targetEvent.id,
+      normalizedArgs,
+      "ready",
+      delay
+    )
+  )
 }
 
 function enqueueStoryScriptInvocations(
@@ -2861,7 +3042,14 @@ function enqueueStoryScriptInvocations(
   invocations: StoryScriptInvocation[]
 ) {
   for (const invocation of invocations) {
-    queueInvokeEvent(bundle, runtimeState, invocation.targetType, invocation.eventId, invocation.args)
+    queueInvokeEvent(
+      bundle,
+      runtimeState,
+      invocation.targetType,
+      invocation.eventId,
+      invocation.args,
+      invocation.delay
+    )
   }
 }
 
@@ -3350,7 +3538,14 @@ function promoteDueScheduledEventsResolved(
       source_id: scheduledEvent.source_id,
       entry_event_id: scheduledEvent.entry_event_id,
       due_game_minute: scheduledEvent.due_game_minute,
-      message: "到时转入就绪队列"
+      message: scheduledEvent.source_type === "invoke"
+        ? buildInvokeAuditMessage(
+            scheduledEvent.invoke_target_type ?? "chain",
+            scheduledEvent.entry_event_id,
+            scheduledEvent.call_values ?? {},
+            "promoted"
+          )
+        : "到时转入就绪队列"
     })
     enqueueReadyEvent(snapshot, {
       ...scheduledEvent,

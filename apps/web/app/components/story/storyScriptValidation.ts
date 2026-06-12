@@ -1,11 +1,16 @@
 import {
+  type StoryDocument,
   createStoryScriptValidationContext,
+  validateStoryScriptInvokeReferences,
   validateStoryScriptContent,
   type StoryScriptValidationIssue,
   type StoryScriptValidationMode,
   type StoryValsFile
 } from "@story-mgr/core"
-import { buildStoryScriptValAutocompleteItems } from "./storyScriptEditor"
+import {
+  buildStoryScriptInvokeAutocompleteContext,
+  buildStoryScriptValAutocompleteItems
+} from "./storyScriptEditor"
 
 export interface StoryScriptFieldValidationOptions {
   vals: StoryValsFile
@@ -15,6 +20,7 @@ export interface StoryScriptFieldValidationOptions {
   readableTokens?: string[]
   writableTokens?: string[]
   bagMode?: "read" | "write"
+  story?: StoryDocument | null
 }
 
 export interface StoryScriptFieldValidationResult {
@@ -35,6 +41,25 @@ function toContextValueMap(tokens: string[] | undefined) {
   )
 }
 
+function validateInvokeOnceReferences(
+  source: string,
+  story: StoryDocument | null | undefined
+): StoryScriptValidationIssue[] {
+  if (!story) {
+    return []
+  }
+
+  const invokeContext = buildStoryScriptInvokeAutocompleteContext(story)
+  return validateStoryScriptInvokeReferences(
+    source,
+    invokeContext.targets.map((target) => ({
+      type: target.type,
+      eventId: target.eventId,
+      paramNames: target.params.map((param) => param.name)
+    }))
+  )
+}
+
 export function validateStoryScriptField(
   options: StoryScriptFieldValidationOptions
 ): StoryScriptFieldValidationResult {
@@ -50,10 +75,13 @@ export function validateStoryScriptField(
       bagMode: options.bagMode ?? (options.mode === "predicate" ? "read" : "write")
     })
   )
+  const invokeIssues = options.mode === "procedure"
+    ? validateInvokeOnceReferences(options.source, options.story)
+    : []
 
   return {
-    ok: issues.length === 0,
-    issues
+    ok: issues.length === 0 && invokeIssues.length === 0,
+    issues: [...issues, ...invokeIssues]
   }
 }
 

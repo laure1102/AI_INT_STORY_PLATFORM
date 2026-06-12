@@ -1,14 +1,82 @@
-import type { StoryValsFile } from "@story-mgr/core"
+import type {
+  StoryDocument,
+  StoryEventFile,
+  StoryLoopEventFile,
+  StoryOnceEventFile,
+  StoryValsFile
+} from "@story-mgr/core"
 
 export interface StoryScriptAutocompleteItem {
   name: string
   description: string
+  detailTitle?: string
+  detailLines?: string[]
 }
 
 export interface StoryScriptHighlightToken {
   text: string
   highlighted: boolean
 }
+
+export interface StoryScriptCommandAutocompleteState {
+  open: boolean
+  query: string
+  replaceStart: number
+  replaceEnd: number
+  mode: "placeholder" | "invoke_once"
+}
+
+export interface StoryScriptInvokeTargetOption {
+  type: "chain" | "pool" | "schedule"
+  eventId: string
+  title: string
+  params: Array<{
+    name: string
+    description: string
+  }>
+}
+
+export interface StoryScriptInvokeAutocompleteContext {
+  targets: StoryScriptInvokeTargetOption[]
+}
+
+export interface StoryScriptCommandAutocompleteResult {
+  items: StoryScriptAutocompleteItem[]
+  state: StoryScriptCommandAutocompleteState
+}
+
+const STORY_SCRIPT_INVOKE_TARGET_TYPE_ITEMS: StoryScriptAutocompleteItem[] = [
+  {
+    name: "chain",
+    description: "调用链式剧情线中的被调用事件。",
+    detailTitle: "invoke_once chain",
+    detailLines: [
+      "格式：invoke_once chain event_id 业务参数=表达式。",
+      "目标必须是链式剧情线里 trigger_mode=invoke 的事件。",
+      "选定目标事件后，可继续填写业务参数，或追加一个 delay_* 延迟元参数。"
+    ]
+  },
+  {
+    name: "pool",
+    description: "调用平面事件池中的被调用事件。",
+    detailTitle: "invoke_once pool",
+    detailLines: [
+      "格式：invoke_once pool event_id 业务参数=表达式。",
+      "目标必须是平面事件池里 trigger_mode=invoke 的事件。",
+      "选定目标事件后，可继续填写业务参数，或追加一个 delay_* 延迟元参数。"
+    ]
+  },
+  {
+    name: "schedule",
+    description: "调用定时事件集合中的被调用事件。",
+    detailTitle: "invoke_once schedule",
+    detailLines: [
+      "格式：invoke_once schedule event_id 业务参数=表达式。",
+      "目标必须是定时事件集合里 trigger_mode=invoke 的事件。",
+      "被调用的 schedule 事件会按 invoke 队列入队，不走默认的循环时间扫描。"
+    ]
+  }
+]
 
 const STORY_SCRIPT_BUILTIN_AUTOCOMPLETE_ITEMS: StoryScriptAutocompleteItem[] = [
   { name: "Number", description: "将输入转成 number。" },
@@ -59,6 +127,16 @@ export function normalizeStoryScriptAutocompleteText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+function normalizeStoryScriptAutocompleteDetailLines(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => normalizeStoryScriptAutocompleteText(item))
+    .filter(Boolean)
+}
+
 export function buildStoryScriptValAutocompleteItems(vals: StoryValsFile) {
   const seen = new Set<string>()
 
@@ -99,6 +177,57 @@ export function buildStoryScriptBuiltinAutocompleteItems() {
   return STORY_SCRIPT_BUILTIN_AUTOCOMPLETE_ITEMS.map((item) => ({ ...item }))
 }
 
+function buildInvokeTargetParams(
+  event: Pick<StoryEventFile | StoryOnceEventFile | StoryLoopEventFile, "invoke_params">
+) {
+  return (event.invoke_params ?? [])
+    .map((param) => ({
+      name: normalizeStoryScriptAutocompleteText(param.name),
+      description: normalizeStoryScriptAutocompleteText(param.descr) || "被调用时传入的参数"
+    }))
+    .filter((param) => param.name)
+}
+
+function buildInvokeTargetOption(
+  type: "chain" | "pool" | "schedule",
+  event: Pick<StoryEventFile | StoryOnceEventFile | StoryLoopEventFile, "id" | "title" | "invoke_params">
+): StoryScriptInvokeTargetOption {
+  return {
+    type,
+    eventId: normalizeStoryScriptAutocompleteText(event.id),
+    title: normalizeStoryScriptAutocompleteText(event.title),
+    params: buildInvokeTargetParams(event)
+  }
+}
+
+export function buildStoryScriptInvokeAutocompleteContext(
+  story: StoryDocument | null | undefined
+): StoryScriptInvokeAutocompleteContext {
+  if (!story) {
+    return {
+      targets: []
+    }
+  }
+
+  const chainTargets = story.chainEvents
+    .filter((event): event is StoryEventFile => {
+      return !("exec_script" in event) && (event.trigger_mode ?? "default") === "invoke"
+    })
+    .map((event) => buildInvokeTargetOption("chain", event))
+
+  const poolTargets = story.poolEvents
+    .filter((event) => (event.trigger_mode ?? "default") === "invoke")
+    .map((event) => buildInvokeTargetOption("pool", event))
+
+  const scheduleTargets = story.scheduleEvents
+    .filter((event) => (event.trigger_mode ?? "default") === "invoke")
+    .map((event) => buildInvokeTargetOption("schedule", event))
+
+  return {
+    targets: [...chainTargets, ...poolTargets, ...scheduleTargets]
+  }
+}
+
 export function mergeStoryScriptAutocompleteItems(
   ...itemGroups: Array<StoryScriptAutocompleteItem[] | undefined>
 ) {
@@ -114,21 +243,33 @@ export function mergeStoryScriptAutocompleteItems(
       }
 
       const description = normalizeStoryScriptAutocompleteText(item.description)
+      const detailTitle = normalizeStoryScriptAutocompleteText(item.detailTitle)
+      const detailLines = normalizeStoryScriptAutocompleteDetailLines(item.detailLines)
       const existingIndex = itemMap.get(name)
 
       if (existingIndex === undefined) {
         itemMap.set(name, mergedItems.length)
         mergedItems.push({
           name,
-          description
+          description,
+          detailTitle,
+          detailLines
         })
         continue
       }
 
-      if (!mergedItems[existingIndex]?.description && description) {
+      const existingItem = mergedItems[existingIndex]
+
+      if (
+        (!existingItem?.description && description) ||
+        (!existingItem?.detailTitle && detailTitle) ||
+        (!existingItem?.detailLines?.length && detailLines.length > 0)
+      ) {
         mergedItems[existingIndex] = {
-          ...mergedItems[existingIndex],
-          description
+          ...existingItem,
+          description: existingItem?.description || description,
+          detailTitle: existingItem?.detailTitle || detailTitle,
+          detailLines: existingItem?.detailLines?.length ? existingItem.detailLines : detailLines
         }
       }
     }
@@ -148,11 +289,231 @@ export function filterStoryScriptAutocompleteItems(
   }
 
   return sourceItems.filter((item) => {
+    const detailTitle = item.detailTitle?.toLowerCase() ?? ""
+    const detailText = (item.detailLines ?? []).join(" ").toLowerCase()
     return (
       item.name.toLowerCase().includes(query) ||
-      item.description.toLowerCase().includes(query)
+      item.description.toLowerCase().includes(query) ||
+      detailTitle.includes(query) ||
+      detailText.includes(query)
     )
   })
+}
+
+function findStoryScriptPlaceholderAutocompleteState(source: string, caret: number): StoryScriptCommandAutocompleteState | null {
+  const beforeCaret = source.slice(0, caret)
+  const openPlaceholderIndex = beforeCaret.lastIndexOf("${")
+
+  if (
+    openPlaceholderIndex < 0 ||
+    beforeCaret.slice(openPlaceholderIndex + 2).includes("}")
+  ) {
+    return null
+  }
+
+  return {
+    open: true,
+    query: beforeCaret.slice(openPlaceholderIndex + 2),
+    replaceStart: openPlaceholderIndex,
+    replaceEnd: caret,
+    mode: "placeholder"
+  }
+}
+
+function buildInvokeTargetAutocompleteItems(
+  context: StoryScriptInvokeAutocompleteContext,
+  targetType: string
+) {
+  return context.targets
+    .filter((target) => target.type === targetType)
+    .map((target) => ({
+      name: target.eventId,
+      description: target.title
+        ? `${target.title}${target.params.length ? ` / 参数: ${target.params.map((param) => param.name).join(", ")}` : ""}`
+        : (target.params.length ? `参数: ${target.params.map((param) => param.name).join(", ")}` : "被调用事件"),
+      detailTitle: `${target.type}.${target.eventId}`,
+      detailLines: [
+        target.title ? `事件标题：${target.title}` : `事件 ID：${target.eventId}`,
+        target.params.length
+          ? `必填业务参数：${target.params.map((param) => param.name).join("、")}`
+          : "这个事件没有必填业务参数。",
+        ...target.params.map((param) => `参数 ${param.name}：${param.description}`),
+        "还可以追加一个 delay_hours / delay_days / delay_months / delay_years 作为延迟元参数。",
+        "delay_* 只影响调度时间，不会进入目标事件的 ${call.xxx}。"
+      ]
+    }))
+}
+
+function buildInvokeDelayAutocompleteItems(
+  targetType: string,
+  eventId: string
+): StoryScriptAutocompleteItem[] {
+  const invokePrefix = `invoke_once ${targetType} ${eventId}`
+
+  return [
+    {
+      name: "delay_hours=",
+      description: "按游戏内小时延迟调用。",
+      detailTitle: `${invokePrefix} delay_hours=...`,
+      detailLines: [
+        "这是调度元参数，只控制何时入队，不会写入目标事件的 ${call.xxx}。",
+        "表达式结果必须是大于等于 0 的整数；delay_hours=0 等同立即入队。",
+        "一条 invoke_once 只能写一个 delay_* 字段。"
+      ]
+    },
+    {
+      name: "delay_days=",
+      description: "按游戏内天数延迟调用。",
+      detailTitle: `${invokePrefix} delay_days=...`,
+      detailLines: [
+        "这是调度元参数，只控制何时入队，不会写入目标事件的 ${call.xxx}。",
+        "表达式结果必须是大于等于 0 的整数；按游戏内天数直接换算。",
+        "一条 invoke_once 只能写一个 delay_* 字段。"
+      ]
+    },
+    {
+      name: "delay_months=",
+      description: "按游戏内月份延迟调用。",
+      detailTitle: `${invokePrefix} delay_months=...`,
+      detailLines: [
+        "这是调度元参数，只控制何时入队，不会写入目标事件的 ${call.xxx}。",
+        "表达式结果必须是大于等于 0 的整数；按游戏内日历月份计算，并保留当前时分。",
+        "如果目标月份没有当前日期，会自动截到该月最后一天。"
+      ]
+    },
+    {
+      name: "delay_years=",
+      description: "按游戏内年份延迟调用。",
+      detailTitle: `${invokePrefix} delay_years=...`,
+      detailLines: [
+        "这是调度元参数，只控制何时入队，不会写入目标事件的 ${call.xxx}。",
+        "表达式结果必须是大于等于 0 的整数；按游戏内日历年份计算，并保留当前时分。",
+        "如果目标年份没有当前日期，会自动截到该年的有效日期。"
+      ]
+    }
+  ]
+}
+
+function buildInvokeArgumentAutocompleteItems(
+  context: StoryScriptInvokeAutocompleteContext,
+  targetType: string,
+  eventId: string
+) {
+  const matchedTarget = context.targets.find((target) => {
+    return target.type === targetType && target.eventId === eventId
+  })
+
+  const paramItems = (matchedTarget?.params ?? []).map((param) => ({
+    name: `${param.name}=`,
+    description: param.description,
+    detailTitle: `${matchedTarget?.type ?? targetType}.${eventId} -> ${param.name}`,
+    detailLines: [
+      param.description || "这是目标事件要求的业务参数。",
+      `目标事件内部可通过 \${call.${param.name}} 读取这个值。`,
+      "这是业务参数，会进入调用上下文，不属于调度元参数。"
+    ]
+  }))
+
+  return mergeStoryScriptAutocompleteItems(
+    buildInvokeDelayAutocompleteItems(targetType, eventId),
+    paramItems
+  )
+}
+
+function findStoryScriptInvokeAutocompleteState(
+  source: string,
+  caret: number,
+  context: StoryScriptInvokeAutocompleteContext
+): StoryScriptCommandAutocompleteResult | null {
+  const beforeCaret = source.slice(0, caret)
+  const lineStart = beforeCaret.lastIndexOf("\n") + 1
+  const currentLinePrefix = beforeCaret.slice(lineStart)
+  const match = currentLinePrefix.match(/^(\s*)invoke_once(?:\s+([^\s]+))?(?:\s+([^\s]+))?(?:\s+(.*))?$/)
+
+  if (!match) {
+    return null
+  }
+
+  const targetType = normalizeStoryScriptAutocompleteText(match[2])
+  const eventId = normalizeStoryScriptAutocompleteText(match[3])
+  const argsPrefix = match[4] ?? ""
+
+  if (!targetType) {
+    return {
+      items: STORY_SCRIPT_INVOKE_TARGET_TYPE_ITEMS,
+      state: {
+        open: true,
+        query: "",
+        replaceStart: caret,
+        replaceEnd: caret,
+        mode: "invoke_once"
+      }
+    }
+  }
+
+  if (!["chain", "pool", "schedule"].includes(targetType) && !eventId) {
+    return {
+      items: STORY_SCRIPT_INVOKE_TARGET_TYPE_ITEMS,
+      state: {
+        open: true,
+        query: targetType,
+        replaceStart: caret - targetType.length,
+        replaceEnd: caret,
+        mode: "invoke_once"
+      }
+    }
+  }
+
+  if (!eventId) {
+    const itemQuery = currentLinePrefix.split(/\s+/).at(-1) ?? ""
+    return {
+      items: buildInvokeTargetAutocompleteItems(context, targetType),
+      state: {
+        open: true,
+        query: itemQuery === "invoke_once" || itemQuery === targetType ? "" : itemQuery,
+        replaceStart: caret - itemQuery.length,
+        replaceEnd: caret,
+        mode: "invoke_once"
+      }
+    }
+  }
+
+  const trailingQueryMatch = argsPrefix.match(/(?:^|\s)([A-Za-z_][A-Za-z0-9_]*=?[^\s]*)?$/)
+  const trailingQuery = trailingQueryMatch?.[1] ?? ""
+
+  return {
+    items: buildInvokeArgumentAutocompleteItems(context, targetType, eventId),
+    state: {
+      open: true,
+      query: trailingQuery,
+      replaceStart: caret - trailingQuery.length,
+      replaceEnd: caret,
+      mode: "invoke_once"
+    }
+  }
+}
+
+export function resolveStoryScriptCommandAutocomplete(
+  source: string,
+  caret: number,
+  options?: {
+    invokeContext?: StoryScriptInvokeAutocompleteContext
+  }
+): StoryScriptCommandAutocompleteResult | null {
+  const placeholderState = findStoryScriptPlaceholderAutocompleteState(source, caret)
+  if (placeholderState) {
+    return {
+      items: [],
+      state: placeholderState
+    }
+  }
+
+  const invokeContext = options?.invokeContext
+  if (!invokeContext) {
+    return null
+  }
+
+  return findStoryScriptInvokeAutocompleteState(source, caret, invokeContext)
 }
 
 function escapeStoryScriptHighlightHtml(value: string) {
