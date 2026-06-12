@@ -17,6 +17,8 @@ import type {
   GenerateItemImageResponse,
   GenerateItemPromptRequest,
   GenerateItemPromptResponse,
+  GenerateStoryDialogueRequest,
+  GenerateStoryDialogueResponse,
   GenerateLocationImageRequest,
   GenerateLocationImageResponse,
   GenerateLocationPromptRequest,
@@ -61,7 +63,11 @@ import {
   readStoryCreationHistory,
   upsertStoryCreationHistorySession
 } from "../services/creation-history"
-import { applyStoryCreationDraft, runStoryCreationAgents } from "../services/story-creation"
+import {
+  applyStoryCreationDraft,
+  generateStoryEventDialogues,
+  runStoryCreationAgents
+} from "../services/story-creation"
 
 const upload = multer({
   storage: multer.memoryStorage()
@@ -179,6 +185,26 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
       storyId,
       body
     ) satisfies ApplyStoryCreationDraftResponse
+  })
+
+  router.post("/stories/:storyId/dialogue-agent/generate", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as GenerateStoryDialogueRequest
+    const [settings, story] = await Promise.all([
+      store.readAppSettings(),
+      store.readStoryDocument(storyId)
+    ])
+
+    const controller = new AbortController()
+    context.req.on("aborted", () => controller.abort())
+    context.req.on("close", () => controller.abort())
+
+    context.body = await generateStoryEventDialogues(
+      settings,
+      story,
+      body,
+      controller.signal
+    ) satisfies GenerateStoryDialogueResponse
   })
 
   router.get("/stories/:storyId/creation-history", async (context) => {

@@ -24,6 +24,8 @@ import type {
   GenerateItemImageResponse,
   GenerateItemPromptRequest,
   GenerateItemPromptResponse,
+  GenerateStoryDialogueRequest,
+  GenerateStoryDialogueResponse,
   GenerateLocationImageRequest,
   GenerateLocationImageResponse,
   GenerateLocationPromptRequest,
@@ -127,6 +129,21 @@ export function useStoryApi() {
       {
         method: "POST",
         body: payload
+      }
+    )
+  }
+
+  async function generateStoryDialogue(
+    storyId: string,
+    payload: GenerateStoryDialogueRequest,
+    signal?: AbortSignal
+  ): Promise<GenerateStoryDialogueResponse> {
+    return $fetch<GenerateStoryDialogueResponse>(
+      `${apiBase}/stories/${storyId}/dialogue-agent/generate`,
+      {
+        method: "POST",
+        body: payload,
+        signal
       }
     )
   }
@@ -508,6 +525,7 @@ export function useStoryApi() {
     compressRoleImage,
     compressSceneAsset,
     exportStory,
+    generateStoryDialogue,
     generateItemImage,
     generateItemPrompt,
     generateLocationImage,

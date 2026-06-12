@@ -14,6 +14,7 @@ import {
 } from "@story-mgr/core"
 import StoryEventLocationField from "./StoryEventLocationField.vue"
 import StoryEventObjectField from "./StoryEventObjectField.vue"
+import StoryDialogueAiDialog from "./StoryDialogueAiDialog.vue"
 import StoryQuickLocationCreateDialog from "./StoryQuickLocationCreateDialog.vue"
 import StoryQuickRoleCreateDialog from "./StoryQuickRoleCreateDialog.vue"
 import type { StoryQuickCreateRolePayload } from "./storyQuickRole"
@@ -33,6 +34,7 @@ import {
   formatStoryScriptValidationIssue,
   validateStoryScriptField
 } from "./storyScriptValidation"
+import type { GenerateStoryDialogueResponse } from "@story-mgr/shared"
 
 interface DialogueDraft extends StoryOnceDialogueDefinition {
   id: string
@@ -111,6 +113,8 @@ const emit = defineEmits<{
   quickCreateRole: [payload: StoryQuickCreateRolePayload]
   save: [event: StoryOnceEventFile]
 }>()
+
+const { generateStoryDialogue } = useStoryApi()
 
 const triggerExprFieldRef = useTemplateRef<HTMLDivElement>("triggerExprField")
 const triggerExprTextareaRef = useTemplateRef<HTMLTextAreaElement>("triggerExprTextarea")
@@ -233,6 +237,12 @@ const dialogueEditorState = reactive<{
     content: ""
   }
 })
+const isDialogueAiDialogOpen = shallowRef(false)
+const dialogueAiPrompt = shallowRef("")
+const dialogueAiLoading = shallowRef(false)
+const dialogueAiError = shallowRef<string | null>(null)
+const dialogueAiResult = shallowRef<GenerateStoryDialogueResponse | null>(null)
+let dialogueAiAbortController: AbortController | null = null
 
 const locationOptions = computed(() => {
   return props.eventLocations.assignments.map((assignment) => ({
@@ -1085,6 +1095,91 @@ function buildDraftPresentation(): StoryOnceEventFile["presentation"] {
   }
 }
 
+function buildDialogueEventDraft(): StoryOnceEventFile | null {
+  if (!props.event) {
+    return null
+  }
+
+  return {
+    id: draft.id.trim(),
+    title: draft.title.trim(),
+    trigger_mode: draft.triggerMode,
+    trigger_expr: draft.triggerMode === "condition" ? draft.triggerExpr.trim() : "",
+    invoke_params: draft.triggerMode === "invoke"
+      ? draft.invokeParams
+          .map((param) => ({
+            name: param.name.trim(),
+            descr: (param.descr ?? "").trim() || undefined
+          }))
+          .filter((param) => param.name)
+      : [],
+    init_script: draft.initScript.trim(),
+    object_keys: normalizeObjectKeys(draft.selectedObjectKeys),
+    presentation: buildDraftPresentation(),
+    location: draft.location.trim(),
+    bgm: draft.bgm.trim(),
+    end_script: draft.endScript.trim(),
+    meta: props.event.meta
+  }
+}
+
+function openDialogueAiDialog() {
+  dialogueAiError.value = null
+  dialogueAiResult.value = null
+  dialogueAiPrompt.value = ""
+  isDialogueAiDialogOpen.value = true
+}
+
+function closeDialogueAiDialog() {
+  if (dialogueAiLoading.value) {
+    return
+  }
+
+  isDialogueAiDialogOpen.value = false
+}
+
+function abortDialogueAi() {
+  dialogueAiAbortController?.abort()
+}
+
+async function runDialogueAi() {
+  const eventDraft = buildDialogueEventDraft()
+
+  if (!eventDraft || eventDraft.presentation.type !== "dialogue") {
+    return
+  }
+
+  dialogueAiLoading.value = true
+  dialogueAiError.value = null
+  dialogueAiAbortController = new AbortController()
+
+  try {
+    dialogueAiResult.value = await generateStoryDialogue(
+      useRoute().params.storyId as string,
+      {
+        collectionType: "pool",
+        event: eventDraft,
+        instruction: dialogueAiPrompt.value
+      },
+      dialogueAiAbortController.signal
+    )
+  } catch (error) {
+    if (error instanceof Error && (error.name === "AbortError" || error.message.includes("aborted"))) {
+      dialogueAiError.value = "已中止。"
+    } else {
+      dialogueAiError.value = error instanceof Error ? error.message : "AI 补对白失败。"
+    }
+  } finally {
+    dialogueAiLoading.value = false
+    dialogueAiAbortController = null
+  }
+}
+
+function applyDialogueAiResult(dialogues: StoryOnceDialogueDefinition[]) {
+  draft.dialogues = dialogues.map((dialogue) => cloneDialogue(dialogue))
+  isDialogueAiDialogOpen.value = false
+}
+
 function submitDraft() {
   if (!props.event) {
     return
@@ -1173,6 +1268,10 @@ watch(
     closeAllScriptAutocomplete()
     closeDialogueContentAutocomplete()
     resetScriptValidation()
+    dialogueAiError.value = null
+    dialogueAiResult.value = null
+    dialogueAiPrompt.value = ""
+    isDialogueAiDialogOpen.value = false
   },
   { immediate: true }
 )
@@ -1245,6 +1344,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("mousedown", handleDocumentPointerDown)
+  dialogueAiAbortController?.abort()
 })
 
 function handleDocumentPointerDown(event: MouseEvent) {
@@ -1780,14 +1880,22 @@ function handleDocumentPointerDown(event: MouseEvent) {
                 }}
               </p>
             </div>
-            <button
-              v-if="draft.presentationType === 'dialogue'"
-              class="btn-secondary detail-panel__dialogue-add"
-              type="button"
-              @click="openCreateDialogueEditor"
-            >
-              添加对白
-            </button>
+            <div v-if="draft.presentationType === 'dialogue'" class="detail-panel__dialogue-head-actions">
+              <button
+                class="btn-secondary detail-panel__dialogue-add"
+                type="button"
+                @click="openDialogueAiDialog"
+              >
+                AI 补对白
+              </button>
+              <button
+                class="btn-secondary detail-panel__dialogue-add"
+                type="button"
+                @click="openCreateDialogueEditor"
+              >
+                添加对白
+              </button>
+            </div>
           </div>
 
           <div class="detail-panel__presentation-mode">
@@ -2057,6 +2165,22 @@ function handleDocumentPointerDown(event: MouseEvent) {
         @close="closeQuickLocationDialog"
         @create="submitQuickCreateLocation"
       />
+
+      <StoryDialogueAiDialog
+        :open="isDialogueAiDialogOpen"
+        :event="buildDialogueEventDraft() ?? event"
+        collection-type="pool"
+        :roles="props.roles"
+        :loading="dialogueAiLoading"
+        :prompt="dialogueAiPrompt"
+        :result="dialogueAiResult"
+        :error-message="dialogueAiError"
+        @close="closeDialogueAiDialog"
+        @update-prompt="dialogueAiPrompt = $event"
+        @run="runDialogueAi"
+        @abort="abortDialogueAi"
+        @apply="applyDialogueAiResult"
+      />
     </template>
 
     <div v-else class="detail-panel__empty">
@@ -2157,6 +2281,13 @@ function handleDocumentPointerDown(event: MouseEvent) {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.detail-panel__dialogue-head-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .detail-panel__dialogue-summary {

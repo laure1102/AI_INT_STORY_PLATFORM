@@ -4,6 +4,7 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph"
 import { ChatOpenAI } from "@langchain/openai"
 import {
   createStoryScriptValidationContext,
+  findStoryRoleReference,
   validateStoryDocument,
   validateStoryScriptContent,
   type AppAiAgentSettings,
@@ -21,6 +22,7 @@ import {
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
   type StoryScriptValidationIssue,
+  type StoryOnceDialogueDefinition,
   type StoryOnceEventFile,
   type StoryRolesFile,
   type StoryValDefinition,
@@ -31,6 +33,8 @@ import { FileStoreError, type StoryFileStore } from "@story-mgr/file-store"
 import type {
   ApplyStoryCreationDraftRequest,
   ApplyStoryCreationDraftResponse,
+  GenerateStoryDialogueRequest,
+  GenerateStoryDialogueResponse,
   RunStoryCreationAgentResponse,
   StoryCreationAgentLog,
   StoryCreationAgentRole,
@@ -358,6 +362,14 @@ const structuredDraftSchema = z.object({
 type StructuredCreationDraft = z.infer<typeof structuredDraftSchema>
 type StructuredCreationDraftLoopRule = z.infer<typeof structuredDraftLoopRuleSchema>
 type StructuredCreationDraftPresentation = z.infer<typeof structuredDraftPresentationSchema>
+
+const generatedDialogueSchema = z.object({
+  summary: z.string().describe("对白生成简述。"),
+  dialogues: z.array(draftDialogueSchema).describe("对白列表。"),
+  warnings: z.array(z.string()).describe("风险、待确认点和需要人工调整的内容。")
+})
+
+type GeneratedDialogueOutput = z.infer<typeof generatedDialogueSchema>
 
 const chiefEditorOutputSchema = z.object({
   log: z.string(),
@@ -1147,6 +1159,126 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
   }
 
   return lines.join("\n")
+}
+
+function normalizeDialogueGenerationCollectionType(
+  collectionType: StoryEventCollectionType
+): "chain" | "pool" | "schedule" {
+  if (collectionType === "pool" || collectionType === "schedule" || collectionType === "chain") {
+    return collectionType
+  }
+
+  if (collectionType === "once") {
+    return "pool"
+  }
+
+  if (collectionType === "loop") {
+    return "schedule"
+  }
+
+  return "chain"
+}
+
+function normalizeDialogueSpeakerKey(
+  roles: StoryRolesFile,
+  dialogue: StoryOnceDialogueDefinition
+) {
+  if (dialogue.speaker_type === "player") {
+    return "player"
+  }
+
+  return findStoryRoleReference(roles, dialogue.speaker_key)?.key ?? dialogue.speaker_key.trim()
+}
+
+function summarizeDialoguePresentation(dialogues: StoryOnceDialogueDefinition[]) {
+  if (dialogues.length === 0) {
+    return "当前还没有对白。"
+  }
+
+  return dialogues
+    .slice(0, 10)
+    .map((dialogue, index) => {
+      const speaker =
+        dialogue.speaker_type === "player"
+          ? "player"
+          : dialogue.speaker_key
+
+      return `${index + 1}. [${speaker}] ${dialogue.content}`
+    })
+    .join("\n")
+}
+
+function summarizeEventForDialogueGeneration(
+  story: StoryDocument,
+  collectionType: "chain" | "pool" | "schedule",
+  event: GenerateStoryDialogueRequest["event"]
+) {
+  const locationDescr = event.location.trim()
+    ? story.eventLocations.assignments.find((item) => item.id === event.location.trim())?.descr ?? ""
+    : ""
+  const roleSummaries = event.object_keys.map((roleKey) => {
+    if (roleKey === "player") {
+      return "player: 主角"
+    }
+
+    const roleReference = findStoryRoleReference(story.roles, roleKey)
+    if (!roleReference) {
+      return `${roleKey}: 未找到角色资料`
+    }
+
+    const sourceRoles = roleReference.scope === "important"
+      ? story.roles.important.roles
+      : story.roles.normal.roles
+    const role = sourceRoles.find((item) => item.id === roleReference.id)
+
+    if (!role) {
+      return `${roleReference.key}: 未找到角色资料`
+    }
+
+    const details = [
+      role.name?.trim() || role.id,
+      role.zhiye?.trim() || "",
+      role.descr?.trim() || ""
+    ].filter(Boolean)
+
+    return `${roleReference.key}: ${details.join(" | ")}`
+  })
+  const triggerMode = event.trigger_mode ?? "default"
+  const existingDialogues =
+    event.presentation.type === "dialogue"
+      ? event.presentation.dialogues.map((dialogue) => ({
+          ...dialogue,
+          speaker_key: normalizeDialogueSpeakerKey(story.roles, dialogue)
+        }))
+      : []
+  const scheduleSummary =
+    collectionType === "schedule" && "loop" in event
+      ? formatJson(event.loop, 1200)
+      : ""
+  const nextSummary =
+    collectionType === "chain" && "next" in event
+      ? formatJson(event.next, 1200)
+      : ""
+
+  return [
+    `事件集合: ${collectionType}`,
+    `事件 ID: ${event.id}`,
+    `标题: ${event.title}`,
+    `触发方式: ${triggerMode}`,
+    `地点: ${event.location || "(无)"}`,
+    locationDescr ? `地点说明: ${locationDescr}` : "",
+    `对象角色: ${roleSummaries.length ? roleSummaries.join("\n") : "(无)"}`,
+    `初始化脚本: ${event.init_script || "(空)"}`,
+    `结束脚本: ${event.end_script || "(空)"}`,
+    triggerMode === "condition" ? `触发条件: ${event.trigger_expr || "(空)"}` : "",
+    triggerMode === "invoke" ? `调用参数: ${formatJson(event.invoke_params ?? [], 1200)}` : "",
+    scheduleSummary ? `定时规则:\n${scheduleSummary}` : "",
+    nextSummary ? `后续节点: ${nextSummary}` : "",
+    `当前表现类型: ${event.presentation.type}`,
+    `当前对白预览:\n${summarizeDialoguePresentation(existingDialogues)}`
+  ]
+    .filter(Boolean)
+    .join("\n")
 }
 
 async function invokeStructured<T extends Record<string, unknown>>(
@@ -2571,6 +2703,121 @@ export async function applyStoryCreationDraft(
       items: appliedItems,
       variables: appliedVariables
     },
+    warnings
+  }
+}
+
+export async function generateStoryEventDialogues(
+  settings: AppSettingsFile,
+  story: StoryDocument,
+  request: GenerateStoryDialogueRequest,
+  signal?: AbortSignal
+): Promise<GenerateStoryDialogueResponse> {
+  const instruction = request.instruction.trim()
+
+  if (!instruction) {
+    throw new FileStoreError(
+      "Dialogue instruction is required.",
+      400,
+      "ai.dialogue-instruction-required"
+    )
+  }
+
+  const collectionType = normalizeDialogueGenerationCollectionType(request.collectionType)
+  const event = request.event
+
+  if (event.presentation.type !== "dialogue") {
+    throw new FileStoreError(
+      "Only dialogue presentation events can generate dialogues.",
+      400,
+      "ai.dialogue-presentation-required"
+    )
+  }
+
+  const agent = requireAgentSettings(settings)
+  const dialogueModel = createChatModel(agent, "eventWriterModel")
+  const prompt = [
+    `你是 Story Manager 的对白润色 Agent。`,
+    "项目目标：把网络小说变成玩家可以代入主角、可以选择、可以演进的开放游戏。",
+    "你负责为单个事件补充对白，不要改写事件结构，不要生成地点、角色、变量、物品或脚本。",
+    "输出必须是结构化对白列表，用于直接覆盖当前事件的对白内容。",
+    "只处理对白事件；silent 和 message 不在本次任务范围内。",
+    "对白要服务游戏推进，而不是长篇小说独白。",
+    "要结合故事背景、当前篇章、事件触发方式、对象角色、地点和现有脚本语义来写。",
+    "必须保留玩家代入感。涉及主角说话时，speaker_type 用 player，speaker_key 固定为 player。",
+    "事件对象说话时，speaker_type 用 object，speaker_key 必须是 player 以外的现有 object key。",
+    "对白应该自然、短促、可点击推进。避免一条对白过长。",
+    "如当前事件对象里没有合适的说话人，不要凭空新增角色，只在 player 和现有对象里分配。",
+    "可以复用 `${group.value}` 这样的占位符，但只在确有必要时使用，且不要编造不存在的变量。",
+    "默认覆盖当前对白，因此输出需要是完整版本，而不是增量 patch。",
+    "如果用户想要大致对白风格，你要把它落成可直接运行的对白序列。",
+    "",
+    "【创作设定】",
+    formatStoryBible(story),
+    "",
+    "【现有变量与资产上下文】",
+    formatExistingVariables(story, instruction, null),
+    "",
+    formatExistingAssets(story, instruction, null),
+    "",
+    "【事件上下文】",
+    summarizeEventForDialogueGeneration(story, collectionType, event),
+    "",
+    "【用户对白指令】",
+    instruction
+  ].join("\n")
+
+  const output = await invokeStructured(
+    "eventWriter",
+    dialogueModel,
+    generatedDialogueSchema,
+    prompt,
+    signal
+  )
+
+  const allowedObjectKeys = new Set(event.object_keys.map((key) => key.trim()).filter(Boolean))
+  const dialogues = output.dialogues.map((dialogue) => {
+    if (dialogue.speaker_type === "player") {
+      return {
+        speaker_type: "player" as const,
+        speaker_key: "player",
+        content: dialogue.content.trim()
+      }
+    }
+
+    const normalizedKey = normalizeDialogueSpeakerKey(story.roles, dialogue)
+
+    if (!normalizedKey || normalizedKey === "player" || !allowedObjectKeys.has(normalizedKey)) {
+      return {
+        speaker_type: "player" as const,
+        speaker_key: "player",
+        content: dialogue.content.trim()
+      }
+    }
+
+    return {
+      speaker_type: "object" as const,
+      speaker_key: normalizedKey,
+      content: dialogue.content.trim()
+    }
+  }).filter((dialogue) => dialogue.content.length > 0)
+
+  if (dialogues.length === 0) {
+    throw new FileStoreError(
+      "Dialogue agent returned an empty dialogue list.",
+      502,
+      "ai.dialogue-empty"
+    )
+  }
+
+  const warnings = [...output.warnings]
+  if (event.object_keys.length === 0) {
+    warnings.push("当前事件没有配置对象角色，AI 只能围绕主角输出对白。")
+  }
+
+  return {
+    summary: output.summary.trim(),
+    dialogues,
     warnings
   }
 }

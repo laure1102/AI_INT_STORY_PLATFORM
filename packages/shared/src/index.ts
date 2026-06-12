@@ -7,7 +7,10 @@ import type {
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryLoopEventFile,
   StoryItemsFile,
+  StoryOnceDialogueDefinition,
+  StoryOnceEventFile,
   StoryPlayerOverrideValsFile,
   StoryRolesFile,
   StorySceneBackgroundVariant,
@@ -40,6 +43,23 @@ export interface StoryBibleResponse {
 
 export interface SaveStoryBibleRequest {
   storyBible: StoryBibleFile
+}
+
+export type StoryDialogueEventSnapshot =
+  | StoryEventFile
+  | StoryOnceEventFile
+  | StoryLoopEventFile
+
+export interface GenerateStoryDialogueRequest {
+  collectionType: StoryEventCollectionType
+  event: StoryDialogueEventSnapshot
+  instruction: string
+}
+
+export interface GenerateStoryDialogueResponse {
+  summary: string
+  dialogues: StoryOnceDialogueDefinition[]
+  warnings: string[]
 }
 
 export type StoryCreationAgentRole =
