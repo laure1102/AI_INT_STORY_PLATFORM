@@ -74,7 +74,9 @@ interface GameUiState {
   interactionActiveIndex: number
   interactionInputDraft: string
   phoneContactActiveIndex: number
-  phoneQuickMessageActiveIndex: number
+  phoneThreadMode: "talk" | "action"
+  phoneTalkActiveIndex: number
+  phoneActionActiveIndex: number
   phoneSelectedRoleKey: string | null
 }
 
@@ -245,29 +247,68 @@ function createPhoneContactOptions(contacts: RuntimePhoneContactView[]): MenuOpt
     const preview = contact.lastMessagePreview?.trim() ?? ""
     const suffix = preview ? ` · ${preview}` : ""
     const unreadLabel = contact.unreadCount > 0 ? `未读 ${contact.unreadCount}` : "已读"
+    const lockLabel = contact.canContact ? "" : " · 当前不可主动联系"
 
     return {
       value: contact.roleKey,
-      label: `${contact.label} · 好感 ${contact.favor}/100 · ${unreadLabel}${suffix}`
+      label: `${contact.label} · ${contact.relationStageLabel} · 好感 ${contact.favor}/100 · ${unreadLabel}${lockLabel}${suffix}`
     }
   })
 }
 
-function createPhoneQuickMessageOptions(thread: RuntimePhoneThreadView | null): MenuOption[] {
+function createPhoneTalkOptions(thread: RuntimePhoneThreadView | null): MenuOption[] {
   if (!thread) {
     return []
   }
 
-  return thread.quickMessages.map((message) => {
+  return thread.talks.map((message) => {
     const tagLabel = message.tags.length > 0 ? ` · ${message.tags.join("/")}` : ""
     const favorLabel = message.baseFavorDelta > 0 ? ` · 好感 +${message.baseFavorDelta}` : ""
     const cooldownLabel = message.cooldownHours > 0 ? ` · 冷却 ${message.cooldownHours}h` : ""
+    const suggestedLabel = message.suggested ? "荐 · " : ""
 
     return {
       value: message.id,
-      label: `${message.text}${tagLabel}${favorLabel}${cooldownLabel}`
+      label: `${suggestedLabel}${message.text}${tagLabel}${favorLabel}${cooldownLabel}`
     }
   })
+}
+
+function formatPhoneActionCostLabel(action: RuntimePhoneThreadView["actions"][number]) {
+  const parts: string[] = []
+
+  if (action.costMoney > 0) {
+    parts.push(`${action.costMoney}元`)
+  }
+
+  if (action.costItems.length > 0) {
+    parts.push(
+      action.costItems
+        .map((item) => `${item.itemName}x${item.quantity}`)
+        .join("、")
+    )
+  }
+
+  return parts.length > 0 ? parts.join(" + ") : "无消耗"
+}
+
+function createPhoneActionOptions(thread: RuntimePhoneThreadView | null): MenuOption[] {
+  if (!thread) {
+    return []
+  }
+
+  return thread.actions
+    .filter((action) => !action.disabled)
+    .map((action) => {
+      const tagLabel = action.tags.length > 0 ? ` · ${action.tags.join("/")}` : ""
+      const favorLabel = action.baseFavorDelta > 0 ? ` · 好感 +${action.baseFavorDelta}` : ""
+      const costLabel = ` · ${formatPhoneActionCostLabel(action)}`
+
+      return {
+        value: action.id,
+        label: `${action.label}${tagLabel}${favorLabel}${costLabel}`
+      }
+    })
 }
 
 function countPhoneUnreadMessages(contacts: RuntimePhoneContactView[]) {
@@ -1119,17 +1160,41 @@ function PhoneContactsOverlay({
 function PhoneThreadOverlay({
   state,
   thread,
-  activeIndex,
-  onActiveIndexChange,
-  onSubmit
+  mode,
+  talkActiveIndex,
+  actionActiveIndex,
+  onTalkActiveIndexChange,
+  onActionActiveIndexChange,
+  onModeChange,
+  onSubmitTalk,
+  onSubmitAction
 }: {
   state: TuiClientAppState
   thread: RuntimePhoneThreadView | null
-  activeIndex: number
-  onActiveIndexChange: (nextIndex: number) => void
-  onSubmit: (quickMessageId: string) => void
+  mode: "talk" | "action"
+  talkActiveIndex: number
+  actionActiveIndex: number
+  onTalkActiveIndexChange: (nextIndex: number) => void
+  onActionActiveIndexChange: (nextIndex: number) => void
+  onModeChange: (nextMode: "talk" | "action") => void
+  onSubmitTalk: (talkId: string) => void
+  onSubmitAction: (actionId: string) => void
 }) {
-  const options = useMemo(() => createPhoneQuickMessageOptions(thread), [thread])
+  const talkOptions = useMemo(() => createPhoneTalkOptions(thread), [thread])
+  const actionOptions = useMemo(() => createPhoneActionOptions(thread), [thread])
+
+  useInput((input, key) => {
+    const lowerInput = input.toLowerCase()
+
+    if (key.leftArrow || lowerInput === "a") {
+      onModeChange("talk")
+      return
+    }
+
+    if (key.rightArrow || lowerInput === "d") {
+      onModeChange("action")
+    }
+  })
 
   if (!thread) {
     return (
@@ -1145,15 +1210,30 @@ function PhoneThreadOverlay({
     )
   }
   const visibleMessages = thread.messages.slice(-8)
+  const lockedActions = thread.actions.filter((action) => action.disabled)
+  const activeOptions = mode === "talk" ? talkOptions : actionOptions
+  const activeIndex = mode === "talk" ? talkActiveIndex : actionActiveIndex
+  const onActiveIndexChange = mode === "talk" ? onTalkActiveIndexChange : onActionActiveIndexChange
+  const onSubmit = mode === "talk" ? onSubmitTalk : onSubmitAction
 
   return (
     <PhoneShell
       state={state}
       title={thread.contactLabel}
-      subtitle={`好感 ${thread.favor}/100 · 未读 ${thread.unreadCount}`}
+      subtitle={`${thread.relationTrackLabel} / ${thread.relationStageLabel} · 好感 ${thread.favor}/100 · 未读 ${thread.unreadCount}`}
       accentColor="magenta"
-      footerText="上/下选择短句；Enter 发送；Esc 返回联系人；P 关闭手机"
+      footerText="A/D 或 左右切换说话/动作；上/下选择；Enter 发送；Esc 返回联系人；P 关闭手机"
     >
+      <SectionCard title="联系人状态" accentColor="yellow" badge={thread.personalityLabel || "未设性格"}>
+        <Box flexDirection="row" flexWrap="wrap">
+          <StatusChip label="关系" value={thread.relationStageLabel} color={thread.canContact ? "green" : "red"} />
+          <StatusChip label="轨道" value={thread.relationTrackLabel} color="cyan" />
+          <StatusChip label="好感" value={`${thread.favor}/100`} color="magenta" />
+        </Box>
+        {!thread.canContact && thread.lockMessage ? (
+          <Alert variant="warning">{thread.lockMessage}</Alert>
+        ) : null}
+      </SectionCard>
       <SectionCard title="聊天记录" accentColor="magenta" badge={`${thread.messages.length} 条`}>
         {visibleMessages.length === 0 ? (
           <Text color="gray">你们还没有聊过天。</Text>
@@ -1168,15 +1248,32 @@ function PhoneThreadOverlay({
           ))
         )}
       </SectionCard>
-      <SectionCard title="发送短句" accentColor="cyan" badge={`${thread.quickMessages.length} 条`}>
+      <SectionCard
+        title={mode === "talk" ? "说话" : "动作"}
+        accentColor={mode === "talk" ? "cyan" : "yellow"}
+        badge={mode === "talk" ? `${thread.talks.length} 条` : `${thread.actions.filter((action) => !action.disabled).length} 项`}
+      >
+        <Box flexDirection="row" flexWrap="wrap" marginBottom={1}>
+          <StatusChip label="A" value="说话" color={mode === "talk" ? "cyan" : "gray"} />
+          <StatusChip label="D" value="动作" color={mode === "action" ? "yellow" : "gray"} />
+        </Box>
         <MenuSelect
-          options={options}
+          options={activeOptions}
           visibleOptionCount={5}
           activeIndex={activeIndex}
           onActiveIndexChange={onActiveIndexChange}
           onSubmit={onSubmit}
         />
       </SectionCard>
+      {mode === "action" && lockedActions.length > 0 ? (
+        <SectionCard title="暂未解锁" accentColor="gray" badge={`${lockedActions.length} 项`}>
+          {lockedActions.map((action) => (
+            <Text key={action.id} color="gray">
+              - {action.label}：{action.disabledReason ?? "暂不可用"}
+            </Text>
+          ))}
+        </SectionCard>
+      ) : null}
     </PhoneShell>
   )
 }
@@ -1620,9 +1717,12 @@ function GameScreen({
   onConfirmContinue,
   onSelectDebugTime,
   onPhoneContactIndexChange,
-  onPhoneQuickMessageIndexChange,
+  onPhoneThreadModeChange,
+  onPhoneTalkIndexChange,
+  onPhoneActionIndexChange,
   onPhoneOpenThread,
-  onPhoneSendQuickMessage
+  onPhoneSendTalk,
+  onPhoneSendAction
 }: {
   state: TuiClientAppState
   uiState: GameUiState
@@ -1631,9 +1731,12 @@ function GameScreen({
   onConfirmContinue: () => void
   onSelectDebugTime: (value: string) => void
   onPhoneContactIndexChange: (nextIndex: number) => void
-  onPhoneQuickMessageIndexChange: (nextIndex: number) => void
+  onPhoneThreadModeChange: (nextMode: "talk" | "action") => void
+  onPhoneTalkIndexChange: (nextIndex: number) => void
+  onPhoneActionIndexChange: (nextIndex: number) => void
   onPhoneOpenThread: (roleKey: string) => void
-  onPhoneSendQuickMessage: (quickMessageId: string) => void
+  onPhoneSendTalk: (talkId: string) => void
+  onPhoneSendAction: (actionId: string) => void
 }) {
   const view = state.view
 
@@ -1726,9 +1829,14 @@ function GameScreen({
             <PhoneThreadOverlay
               state={state}
               thread={phoneThread}
-              activeIndex={uiState.phoneQuickMessageActiveIndex}
-              onActiveIndexChange={onPhoneQuickMessageIndexChange}
-              onSubmit={onPhoneSendQuickMessage}
+              mode={uiState.phoneThreadMode}
+              talkActiveIndex={uiState.phoneTalkActiveIndex}
+              actionActiveIndex={uiState.phoneActionActiveIndex}
+              onTalkActiveIndexChange={onPhoneTalkIndexChange}
+              onActionActiveIndexChange={onPhoneActionIndexChange}
+              onModeChange={onPhoneThreadModeChange}
+              onSubmitTalk={onPhoneSendTalk}
+              onSubmitAction={onPhoneSendAction}
             />
           </Box>
         ) : null}
@@ -1886,7 +1994,9 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
     interactionActiveIndex: 0,
     interactionInputDraft: "",
     phoneContactActiveIndex: 0,
-    phoneQuickMessageActiveIndex: 0,
+    phoneThreadMode: "talk",
+    phoneTalkActiveIndex: 0,
+    phoneActionActiveIndex: 0,
     phoneSelectedRoleKey: null
   })
   const [task, setTask] = useState<AsyncTaskState | null>({
@@ -1964,7 +2074,9 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
       ...currentState,
       overlay: null,
       overlayOffset: 0,
-      phoneQuickMessageActiveIndex: 0,
+      phoneThreadMode: "talk",
+      phoneTalkActiveIndex: 0,
+      phoneActionActiveIndex: 0,
       phoneSelectedRoleKey: null
     }))
   }
@@ -1974,7 +2086,9 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
       ...currentState,
       overlay: "phone-contacts",
       overlayOffset: 0,
-      phoneQuickMessageActiveIndex: 0,
+      phoneThreadMode: "talk",
+      phoneTalkActiveIndex: 0,
+      phoneActionActiveIndex: 0,
       phoneSelectedRoleKey: null
     }))
   }
@@ -1986,20 +2100,36 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
       overlay: "phone-thread",
       overlayOffset: 0,
       phoneSelectedRoleKey: roleKey,
-      phoneQuickMessageActiveIndex: 0
+      phoneThreadMode: "talk",
+      phoneTalkActiveIndex: 0,
+      phoneActionActiveIndex: 0
     }))
   }
 
-  async function sendPhoneQuickMessage(quickMessageId: string) {
+  async function sendPhoneTalk(talkId: string) {
     const roleKey = gameUiState.phoneSelectedRoleKey
     if (!roleKey) {
       return
     }
 
     await handleDispatchAction(app, {
-      type: "phone-send-quick-message",
+      type: "phone-send-talk",
       roleKey,
-      quickMessageId
+      talkId
+    }, setState)
+    await handleDispatchAction(app, { type: "phone-mark-read", roleKey }, setState)
+  }
+
+  async function sendPhoneAction(actionId: string) {
+    const roleKey = gameUiState.phoneSelectedRoleKey
+    if (!roleKey) {
+      return
+    }
+
+    await handleDispatchAction(app, {
+      type: "phone-send-action",
+      roleKey,
+      actionId
     }, setState)
     await handleDispatchAction(app, { type: "phone-mark-read", roleKey }, setState)
   }
@@ -2129,7 +2259,9 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
         overlay: "phone-contacts",
         overlayOffset: 0,
         phoneSelectedRoleKey: null,
-        phoneQuickMessageActiveIndex: 0
+        phoneThreadMode: "talk",
+        phoneTalkActiveIndex: 0,
+        phoneActionActiveIndex: 0
       }))
       return
     }
@@ -2567,14 +2699,27 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
             phoneContactActiveIndex: Math.max(0, nextIndex)
           }))
         }}
-        onPhoneQuickMessageIndexChange={(nextIndex) => {
+        onPhoneThreadModeChange={(nextMode) => {
           setGameUiState((currentState) => ({
             ...currentState,
-            phoneQuickMessageActiveIndex: Math.max(0, nextIndex)
+            phoneThreadMode: nextMode
+          }))
+        }}
+        onPhoneTalkIndexChange={(nextIndex) => {
+          setGameUiState((currentState) => ({
+            ...currentState,
+            phoneTalkActiveIndex: Math.max(0, nextIndex)
+          }))
+        }}
+        onPhoneActionIndexChange={(nextIndex) => {
+          setGameUiState((currentState) => ({
+            ...currentState,
+            phoneActionActiveIndex: Math.max(0, nextIndex)
           }))
         }}
         onPhoneOpenThread={(roleKey) => void openPhoneThread(roleKey)}
-        onPhoneSendQuickMessage={(quickMessageId) => void sendPhoneQuickMessage(quickMessageId)}
+        onPhoneSendTalk={(talkId) => void sendPhoneTalk(talkId)}
+        onPhoneSendAction={(actionId) => void sendPhoneAction(actionId)}
       />
     )
   })()

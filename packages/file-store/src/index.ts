@@ -361,6 +361,11 @@ function createDefaultInitialBags(): StoryInitialBagsFile {
 
 function createDefaultStoryPhone(): StoryPhoneFile {
   return {
+    relationship_tracks: [],
+    personality_library: [],
+    talk_library: [],
+    action_library: [],
+    reply_library: [],
     player_quick_messages: [],
     contact_profiles: [],
     fallback_replies: {}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  StoryPhoneFile,
   StoryImportantRoleDefinition,
   StoryNormalRoleDefinition,
   StoryRolesFile
@@ -19,6 +20,9 @@ interface RoleAiDraft {
 }
 
 interface NormalRoleDraft {
+  contact_enabled: boolean
+  contact_initial_favor: number
+  contact_track: "none" | "romance" | "official" | "social"
   draftKey: string
   descr: string
   id: string
@@ -28,10 +32,15 @@ interface NormalRoleDraft {
   name: string
   prompt: string
   selected: boolean
+  xingge_id: string
+  xingge_note: string
   zhiye: string
 }
 
 interface ImportantRoleDraft {
+  contact_enabled: boolean
+  contact_initial_favor: number
+  contact_track: "none" | "romance" | "official" | "social"
   draftKey: string
   descr: string
   descr_female: string
@@ -53,6 +62,8 @@ interface ImportantRoleDraft {
   qufen_xingbie: boolean
   selected: boolean
   xingge: string
+  xingge_id: string
+  xingge_note: string
   zhiye: string
 }
 
@@ -79,8 +90,15 @@ interface ImportantRoleImageTask {
 }
 
 const imageVariants: ImageVariant[] = ["raw", "compress1", "compress2"]
+const contactTrackOptions = [
+  { label: "不加入联系人", value: "none" },
+  { label: "恋爱", value: "romance" },
+  { label: "政务", value: "official" },
+  { label: "社交", value: "social" }
+] as const
 
 const props = defineProps<{
+  phone: StoryPhoneFile
   roles: StoryRolesFile
   saveSuccessMessage?: string | null
   saving: boolean
@@ -157,6 +175,13 @@ const batchState = reactive({
   promptTotal: 0
 })
 
+const personalityOptions = computed(() =>
+  props.phone.personality_library.map((entry) => ({
+    label: entry.name || entry.id,
+    value: entry.id
+  }))
+)
+
 let draftKeySeed = 0
 
 function createDraftKey(prefix: string) {
@@ -166,6 +191,35 @@ function createDraftKey(prefix: string) {
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value : ""
+}
+
+function clampFavorInput(value: unknown) {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10)
+  if (!Number.isFinite(parsed)) {
+    return 20
+  }
+
+  return Math.max(0, Math.min(100, parsed))
+}
+
+function getPersonalityLabel(personalityId: string) {
+  const matched = props.phone.personality_library.find((entry) => entry.id === personalityId)
+  return matched?.name ?? personalityId
+}
+
+function buildRoleXinggePromptText(role: {
+  xingge?: string
+  xingge_id?: string
+  xingge_note?: string
+}) {
+  return [
+    role.xingge_id ? getPersonalityLabel(role.xingge_id) : "",
+    normalizeText(role.xingge_note),
+    normalizeText(role.xingge)
+  ]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("，")
 }
 
 function sanitizeNameInput(value: string) {
@@ -269,6 +323,9 @@ function getAssetState(
 
 function cloneNormalRole(role: StoryNormalRoleDefinition): NormalRoleDraft {
   const draftRole: NormalRoleDraft = {
+    contact_enabled: Boolean(role.contact_enabled),
+    contact_initial_favor: Number(role.contact_initial_favor ?? 20),
+    contact_track: role.contact_track ?? "none",
     descr: normalizeText(role.descr),
     draftKey: createDraftKey("normal-role"),
     id: normalizeText(role.id),
@@ -278,6 +335,8 @@ function cloneNormalRole(role: StoryNormalRoleDefinition): NormalRoleDraft {
     name: normalizeText(role.name),
     prompt: normalizeText(role.prompt),
     selected: false,
+    xingge_id: normalizeText(role.xingge_id),
+    xingge_note: normalizeText(role.xingge_note),
     zhiye: normalizeText(role.zhiye)
   }
 
@@ -287,6 +346,9 @@ function cloneNormalRole(role: StoryNormalRoleDefinition): NormalRoleDraft {
 
 function cloneImportantRole(role: StoryImportantRoleDefinition): ImportantRoleDraft {
   const draftRole: ImportantRoleDraft = {
+    contact_enabled: Boolean(role.contact_enabled),
+    contact_initial_favor: Number(role.contact_initial_favor ?? 20),
+    contact_track: role.contact_track ?? "none",
     descr: normalizeText(role.descr),
     descr_female: normalizeText(role.descr_female),
     descr_male: normalizeText(role.descr_male),
@@ -308,6 +370,8 @@ function cloneImportantRole(role: StoryImportantRoleDefinition): ImportantRoleDr
     qufen_xingbie: Boolean(role.qufen_xingbie),
     selected: false,
     xingge: normalizeText(role.xingge),
+    xingge_id: normalizeText(role.xingge_id),
+    xingge_note: normalizeText(role.xingge_note),
     zhiye: normalizeText(role.zhiye)
   }
 
@@ -642,6 +706,9 @@ function getRoleDisplayName(role: { name?: string; id: string }) {
 
 function addNormalRole() {
   const role: NormalRoleDraft = {
+    contact_enabled: false,
+    contact_initial_favor: 20,
+    contact_track: "none",
     descr: "",
     draftKey: createDraftKey("normal-role"),
     img_compress_1: "",
@@ -651,6 +718,8 @@ function addNormalRole() {
     id: getNextDefaultId("normal"),
     prompt: "",
     selected: false,
+    xingge_id: "",
+    xingge_note: "",
     zhiye: ""
   }
 
@@ -660,6 +729,9 @@ function addNormalRole() {
 
 function addImportantRole() {
   const role: ImportantRoleDraft = {
+    contact_enabled: false,
+    contact_initial_favor: 20,
+    contact_track: "none",
     descr: "",
     descr_female: "",
     descr_male: "",
@@ -681,6 +753,8 @@ function addImportantRole() {
     qufen_xingbie: false,
     selected: false,
     xingge: "",
+    xingge_id: "",
+    xingge_note: "",
     zhiye: ""
   }
 
@@ -900,7 +974,8 @@ async function handleGenerateNormalPrompt(role: NormalRoleDraft) {
       important: false,
       qufenXingbie: false,
       roleName: role.id,
-      storyTitle: props.storyTitle
+      storyTitle: props.storyTitle,
+      xingge: buildRoleXinggePromptText(role)
     })
   } catch (error) {
     state.error = formatErrorMessage(error, "生成提示词失败。")
@@ -928,7 +1003,7 @@ async function handleGenerateImportantPrompt(role: ImportantRoleDraft) {
               qufenXingbie: true,
               roleName: role.id,
               storyTitle: props.storyTitle,
-              xingge: role.xingge
+              xingge: buildRoleXinggePromptText(role)
             })
           : Promise.resolve(""),
         femaleDescr
@@ -939,7 +1014,7 @@ async function handleGenerateImportantPrompt(role: ImportantRoleDraft) {
               qufenXingbie: true,
               roleName: role.id,
               storyTitle: props.storyTitle,
-              xingge: role.xingge
+              xingge: buildRoleXinggePromptText(role)
             })
           : Promise.resolve("")
       ])
@@ -957,7 +1032,7 @@ async function handleGenerateImportantPrompt(role: ImportantRoleDraft) {
       qufenXingbie: false,
       roleName: role.id,
       storyTitle: props.storyTitle,
-      xingge: role.xingge
+      xingge: buildRoleXinggePromptText(role)
     })
     role.prompt_male = ""
     role.prompt_female = ""
@@ -1324,8 +1399,13 @@ function submitDraft() {
           prompt: isSplitByGender ? "" : role.prompt.trim(),
           prompt_female: isSplitByGender ? role.prompt_female.trim() : "",
           prompt_male: isSplitByGender ? role.prompt_male.trim() : "",
+          contact_enabled: role.contact_enabled,
+          contact_initial_favor: clampFavorInput(role.contact_initial_favor),
+          contact_track: role.contact_track,
           qufen_xingbie: isSplitByGender,
           xingge: role.xingge.trim(),
+          xingge_id: role.xingge_id.trim(),
+          xingge_note: role.xingge_note.trim(),
           zhiye: role.zhiye.trim()
         }
       })
@@ -1346,6 +1426,11 @@ function submitDraft() {
         name: role.name.trim(),
         id: sanitizeNameInput(role.id),
         prompt: role.prompt.trim(),
+        contact_enabled: role.contact_enabled,
+        contact_initial_favor: clampFavorInput(role.contact_initial_favor),
+        contact_track: role.contact_track,
+        xingge_id: role.xingge_id.trim(),
+        xingge_note: role.xingge_note.trim(),
         zhiye: role.zhiye.trim()
       }))
     }
@@ -1539,6 +1624,7 @@ watch(
                     <th>ID</th>
                     <th>名字</th>
                     <th>职业</th>
+                    <th>联系人/性格</th>
                     <th>描述</th>
                     <th>提示词</th>
                     <th>图片</th>
@@ -1559,6 +1645,40 @@ watch(
                     </td>
                     <td>
                       <input v-model="role.zhiye" class="text-input roles-dialog__cell-input" type="text" placeholder="算命先生" />
+                    </td>
+                    <td>
+                      <div class="roles-dialog__meta-stack">
+                        <label class="roles-dialog__inline-check">
+                          <input v-model="role.contact_enabled" type="checkbox" />
+                          <span>加入联系人</span>
+                        </label>
+                        <select v-model="role.contact_track" class="text-input roles-dialog__select">
+                          <option v-for="option in contactTrackOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                        <input
+                          v-model.number="role.contact_initial_favor"
+                          class="text-input roles-dialog__cell-input"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          placeholder="20"
+                        />
+                        <select v-model="role.xingge_id" class="text-input roles-dialog__select">
+                          <option value="">未指定性格</option>
+                          <option v-for="option in personalityOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                        <textarea
+                          v-model="role.xingge_note"
+                          class="text-input roles-dialog__textarea roles-dialog__textarea--cell"
+                          rows="2"
+                          placeholder="补充说话方式或气质说明"
+                        />
+                      </div>
                     </td>
                     <td>
                       <textarea
@@ -1703,7 +1823,7 @@ watch(
                     <th>名字</th>
                     <th>职业</th>
                     <th>描述</th>
-                    <th>性格</th>
+                    <th>联系人/性格</th>
                     <th>区分性别</th>
                     <th>提示词</th>
                     <th>图片</th>
@@ -1755,12 +1875,44 @@ watch(
                       />
                     </td>
                     <td>
-                      <textarea
-                        v-model="role.xingge"
-                        class="text-input roles-dialog__textarea roles-dialog__textarea--cell"
-                        rows="3"
-                        placeholder="神秘，圆滑，洞察人心"
-                      />
+                      <div class="roles-dialog__meta-stack">
+                        <label class="roles-dialog__inline-check">
+                          <input v-model="role.contact_enabled" type="checkbox" />
+                          <span>加入联系人</span>
+                        </label>
+                        <select v-model="role.contact_track" class="text-input roles-dialog__select">
+                          <option v-for="option in contactTrackOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                        <input
+                          v-model.number="role.contact_initial_favor"
+                          class="text-input roles-dialog__cell-input"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          placeholder="20"
+                        />
+                        <select v-model="role.xingge_id" class="text-input roles-dialog__select">
+                          <option value="">未指定性格</option>
+                          <option v-for="option in personalityOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                        <textarea
+                          v-model="role.xingge"
+                          class="text-input roles-dialog__textarea roles-dialog__textarea--cell"
+                          rows="2"
+                          placeholder="兼容旧字段的性格描述"
+                        />
+                        <textarea
+                          v-model="role.xingge_note"
+                          class="text-input roles-dialog__textarea roles-dialog__textarea--cell"
+                          rows="2"
+                          placeholder="补充不同场景下的说话方式"
+                        />
+                      </div>
                     </td>
                     <td>
                       <select v-model="role.qufen_xingbie" class="text-input roles-dialog__select">
@@ -2159,6 +2311,20 @@ watch(
 .roles-dialog__select,
 .roles-dialog__textarea {
   resize: vertical;
+}
+
+.roles-dialog__meta-stack {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.roles-dialog__inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 .roles-dialog__textarea--cell {

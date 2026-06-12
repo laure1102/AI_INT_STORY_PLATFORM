@@ -40,6 +40,9 @@ export function hasQuickRoleIdConflict(
 
 function createNormalQuickRole(payload: StoryQuickCreateRolePayload): StoryNormalRoleDefinition {
   return {
+    contact_enabled: false,
+    contact_initial_favor: 20,
+    contact_track: "none",
     descr: payload.descr.trim(),
     id: payload.id,
     img_compress_1: "",
@@ -47,12 +50,17 @@ function createNormalQuickRole(payload: StoryQuickCreateRolePayload): StoryNorma
     img_raw: "",
     name: payload.name.trim(),
     prompt: "",
+    xingge_id: "",
+    xingge_note: "",
     zhiye: payload.zhiye.trim()
   }
 }
 
 function createImportantQuickRole(payload: StoryQuickCreateRolePayload): StoryImportantRoleDefinition {
   const baseRole: StoryImportantRoleDefinition = {
+    contact_enabled: false,
+    contact_initial_favor: 20,
+    contact_track: "none",
     descr: payload.qufenXingbie ? "" : payload.descr.trim(),
     descr_female: payload.qufenXingbie ? payload.descr.trim() : "",
     descr_male: payload.qufenXingbie ? payload.descr.trim() : "",
@@ -72,6 +80,8 @@ function createImportantQuickRole(payload: StoryQuickCreateRolePayload): StoryIm
     prompt_male: "",
     qufen_xingbie: payload.qufenXingbie,
     xingge: "",
+    xingge_id: "",
+    xingge_note: "",
     zhiye: payload.zhiye.trim()
   }
 

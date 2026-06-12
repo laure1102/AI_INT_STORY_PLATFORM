@@ -450,9 +450,135 @@ function collectGlobalValKeys(document: StoryDocument) {
 
 function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[]) {
   const roleKeys = collectValidationRoleKeys(document)
+  const relationshipTrackIds = new Set<string>(
+    document.phone.relationship_tracks.map((track) => track.id).filter((trackId) => trackId !== "none")
+  )
+  const personalityIds = new Set(
+    document.phone.personality_library.map((personality) => personality.id)
+  )
   const quickMessageIds = new Set(document.phone.player_quick_messages.map((message) => message.id))
+  const talkSuggestionIds = new Set(document.phone.talk_library.map((entry) => entry.id))
+  const proactiveSuggestionIds = new Set([...quickMessageIds, ...talkSuggestionIds])
+  const itemIds = new Set(collectValidationItemIds(document))
+  const invokeTargetKeys = new Set(
+    buildStoryInvokeValidationTargets(document).map((target) => `${target.type}:${target.eventId}`)
+  )
   const readableContext = buildValidationReadableContext(document)
   const valsFile = buildCombinedStoryScriptVals(document)
+
+  const validatePhoneScope = (
+    scope: {
+      role_keys: string[]
+      contact_tracks: string[]
+      personality_ids: string[]
+    },
+    basePath: string[],
+    label: string
+  ) => {
+    for (const [roleKeyIndex, roleKey] of scope.role_keys.entries()) {
+      if (!roleKeys.has(roleKey)) {
+        pushIssue(
+          issues,
+          "error",
+          "phone.scope.missing-role",
+          `${label} references unknown role "${roleKey}".`,
+          [...basePath, "role_keys", String(roleKeyIndex)]
+        )
+      }
+    }
+
+    for (const [trackIndex, trackId] of scope.contact_tracks.entries()) {
+      if (trackId === "none") {
+        continue
+      }
+
+      if (!relationshipTrackIds.has(trackId)) {
+        pushIssue(
+          issues,
+          "error",
+          "phone.scope.missing-track",
+          `${label} references unknown contact track "${trackId}".`,
+          [...basePath, "contact_tracks", String(trackIndex)]
+        )
+      }
+    }
+
+    for (const [personalityIndex, personalityId] of scope.personality_ids.entries()) {
+      if (!personalityIds.has(personalityId)) {
+        pushIssue(
+          issues,
+          "error",
+          "phone.scope.missing-personality",
+          `${label} references unknown personality "${personalityId}".`,
+          [...basePath, "personality_ids", String(personalityIndex)]
+        )
+      }
+    }
+  }
+
+  const validatePhoneInvoke = (
+    invoke: { target_type: string; event_id: string } | undefined,
+    basePath: string[],
+    label: string
+  ) => {
+    if (!invoke) {
+      return
+    }
+
+    if (!invokeTargetKeys.has(`${invoke.target_type}:${invoke.event_id}`)) {
+      pushIssue(
+        issues,
+        "error",
+        "phone.invoke.missing-event",
+        `${label} references missing invoke event "${invoke.target_type}:${invoke.event_id}".`,
+        [...basePath, "event_id"]
+      )
+    }
+  }
+
+  for (const [roleIndex, role] of document.roles.normal.roles.entries()) {
+    if (role.contact_track !== "none" && !relationshipTrackIds.has(role.contact_track)) {
+      pushIssue(
+        issues,
+        "error",
+        "phone.role.missing-track",
+        `Normal role "${role.id}" references unknown contact track "${role.contact_track}".`,
+        ["roles", "normal", "roles", String(roleIndex), "contact_track"]
+      )
+    }
+
+    if (role.xingge_id && !personalityIds.has(role.xingge_id)) {
+      pushIssue(
+        issues,
+        "error",
+        "phone.role.missing-personality",
+        `Normal role "${role.id}" references unknown personality "${role.xingge_id}".`,
+        ["roles", "normal", "roles", String(roleIndex), "xingge_id"]
+      )
+    }
+  }
+
+  for (const [roleIndex, role] of document.roles.important.roles.entries()) {
+    if (role.contact_track !== "none" && !relationshipTrackIds.has(role.contact_track)) {
+      pushIssue(
+        issues,
+        "error",
+        "phone.role.missing-track",
+        `Important role "${role.id}" references unknown contact track "${role.contact_track}".`,
+        ["roles", "important", "roles", String(roleIndex), "contact_track"]
+      )
+    }
+
+    if (role.xingge_id && !personalityIds.has(role.xingge_id)) {
+      pushIssue(
+        issues,
+        "error",
+        "phone.role.missing-personality",
+        `Important role "${role.id}" references unknown personality "${role.xingge_id}".`,
+        ["roles", "important", "roles", String(roleIndex), "xingge_id"]
+      )
+    }
+  }
 
   for (const [messageIndex, message] of document.phone.player_quick_messages.entries()) {
     for (const [roleKeyIndex, roleKey] of message.available_role_keys.entries()) {
@@ -466,6 +592,52 @@ function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[])
         )
       }
     }
+  }
+
+  for (const [entryIndex, entry] of document.phone.talk_library.entries()) {
+    validatePhoneScope(
+      entry.scope,
+      ["phone", "talk_library", String(entryIndex), "scope"],
+      `Phone talk "${entry.id}"`
+    )
+    validatePhoneInvoke(
+      entry.invoke,
+      ["phone", "talk_library", String(entryIndex), "invoke"],
+      `Phone talk "${entry.id}"`
+    )
+  }
+
+  for (const [entryIndex, entry] of document.phone.action_library.entries()) {
+    validatePhoneScope(
+      entry.scope,
+      ["phone", "action_library", String(entryIndex), "scope"],
+      `Phone action "${entry.id}"`
+    )
+    validatePhoneInvoke(
+      entry.invoke,
+      ["phone", "action_library", String(entryIndex), "invoke"],
+      `Phone action "${entry.id}"`
+    )
+
+    for (const [costIndex, costItem] of entry.cost_items.entries()) {
+      if (!itemIds.has(costItem.item_id)) {
+        pushIssue(
+          issues,
+          "error",
+          "phone.action.missing-item",
+          `Phone action "${entry.id}" references missing item "${costItem.item_id}".`,
+          ["phone", "action_library", String(entryIndex), "cost_items", String(costIndex), "item_id"]
+        )
+      }
+    }
+  }
+
+  for (const [entryIndex, entry] of document.phone.reply_library.entries()) {
+    validatePhoneScope(
+      entry.scope,
+      ["phone", "reply_library", String(entryIndex), "scope"],
+      `Phone reply "${entry.id}"`
+    )
   }
 
   for (const [profileIndex, profile] of document.phone.contact_profiles.entries()) {
@@ -506,12 +678,12 @@ function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[])
       }
 
       for (const [replyIndex, quickMessageId] of rule.reply_quick_message_ids.entries()) {
-        if (!quickMessageIds.has(quickMessageId)) {
+        if (!proactiveSuggestionIds.has(quickMessageId)) {
           pushIssue(
             issues,
             "error",
             "phone.proactive-rule.missing-quick-message",
-            `Phone proactive rule "${profile.role_key}/${rule.id}" references missing quick message "${quickMessageId}".`,
+            `Phone proactive rule "${profile.role_key}/${rule.id}" references missing reply suggestion "${quickMessageId}".`,
             [
               "phone",
               "contact_profiles",
@@ -653,16 +825,13 @@ function validatePlayableEvent(
     }
   }
 
-  if (
-    triggerMode === "invoke"
-    && !(event.invoke_params ?? []).some((param) => param.name.trim())
-  ) {
+  if (triggerMode === "invoke" && event.trigger_expr.trim()) {
     pushIssue(
       issues,
       "error",
-      `${codePrefix}.invoke-param-required`,
-      `${label} "${event.id}" invoke_params is required when trigger_mode is invoke.`,
-      [eventGroupKey, String(eventIndex), "invoke_params"]
+      `${codePrefix}.trigger-expr-not-allowed`,
+      `${label} "${event.id}" trigger_expr must stay empty when trigger_mode is invoke.`,
+      [eventGroupKey, String(eventIndex), "trigger_expr"]
     )
   }
 

@@ -8,6 +8,7 @@ import type {
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryPhoneFile,
   StoryEventTriggerMode,
   StoryItemsFile,
   StoryLoopEventFile,
@@ -40,6 +41,7 @@ import StoryItemsDialog from "./StoryItemsDialog.vue"
 import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
 import StoryLocationsDialog from "./StoryLocationsDialog.vue"
 import StoryOnceCanvas from "./StoryOnceCanvas.vue"
+import StoryPhoneDialog from "./StoryPhoneDialog.vue"
 import StoryPlayerOverrideValsDialog from "./StoryPlayerOverrideValsDialog.vue"
 import StoryRolesDialog from "./StoryRolesDialog.vue"
 import StoryScenesDialog from "./StoryScenesDialog.vue"
@@ -75,6 +77,7 @@ const {
   saveEventLocations,
   saveStoryCreationHistorySession,
   saveItems,
+  savePhone,
   savePlayerOverrideVals,
   saveRoles,
   saveScenes,
@@ -111,11 +114,13 @@ const isSystemValsDialogOpen = shallowRef(false)
 const isScenesDialogOpen = shallowRef(false)
 const isLocationsDialogOpen = shallowRef(false)
 const isItemsDialogOpen = shallowRef(false)
+const isPhoneDialogOpen = shallowRef(false)
 const isRolesDialogOpen = shallowRef(false)
 const isSettingsDialogOpen = shallowRef(false)
 const scenesSaveSuccessMessage = shallowRef<string | null>(null)
 const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const itemsSaveSuccessMessage = shallowRef<string | null>(null)
+const phoneSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
 const activeWorkspaceTab = shallowRef<StoryWorkspaceTab>("creation")
 const activeEventTab = shallowRef<EventCanvasTab>("chain")
@@ -366,6 +371,39 @@ const storyScriptItemIds = computed(() => {
   return storyDocument.value?.items.items.map((item) => item.id) ?? []
 })
 
+const phoneInvokeEventOptions = computed(() => {
+  if (!storyDocument.value) {
+    return []
+  }
+
+  const chainEvents = storyDocument.value.chainEvents
+    .filter((event): event is StoryEventFile => isGraphEventNode(event))
+    .filter((event) => normalizeEventTriggerMode(event) === "invoke")
+    .map((event) => ({
+      eventId: event.id,
+      label: `[链] ${event.title} (${event.id})`,
+      targetType: "chain" as const
+    }))
+
+  const poolEvents = storyDocument.value.poolEvents
+    .filter((event) => normalizeEventTriggerMode(event) === "invoke")
+    .map((event) => ({
+      eventId: event.id,
+      label: `[池] ${event.title} (${event.id})`,
+      targetType: "pool" as const
+    }))
+
+  const scheduleEvents = storyDocument.value.scheduleEvents
+    .filter((event) => normalizeEventTriggerMode(event) === "invoke")
+    .map((event) => ({
+      eventId: event.id,
+      label: `[定时] ${event.title} (${event.id})`,
+      targetType: "schedule" as const
+    }))
+
+  return [...chainEvents, ...poolEvents, ...scheduleEvents]
+})
+
 function buildGraphEventBranchAutocompleteItemsFromActions(
   actions: StoryActionFile[]
 ): StoryScriptAutocompleteItem[] {
@@ -581,6 +619,7 @@ function openValsDialog() {
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
+  isPhoneDialogOpen.value = false
   isRolesDialogOpen.value = false
   isValsDialogOpen.value = true
 }
@@ -600,6 +639,7 @@ function openPlayerOverrideValsDialog() {
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
+  isPhoneDialogOpen.value = false
   isRolesDialogOpen.value = false
   isPlayerOverrideValsDialogOpen.value = true
 }
@@ -619,6 +659,7 @@ function openSystemValsDialog() {
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
+  isPhoneDialogOpen.value = false
   isRolesDialogOpen.value = false
   isSystemValsDialogOpen.value = true
 }
@@ -638,6 +679,7 @@ function openScenesDialog() {
   isSystemValsDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
+  isPhoneDialogOpen.value = false
   isRolesDialogOpen.value = false
   scenesSaveSuccessMessage.value = null
   isScenesDialogOpen.value = true
@@ -659,6 +701,7 @@ function openLocationsDialog() {
   isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isItemsDialogOpen.value = false
+  isPhoneDialogOpen.value = false
   isRolesDialogOpen.value = false
   locationsSaveSuccessMessage.value = null
   isLocationsDialogOpen.value = true
@@ -680,6 +723,7 @@ function openItemsDialog() {
   isSystemValsDialogOpen.value = false
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
+  isPhoneDialogOpen.value = false
   isRolesDialogOpen.value = false
   itemsSaveSuccessMessage.value = null
   isItemsDialogOpen.value = true
@@ -688,6 +732,28 @@ function openItemsDialog() {
 function closeItemsDialog() {
   itemsSaveSuccessMessage.value = null
   isItemsDialogOpen.value = false
+}
+
+function openPhoneDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  closeEditor()
+  isValsDialogOpen.value = false
+  isPlayerOverrideValsDialogOpen.value = false
+  isSystemValsDialogOpen.value = false
+  isScenesDialogOpen.value = false
+  isLocationsDialogOpen.value = false
+  isItemsDialogOpen.value = false
+  isRolesDialogOpen.value = false
+  phoneSaveSuccessMessage.value = null
+  isPhoneDialogOpen.value = true
+}
+
+function closePhoneDialog() {
+  phoneSaveSuccessMessage.value = null
+  isPhoneDialogOpen.value = false
 }
 
 function openRolesDialog() {
@@ -702,6 +768,7 @@ function openRolesDialog() {
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
+  isPhoneDialogOpen.value = false
   rolesSaveSuccessMessage.value = null
   isRolesDialogOpen.value = true
 }
@@ -1284,6 +1351,30 @@ async function handleSaveItems(items: StoryItemsFile) {
   }
 }
 
+async function handleSavePhone(phone: StoryPhoneFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+  phoneSaveSuccessMessage.value = null
+
+  try {
+    const savedPhone = await savePhone(props.storyId, phone)
+    storyDocument.value = {
+      ...storyDocument.value,
+      phone: savedPhone
+    }
+    phoneSaveSuccessMessage.value = "已保存"
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存手机联系人配置失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
 async function handleSaveRoles(roles: StoryRolesFile) {
   if (!storyDocument.value) {
     return
@@ -1622,6 +1713,7 @@ watch(
     isScenesDialogOpen.value = false
     isLocationsDialogOpen.value = false
     isItemsDialogOpen.value = false
+    isPhoneDialogOpen.value = false
     isRolesDialogOpen.value = false
     activeWorkspaceTab.value = "creation"
     creationAgentResult.value = null
@@ -1632,6 +1724,7 @@ watch(
     scenesSaveSuccessMessage.value = null
     locationsSaveSuccessMessage.value = null
     itemsSaveSuccessMessage.value = null
+    phoneSaveSuccessMessage.value = null
     rolesSaveSuccessMessage.value = null
     void loadStory()
   },
@@ -1669,6 +1762,9 @@ watch(
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openItemsDialog">
             物品
+          </button>
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openPhoneDialog">
+            手机
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openRolesDialog">
             角色
@@ -1972,8 +2068,21 @@ watch(
       @save="handleSaveItems"
     />
 
+    <StoryPhoneDialog
+      v-if="storyDocument && isPhoneDialogOpen"
+      :item-ids="storyScriptItemIds"
+      :invoke-event-options="phoneInvokeEventOptions"
+      :phone="storyDocument.phone"
+      :roles="storyDocument.roles"
+      :save-success-message="phoneSaveSuccessMessage"
+      :saving="isSaving"
+      @close="closePhoneDialog"
+      @save="handleSavePhone"
+    />
+
     <StoryRolesDialog
       v-if="storyDocument && isRolesDialogOpen"
+      :phone="storyDocument.phone"
       :roles="storyDocument.roles"
       :save-success-message="rolesSaveSuccessMessage"
       :saving="isSaving"

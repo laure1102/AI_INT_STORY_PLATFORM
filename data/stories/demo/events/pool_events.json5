@@ -72,39 +72,293 @@
     presentation: {
       type: 'dialogue',
       dialogues: [
-      {
-        content: '老板，今天天气很好呢。',
-        speaker_key: 'important:zhuli',
-        speaker_type: 'object',
-      },
-      {
-        content: '我们要不要去玩高尔夫？',
-        speaker_key: 'important:zhuli',
-        speaker_type: 'object',
-      },
-      {
-        content: '好啊，好啊。',
-        speaker_key: 'player',
-        speaker_type: 'player',
-      },
+        {
+          content: '真没想到，会在这条街上和你并排走这么久。',
+          speaker_key: 'important:chulian',
+          speaker_type: 'object',
+        },
+        {
+          content: '我也没想到你会答应出来。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '你现在和以前不太一样了。说不上是哪里，就是更让人看不透了。',
+          speaker_key: 'important:chulian',
+          speaker_type: 'object',
+        },
+        {
+          content: '那你呢？你还是会在夜里把心事都藏起来。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '……至少今晚，不想藏得那么严实。',
+          speaker_key: 'important:chulian',
+          speaker_type: 'object',
+        },
       ],
     },
-    end_script: '${county.level} = 1',
-    id: 'test1',
-    init_script: 'let money = ${county.renkou} * 100\nmoney = money * 2',
-    invoke_params: [
-      {
-        descr: '0-100',
-        name: 'mama',
-      },
+    end_script: "// 【关系推进】\n// 这次夜间散步让初恋重新放下了一点防备。\nphone_add_favor(\"important:chulian\", 3)\n\n// 【事件余波】\n// 让她在会话结束后主动发一条消息，方便玩家继续在手机里接触。\nphone_send_from_contact(\"important:chulian\", \"今晚……谢谢你陪我走那一段路。\")",
+    id: 'phone_chulian_evening_walk',
+    init_script: '',
+    invoke_params: [],
+    location: 'jiedao_renshao',
+    object_keys: [
+      'important:chulian',
     ],
-    location: '',
+    title: '和初恋夜里散步',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
+        {
+          content: '小友脚步急，心火旺，兜里倒是有了新财气。',
+          speaker_key: 'normal:start_suanming',
+          speaker_type: 'object',
+        },
+        {
+          content: '你这开场白，听着像冲着我来的。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '县里这地方，风刚起的时候，最先乱的是人心。要是以后拿不准，给老夫发个消息。',
+          speaker_key: 'normal:start_suanming',
+          speaker_type: 'object',
+        },
+      ],
+    },
+    end_script: "// 【联系人接入】\n// 老算命属于县城的风向标型角色，先接入手机联系人，方便后续做玄学提示线。\nphone_add_contact(\"normal:start_suanming\")\nphone_set_favor(\"normal:start_suanming\", 18)\n\n// 【首条消息】\n// 主动留号，强化“联系人都是剧情关系延伸”的体验。\nphone_send_from_contact(\"normal:start_suanming\", \"小友，若哪天心里拿不准，就给老夫发个消息。县里这地方，风比人先动。\")",
+    id: 'suanming_exchange_contact',
+    init_script: '',
+    invoke_params: [],
+    location: 'jiedao_renshao',
+    object_keys: [
+      'normal:start_suanming',
+    ],
+    title: '老算命递来号码',
+    trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && !phone_has_contact("normal:start_suanming")',
+    trigger_mode: 'condition',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
+        {
+          content: '老板，第一次来县里夜场吧？这边的人，认个脸比认个名字快。',
+          speaker_key: 'normal:yule_dama',
+          speaker_type: 'object',
+        },
+        {
+          content: '听起来你很懂这地方的门路。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '懂不敢说，熟倒是熟。你要以后晚上出来，提前给我打个电话，我替你避开不该碰的人。 ',
+          speaker_key: 'normal:yule_dama',
+          speaker_type: 'object',
+        },
+      ],
+    },
+    end_script: "// 【联系人接入】\n// 娱乐场的大妈偏信息贩子和门路角色，适合提供夜生活、人脉和八卦线。\nphone_add_contact(\"normal:yule_dama\")\nphone_set_favor(\"normal:yule_dama\", 16)\n\n// 【首条消息】\nphone_send_from_contact(\"normal:yule_dama\", \"老板，这是我号码。你以后想找热闹、找人、找包厢，都可以先问我。\")",
+    id: 'yule_dama_drop_contact',
+    init_script: '',
+    invoke_params: [],
+    location: 'jiedao_renshao',
+    object_keys: [
+      'normal:yule_dama',
+    ],
+    title: '娱乐场大妈留号',
+    trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 19 && ${system.now_hour} <= 23 && phone_has_contact("important:zhuli") && !phone_has_contact("normal:yule_dama")',
+    trigger_mode: 'condition',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
+        {
+          content: '……是你？',
+          speaker_key: 'important:chulian',
+          speaker_type: 'object',
+        },
+        {
+          content: '我还以为，你会先装作没看见我。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '想过。可县城就这么大，绕也绕不开。',
+          speaker_key: 'important:chulian',
+          speaker_type: 'object',
+        },
+        {
+          content: '那至少，先别把我当陌生人。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+    },
+    end_script: "// 【联系人接入】\n// 初恋属于情感主线入口，先恢复基础联系，再让手机系统承接后续关系推进。\nphone_add_contact(\"important:chulian\")\nphone_set_favor(\"important:chulian\", 35)\n\n// 【首条消息】\nphone_send_from_contact(\"important:chulian\", \"刚才走得急，很多话没说。你如果还想聊，就发我消息吧。\")",
+    id: 'chulian_reconnect_on_street',
+    init_script: '',
+    invoke_params: [],
+    location: 'jiedao_renshao',
+    object_keys: [
+      'important:chulian',
+    ],
+    title: '街头重逢初恋',
+    trigger_expr: '${system.now_day} >= 3 && ${system.now_hour} >= 17 && ${system.now_hour} <= 22 && !phone_has_contact("important:chulian")',
+    trigger_mode: 'condition',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
+        {
+          content: '老板，你还真把我叫出来吃夜宵了啊。',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+        {
+          content: '白天只够说正事，晚上才适合听真话。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '那我就说真话。县里很多人已经在打听你了，不过我还能替你挡一阵。',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+      ],
+    },
+    end_script: "// 【关系推进】\nphone_add_favor(\"important:zhuli\", 2)\n\n// 【事件余波】\nphone_send_from_contact(\"important:zhuli\", \"老板，今晚这顿我记着了。明早我把整理好的清单发您。\")",
+    id: 'phone_zhuli_night_snack',
+    init_script: '',
+    invoke_params: [],
+    location: 'jiedao_renshao',
     object_keys: [
       'important:zhuli',
-      'normal:start_suanming',
+    ],
+    title: '和助理夜宵复盘',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'message',
+      message: {
+        content: '你按约去了县里办公室，和县长聊了半个多小时。对方对你做事的分寸明显多了几分认可。',
+        duration_seconds: 3,
+      },
+    },
+    end_script: "// 【关系推进】\nphone_add_favor(\"important:xianzhang\", 2)\n\n// 【事件余波】\nphone_send_from_contact(\"important:xianzhang\", \"你今天说的那几个点，我记住了。材料我会让人再细化一版。\")",
+    id: 'phone_xianzhang_office_visit',
+    init_script: '',
+    invoke_params: [],
+    location: 'office_small',
+    object_keys: [
       'important:xianzhang',
     ],
-    title: '和助理闲聊',
+    title: '去县里拜访县长',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
+        {
+          content: '你现在手里有钱，这不稀奇。稀奇的是，你到底想拿这笔钱干什么。',
+          speaker_key: 'important:xianzhang',
+          speaker_type: 'object',
+        },
+        {
+          content: '我想做点真能改变县里的事，但也不想当冤大头。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '这话算实在。那以后很多事，我们就别在台面上绕弯子了。',
+          speaker_key: 'important:xianzhang',
+          speaker_type: 'object',
+        },
+      ],
+    },
+    end_script: "// 【关系推进】\nphone_add_favor(\"important:xianzhang\", 3)\n\n// 【事件余波】\nphone_send_from_contact(\"important:xianzhang\", \"你今天这顿饭没白吃。后面真有想法，可以直接跟我通气。\")",
+    id: 'phone_xianzhang_private_dinner',
+    init_script: '',
+    invoke_params: [],
+    location: 'office_small',
+    object_keys: [
+      'important:xianzhang',
+    ],
+    title: '和县长私下吃饭',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
+        {
+          content: '红包老夫收了。你这卦，问的不是运，是人。',
+          speaker_key: 'normal:start_suanming',
+          speaker_type: 'object',
+        },
+        {
+          content: '人和运，本来就分不开。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '那就记住一句。三天内，少碰南边来的热闹局，热闹里藏着口舌。 ',
+          speaker_key: 'normal:start_suanming',
+          speaker_type: 'object',
+        },
+      ],
+    },
+    end_script: "// 【关系推进】\nphone_add_favor(\"normal:start_suanming\", 1)\n\n// 【事件余波】\nphone_send_from_contact(\"normal:start_suanming\", \"小友，老夫不常提醒人第二遍。真要去南边，先给我发消息。\")",
+    id: 'phone_suanming_paid_consult',
+    init_script: '',
+    invoke_params: [],
+    location: 'jiedao_renshao',
+    object_keys: [
+      'normal:start_suanming',
+    ],
+    title: '向老算命付费问卦',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'message',
+      message: {
+        content: '你到场时，大妈已经替你留好了包厢，还顺手帮你筛掉了几个不该碰的人。',
+        duration_seconds: 3,
+      },
+    },
+    end_script: "// 【关系推进】\nphone_add_favor(\"normal:yule_dama\", 2)\n\n// 【事件余波】\nphone_send_from_contact(\"normal:yule_dama\", \"老板，今晚该避的人我都替你挡开了。你要再来，提前吱我一声。\")",
+    id: 'phone_yule_dama_book_room',
+    init_script: '',
+    invoke_params: [],
+    location: 'jiedao_renshao',
+    object_keys: [
+      'normal:yule_dama',
+    ],
+    title: '让大妈留了包厢',
     trigger_expr: '',
     trigger_mode: 'invoke',
   },

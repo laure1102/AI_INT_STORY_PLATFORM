@@ -63,7 +63,17 @@ export interface StoryRoleAiConfig {
   compress_quality_2: number
 }
 
-export interface StoryNormalRoleDefinition {
+export type StoryPhoneContactTrackId = "none" | "romance" | "official" | "social"
+
+export interface StoryRoleContactMetadata {
+  contact_enabled: boolean
+  contact_track: StoryPhoneContactTrackId
+  contact_initial_favor: number
+  xingge_id: string
+  xingge_note: string
+}
+
+export interface StoryNormalRoleDefinition extends StoryRoleContactMetadata {
   id: string
   name: string
   zhiye: string
@@ -74,7 +84,7 @@ export interface StoryNormalRoleDefinition {
   img_compress_2: string
 }
 
-export interface StoryImportantRoleDefinition {
+export interface StoryImportantRoleDefinition extends StoryRoleContactMetadata {
   id: string
   name: string
   zhiye: string
@@ -187,6 +197,52 @@ export interface StoryInitialBagsFile {
   [ownerId: string]: StoryInitialBagDefinition
 }
 
+export interface StoryPhoneLibraryScope {
+  role_keys: string[]
+  contact_tracks: StoryPhoneContactTrackId[]
+  personality_ids: string[]
+  min_favor: number
+  max_favor: number
+}
+
+export type StoryPhoneInvokeDelayUnit = "hours" | "days" | "months" | "years"
+
+export interface StoryPhoneInvokeDelay {
+  unit: StoryPhoneInvokeDelayUnit
+  value: number
+}
+
+export interface StoryPhoneEventInvocation {
+  target_type: StoryCanonicalEventCollectionType
+  event_id: string
+  delay?: StoryPhoneInvokeDelay
+}
+
+export interface StoryPhoneRelationshipStage {
+  id: string
+  name: string
+  descr: string
+  min_favor: number
+  max_favor: number
+  allow_contact: boolean
+  lock_message: string
+  unlock_action_tags: string[]
+}
+
+export interface StoryPhoneRelationshipTrack {
+  id: StoryPhoneContactTrackId
+  name: string
+  descr: string
+  stages: StoryPhoneRelationshipStage[]
+}
+
+export interface StoryPhonePersonalityDefinition {
+  id: string
+  name: string
+  descr: string
+  style_tags: string[]
+}
+
 export interface StoryPhoneQuickMessage {
   id: string
   text: string
@@ -217,7 +273,47 @@ export interface StoryPhoneContactProfile {
   proactive_messages: StoryPhoneProactiveMessageRule[]
 }
 
+export interface StoryPhoneTalkLibraryEntry {
+  id: string
+  text: string
+  tags: string[]
+  scope: StoryPhoneLibraryScope
+  base_favor_delta: number
+  cooldown_hours: number
+  invoke?: StoryPhoneEventInvocation
+}
+
+export interface StoryPhoneActionCostItem {
+  item_id: string
+  quantity: number
+}
+
+export interface StoryPhoneActionLibraryEntry {
+  id: string
+  label: string
+  text: string
+  tags: string[]
+  scope: StoryPhoneLibraryScope
+  base_favor_delta: number
+  cooldown_hours: number
+  cost_money: number
+  cost_items: StoryPhoneActionCostItem[]
+  invoke?: StoryPhoneEventInvocation
+}
+
+export interface StoryPhoneReplyLibraryEntry {
+  id: string
+  tags: string[]
+  scope: StoryPhoneLibraryScope
+  replies: string[]
+}
+
 export interface StoryPhoneFile {
+  relationship_tracks: StoryPhoneRelationshipTrack[]
+  personality_library: StoryPhonePersonalityDefinition[]
+  talk_library: StoryPhoneTalkLibraryEntry[]
+  action_library: StoryPhoneActionLibraryEntry[]
+  reply_library: StoryPhoneReplyLibraryEntry[]
   player_quick_messages: StoryPhoneQuickMessage[]
   contact_profiles: StoryPhoneContactProfile[]
   fallback_replies: Record<string, string[]>

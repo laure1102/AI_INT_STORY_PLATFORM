@@ -35,6 +35,7 @@ import type {
   SaveEventRequest,
   SaveEventLocationsRequest,
   SaveStoryItemsRequest,
+  SaveStoryPhoneRequest,
   SavePlayerOverrideValsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
@@ -46,6 +47,7 @@ import type {
   StoryPlayerOverrideValsResponse,
   StoryRolesResponse,
   StoryItemsResponse,
+  StoryPhoneResponse,
   SaveValsRequest,
   StorySystemValsResponse,
   StoryAssetResponse
@@ -330,6 +332,15 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       items: await store.writeItems(storyId, body.items)
     } satisfies StoryItemsResponse
+  })
+
+  router.put("/stories/:storyId/phone", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as SaveStoryPhoneRequest
+
+    context.body = {
+      phone: await store.writePhone(storyId, body.phone)
+    } satisfies StoryPhoneResponse
   })
 
   router.post("/stories/:storyId/event-locations/prompt", async (context) => {

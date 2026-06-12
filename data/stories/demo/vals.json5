@@ -520,6 +520,13 @@
           value: '',
           value_type: 'value',
         },
+        {
+          calc_rule: '',
+          description: '性别(男/女)',
+          name: 'gender',
+          value: '',
+          value_type: 'value',
+        },
       ],
     },
   ],

@@ -73,6 +73,47 @@ interface RuntimeStoryItemsFile {
   items: RuntimeStoryItemDefinition[]
 }
 
+type RuntimePhoneContactTrackId = "none" | "romance" | "official" | "social"
+
+interface RuntimeStoryPhoneLibraryScope {
+  role_keys: string[]
+  contact_tracks: RuntimePhoneContactTrackId[]
+  personality_ids: string[]
+  min_favor: number
+  max_favor: number
+}
+
+interface RuntimeStoryPhoneEventInvocation {
+  target_type: StoryInvokeTargetType
+  event_id: string
+  delay?: StoryScriptInvokeDelay
+}
+
+interface RuntimeStoryPhoneRelationshipStage {
+  id: string
+  name: string
+  descr: string
+  min_favor: number
+  max_favor: number
+  allow_contact: boolean
+  lock_message: string
+  unlock_action_tags: string[]
+}
+
+interface RuntimeStoryPhoneRelationshipTrack {
+  id: RuntimePhoneContactTrackId
+  name: string
+  descr: string
+  stages: RuntimeStoryPhoneRelationshipStage[]
+}
+
+interface RuntimeStoryPhonePersonalityDefinition {
+  id: string
+  name: string
+  descr: string
+  style_tags: string[]
+}
+
 interface RuntimeStoryPhoneQuickMessageDefinition {
   id: string
   text: string
@@ -103,7 +144,47 @@ interface RuntimeStoryPhoneContactProfile {
   proactive_messages: RuntimeStoryPhoneProactiveMessageRule[]
 }
 
+interface RuntimeStoryPhoneTalkLibraryEntry {
+  id: string
+  text: string
+  tags: string[]
+  scope: RuntimeStoryPhoneLibraryScope
+  base_favor_delta: number
+  cooldown_hours: number
+  invoke?: RuntimeStoryPhoneEventInvocation
+}
+
+interface RuntimeStoryPhoneActionCostItem {
+  item_id: string
+  quantity: number
+}
+
+interface RuntimeStoryPhoneActionLibraryEntry {
+  id: string
+  label: string
+  text: string
+  tags: string[]
+  scope: RuntimeStoryPhoneLibraryScope
+  base_favor_delta: number
+  cooldown_hours: number
+  cost_money: number
+  cost_items: RuntimeStoryPhoneActionCostItem[]
+  invoke?: RuntimeStoryPhoneEventInvocation
+}
+
+interface RuntimeStoryPhoneReplyLibraryEntry {
+  id: string
+  tags: string[]
+  scope: RuntimeStoryPhoneLibraryScope
+  replies: string[]
+}
+
 interface RuntimeStoryPhoneFile {
+  relationship_tracks: RuntimeStoryPhoneRelationshipTrack[]
+  personality_library: RuntimeStoryPhonePersonalityDefinition[]
+  talk_library: RuntimeStoryPhoneTalkLibraryEntry[]
+  action_library: RuntimeStoryPhoneActionLibraryEntry[]
+  reply_library: RuntimeStoryPhoneReplyLibraryEntry[]
   player_quick_messages: RuntimeStoryPhoneQuickMessageDefinition[]
   contact_profiles: RuntimeStoryPhoneContactProfile[]
   fallback_replies: Record<string, string[]>
@@ -139,6 +220,8 @@ export interface RuntimePhoneMessageState {
   content: string
   game_minute: number
   read: boolean
+  option_id?: string
+  option_kind?: "talk" | "action"
   quick_message_id?: string
   source_rule_id?: string
   tags?: string[]
@@ -174,12 +257,22 @@ interface RuntimeNormalRoleDefinition {
   id: string
   name?: string
   descr: string
+  contact_enabled?: boolean
+  contact_track?: RuntimePhoneContactTrackId
+  contact_initial_favor?: number
+  xingge_id?: string
+  xingge_note?: string
 }
 
 interface RuntimeImportantRoleDefinition {
   id: string
   name?: string
   descr: string
+  contact_enabled?: boolean
+  contact_track?: RuntimePhoneContactTrackId
+  contact_initial_favor?: number
+  xingge_id?: string
+  xingge_note?: string
 }
 
 interface CompiledEvent {
@@ -464,12 +557,21 @@ export interface RuntimePhoneQuickMessageView {
   tags: string[]
   baseFavorDelta: number
   cooldownHours: number
+  suggested: boolean
 }
 
 export interface RuntimePhoneContactView {
   roleKey: string
   label: string
   favor: number
+  relationTrackId: RuntimePhoneContactTrackId
+  relationTrackLabel: string
+  relationStageId: string
+  relationStageLabel: string
+  canContact: boolean
+  lockMessage: string | null
+  personalityId: string
+  personalityLabel: string
   unreadCount: number
   unlockedAtDay: number
   lastMessageGameMinute: number | null
@@ -486,12 +588,42 @@ export interface RuntimePhoneThreadMessageView {
   read: boolean
 }
 
+export interface RuntimePhoneActionCostItemView {
+  itemId: string
+  itemName: string
+  quantity: number
+}
+
+export interface RuntimePhoneActionView {
+  id: string
+  label: string
+  text: string
+  tags: string[]
+  baseFavorDelta: number
+  cooldownHours: number
+  costMoney: number
+  costItems: RuntimePhoneActionCostItemView[]
+  disabled: boolean
+  disabledReason: string | null
+  invokeEventLabel: string | null
+}
+
 export interface RuntimePhoneThreadView {
   roleKey: string
   contactLabel: string
   favor: number
+  relationTrackId: RuntimePhoneContactTrackId
+  relationTrackLabel: string
+  relationStageId: string
+  relationStageLabel: string
+  canContact: boolean
+  lockMessage: string | null
+  personalityId: string
+  personalityLabel: string
   unreadCount: number
   messages: RuntimePhoneThreadMessageView[]
+  talks: RuntimePhoneQuickMessageView[]
+  actions: RuntimePhoneActionView[]
   quickMessages: RuntimePhoneQuickMessageView[]
 }
 
@@ -526,6 +658,8 @@ export type RuntimeStorySessionAction =
   | { type: "select-option"; optionId: string }
   | { type: "submit-text"; field: string; value: string }
   | { type: "invoke-once"; targetType: StoryInvokeTargetType; eventId: string; args?: Record<string, unknown> }
+  | { type: "phone-send-talk"; roleKey: string; talkId: string }
+  | { type: "phone-send-action"; roleKey: string; actionId: string }
   | { type: "phone-send-quick-message"; roleKey: string; quickMessageId: string }
   | { type: "phone-mark-read"; roleKey: string }
   | { type: "open-debug" }
@@ -565,6 +699,53 @@ interface RuntimeState {
   storyDirector: RuntimeStoryDirector
 }
 
+interface RuntimeResolvedPhoneContactMeta {
+  roleKey: string
+  label: string
+  enabled: boolean
+  autoAdd: boolean
+  favor: number
+  initialFavor: number
+  trackId: RuntimePhoneContactTrackId
+  trackLabel: string
+  stageId: string
+  stageLabel: string
+  canContact: boolean
+  lockMessage: string | null
+  personalityId: string
+  personalityLabel: string
+  preferredTags: Set<string>
+  profile: RuntimeStoryPhoneContactProfile | null
+  unlockActionTags: Set<string>
+}
+
+interface RuntimeResolvedPhoneTalkOption {
+  id: string
+  text: string
+  tags: string[]
+  baseFavorDelta: number
+  cooldownHours: number
+  suggested: boolean
+  preferred: boolean
+  invoke?: RuntimeStoryPhoneEventInvocation
+  source: "talk-library" | "legacy-quick-message"
+}
+
+interface RuntimeResolvedPhoneActionOption {
+  id: string
+  label: string
+  text: string
+  tags: string[]
+  baseFavorDelta: number
+  cooldownHours: number
+  costMoney: number
+  costItems: RuntimePhoneActionCostItemView[]
+  preferred: boolean
+  disabled: boolean
+  disabledReason: string | null
+  invoke?: RuntimeStoryPhoneEventInvocation
+}
+
 interface RuntimeEnterEventOptions {
   skipTriggerCheck?: boolean
 }
@@ -586,6 +767,46 @@ const DEFAULT_CLOCK_STEP_MINUTES = 10
 const MINUTES_PER_DAY = 24 * 60
 const MAX_SCHEDULER_AUDIT_LOGS = 120
 const MAX_RUNTIME_DIRECTOR_LOGS = 120
+const DEFAULT_PHONE_RELATIONSHIP_TRACKS: RuntimeStoryPhoneRelationshipTrack[] = [
+  {
+    id: "romance",
+    name: "恋爱关系",
+    descr: "可发展恋爱关系的联系人轨道。",
+    stages: [
+      { id: "breakup", name: "分手/决裂", descr: "", min_favor: 0, max_favor: 9, allow_contact: false, lock_message: "她现在很讨厌我，肯定不会理我了。", unlock_action_tags: [] },
+      { id: "cold", name: "冷淡", descr: "", min_favor: 10, max_favor: 19, allow_contact: true, lock_message: "", unlock_action_tags: [] },
+      { id: "stranger", name: "陌生", descr: "", min_favor: 20, max_favor: 39, allow_contact: true, lock_message: "", unlock_action_tags: [] },
+      { id: "familiar", name: "熟悉", descr: "", min_favor: 40, max_favor: 59, allow_contact: true, lock_message: "", unlock_action_tags: ["gift_basic"] },
+      { id: "dateable", name: "暧昧", descr: "", min_favor: 60, max_favor: 89, allow_contact: true, lock_message: "", unlock_action_tags: ["gift_basic", "date"] },
+      { id: "lover", name: "情人", descr: "", min_favor: 90, max_favor: 100, allow_contact: true, lock_message: "", unlock_action_tags: ["gift_basic", "date", "hotel"] }
+    ]
+  },
+  {
+    id: "official",
+    name: "政务关系",
+    descr: "政府、公职和资源型联系人轨道。",
+    stages: [
+      { id: "distant", name: "疏远", descr: "", min_favor: 0, max_favor: 19, allow_contact: true, lock_message: "", unlock_action_tags: [] },
+      { id: "basic", name: "普通接触", descr: "", min_favor: 20, max_favor: 39, allow_contact: true, lock_message: "", unlock_action_tags: ["formal_visit"] },
+      { id: "recognized", name: "认可", descr: "", min_favor: 40, max_favor: 59, allow_contact: true, lock_message: "", unlock_action_tags: ["formal_visit", "gift_basic"] },
+      { id: "supportive", name: "支持", descr: "", min_favor: 60, max_favor: 79, allow_contact: true, lock_message: "", unlock_action_tags: ["formal_visit", "gift_basic", "private_dinner"] },
+      { id: "backer", name: "全力支持者", descr: "", min_favor: 80, max_favor: 100, allow_contact: true, lock_message: "", unlock_action_tags: ["formal_visit", "gift_basic", "private_dinner"] }
+    ]
+  },
+  {
+    id: "social",
+    name: "社交关系",
+    descr: "普通社交联系人轨道。",
+    stages: [
+      { id: "enemy", name: "敌对", descr: "", min_favor: 0, max_favor: 9, allow_contact: false, lock_message: "他现在很讨厌我，肯定不会理我了。", unlock_action_tags: [] },
+      { id: "dislike", name: "讨厌", descr: "", min_favor: 10, max_favor: 19, allow_contact: true, lock_message: "", unlock_action_tags: [] },
+      { id: "stranger", name: "陌生", descr: "", min_favor: 20, max_favor: 39, allow_contact: true, lock_message: "", unlock_action_tags: [] },
+      { id: "acquaintance", name: "熟人", descr: "", min_favor: 40, max_favor: 59, allow_contact: true, lock_message: "", unlock_action_tags: ["gift_basic"] },
+      { id: "friend", name: "朋友", descr: "", min_favor: 60, max_favor: 79, allow_contact: true, lock_message: "", unlock_action_tags: ["gift_basic", "date"] },
+      { id: "best_friend", name: "挚友", descr: "", min_favor: 80, max_favor: 100, allow_contact: true, lock_message: "", unlock_action_tags: ["gift_basic", "date"] }
+    ]
+  }
+]
 const RUNTIME_SCHEDULER_AUDIT_KINDS: RuntimeSchedulerAuditKind[] = [
   "schedule-future",
   "queue-ready",
@@ -865,6 +1086,35 @@ function writeSystemValue(snapshotVals: StoryValsFile, token: string, value: unk
   match.row.value = cloneValue(value)
 }
 
+function readSnapshotValue(snapshot: RuntimeStorySessionSnapshot, token: string) {
+  const runtimeValue = readValEntryValue(snapshot.vals, token)
+  if (runtimeValue !== undefined) {
+    return runtimeValue
+  }
+
+  return readValEntryValue(snapshot.system_vals, token)
+}
+
+function writeSnapshotValue(
+  snapshot: RuntimeStorySessionSnapshot,
+  token: string,
+  value: unknown
+) {
+  const runtimeMatch = findValEntry(snapshot.vals, token)
+  if (runtimeMatch && runtimeMatch.row.value_type !== "calc") {
+    runtimeMatch.row.value = cloneValue(value)
+    return true
+  }
+
+  const systemMatch = findValEntry(snapshot.system_vals, token)
+  if (systemMatch && systemMatch.row.value_type !== "calc") {
+    systemMatch.row.value = cloneValue(value)
+    return true
+  }
+
+  return false
+}
+
 function resolveShiduan(hour: number) {
   return hour >= 12 ? "下午" : "上午"
 }
@@ -919,6 +1169,11 @@ function createDefaultBagsState(): RuntimeBagsState {
 
 function createDefaultPhoneConfig(): RuntimeStoryPhoneFile {
   return {
+    relationship_tracks: cloneValue(DEFAULT_PHONE_RELATIONSHIP_TRACKS),
+    personality_library: [],
+    talk_library: [],
+    action_library: [],
+    reply_library: [],
     player_quick_messages: [],
     contact_profiles: [],
     fallback_replies: {}
@@ -942,6 +1197,12 @@ function normalizeItemId(itemId: unknown) {
 
 function normalizePhoneRoleKey(roleKey: unknown) {
   return typeof roleKey === "string" ? roleKey.trim() : ""
+}
+
+function normalizePhoneContactTrackId(value: unknown): RuntimePhoneContactTrackId {
+  return value === "romance" || value === "official" || value === "social" || value === "none"
+    ? value
+    : "none"
 }
 
 function clampPhoneFavor(value: unknown, fallback = 0) {
@@ -1021,6 +1282,11 @@ function normalizePhoneMessages(messages: RuntimePhoneMessageState[] | undefined
       const sender: RuntimePhoneMessageState["sender"] = message.sender === "contact" || message.sender === "system"
         ? message.sender
         : "player"
+      const optionKind: RuntimePhoneMessageState["option_kind"] = message.option_kind === "action"
+        ? "action"
+        : message.option_kind === "talk"
+          ? "talk"
+          : undefined
 
       return {
         id: normalizeText(message.id),
@@ -1028,6 +1294,8 @@ function normalizePhoneMessages(messages: RuntimePhoneMessageState[] | undefined
         content: normalizeText(message.content),
         game_minute: Math.max(0, clampInteger(message.game_minute, 0)),
         read: Boolean(message.read),
+        option_id: normalizeOptionalText(message.option_id),
+        option_kind: optionKind,
         quick_message_id: normalizeOptionalText(message.quick_message_id),
         source_rule_id: normalizeOptionalText(message.source_rule_id),
         tags: Array.isArray(message.tags)
@@ -1434,7 +1702,33 @@ function getBundleItemIds(bundle: RuntimeStoryBundle) {
 }
 
 function getBundlePhoneConfig(bundle: RuntimeStoryBundle): RuntimeStoryPhoneFile {
-  return bundle.phone ?? createDefaultPhoneConfig()
+  const rawConfig = bundle.phone ?? createDefaultPhoneConfig()
+  return {
+    relationship_tracks: Array.isArray(rawConfig.relationship_tracks)
+      ? rawConfig.relationship_tracks
+      : cloneValue(DEFAULT_PHONE_RELATIONSHIP_TRACKS),
+    personality_library: Array.isArray(rawConfig.personality_library)
+      ? rawConfig.personality_library
+      : [],
+    talk_library: Array.isArray(rawConfig.talk_library)
+      ? rawConfig.talk_library
+      : [],
+    action_library: Array.isArray(rawConfig.action_library)
+      ? rawConfig.action_library
+      : [],
+    reply_library: Array.isArray(rawConfig.reply_library)
+      ? rawConfig.reply_library
+      : [],
+    player_quick_messages: Array.isArray(rawConfig.player_quick_messages)
+      ? rawConfig.player_quick_messages
+      : [],
+    contact_profiles: Array.isArray(rawConfig.contact_profiles)
+      ? rawConfig.contact_profiles
+      : [],
+    fallback_replies: rawConfig.fallback_replies && typeof rawConfig.fallback_replies === "object"
+      ? rawConfig.fallback_replies
+      : {}
+  }
 }
 
 function getBundlePhoneQuickMessages(bundle: RuntimeStoryBundle) {
@@ -1450,6 +1744,256 @@ function getBundlePhoneContactProfile(bundle: RuntimeStoryBundle, roleKey: strin
   return getBundlePhoneConfig(bundle).contact_profiles.find(
     (profile) => profile.role_key.trim() === normalizedRoleKey
   ) ?? null
+}
+
+function findBundleRoleDefinition(bundle: RuntimeStoryBundle, roleKey: string) {
+  const [scope, roleId] = normalizePhoneRoleKey(roleKey).split(":")
+  if (!scope || !roleId) {
+    return null
+  }
+
+  const roles = getBundleRoles(bundle)
+  return scope === "important"
+    ? roles.important.find((item) => item.id === roleId) ?? null
+    : scope === "normal"
+      ? roles.normal.find((item) => item.id === roleId) ?? null
+      : null
+}
+
+function getBundlePhoneRelationshipTrack(
+  bundle: RuntimeStoryBundle,
+  trackId: RuntimePhoneContactTrackId
+) {
+  const normalizedTrackId = normalizePhoneContactTrackId(trackId)
+  if (normalizedTrackId === "none") {
+    return null
+  }
+
+  const configuredTrack = getBundlePhoneConfig(bundle).relationship_tracks.find(
+    (track) => track.id === normalizedTrackId
+  )
+  if (configuredTrack) {
+    return configuredTrack
+  }
+
+  return DEFAULT_PHONE_RELATIONSHIP_TRACKS.find((track) => track.id === normalizedTrackId)
+    ?? DEFAULT_PHONE_RELATIONSHIP_TRACKS.find((track) => track.id === "social")
+    ?? null
+}
+
+function getBundlePhonePersonality(
+  bundle: RuntimeStoryBundle,
+  personalityId: string
+) {
+  const normalizedPersonalityId = normalizeText(personalityId)
+  if (!normalizedPersonalityId) {
+    return null
+  }
+
+  return getBundlePhoneConfig(bundle).personality_library.find(
+    (entry) => entry.id.trim() === normalizedPersonalityId
+  ) ?? null
+}
+
+function resolvePhoneRelationshipStage(
+  bundle: RuntimeStoryBundle,
+  trackId: RuntimePhoneContactTrackId,
+  favor: number
+) {
+  const track = getBundlePhoneRelationshipTrack(bundle, trackId)
+  if (!track) {
+    return {
+      id: "default",
+      name: "默认",
+      descr: "",
+      min_favor: 0,
+      max_favor: 100,
+      allow_contact: true,
+      lock_message: "",
+      unlock_action_tags: []
+    } satisfies RuntimeStoryPhoneRelationshipStage
+  }
+
+  const normalizedFavor = clampPhoneFavor(favor, 20)
+  const matchedStage = track.stages.find(
+    (stage) => normalizedFavor >= stage.min_favor && normalizedFavor <= stage.max_favor
+  )
+  if (matchedStage) {
+    return matchedStage
+  }
+
+  return track.stages
+    .slice()
+    .sort((left, right) => left.min_favor - right.min_favor)
+    .find((stage) => normalizedFavor <= stage.max_favor)
+    ?? track.stages[track.stages.length - 1]
+    ?? {
+      id: "default",
+      name: track.name,
+      descr: track.descr,
+      min_favor: 0,
+      max_favor: 100,
+      allow_contact: true,
+      lock_message: "",
+      unlock_action_tags: []
+    }
+}
+
+function buildRuntimePhoneContactMeta(
+  bundle: RuntimeStoryBundle,
+  roleKey: string,
+  favor: number
+): RuntimeResolvedPhoneContactMeta {
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  const roleDefinition = findBundleRoleDefinition(bundle, normalizedRoleKey)
+  const profile = getBundlePhoneContactProfile(bundle, normalizedRoleKey)
+  const roleEnabled = Boolean(roleDefinition?.contact_enabled)
+  const roleTrack = normalizePhoneContactTrackId(roleDefinition?.contact_track)
+  const inferredEnabled = roleEnabled || roleTrack !== "none" || Boolean(profile?.enabled)
+  const enabled = profile ? Boolean(profile.enabled) : inferredEnabled
+  const autoAdd = profile ? Boolean(profile.auto_add) : enabled
+  const initialFavor = clampPhoneFavor(
+    profile?.initial_favor ?? roleDefinition?.contact_initial_favor ?? 20,
+    20
+  )
+  const personalityId = normalizeText(roleDefinition?.xingge_id)
+  const personalityDefinition = getBundlePhonePersonality(bundle, personalityId)
+  const trackId = roleTrack !== "none"
+    ? roleTrack
+    : enabled
+      ? "social"
+      : "none"
+  const track = getBundlePhoneRelationshipTrack(bundle, trackId)
+  const relationStage = resolvePhoneRelationshipStage(bundle, trackId, favor)
+  const personalityLabel = normalizeText(personalityDefinition?.name)
+    || personalityId
+    || normalizeText(roleDefinition?.xingge_note)
+    || ""
+  const canContact = enabled && relationStage.allow_contact
+  const lockMessage = canContact
+    ? null
+    : normalizeText(relationStage.lock_message) || (enabled ? "当前无法主动联系。" : "当前还未成为联系人。")
+
+  return {
+    roleKey: normalizedRoleKey,
+    label: findRoleLabel(bundle, normalizedRoleKey),
+    enabled,
+    autoAdd,
+    favor: clampPhoneFavor(favor, initialFavor),
+    initialFavor,
+    trackId,
+    trackLabel: normalizeText(track?.name) || "社交关系",
+    stageId: normalizeText(relationStage.id) || "default",
+    stageLabel: normalizeText(relationStage.name) || "默认",
+    canContact,
+    lockMessage,
+    personalityId,
+    personalityLabel,
+    preferredTags: new Set((profile?.preferred_tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)),
+    profile,
+    unlockActionTags: new Set((relationStage.unlock_action_tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean))
+  }
+}
+
+function getLatestPhoneSuggestedOptionIds(
+  bundle: RuntimeStoryBundle,
+  roleKey: string,
+  snapshot?: RuntimeStorySessionSnapshot
+) {
+  const latestSuggestedMessage = snapshot
+    ? getPhoneThread(snapshot, roleKey)?.messages
+      .slice()
+      .reverse()
+      .find((message) => message.sender === "contact" && message.source_rule_id)
+    : null
+  const suggestedRule = latestSuggestedMessage?.source_rule_id
+    ? getPhoneProactiveRulesForContact(bundle, roleKey).find(
+        (rule) => rule.id === latestSuggestedMessage.source_rule_id
+      ) ?? null
+    : null
+
+  return new Set((suggestedRule?.reply_quick_message_ids ?? []).map((item) => normalizeText(item)).filter(Boolean))
+}
+
+function matchesPhoneLibraryScope(
+  scope: RuntimeStoryPhoneLibraryScope | undefined,
+  meta: RuntimeResolvedPhoneContactMeta
+) {
+  if (!scope) {
+    return true
+  }
+
+  const roleKeys = Array.isArray(scope.role_keys)
+    ? scope.role_keys.map((item) => normalizeText(item)).filter(Boolean)
+    : []
+  if (roleKeys.length > 0 && !roleKeys.includes(meta.roleKey)) {
+    return false
+  }
+
+  const contactTracks: Array<Exclude<RuntimePhoneContactTrackId, "none">> = Array.isArray(scope.contact_tracks)
+    ? scope.contact_tracks
+      .map((item) => normalizePhoneContactTrackId(item))
+      .filter((item): item is Exclude<RuntimePhoneContactTrackId, "none"> => item !== "none")
+    : []
+  if (contactTracks.length > 0 && (meta.trackId === "none" || !contactTracks.includes(meta.trackId))) {
+    return false
+  }
+
+  const personalityIds = Array.isArray(scope.personality_ids)
+    ? scope.personality_ids.map((item) => normalizeText(item)).filter(Boolean)
+    : []
+  if (personalityIds.length > 0 && (!meta.personalityId || !personalityIds.includes(meta.personalityId))) {
+    return false
+  }
+
+  const minFavor = Number.isFinite(scope.min_favor) ? scope.min_favor : 0
+  const maxFavor = Number.isFinite(scope.max_favor) ? scope.max_favor : 100
+  return meta.favor >= minFavor && meta.favor <= maxFavor
+}
+
+function getPhoneScopeSpecificityScore(
+  scope: RuntimeStoryPhoneLibraryScope | undefined,
+  roleKey: string
+) {
+  if (!scope) {
+    return 0
+  }
+
+  let score = 0
+  const roleKeys = Array.isArray(scope.role_keys)
+    ? scope.role_keys.map((item) => normalizeText(item)).filter(Boolean)
+    : []
+  if (roleKeys.length > 0) {
+    score += roleKeys.includes(roleKey) ? 8 : 4
+  }
+
+  const contactTracks = Array.isArray(scope.contact_tracks)
+    ? scope.contact_tracks.filter((item) => item && item !== "none")
+    : []
+  if (contactTracks.length > 0) {
+    score += 4
+  }
+
+  const personalityIds = Array.isArray(scope.personality_ids)
+    ? scope.personality_ids.map((item) => normalizeText(item)).filter(Boolean)
+    : []
+  if (personalityIds.length > 0) {
+    score += 4
+  }
+
+  const minFavor = Number.isFinite(scope.min_favor) ? scope.min_favor : 0
+  const maxFavor = Number.isFinite(scope.max_favor) ? scope.max_favor : 100
+  score += Math.max(0, 10 - Math.max(1, maxFavor - minFavor + 1) / 10)
+  return score
+}
+
+function getPhoneTagOverlapScore(optionTags: string[], targetTags: string[]) {
+  if (optionTags.length === 0 || targetTags.length === 0) {
+    return 0
+  }
+
+  const targetSet = new Set(targetTags)
+  return optionTags.reduce((count, tag) => count + (targetSet.has(tag) ? 1 : 0), 0)
 }
 
 function getBundleItemNameMap(bundle: RuntimeStoryBundle) {
@@ -2801,10 +3345,14 @@ function ensurePhoneContact(
     return existing
   }
 
-  const profile = getBundlePhoneContactProfile(bundle, roleKey)
+  const contactMeta = buildRuntimePhoneContactMeta(
+    bundle,
+    roleKey,
+    getBundlePhoneContactProfile(bundle, roleKey)?.initial_favor ?? 20
+  )
   const nextContact: RuntimePhoneContactState = {
     role_key: roleKey,
-    favor: clampPhoneFavor(profile?.initial_favor ?? 0, 0),
+    favor: contactMeta.initialFavor,
     unlocked_at_day: Math.max(1, readSystemNumber(snapshot.system_vals, "system.now_day", 1))
   }
   snapshot.phone.contacts.push(nextContact)
@@ -2823,6 +3371,8 @@ function appendPhoneMessage(
   content: string,
   options: {
     read?: boolean
+    optionId?: string
+    optionKind?: "talk" | "action"
     quickMessageId?: string
     sourceRuleId?: string
     tags?: string[]
@@ -2843,6 +3393,8 @@ function appendPhoneMessage(
     content: normalizedContent,
     game_minute: gameMinute,
     read: options.read ?? sender === "player",
+    ...(options.optionId ? { option_id: normalizeText(options.optionId) } : {}),
+    ...(options.optionKind ? { option_kind: options.optionKind } : {}),
     ...(options.quickMessageId ? { quick_message_id: options.quickMessageId } : {}),
     ...(options.sourceRuleId ? { source_rule_id: options.sourceRuleId } : {}),
     ...(options.tags && options.tags.length > 0
@@ -2891,61 +3443,89 @@ function getLatestPhoneMessagePreview(snapshot: RuntimeStorySessionSnapshot, rol
   }
 }
 
-function getPhoneQuickMessagesForContact(
+function resolvePhoneTalkOptionsForContact(
   bundle: RuntimeStoryBundle,
   roleKey: string,
   snapshot?: RuntimeStorySessionSnapshot
-): RuntimeStoryPhoneQuickMessageDefinition[] {
-  const profile = getBundlePhoneContactProfile(bundle, roleKey)
-  const preferredTags = new Set(profile?.preferred_tags ?? [])
-  const quickMessages = getBundlePhoneQuickMessages(bundle)
-  const latestSuggestedMessage = snapshot
-    ? getPhoneThread(snapshot, roleKey)?.messages
-      .slice()
-      .reverse()
-      .find((message) => message.sender === "contact" && message.source_rule_id)
-    : null
-  const suggestedRule = latestSuggestedMessage?.source_rule_id
-    ? getPhoneProactiveRulesForContact(bundle, roleKey).find(
-        (rule) => rule.id === latestSuggestedMessage.source_rule_id
-      ) ?? null
-    : null
-  const suggestedIds = new Set(suggestedRule?.reply_quick_message_ids ?? [])
+): RuntimeResolvedPhoneTalkOption[] {
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  if (!normalizedRoleKey) {
+    return []
+  }
 
-  return quickMessages
-    .filter((message) => {
-      if (message.text.trim().length === 0) {
-        return false
-      }
+  const contact = snapshot ? getPhoneContact(snapshot, normalizedRoleKey) : null
+  const meta = buildRuntimePhoneContactMeta(
+    bundle,
+    normalizedRoleKey,
+    contact?.favor ?? getBundlePhoneContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
+  )
+  if (!meta.canContact) {
+    return []
+  }
 
-      if (
-        message.available_role_keys.length > 0
-        && !message.available_role_keys.includes(roleKey)
-      ) {
-        return false
-      }
-
-      if (message.visibility === "suggested-only" && !suggestedIds.has(message.id)) {
-        return false
-      }
-
-      return true
+  const suggestedIds = getLatestPhoneSuggestedOptionIds(bundle, normalizedRoleKey, snapshot)
+  const talkLibraryOptions = getBundlePhoneConfig(bundle).talk_library
+    .filter((entry) => normalizeText(entry.text) && matchesPhoneLibraryScope(entry.scope, meta))
+    .map((entry) => {
+      const tags = Array.from(new Set((entry.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
+      return {
+        id: normalizeText(entry.id),
+        text: normalizeText(entry.text),
+        tags,
+        baseFavorDelta: Math.max(0, clampInteger(entry.base_favor_delta, 0)),
+        cooldownHours: Math.max(0, clampInteger(entry.cooldown_hours, 0)),
+        suggested: suggestedIds.has(normalizeText(entry.id)),
+        preferred: tags.some((tag) => meta.preferredTags.has(tag)),
+        invoke: entry.invoke,
+        source: "talk-library"
+      } satisfies RuntimeResolvedPhoneTalkOption
     })
+    .filter((entry) => entry.id && entry.text)
+  const legacyQuickMessages = getBundlePhoneQuickMessages(bundle)
+    .filter((message) => {
+      if (!normalizeText(message.text)) {
+        return false
+      }
+
+      const availableRoleKeys = Array.isArray(message.available_role_keys)
+        ? message.available_role_keys.map((item) => normalizeText(item)).filter(Boolean)
+        : []
+      if (availableRoleKeys.length > 0 && !availableRoleKeys.includes(normalizedRoleKey)) {
+        return false
+      }
+
+      return message.visibility !== "suggested-only" || suggestedIds.has(normalizeText(message.id))
+    })
+    .map((message) => {
+      const tags = Array.from(new Set((message.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
+      return {
+        id: normalizeText(message.id),
+        text: normalizeText(message.text),
+        tags,
+        baseFavorDelta: Math.max(0, clampInteger(message.base_favor_delta, 0)),
+        cooldownHours: Math.max(0, clampInteger(message.cooldown_hours, 0)),
+        suggested: suggestedIds.has(normalizeText(message.id)),
+        preferred: tags.some((tag) => meta.preferredTags.has(tag)),
+        source: "legacy-quick-message"
+      } satisfies RuntimeResolvedPhoneTalkOption
+    })
+    .filter((entry) => entry.id && entry.text)
+
+  return [...talkLibraryOptions, ...legacyQuickMessages]
     .sort((left, right) => {
-      const leftSuggested = suggestedIds.has(left.id)
-      const rightSuggested = suggestedIds.has(right.id)
-      if (leftSuggested !== rightSuggested) {
-        return leftSuggested ? -1 : 1
+      if (left.suggested !== right.suggested) {
+        return left.suggested ? -1 : 1
       }
 
-      const leftPreferred = left.tags.some((tag) => preferredTags.has(tag))
-      const rightPreferred = right.tags.some((tag) => preferredTags.has(tag))
-
-      if (leftPreferred !== rightPreferred) {
-        return leftPreferred ? -1 : 1
+      if (left.preferred !== right.preferred) {
+        return left.preferred ? -1 : 1
       }
 
-      return left.id.localeCompare(right.id)
+      if (left.baseFavorDelta !== right.baseFavorDelta) {
+        return right.baseFavorDelta - left.baseFavorDelta
+      }
+
+      return left.id.localeCompare(right.id, "zh-Hans-CN")
     })
 }
 
@@ -2963,30 +3543,199 @@ function getPhoneProactiveRulesForContact(
     .sort((left, right) => left.id.localeCompare(right.id))
 }
 
-function findPhoneQuickMessage(
+function findPhoneTalkOption(
   bundle: RuntimeStoryBundle,
-  quickMessageId: string
+  roleKey: string,
+  talkId: string,
+  snapshot?: RuntimeStorySessionSnapshot
 ) {
-  const normalizedQuickMessageId = normalizeText(quickMessageId)
-  if (!normalizedQuickMessageId) {
+  const normalizedTalkId = normalizeText(talkId)
+  if (!normalizedTalkId) {
     return null
   }
 
-  return getBundlePhoneQuickMessages(bundle).find(
-    (message) => message.id.trim() === normalizedQuickMessageId
+  return resolvePhoneTalkOptionsForContact(bundle, roleKey, snapshot).find(
+    (message) => message.id === normalizedTalkId
   ) ?? null
+}
+
+function getPlayerMoneyBalance(snapshot: RuntimeStorySessionSnapshot) {
+  const value = readSnapshotValue(snapshot, "player.money")
+  const normalized = typeof value === "number" && Number.isFinite(value)
+    ? value
+    : typeof value === "string" && value.trim()
+      ? Number(value)
+      : Number.NaN
+
+  return Number.isFinite(normalized) ? normalized : null
+}
+
+function resolvePhoneActionDisabledReason(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  action: RuntimeStoryPhoneActionLibraryEntry
+) {
+  const contact = getPhoneContact(snapshot, roleKey)
+  const meta = buildRuntimePhoneContactMeta(
+    bundle,
+    roleKey,
+    contact?.favor ?? getBundlePhoneContactProfile(bundle, roleKey)?.initial_favor ?? 20
+  )
+  if (!meta.canContact) {
+    return meta.lockMessage ?? "当前无法主动联系。"
+  }
+
+  const normalizedTags = Array.from(new Set((action.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
+  if (normalizedTags.length > 0) {
+    const unlocked = normalizedTags.some((tag) => meta.unlockActionTags.has(tag))
+    if (!unlocked) {
+      return `${meta.stageLabel}阶段尚未解锁这个动作。`
+    }
+  }
+
+  if (action.cost_money > 0) {
+    const currentMoney = getPlayerMoneyBalance(snapshot)
+    if (currentMoney === null) {
+      return "当前故事没有可写入的 player.money 变量，暂时无法支付。"
+    }
+
+    if (currentMoney < action.cost_money) {
+      return `需要 ${action.cost_money} 元，当前只有 ${Math.max(0, Math.trunc(currentMoney))} 元。`
+    }
+  }
+
+  for (const costItem of action.cost_items ?? []) {
+    const itemId = normalizeItemId(costItem.item_id)
+    const quantity = normalizeBagQuantity(costItem.quantity, 1)
+    if (!itemId || quantity <= 0) {
+      continue
+    }
+
+    const currentQuantity = findBagEntry(snapshot, "player", itemId)?.quantity ?? 0
+    if (currentQuantity < quantity) {
+      const itemName = getBundleItemNameMap(bundle).get(itemId) ?? itemId
+      return `需要 ${itemName} x${quantity}，当前只有 ${currentQuantity}。`
+    }
+  }
+
+  return null
+}
+
+function resolvePhoneActionOptionsForContact(
+  bundle: RuntimeStoryBundle,
+  roleKey: string,
+  snapshot: RuntimeStorySessionSnapshot
+): RuntimeResolvedPhoneActionOption[] {
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  if (!normalizedRoleKey) {
+    return []
+  }
+
+  const contact = getPhoneContact(snapshot, normalizedRoleKey)
+  const meta = buildRuntimePhoneContactMeta(
+    bundle,
+    normalizedRoleKey,
+    contact?.favor ?? getBundlePhoneContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
+  )
+  const itemNameMap = getBundleItemNameMap(bundle)
+
+  return getBundlePhoneConfig(bundle).action_library
+    .filter((entry) => normalizeText(entry.label) && normalizeText(entry.text) && matchesPhoneLibraryScope(entry.scope, meta))
+    .map((entry) => {
+      const tags = Array.from(new Set((entry.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
+      return {
+        id: normalizeText(entry.id),
+        label: normalizeText(entry.label),
+        text: normalizeText(entry.text),
+        tags,
+        baseFavorDelta: Math.max(0, clampInteger(entry.base_favor_delta, 0)),
+        cooldownHours: Math.max(0, clampInteger(entry.cooldown_hours, 0)),
+        costMoney: Math.max(0, clampInteger(entry.cost_money, 0)),
+        costItems: (entry.cost_items ?? [])
+          .map((item) => ({
+            itemId: normalizeItemId(item.item_id),
+            itemName: itemNameMap.get(normalizeItemId(item.item_id)) ?? normalizeItemId(item.item_id),
+            quantity: normalizeBagQuantity(item.quantity, 1)
+          }))
+          .filter((item) => item.itemId && item.quantity > 0),
+        preferred: tags.some((tag) => meta.preferredTags.has(tag)),
+        disabledReason: resolvePhoneActionDisabledReason(bundle, snapshot, normalizedRoleKey, entry),
+        invoke: entry.invoke
+      } satisfies Omit<RuntimeResolvedPhoneActionOption, "disabled">
+    })
+    .filter((entry) => entry.id && entry.label && entry.text)
+    .map((entry) => ({
+      ...entry,
+      disabled: Boolean(entry.disabledReason)
+    }))
+    .sort((left, right) => {
+      if (left.disabled !== right.disabled) {
+        return left.disabled ? 1 : -1
+      }
+
+      if (left.preferred !== right.preferred) {
+        return left.preferred ? -1 : 1
+      }
+
+      if (left.costMoney !== right.costMoney) {
+        return left.costMoney - right.costMoney
+      }
+
+      return left.id.localeCompare(right.id, "zh-Hans-CN")
+    })
 }
 
 function choosePhoneReply(
   bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
   roleKey: string,
-  quickMessage: RuntimeStoryPhoneQuickMessageDefinition
+  tags: string[]
 ) {
-  const profile = getBundlePhoneContactProfile(bundle, roleKey)
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  const normalizedTags = Array.from(new Set(tags.map((tag) => normalizeText(tag)).filter(Boolean)))
+  const contact = getPhoneContact(snapshot, normalizedRoleKey)
+  const meta = buildRuntimePhoneContactMeta(
+    bundle,
+    normalizedRoleKey,
+    contact?.favor ?? getBundlePhoneContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
+  )
   const fallbackReplies = getBundlePhoneConfig(bundle).fallback_replies
+  const replyEntries = getBundlePhoneConfig(bundle).reply_library
+    .filter((entry) => {
+      const entryTags = Array.from(new Set((entry.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
+      if (entryTags.length > 0 && normalizedTags.length > 0 && !entryTags.some((tag) => normalizedTags.includes(tag))) {
+        return false
+      }
 
-  for (const tag of quickMessage.tags) {
-    const profileReplies = profile?.reply_by_tag?.[tag] ?? []
+      return entry.replies.length > 0 && matchesPhoneLibraryScope(entry.scope, meta)
+    })
+    .sort((left, right) => {
+      const leftTags = Array.from(new Set((left.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
+      const rightTags = Array.from(new Set((right.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
+      const tagDelta = getPhoneTagOverlapScore(rightTags, normalizedTags) - getPhoneTagOverlapScore(leftTags, normalizedTags)
+      if (tagDelta !== 0) {
+        return tagDelta
+      }
+
+      const specificityDelta =
+        getPhoneScopeSpecificityScore(right.scope, normalizedRoleKey)
+        - getPhoneScopeSpecificityScore(left.scope, normalizedRoleKey)
+      if (specificityDelta !== 0) {
+        return specificityDelta
+      }
+
+      return left.id.localeCompare(right.id, "zh-Hans-CN")
+    })
+  const replyEntry = replyEntries[0]
+  if (replyEntry && replyEntry.replies.length > 0) {
+    const thread = getPhoneThread(snapshot, normalizedRoleKey)
+    const previousReplyCount = thread?.messages.filter((message) => message.sender === "contact").length ?? 0
+    return replyEntry.replies[previousReplyCount % replyEntry.replies.length] ?? replyEntry.replies[0] ?? ""
+  }
+
+  for (const tag of normalizedTags) {
+    const profileReplies = meta.profile?.reply_by_tag?.[tag] ?? []
     if (profileReplies.length > 0) {
       return profileReplies[0] ?? ""
     }
@@ -3108,23 +3857,30 @@ function calculatePhoneFavorDelta(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   roleKey: string,
-  quickMessage: RuntimeStoryPhoneQuickMessageDefinition
+  option: {
+    id: string
+    baseFavorDelta: number
+    cooldownHours: number
+  }
 ) {
   const thread = getPhoneThread(snapshot, roleKey)
   const previousPlayerMessage = thread?.messages
     .slice()
     .reverse()
     .find((message) => message.sender === "player") ?? null
-  let favorDelta = Math.max(0, quickMessage.base_favor_delta)
+  let favorDelta = Math.max(0, option.baseFavorDelta)
 
-  if (previousPlayerMessage?.quick_message_id === quickMessage.id) {
+  if (previousPlayerMessage?.option_id === option.id || previousPlayerMessage?.quick_message_id === option.id) {
     favorDelta = Math.max(0, favorDelta - 1)
   }
 
-  if (quickMessage.cooldown_hours > 0 && previousPlayerMessage) {
-    const cooldownMinutes = quickMessage.cooldown_hours * 60
+  if (option.cooldownHours > 0 && previousPlayerMessage) {
+    const cooldownMinutes = option.cooldownHours * 60
     const minuteGap = Math.max(0, getCurrentGameMinute(snapshot) - previousPlayerMessage.game_minute)
-    if (previousPlayerMessage.quick_message_id === quickMessage.id && minuteGap < cooldownMinutes) {
+    if (
+      (previousPlayerMessage.option_id === option.id || previousPlayerMessage.quick_message_id === option.id)
+      && minuteGap < cooldownMinutes
+    ) {
       favorDelta = Math.max(0, favorDelta - 1)
     }
   }
@@ -3157,12 +3913,12 @@ function autoRegisterPhoneContactsFromEvent(
   )
 
   for (const roleKey of speakerRoleKeys) {
-    const profile = getBundlePhoneContactProfile(bundle, roleKey)
-    if (profile && !profile.enabled) {
-      continue
-    }
-
-    if (profile && !profile.auto_add) {
+    const contactMeta = buildRuntimePhoneContactMeta(
+      bundle,
+      roleKey,
+      getBundlePhoneContactProfile(bundle, roleKey)?.initial_favor ?? 20
+    )
+    if (!contactMeta.enabled || !contactMeta.autoAdd) {
       continue
     }
 
@@ -3232,31 +3988,65 @@ function sendPhoneMessageToContact(
   return message
 }
 
-function sendPhoneQuickMessage(
+function applyPhoneActionCosts(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
-  notifications: string[],
-  roleKey: string,
-  quickMessageId: string
+  action: RuntimeResolvedPhoneActionOption
 ) {
-  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-  const quickMessage = findPhoneQuickMessage(bundle, quickMessageId)
+  if (action.costMoney > 0) {
+    const currentMoney = getPlayerMoneyBalance(snapshot)
+    if (currentMoney === null) {
+      throw new Error("当前故事没有可写入的 player.money 变量，暂时无法支付。")
+    }
 
-  if (!quickMessage) {
-    throw new Error(`phone quick message "${quickMessageId}" does not exist in phone config.`)
+    if (currentMoney < action.costMoney) {
+      throw new Error(`需要 ${action.costMoney} 元，当前只有 ${Math.max(0, Math.trunc(currentMoney))} 元。`)
+    }
+
+    if (!writeSnapshotValue(snapshot, "player.money", Math.max(0, Math.trunc(currentMoney - action.costMoney)))) {
+      throw new Error("player.money 不是可写 value 变量，暂时无法支付。")
+    }
   }
 
-  const availableQuickMessages = getPhoneQuickMessagesForContact(bundle, normalizedRoleKey, snapshot)
-  if (!availableQuickMessages.some((message) => message.id === quickMessage.id)) {
-    throw new Error(`phone quick message "${quickMessageId}" is not available for "${normalizedRoleKey}".`)
+  for (const costItem of action.costItems) {
+    if (!costItem.itemId || costItem.quantity <= 0) {
+      continue
+    }
+
+    const removed = createRuntimeBagScriptFunctions(bundle, snapshot).bag_remove(
+      "player",
+      costItem.itemId,
+      costItem.quantity
+    )
+    if (!removed) {
+      throw new Error(`消耗物品失败：${costItem.itemName} x${costItem.quantity}`)
+    }
+  }
+}
+
+function sendPhoneTalk(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[],
+  roleKey: string,
+  talkId: string
+) {
+  const snapshot = runtimeState.snapshot
+  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  const talkOption = findPhoneTalkOption(bundle, normalizedRoleKey, talkId, snapshot)
+
+  if (!talkOption) {
+    throw new Error(`phone talk "${talkId}" is not available for "${normalizedRoleKey}".`)
   }
 
   ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-  const favorDelta = calculatePhoneFavorDelta(bundle, snapshot, normalizedRoleKey, quickMessage)
-  const outgoingMessage = appendPhoneMessage(snapshot, normalizedRoleKey, "player", quickMessage.text, {
+  const favorDelta = calculatePhoneFavorDelta(bundle, snapshot, normalizedRoleKey, talkOption)
+  const outgoingMessage = appendPhoneMessage(snapshot, normalizedRoleKey, "player", talkOption.text, {
     read: true,
-    quickMessageId: quickMessage.id,
-    tags: quickMessage.tags
+    optionId: talkOption.id,
+    optionKind: "talk",
+    quickMessageId: talkOption.source === "legacy-quick-message" ? talkOption.id : undefined,
+    tags: talkOption.tags
   })
   if (!outgoingMessage) {
     return false
@@ -3272,12 +4062,95 @@ function sendPhoneQuickMessage(
     content: `主角向 ${findRoleLabel(bundle, normalizedRoleKey)} 发送消息：${outgoingMessage.content}`
   })
 
-  const replyContent = choosePhoneReply(bundle, normalizedRoleKey, quickMessage)
+  if (talkOption.invoke) {
+    queueInvokeEvent(
+      bundle,
+      runtimeState,
+      talkOption.invoke.target_type,
+      talkOption.invoke.event_id,
+      {},
+      talkOption.invoke.delay
+    )
+  }
+
+  const replyContent = choosePhoneReply(bundle, snapshot, normalizedRoleKey, talkOption.tags)
   if (replyContent) {
     sendPhoneMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, replyContent)
   }
 
   return true
+}
+
+function sendPhoneAction(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[],
+  roleKey: string,
+  actionId: string
+) {
+  const snapshot = runtimeState.snapshot
+  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  const actionOption = resolvePhoneActionOptionsForContact(bundle, normalizedRoleKey, snapshot).find(
+    (entry) => entry.id === normalizeText(actionId)
+  )
+
+  if (!actionOption) {
+    throw new Error(`phone action "${actionId}" is not available for "${normalizedRoleKey}".`)
+  }
+
+  if (actionOption.disabled) {
+    throw new Error(actionOption.disabledReason ?? `phone action "${actionId}" is currently unavailable.`)
+  }
+
+  applyPhoneActionCosts(bundle, snapshot, actionOption)
+  const favorDelta = calculatePhoneFavorDelta(bundle, snapshot, normalizedRoleKey, actionOption)
+  const outgoingMessage = appendPhoneMessage(snapshot, normalizedRoleKey, "player", actionOption.text, {
+    read: true,
+    optionId: actionOption.id,
+    optionKind: "action",
+    tags: actionOption.tags
+  })
+  if (!outgoingMessage) {
+    return false
+  }
+
+  const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+  contact.favor = clampPhoneFavor(contact.favor + favorDelta, contact.favor)
+
+  appendHistory(snapshot, {
+    type: "system",
+    id: outgoingMessage.id,
+    title: `phone:${normalizedRoleKey}`,
+    content: `主角对 ${findRoleLabel(bundle, normalizedRoleKey)} 执行动作：${actionOption.label}`
+  })
+
+  if (actionOption.invoke) {
+    queueInvokeEvent(
+      bundle,
+      runtimeState,
+      actionOption.invoke.target_type,
+      actionOption.invoke.event_id,
+      {},
+      actionOption.invoke.delay
+    )
+  }
+
+  const replyContent = choosePhoneReply(bundle, snapshot, normalizedRoleKey, actionOption.tags)
+  if (replyContent) {
+    sendPhoneMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, replyContent)
+  }
+
+  return true
+}
+
+function sendPhoneQuickMessage(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[],
+  roleKey: string,
+  quickMessageId: string
+) {
+  return sendPhoneTalk(bundle, runtimeState, notifications, roleKey, quickMessageId)
 }
 
 function findLocationLabel(bundle: RuntimeStoryBundle, locationId: string) {
@@ -4751,11 +5624,20 @@ export function buildRuntimePhoneContacts(
   return snapshot.phone.contacts
     .map((contact) => {
       const latest = getLatestPhoneMessagePreview(snapshot, contact.role_key)
+      const meta = buildRuntimePhoneContactMeta(bundle, contact.role_key, contact.favor)
 
       return {
         roleKey: contact.role_key,
-        label: findRoleLabel(bundle, contact.role_key),
+        label: meta.label,
         favor: contact.favor,
+        relationTrackId: meta.trackId,
+        relationTrackLabel: meta.trackLabel,
+        relationStageId: meta.stageId,
+        relationStageLabel: meta.stageLabel,
+        canContact: meta.canContact,
+        lockMessage: meta.lockMessage,
+        personalityId: meta.personalityId,
+        personalityLabel: meta.personalityLabel,
         unreadCount: getPhoneUnreadCount(snapshot, contact.role_key),
         unlockedAtDay: contact.unlocked_at_day,
         lastMessageGameMinute: latest.gameMinute,
@@ -4797,11 +5679,22 @@ export function buildRuntimePhoneThreadView(
 
   const thread = getPhoneThread(snapshot, normalizedRoleKey)
   const messages = thread?.messages ?? []
+  const meta = buildRuntimePhoneContactMeta(bundle, normalizedRoleKey, contact.favor)
+  const talks = resolvePhoneTalkOptionsForContact(bundle, normalizedRoleKey, snapshot)
+  const actions = resolvePhoneActionOptionsForContact(bundle, normalizedRoleKey, snapshot)
 
   return {
     roleKey: normalizedRoleKey,
-    contactLabel: findRoleLabel(bundle, normalizedRoleKey),
+    contactLabel: meta.label,
     favor: contact.favor,
+    relationTrackId: meta.trackId,
+    relationTrackLabel: meta.trackLabel,
+    relationStageId: meta.stageId,
+    relationStageLabel: meta.stageLabel,
+    canContact: meta.canContact,
+    lockMessage: meta.lockMessage,
+    personalityId: meta.personalityId,
+    personalityLabel: meta.personalityLabel,
     unreadCount: getPhoneUnreadCount(snapshot, normalizedRoleKey),
     messages: messages.map((message) => ({
       id: message.id,
@@ -4815,12 +5708,38 @@ export function buildRuntimePhoneThreadView(
       gameMinute: message.game_minute,
       read: message.read
     })),
-    quickMessages: getPhoneQuickMessagesForContact(bundle, normalizedRoleKey, snapshot).map((message) => ({
+    talks: talks.map((message) => ({
       id: message.id,
       text: message.text,
       tags: [...message.tags],
-      baseFavorDelta: message.base_favor_delta,
-      cooldownHours: message.cooldown_hours
+      baseFavorDelta: message.baseFavorDelta,
+      cooldownHours: message.cooldownHours,
+      suggested: message.suggested
+    })),
+    actions: actions.map((action) => ({
+      id: action.id,
+      label: action.label,
+      text: action.text,
+      tags: [...action.tags],
+      baseFavorDelta: action.baseFavorDelta,
+      cooldownHours: action.cooldownHours,
+      costMoney: action.costMoney,
+      costItems: action.costItems.map((item) => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        quantity: item.quantity
+      })),
+      disabled: action.disabled,
+      disabledReason: action.disabledReason,
+      invokeEventLabel: action.invoke ? `${action.invoke.target_type}/${action.invoke.event_id}` : null
+    })),
+    quickMessages: talks.map((message) => ({
+      id: message.id,
+      text: message.text,
+      tags: [...message.tags],
+      baseFavorDelta: message.baseFavorDelta,
+      cooldownHours: message.cooldownHours,
+      suggested: message.suggested
     }))
   }
 }
@@ -5071,13 +5990,46 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         try {
           sendPhoneQuickMessage(
             options.bundle,
-            runtimeState.snapshot,
+            runtimeState,
             notifications,
             action.roleKey,
             action.quickMessageId
           )
+          reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
           notifications.push(error instanceof Error ? error.message : "发送手机消息失败。")
+        }
+        return
+      }
+
+      if (action.type === "phone-send-talk") {
+        try {
+          sendPhoneTalk(
+            options.bundle,
+            runtimeState,
+            notifications,
+            action.roleKey,
+            action.talkId
+          )
+          reconcileScheduler(options.bundle, runtimeState, notifications)
+        } catch (error) {
+          notifications.push(error instanceof Error ? error.message : "发送手机闲聊失败。")
+        }
+        return
+      }
+
+      if (action.type === "phone-send-action") {
+        try {
+          sendPhoneAction(
+            options.bundle,
+            runtimeState,
+            notifications,
+            action.roleKey,
+            action.actionId
+          )
+          reconcileScheduler(options.bundle, runtimeState, notifications)
+        } catch (error) {
+          notifications.push(error instanceof Error ? error.message : "执行手机动作失败。")
         }
         return
       }

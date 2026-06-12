@@ -15,6 +15,12 @@
     {
       group_no: 1,
       need_player_override: true,
+      tips: '请选择主角的性别',
+      var_key: 'player.gender',
+    },
+    {
+      group_no: 1,
+      need_player_override: true,
       tips: '请选择主角的头像',
       var_key: 'player.avatar',
     },

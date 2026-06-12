@@ -2109,6 +2109,9 @@ function toNormalRole(
   existing?: StoryNormalRoleDefinition
 ): StoryNormalRoleDefinition {
   return {
+    contact_enabled: existing?.contact_enabled ?? false,
+    contact_initial_favor: existing?.contact_initial_favor ?? 20,
+    contact_track: existing?.contact_track ?? "none",
     id: draftRole.id,
     name: draftRole.name,
     zhiye: draftRole.zhiye,
@@ -2116,7 +2119,9 @@ function toNormalRole(
     prompt: draftRole.prompt,
     img_raw: existing?.img_raw ?? "",
     img_compress_1: existing?.img_compress_1 ?? "",
-    img_compress_2: existing?.img_compress_2 ?? ""
+    img_compress_2: existing?.img_compress_2 ?? "",
+    xingge_id: existing?.xingge_id ?? "",
+    xingge_note: existing?.xingge_note ?? draftRole.xingge ?? ""
   }
 }
 
@@ -2125,6 +2130,9 @@ function toImportantRole(
   existing?: StoryImportantRoleDefinition
 ): StoryImportantRoleDefinition {
   return {
+    contact_enabled: existing?.contact_enabled ?? false,
+    contact_initial_favor: existing?.contact_initial_favor ?? 20,
+    contact_track: existing?.contact_track ?? "none",
     id: draftRole.id,
     name: draftRole.name,
     zhiye: draftRole.zhiye,
@@ -2138,6 +2146,8 @@ function toImportantRole(
     img_compress_1: existing?.img_compress_1 ?? "",
     img_compress_2: existing?.img_compress_2 ?? "",
     xingge: draftRole.xingge ?? existing?.xingge ?? "",
+    xingge_id: existing?.xingge_id ?? "",
+    xingge_note: existing?.xingge_note ?? "",
     qufen_xingbie: existing?.qufen_xingbie ?? false,
     img_male_raw: existing?.img_male_raw ?? "",
     img_male_compress_1: existing?.img_male_compress_1 ?? "",

@@ -7,6 +7,7 @@ import type {
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
+  StoryPhoneFile,
   StoryLoopEventFile,
   StoryItemsFile,
   StoryOnceDialogueDefinition,
@@ -344,6 +345,14 @@ export interface StoryItemsResponse {
 
 export interface SaveStoryItemsRequest {
   items: StoryItemsFile
+}
+
+export interface StoryPhoneResponse {
+  phone: StoryPhoneFile
+}
+
+export interface SaveStoryPhoneRequest {
+  phone: StoryPhoneFile
 }
 
 export interface AppSettingsResponse {
