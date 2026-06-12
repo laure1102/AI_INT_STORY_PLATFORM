@@ -187,6 +187,42 @@ export interface StoryInitialBagsFile {
   [ownerId: string]: StoryInitialBagDefinition
 }
 
+export interface StoryPhoneQuickMessage {
+  id: string
+  text: string
+  tags: string[]
+  base_favor_delta: number
+  cooldown_hours: number
+  visibility: "always" | "suggested-only"
+  available_role_keys: string[]
+}
+
+export interface StoryPhoneProactiveMessageRule {
+  id: string
+  enabled: boolean
+  trigger_expr: string
+  cooldown_hours: number
+  favor_delta: number
+  messages: string[]
+  reply_quick_message_ids: string[]
+}
+
+export interface StoryPhoneContactProfile {
+  role_key: string
+  enabled: boolean
+  auto_add: boolean
+  initial_favor: number
+  preferred_tags: string[]
+  reply_by_tag: Record<string, string[]>
+  proactive_messages: StoryPhoneProactiveMessageRule[]
+}
+
+export interface StoryPhoneFile {
+  player_quick_messages: StoryPhoneQuickMessage[]
+  contact_profiles: StoryPhoneContactProfile[]
+  fallback_replies: Record<string, string[]>
+}
+
 export interface StoryBibleFile {
   background: string
   golden_finger: string
@@ -382,6 +418,7 @@ export interface StoryDocument {
   eventLocations: StoryEventLocationFile
   items: StoryItemsFile
   initialBags: StoryInitialBagsFile
+  phone: StoryPhoneFile
   chainEvents: StoryChainEventsFile
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile
@@ -451,6 +488,7 @@ export interface CompiledStory {
   eventLocations: StoryEventLocationFile
   items: StoryItemsFile
   initialBags: StoryInitialBagsFile
+  phone: StoryPhoneFile
   chainEvents: Record<string, CompiledEvent | CompiledAction>
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile

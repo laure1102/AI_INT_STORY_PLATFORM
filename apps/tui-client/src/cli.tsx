@@ -3,8 +3,18 @@ import React, { useEffect, useMemo, useState } from "react"
 import { Alert, ConfirmInput, Spinner, StatusMessage, TextInput } from "@inkjs/ui"
 import { Box, render, Text, useApp, useInput } from "ink"
 import type { StorySceneFile } from "@story-mgr/core"
-import type { RuntimeStorySessionAction, RuntimeStoryViewModel } from "@story-mgr/runtime"
-import { formatStoryValInput, getStoryValCalcDisplay } from "@story-mgr/runtime"
+import type {
+  RuntimePhoneContactView,
+  RuntimePhoneThreadView,
+  RuntimeStorySessionAction,
+  RuntimeStoryViewModel
+} from "@story-mgr/runtime"
+import {
+  buildRuntimePhoneContacts,
+  buildRuntimePhoneThreadView,
+  formatStoryValInput,
+  getStoryValCalcDisplay
+} from "@story-mgr/runtime"
 import {
   createTuiClientApp,
   type CreateTuiClientAppOptions,
@@ -59,10 +69,13 @@ interface AsyncTaskState {
 }
 
 interface GameUiState {
-  overlay: "notifications" | "globalVals" | "scheduler" | null
+  overlay: "notifications" | "globalVals" | "scheduler" | "phone-contacts" | "phone-thread" | null
   overlayOffset: number
   interactionActiveIndex: number
   interactionInputDraft: string
+  phoneContactActiveIndex: number
+  phoneQuickMessageActiveIndex: number
+  phoneSelectedRoleKey: string | null
 }
 
 type ThemeColor = "blue" | "cyan" | "green" | "magenta" | "yellow" | "gray" | "red" | "white"
@@ -225,6 +238,40 @@ function createInteractionOptions(
         label: option.description ? `${option.label} · ${option.description}` : option.label
       }))
     : []
+}
+
+function createPhoneContactOptions(contacts: RuntimePhoneContactView[]): MenuOption[] {
+  return contacts.map((contact) => {
+    const preview = contact.lastMessagePreview?.trim() ?? ""
+    const suffix = preview ? ` · ${preview}` : ""
+    const unreadLabel = contact.unreadCount > 0 ? `未读 ${contact.unreadCount}` : "已读"
+
+    return {
+      value: contact.roleKey,
+      label: `${contact.label} · 好感 ${contact.favor}/100 · ${unreadLabel}${suffix}`
+    }
+  })
+}
+
+function createPhoneQuickMessageOptions(thread: RuntimePhoneThreadView | null): MenuOption[] {
+  if (!thread) {
+    return []
+  }
+
+  return thread.quickMessages.map((message) => {
+    const tagLabel = message.tags.length > 0 ? ` · ${message.tags.join("/")}` : ""
+    const favorLabel = message.baseFavorDelta > 0 ? ` · 好感 +${message.baseFavorDelta}` : ""
+    const cooldownLabel = message.cooldownHours > 0 ? ` · 冷却 ${message.cooldownHours}h` : ""
+
+    return {
+      value: message.id,
+      label: `${message.text}${tagLabel}${favorLabel}${cooldownLabel}`
+    }
+  })
+}
+
+function countPhoneUnreadMessages(contacts: RuntimePhoneContactView[]) {
+  return contacts.reduce((sum, contact) => sum + contact.unreadCount, 0)
 }
 
 function buildSettingsOptions(view: RuntimeStoryViewModel): MenuOption[] {
@@ -1028,6 +1075,112 @@ function PhoneShell({
   )
 }
 
+function PhoneContactsOverlay({
+  state,
+  contacts,
+  activeIndex,
+  onActiveIndexChange,
+  onSubmit
+}: {
+  state: TuiClientAppState
+  contacts: RuntimePhoneContactView[]
+  activeIndex: number
+  onActiveIndexChange: (nextIndex: number) => void
+  onSubmit: (roleKey: string) => void
+}) {
+  const unreadTotal = countPhoneUnreadMessages(contacts)
+  const options = useMemo(() => createPhoneContactOptions(contacts), [contacts])
+
+  return (
+    <PhoneShell
+      state={state}
+      title="联系人"
+      subtitle="和认识的 NPC 聊聊，关系会慢慢发生变化"
+      accentColor="cyan"
+      footerText="上/下选择联系人；Enter 打开；Esc 或 P 关闭手机"
+    >
+      <SectionCard title="手机联系人" accentColor="cyan" badge={`${contacts.length} 人`}>
+        <Box flexDirection="row" flexWrap="wrap">
+          <StatusChip label="未读" value={unreadTotal} color={unreadTotal > 0 ? "yellow" : "gray"} />
+          <StatusChip label="今日" value={findGameDayLabel(state)} color="green" />
+        </Box>
+        <MenuSelect
+          options={options}
+          visibleOptionCount={6}
+          activeIndex={activeIndex}
+          onActiveIndexChange={onActiveIndexChange}
+          onSubmit={onSubmit}
+        />
+      </SectionCard>
+    </PhoneShell>
+  )
+}
+
+function PhoneThreadOverlay({
+  state,
+  thread,
+  activeIndex,
+  onActiveIndexChange,
+  onSubmit
+}: {
+  state: TuiClientAppState
+  thread: RuntimePhoneThreadView | null
+  activeIndex: number
+  onActiveIndexChange: (nextIndex: number) => void
+  onSubmit: (quickMessageId: string) => void
+}) {
+  const options = useMemo(() => createPhoneQuickMessageOptions(thread), [thread])
+
+  if (!thread) {
+    return (
+      <PhoneShell
+        state={state}
+        title="联系人会话"
+        subtitle="当前联系人已不可用"
+        accentColor="red"
+        footerText="Esc 返回联系人；P 关闭手机"
+      >
+        <Alert variant="warning">当前联系人不存在，或尚未加入联系人列表。</Alert>
+      </PhoneShell>
+    )
+  }
+  const visibleMessages = thread.messages.slice(-8)
+
+  return (
+    <PhoneShell
+      state={state}
+      title={thread.contactLabel}
+      subtitle={`好感 ${thread.favor}/100 · 未读 ${thread.unreadCount}`}
+      accentColor="magenta"
+      footerText="上/下选择短句；Enter 发送；Esc 返回联系人；P 关闭手机"
+    >
+      <SectionCard title="聊天记录" accentColor="magenta" badge={`${thread.messages.length} 条`}>
+        {visibleMessages.length === 0 ? (
+          <Text color="gray">你们还没有聊过天。</Text>
+        ) : (
+          visibleMessages.map((message) => (
+            <Box key={message.id} flexDirection="column" marginBottom={1}>
+              <Text color={message.sender === "player" ? "cyan" : message.sender === "contact" ? "green" : "yellow"}>
+                {message.senderLabel}
+              </Text>
+              <Text>{message.content}</Text>
+            </Box>
+          ))
+        )}
+      </SectionCard>
+      <SectionCard title="发送短句" accentColor="cyan" badge={`${thread.quickMessages.length} 条`}>
+        <MenuSelect
+          options={options}
+          visibleOptionCount={5}
+          activeIndex={activeIndex}
+          onActiveIndexChange={onActiveIndexChange}
+          onSubmit={onSubmit}
+        />
+      </SectionCard>
+    </PhoneShell>
+  )
+}
+
 function SummaryPanel({ state }: { state: TuiClientAppState }) {
   return (
     <SectionCard title="状态总览" accentColor="blue" badge={formatStageLabel(state.stage)}>
@@ -1465,7 +1618,11 @@ function GameScreen({
   onSelectOption,
   onSubmitText,
   onConfirmContinue,
-  onSelectDebugTime
+  onSelectDebugTime,
+  onPhoneContactIndexChange,
+  onPhoneQuickMessageIndexChange,
+  onPhoneOpenThread,
+  onPhoneSendQuickMessage
 }: {
   state: TuiClientAppState
   uiState: GameUiState
@@ -1473,6 +1630,10 @@ function GameScreen({
   onSubmitText: (value: string) => void
   onConfirmContinue: () => void
   onSelectDebugTime: (value: string) => void
+  onPhoneContactIndexChange: (nextIndex: number) => void
+  onPhoneQuickMessageIndexChange: (nextIndex: number) => void
+  onPhoneOpenThread: (roleKey: string) => void
+  onPhoneSendQuickMessage: (quickMessageId: string) => void
 }) {
   const view = state.view
 
@@ -1494,7 +1655,19 @@ function GameScreen({
   const mergedNotifications = [...state.notifications, ...view.notifications]
   const sceneImagePath = findCurrentSceneImagePath(state)
   const currentLocationId = findCurrentLocationId(state)
-  const footerHint = "h 主界面  t 设置  空格 暂停/继续  l 消息流  i 全局变量  e 调度器"
+  const phoneSnapshot = state.session?.getSnapshot() ?? null
+  const phoneContacts = state.bundle && phoneSnapshot
+    ? buildRuntimePhoneContacts(state.bundle, phoneSnapshot)
+    : []
+  const phoneThread = state.bundle && phoneSnapshot && uiState.phoneSelectedRoleKey
+    ? buildRuntimePhoneThreadView(state.bundle, phoneSnapshot, uiState.phoneSelectedRoleKey)
+    : null
+  const phoneUnreadTotal = countPhoneUnreadMessages(phoneContacts)
+  const isPhoneOverlay = uiState.overlay === "phone-contacts" || uiState.overlay === "phone-thread"
+  const isGenericOverlay = uiState.overlay === "notifications"
+    || uiState.overlay === "globalVals"
+    || uiState.overlay === "scheduler"
+  const shouldFlashPhoneMenu = !isPhoneOverlay && phoneUnreadTotal > 0 && new Date().getSeconds() % 2 === 0
   const bagDebugLines = view.screen === "debug" ? buildBagDebugLines(view) : []
   const overlayLines = uiState.overlay === "notifications"
     ? mergedNotifications.slice().reverse()
@@ -1527,13 +1700,35 @@ function GameScreen({
         <Text bold color={view.screen === "debug" ? "yellow" : "green"}>
           {view.activeEventTitle ?? view.activeEventId ?? "该干点什么好呢？"}
         </Text>
-        {uiState.overlay ? (
+        {isGenericOverlay ? (
           <Box flexDirection="column" marginTop={1}>
             <OverlayPager
               title={overlayTitle}
               badge={overlayBadge}
               lines={overlayLines}
               offset={uiState.overlayOffset}
+            />
+          </Box>
+        ) : null}
+        {uiState.overlay === "phone-contacts" ? (
+          <Box flexDirection="column" marginTop={1}>
+            <PhoneContactsOverlay
+              state={state}
+              contacts={phoneContacts}
+              activeIndex={uiState.phoneContactActiveIndex}
+              onActiveIndexChange={onPhoneContactIndexChange}
+              onSubmit={onPhoneOpenThread}
+            />
+          </Box>
+        ) : null}
+        {uiState.overlay === "phone-thread" ? (
+          <Box flexDirection="column" marginTop={1}>
+            <PhoneThreadOverlay
+              state={state}
+              thread={phoneThread}
+              activeIndex={uiState.phoneQuickMessageActiveIndex}
+              onActiveIndexChange={onPhoneQuickMessageIndexChange}
+              onSubmit={onPhoneSendQuickMessage}
             />
           </Box>
         ) : null}
@@ -1617,7 +1812,7 @@ function GameScreen({
           <Text color="green">
             {findPlayerName(state)}  金钱: {findPlayerMoneyLabel(state)}
           </Text>
-          <Text color="green">下一天</Text>
+          <Text color="green">{`手机未读: ${phoneUnreadTotal}`}</Text>
         </Box>
         <Box flexDirection="row" justifyContent="space-between" width={74}>
           <Text color="gray">{`场景: ${sceneImagePath}`}</Text>
@@ -1633,7 +1828,17 @@ function GameScreen({
       </Box>
 
       <Box>
-        <Text color="gray">{`${footerHint}  n 下一天`}</Text>
+        {isPhoneOverlay ? (
+          <Text color="gray">Esc 返回/关闭手机  p 收起手机</Text>
+        ) : (
+          <Box flexDirection="row" flexWrap="wrap">
+            <Text color="gray">h 主界面  t 设置  </Text>
+            <Text color={shouldFlashPhoneMenu ? "yellow" : "gray"}>
+              {shouldFlashPhoneMenu ? `p 手机[未读 ${phoneUnreadTotal}]` : "p 手机"}
+            </Text>
+            <Text color="gray">  空格 暂停/继续  l 消息流  i 全局变量  e 调度器  n 下一天</Text>
+          </Box>
+        )}
       </Box>
     </Box>
   )
@@ -1679,7 +1884,10 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
     overlay: null,
     overlayOffset: 0,
     interactionActiveIndex: 0,
-    interactionInputDraft: ""
+    interactionInputDraft: "",
+    phoneContactActiveIndex: 0,
+    phoneQuickMessageActiveIndex: 0,
+    phoneSelectedRoleKey: null
   })
   const [task, setTask] = useState<AsyncTaskState | null>({
     label: "正在启动并同步故事数据...",
@@ -1751,6 +1959,51 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
     }
   }, [app, state.session, task])
 
+  function closePhoneOverlay() {
+    setGameUiState((currentState) => ({
+      ...currentState,
+      overlay: null,
+      overlayOffset: 0,
+      phoneQuickMessageActiveIndex: 0,
+      phoneSelectedRoleKey: null
+    }))
+  }
+
+  function returnToPhoneContacts() {
+    setGameUiState((currentState) => ({
+      ...currentState,
+      overlay: "phone-contacts",
+      overlayOffset: 0,
+      phoneQuickMessageActiveIndex: 0,
+      phoneSelectedRoleKey: null
+    }))
+  }
+
+  async function openPhoneThread(roleKey: string) {
+    await handleDispatchAction(app, { type: "phone-mark-read", roleKey }, setState)
+    setGameUiState((currentState) => ({
+      ...currentState,
+      overlay: "phone-thread",
+      overlayOffset: 0,
+      phoneSelectedRoleKey: roleKey,
+      phoneQuickMessageActiveIndex: 0
+    }))
+  }
+
+  async function sendPhoneQuickMessage(quickMessageId: string) {
+    const roleKey = gameUiState.phoneSelectedRoleKey
+    if (!roleKey) {
+      return
+    }
+
+    await handleDispatchAction(app, {
+      type: "phone-send-quick-message",
+      roleKey,
+      quickMessageId
+    }, setState)
+    await handleDispatchAction(app, { type: "phone-mark-read", roleKey }, setState)
+  }
+
   useInput((input, key) => {
     if (key.ctrl && input.toLowerCase() === "c") {
       exit()
@@ -1762,6 +2015,25 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
     }
 
     const lowerInput = input.toLowerCase()
+    if (gameUiState.overlay === "phone-thread") {
+      if (key.escape) {
+        returnToPhoneContacts()
+        return
+      }
+
+      if (lowerInput === "p") {
+        closePhoneOverlay()
+      }
+      return
+    }
+
+    if (gameUiState.overlay === "phone-contacts") {
+      if (key.escape || lowerInput === "p") {
+        closePhoneOverlay()
+      }
+      return
+    }
+
     if (lowerInput === "h") {
       setValidationError(null)
       setScreen({ kind: "profile-menu" })
@@ -1847,6 +2119,17 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
         ...currentState,
         overlay: currentState.overlay === "scheduler" ? null : "scheduler",
         overlayOffset: 0
+      }))
+      return
+    }
+
+    if (lowerInput === "p") {
+      setGameUiState((currentState) => ({
+        ...currentState,
+        overlay: "phone-contacts",
+        overlayOffset: 0,
+        phoneSelectedRoleKey: null,
+        phoneQuickMessageActiveIndex: 0
       }))
       return
     }
@@ -2278,6 +2561,20 @@ function App({ options }: { options: CreateTuiClientAppOptions }) {
         onSubmitText={(value) => void submitTextInput(value)}
         onConfirmContinue={() => void confirmInteraction()}
         onSelectDebugTime={(value) => void handleTimeDebugSelect(value)}
+        onPhoneContactIndexChange={(nextIndex) => {
+          setGameUiState((currentState) => ({
+            ...currentState,
+            phoneContactActiveIndex: Math.max(0, nextIndex)
+          }))
+        }}
+        onPhoneQuickMessageIndexChange={(nextIndex) => {
+          setGameUiState((currentState) => ({
+            ...currentState,
+            phoneQuickMessageActiveIndex: Math.max(0, nextIndex)
+          }))
+        }}
+        onPhoneOpenThread={(roleKey) => void openPhoneThread(roleKey)}
+        onPhoneSendQuickMessage={(quickMessageId) => void sendPhoneQuickMessage(quickMessageId)}
       />
     )
   })()

@@ -4,6 +4,74 @@
     presentation: {
       type: 'dialogue',
       dialogues: [
+        {
+          content: '请问……您就是刚回县里的那位老板吗？',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+        {
+          content: '老板不敢当，不过刚回县里的人，应该就是我。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '我叫助理，之前一直在外面给人跑事务。听说您想在县里做点事，我或许能帮上忙。',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+        {
+          content: '你消息倒是灵通。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '小地方，风吹草动传得都快。您要真想做事，身边总得有人先替您跑腿、盯消息、传话。',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+        {
+          content: '行，那你先跟着我试试。正好我现在最缺的，就是一个熟县里门路的人。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+    },
+    end_script: "// 【联系人接入】\n// 助理正式成为主角的第一位现实联系人，后续很多县域经营线都可以从她这里展开。\nphone_add_contact(\"important:zhuli\")\nphone_set_favor(\"important:zhuli\", 30)\n\n// 【首条手机消息】\n// 让玩家在第一次认识助理后立刻看到手机系统的价值。\nphone_send_from_contact(\"important:zhuli\", \"老板，这是我的手机号。我先去把县里的基础情况摸一遍，有进展我随时跟您汇报。\")",
+    id: 'zhuli_offer_help',
+    init_script: '',
+    invoke_params: [],
+    location: 'qichezhan_lvl1',
+    object_keys: [
+      'important:zhuli',
+    ],
+    title: '助理主动上门',
+    trigger_expr: '${system.now_day} >= 1 && !phone_has_contact("important:zhuli") && ${player.money} >= ${player.first_day_give_money}',
+    trigger_mode: 'condition',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'message',
+      message: {
+        content: '助理给你推来了一个新的联系人号码。',
+        duration_seconds: 2,
+      },
+    },
+    end_script: "// 【主线手机铺垫】\n// 县长通过助理递来联系方式，表示他已经注意到主角回县里这件事。\nphone_add_contact(\"important:xianzhang\")\nphone_set_favor(\"important:xianzhang\", 22)\nphone_send_from_contact(\"important:xianzhang\", \"听说你回县里了。有空的话，来县里坐坐。你要是真想做点事，我们可以聊聊。\")",
+    id: 'xianzhang_first_contact',
+    init_script: '',
+    invoke_params: [],
+    location: '',
+    object_keys: [],
+    title: '县长递来联系方式',
+    trigger_expr: '${system.now_day} >= 2 && phone_has_contact("important:zhuli") && !phone_has_contact("important:xianzhang")',
+    trigger_mode: 'condition',
+  },
+  {
+    bgm: '',
+    presentation: {
+      type: 'dialogue',
+      dialogues: [
       {
         content: '老板，今天天气很好呢。',
         speaker_key: 'important:zhuli',

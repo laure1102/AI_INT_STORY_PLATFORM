@@ -73,6 +73,42 @@ interface RuntimeStoryItemsFile {
   items: RuntimeStoryItemDefinition[]
 }
 
+interface RuntimeStoryPhoneQuickMessageDefinition {
+  id: string
+  text: string
+  tags: string[]
+  base_favor_delta: number
+  cooldown_hours: number
+  visibility: "always" | "suggested-only"
+  available_role_keys: string[]
+}
+
+interface RuntimeStoryPhoneProactiveMessageRule {
+  id: string
+  enabled: boolean
+  trigger_expr: string
+  cooldown_hours: number
+  favor_delta: number
+  messages: string[]
+  reply_quick_message_ids: string[]
+}
+
+interface RuntimeStoryPhoneContactProfile {
+  role_key: string
+  enabled: boolean
+  auto_add: boolean
+  initial_favor: number
+  preferred_tags: string[]
+  reply_by_tag: Record<string, string[]>
+  proactive_messages: RuntimeStoryPhoneProactiveMessageRule[]
+}
+
+interface RuntimeStoryPhoneFile {
+  player_quick_messages: RuntimeStoryPhoneQuickMessageDefinition[]
+  contact_profiles: RuntimeStoryPhoneContactProfile[]
+  fallback_replies: Record<string, string[]>
+}
+
 export interface RuntimeBagEntry {
   item_id: string
   quantity: number
@@ -89,6 +125,33 @@ export interface RuntimeBagState {
 export interface RuntimeBagsState {
   player: RuntimeBagState
   [ownerId: string]: RuntimeBagState
+}
+
+export interface RuntimePhoneContactState {
+  role_key: string
+  favor: number
+  unlocked_at_day: number
+}
+
+export interface RuntimePhoneMessageState {
+  id: string
+  sender: "player" | "contact" | "system"
+  content: string
+  game_minute: number
+  read: boolean
+  quick_message_id?: string
+  source_rule_id?: string
+  tags?: string[]
+}
+
+export interface RuntimePhoneThreadState {
+  role_key: string
+  messages: RuntimePhoneMessageState[]
+}
+
+export interface RuntimePhoneState {
+  contacts: RuntimePhoneContactState[]
+  threads: RuntimePhoneThreadState[]
 }
 
 interface RuntimeInitialBagEntry {
@@ -296,6 +359,7 @@ export interface RuntimeStorySessionSnapshot {
   clock: RuntimeClockState
   scheduler: RuntimeSchedulerState
   bags: RuntimeBagsState
+  phone: RuntimePhoneState
   triggered_once_events: RuntimeTriggeredOnceState[]
   /** @deprecated 请改用 triggered_once_events */
   loop_event_states: RuntimeLoopEventState[]
@@ -314,6 +378,7 @@ export interface RuntimeStoryBundle {
   eventLocations: unknown
   items?: RuntimeStoryItemsFile
   initialBags?: RuntimeInitialBagsFile
+  phone?: RuntimeStoryPhoneFile
   chainEvents?: Record<string, unknown>
   poolEvents?: unknown[]
   scheduleEvents?: unknown[]
@@ -393,6 +458,43 @@ export interface RuntimeBagSummary {
   entries: RuntimeBagItemView[]
 }
 
+export interface RuntimePhoneQuickMessageView {
+  id: string
+  text: string
+  tags: string[]
+  baseFavorDelta: number
+  cooldownHours: number
+}
+
+export interface RuntimePhoneContactView {
+  roleKey: string
+  label: string
+  favor: number
+  unreadCount: number
+  unlockedAtDay: number
+  lastMessageGameMinute: number | null
+  lastMessagePreview: string | null
+  messageCount: number
+}
+
+export interface RuntimePhoneThreadMessageView {
+  id: string
+  sender: "player" | "contact" | "system"
+  senderLabel: string
+  content: string
+  gameMinute: number
+  read: boolean
+}
+
+export interface RuntimePhoneThreadView {
+  roleKey: string
+  contactLabel: string
+  favor: number
+  unreadCount: number
+  messages: RuntimePhoneThreadMessageView[]
+  quickMessages: RuntimePhoneQuickMessageView[]
+}
+
 export interface RuntimeStoryViewModel {
   screen: "boot" | "profile" | "save-select" | "game" | "debug"
   storyTitle: string
@@ -424,6 +526,8 @@ export type RuntimeStorySessionAction =
   | { type: "select-option"; optionId: string }
   | { type: "submit-text"; field: string; value: string }
   | { type: "invoke-once"; targetType: StoryInvokeTargetType; eventId: string; args?: Record<string, unknown> }
+  | { type: "phone-send-quick-message"; roleKey: string; quickMessageId: string }
+  | { type: "phone-mark-read"; roleKey: string }
   | { type: "open-debug" }
   | { type: "close-debug" }
 
@@ -813,12 +917,35 @@ function createDefaultBagsState(): RuntimeBagsState {
   }
 }
 
+function createDefaultPhoneConfig(): RuntimeStoryPhoneFile {
+  return {
+    player_quick_messages: [],
+    contact_profiles: [],
+    fallback_replies: {}
+  }
+}
+
+function createDefaultPhoneState(): RuntimePhoneState {
+  return {
+    contacts: [],
+    threads: []
+  }
+}
+
 function normalizeOwnerId(ownerId: unknown) {
   return typeof ownerId === "string" ? ownerId.trim() : ""
 }
 
 function normalizeItemId(itemId: unknown) {
   return typeof itemId === "string" ? itemId.trim() : ""
+}
+
+function normalizePhoneRoleKey(roleKey: unknown) {
+  return typeof roleKey === "string" ? roleKey.trim() : ""
+}
+
+function clampPhoneFavor(value: unknown, fallback = 0) {
+  return Math.max(0, Math.min(100, clampInteger(value, fallback)))
 }
 
 function normalizeBagQuantity(quantity: unknown, fallback = 1) {
@@ -884,6 +1011,53 @@ function normalizeBagsState(snapshot: RuntimeStorySessionSnapshot) {
   }
 
   snapshot.bags = nextBags
+}
+
+function normalizePhoneMessages(messages: RuntimePhoneMessageState[] | undefined): RuntimePhoneMessageState[] {
+  const nextMessages = Array.isArray(messages) ? messages : []
+
+  return nextMessages
+    .map((message) => {
+      const sender: RuntimePhoneMessageState["sender"] = message.sender === "contact" || message.sender === "system"
+        ? message.sender
+        : "player"
+
+      return {
+        id: normalizeText(message.id),
+        sender,
+        content: normalizeText(message.content),
+        game_minute: Math.max(0, clampInteger(message.game_minute, 0)),
+        read: Boolean(message.read),
+        quick_message_id: normalizeOptionalText(message.quick_message_id),
+        source_rule_id: normalizeOptionalText(message.source_rule_id),
+        tags: Array.isArray(message.tags)
+          ? Array.from(new Set(message.tags.map((tag) => normalizeText(tag)).filter(Boolean)))
+          : undefined
+      }
+    })
+    .filter((message) => message.id && message.content)
+}
+
+function normalizePhoneState(snapshot: RuntimeStorySessionSnapshot) {
+  const rawPhone = snapshot.phone ?? createDefaultPhoneState()
+  const contacts = Array.isArray(rawPhone.contacts) ? rawPhone.contacts : []
+  const threads = Array.isArray(rawPhone.threads) ? rawPhone.threads : []
+
+  snapshot.phone = {
+    contacts: contacts
+      .map((contact) => ({
+        role_key: normalizePhoneRoleKey(contact.role_key),
+        favor: clampPhoneFavor(contact.favor, 0),
+        unlocked_at_day: Math.max(1, clampInteger(contact.unlocked_at_day, 1))
+      }))
+      .filter((contact) => contact.role_key),
+    threads: threads
+      .map((thread) => ({
+        role_key: normalizePhoneRoleKey(thread.role_key),
+        messages: normalizePhoneMessages(thread.messages)
+      }))
+      .filter((thread) => thread.role_key)
+  }
 }
 
 function createDefaultClockState(systemVals: StoryValsFile): RuntimeClockState {
@@ -1259,6 +1433,25 @@ function getBundleItemIds(bundle: RuntimeStoryBundle) {
   return new Set((bundle.items?.items ?? []).map((item) => item.id.trim()).filter(Boolean))
 }
 
+function getBundlePhoneConfig(bundle: RuntimeStoryBundle): RuntimeStoryPhoneFile {
+  return bundle.phone ?? createDefaultPhoneConfig()
+}
+
+function getBundlePhoneQuickMessages(bundle: RuntimeStoryBundle) {
+  return getBundlePhoneConfig(bundle).player_quick_messages ?? []
+}
+
+function getBundlePhoneContactProfile(bundle: RuntimeStoryBundle, roleKey: string) {
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  if (!normalizedRoleKey) {
+    return null
+  }
+
+  return getBundlePhoneConfig(bundle).contact_profiles.find(
+    (profile) => profile.role_key.trim() === normalizedRoleKey
+  ) ?? null
+}
+
 function getBundleItemNameMap(bundle: RuntimeStoryBundle) {
   const result = new Map<string, string>()
 
@@ -1346,6 +1539,7 @@ function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnap
     clock,
     scheduler: createDefaultSchedulerState(),
     bags: createInitialBagsState(bundle, clock),
+    phone: createDefaultPhoneState(),
     triggered_once_events: [],
     loop_event_states: [],
     history: []
@@ -2407,12 +2601,18 @@ function startNextReadyEventIfIdle(
 function reconcileScheduler(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
-  notifications: string[]
+  notifications: string[],
+  options: {
+    runPhoneAutoMessages?: boolean
+  } = {}
 ) {
   normalizeSchedulerState(runtimeState.snapshot)
   promoteDueScheduledEventsResolved(bundle, runtimeState.snapshot)
   scanDirectorEntryEvents(bundle, runtimeState, runtimeState.storyDirector)
   ensureLoopSchedules(bundle, runtimeState)
+  if (options.runPhoneAutoMessages) {
+    reconcilePhoneAutoMessages(bundle, runtimeState, notifications)
+  }
   startNextReadyEventIfIdle(bundle, runtimeState, notifications)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)
 }
@@ -2534,6 +2734,552 @@ function findRoleLabel(bundle: RuntimeStoryBundle, roleKey: string) {
   return normalizeText(role.name).trim() || role.descr.trim() || role.id
 }
 
+function isBundleRoleKey(bundle: RuntimeStoryBundle, roleKey: string) {
+  if (!roleKey || roleKey === "player") {
+    return false
+  }
+
+  const [scope, roleId] = roleKey.split(":")
+  if (!scope || !roleId) {
+    return false
+  }
+
+  const roles = getBundleRoles(bundle)
+  return scope === "important"
+    ? roles.important.some((item) => item.id === roleId)
+    : scope === "normal"
+      ? roles.normal.some((item) => item.id === roleId)
+      : false
+}
+
+function assertRuntimePhoneRoleKey(bundle: RuntimeStoryBundle, roleKey: unknown) {
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  if (!normalizedRoleKey) {
+    throw new Error("phone role key is required.")
+  }
+
+  if (!isBundleRoleKey(bundle, normalizedRoleKey)) {
+    throw new Error(`phone role "${normalizedRoleKey}" does not exist in runtime role library.`)
+  }
+
+  return normalizedRoleKey
+}
+
+function getPhoneContact(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  normalizePhoneState(snapshot)
+  return snapshot.phone.contacts.find((contact) => contact.role_key === roleKey) ?? null
+}
+
+function getPhoneThread(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  normalizePhoneState(snapshot)
+  return snapshot.phone.threads.find((thread) => thread.role_key === roleKey) ?? null
+}
+
+function ensurePhoneThread(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  normalizePhoneState(snapshot)
+  const existing = getPhoneThread(snapshot, roleKey)
+  if (existing) {
+    return existing
+  }
+
+  const nextThread: RuntimePhoneThreadState = {
+    role_key: roleKey,
+    messages: []
+  }
+  snapshot.phone.threads.push(nextThread)
+  return nextThread
+}
+
+function ensurePhoneContact(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string
+) {
+  normalizePhoneState(snapshot)
+  const existing = getPhoneContact(snapshot, roleKey)
+  if (existing) {
+    return existing
+  }
+
+  const profile = getBundlePhoneContactProfile(bundle, roleKey)
+  const nextContact: RuntimePhoneContactState = {
+    role_key: roleKey,
+    favor: clampPhoneFavor(profile?.initial_favor ?? 0, 0),
+    unlocked_at_day: Math.max(1, readSystemNumber(snapshot.system_vals, "system.now_day", 1))
+  }
+  snapshot.phone.contacts.push(nextContact)
+  return nextContact
+}
+
+function createPhoneMessageId(roleKey: string, gameMinute: number, messageIndex: number) {
+  const safeRoleKey = roleKey.replace(/[^A-Za-z0-9]+/g, "-").toLowerCase()
+  return `phone-${safeRoleKey}-${gameMinute}-${messageIndex}`
+}
+
+function appendPhoneMessage(
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  sender: RuntimePhoneMessageState["sender"],
+  content: string,
+  options: {
+    read?: boolean
+    quickMessageId?: string
+    sourceRuleId?: string
+    tags?: string[]
+  } = {}
+) {
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  const normalizedContent = normalizeText(content)
+
+  if (!normalizedRoleKey || !normalizedContent) {
+    return null
+  }
+
+  const thread = ensurePhoneThread(snapshot, normalizedRoleKey)
+  const gameMinute = getCurrentGameMinute(snapshot)
+  const nextMessage: RuntimePhoneMessageState = {
+    id: createPhoneMessageId(normalizedRoleKey, gameMinute, thread.messages.length + 1),
+    sender,
+    content: normalizedContent,
+    game_minute: gameMinute,
+    read: options.read ?? sender === "player",
+    ...(options.quickMessageId ? { quick_message_id: options.quickMessageId } : {}),
+    ...(options.sourceRuleId ? { source_rule_id: options.sourceRuleId } : {}),
+    ...(options.tags && options.tags.length > 0
+      ? { tags: Array.from(new Set(options.tags.map((tag) => normalizeText(tag)).filter(Boolean))) }
+      : {})
+  }
+
+  thread.messages.push(nextMessage)
+  return nextMessage
+}
+
+function getPhoneUnreadCount(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  const thread = getPhoneThread(snapshot, roleKey)
+  if (!thread) {
+    return 0
+  }
+
+  return thread.messages.filter((message) => !message.read && message.sender !== "player").length
+}
+
+function markPhoneThreadRead(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  const thread = getPhoneThread(snapshot, roleKey)
+  if (!thread) {
+    return 0
+  }
+
+  let changedCount = 0
+  for (const message of thread.messages) {
+    if (message.sender !== "player" && !message.read) {
+      message.read = true
+      changedCount += 1
+    }
+  }
+
+  return changedCount
+}
+
+function getLatestPhoneMessagePreview(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  const thread = getPhoneThread(snapshot, roleKey)
+  const lastMessage = thread?.messages[thread.messages.length - 1]
+
+  return {
+    preview: lastMessage?.content ?? null,
+    gameMinute: lastMessage?.game_minute ?? null,
+    messageCount: thread?.messages.length ?? 0
+  }
+}
+
+function getPhoneQuickMessagesForContact(
+  bundle: RuntimeStoryBundle,
+  roleKey: string,
+  snapshot?: RuntimeStorySessionSnapshot
+): RuntimeStoryPhoneQuickMessageDefinition[] {
+  const profile = getBundlePhoneContactProfile(bundle, roleKey)
+  const preferredTags = new Set(profile?.preferred_tags ?? [])
+  const quickMessages = getBundlePhoneQuickMessages(bundle)
+  const latestSuggestedMessage = snapshot
+    ? getPhoneThread(snapshot, roleKey)?.messages
+      .slice()
+      .reverse()
+      .find((message) => message.sender === "contact" && message.source_rule_id)
+    : null
+  const suggestedRule = latestSuggestedMessage?.source_rule_id
+    ? getPhoneProactiveRulesForContact(bundle, roleKey).find(
+        (rule) => rule.id === latestSuggestedMessage.source_rule_id
+      ) ?? null
+    : null
+  const suggestedIds = new Set(suggestedRule?.reply_quick_message_ids ?? [])
+
+  return quickMessages
+    .filter((message) => {
+      if (message.text.trim().length === 0) {
+        return false
+      }
+
+      if (
+        message.available_role_keys.length > 0
+        && !message.available_role_keys.includes(roleKey)
+      ) {
+        return false
+      }
+
+      if (message.visibility === "suggested-only" && !suggestedIds.has(message.id)) {
+        return false
+      }
+
+      return true
+    })
+    .sort((left, right) => {
+      const leftSuggested = suggestedIds.has(left.id)
+      const rightSuggested = suggestedIds.has(right.id)
+      if (leftSuggested !== rightSuggested) {
+        return leftSuggested ? -1 : 1
+      }
+
+      const leftPreferred = left.tags.some((tag) => preferredTags.has(tag))
+      const rightPreferred = right.tags.some((tag) => preferredTags.has(tag))
+
+      if (leftPreferred !== rightPreferred) {
+        return leftPreferred ? -1 : 1
+      }
+
+      return left.id.localeCompare(right.id)
+    })
+}
+
+function getPhoneProactiveRulesForContact(
+  bundle: RuntimeStoryBundle,
+  roleKey: string
+): RuntimeStoryPhoneProactiveMessageRule[] {
+  const profile = getBundlePhoneContactProfile(bundle, roleKey)
+  if (!profile) {
+    return []
+  }
+
+  return (profile.proactive_messages ?? [])
+    .filter((rule) => rule.enabled && rule.messages.length > 0 && rule.trigger_expr.trim().length > 0)
+    .sort((left, right) => left.id.localeCompare(right.id))
+}
+
+function findPhoneQuickMessage(
+  bundle: RuntimeStoryBundle,
+  quickMessageId: string
+) {
+  const normalizedQuickMessageId = normalizeText(quickMessageId)
+  if (!normalizedQuickMessageId) {
+    return null
+  }
+
+  return getBundlePhoneQuickMessages(bundle).find(
+    (message) => message.id.trim() === normalizedQuickMessageId
+  ) ?? null
+}
+
+function choosePhoneReply(
+  bundle: RuntimeStoryBundle,
+  roleKey: string,
+  quickMessage: RuntimeStoryPhoneQuickMessageDefinition
+) {
+  const profile = getBundlePhoneContactProfile(bundle, roleKey)
+  const fallbackReplies = getBundlePhoneConfig(bundle).fallback_replies
+
+  for (const tag of quickMessage.tags) {
+    const profileReplies = profile?.reply_by_tag?.[tag] ?? []
+    if (profileReplies.length > 0) {
+      return profileReplies[0] ?? ""
+    }
+
+    const fallbackTagReplies = fallbackReplies[tag] ?? []
+    if (fallbackTagReplies.length > 0) {
+      return fallbackTagReplies[0] ?? ""
+    }
+  }
+
+  const defaultReplies = fallbackReplies.default ?? []
+  return defaultReplies[0] ?? ""
+}
+
+function findLatestPhoneProactiveRuleMessage(
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  ruleId: string
+) {
+  const thread = getPhoneThread(snapshot, roleKey)
+  return thread?.messages
+    .slice()
+    .reverse()
+    .find((message) => message.sender === "contact" && message.source_rule_id === ruleId) ?? null
+}
+
+function choosePhoneProactiveRuleMessage(
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  rule: RuntimeStoryPhoneProactiveMessageRule
+) {
+  const thread = getPhoneThread(snapshot, roleKey)
+  const previousCount = thread?.messages.filter(
+    (message) => message.sender === "contact" && message.source_rule_id === rule.id
+  ).length ?? 0
+
+  if (rule.messages.length === 0) {
+    return ""
+  }
+
+  return rule.messages[previousCount % rule.messages.length] ?? rule.messages[0] ?? ""
+}
+
+function canFirePhoneProactiveRule(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  rule: RuntimeStoryPhoneProactiveMessageRule
+) {
+  if (!getPhoneContact(snapshot, roleKey)) {
+    return false
+  }
+
+  const latestRuleMessage = findLatestPhoneProactiveRuleMessage(snapshot, roleKey, rule.id)
+  if (latestRuleMessage) {
+    const cooldownMinutes = Math.max(1, rule.cooldown_hours) * 60
+    const minuteGap = Math.max(0, getCurrentGameMinute(snapshot) - latestRuleMessage.game_minute)
+    if (minuteGap < cooldownMinutes) {
+      return false
+    }
+  }
+
+  const executionContext = buildRuntimeContextValues(bundle, snapshot, {})
+  const combinedValsFile = createCombinedValsFile(snapshot)
+
+  try {
+    return evaluateStoryBooleanExpression(
+      combinedValsFile,
+      rule.trigger_expr,
+      DEFAULT_MAX_CALC_NESTING_DEPTH,
+      executionContext
+    )
+  } catch {
+    return false
+  }
+}
+
+function reconcilePhoneAutoMessages(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[]
+) {
+  normalizePhoneState(runtimeState.snapshot)
+
+  for (const contact of runtimeState.snapshot.phone.contacts) {
+    const proactiveRules = getPhoneProactiveRulesForContact(bundle, contact.role_key)
+    for (const rule of proactiveRules) {
+      if (!canFirePhoneProactiveRule(bundle, runtimeState.snapshot, contact.role_key, rule)) {
+        continue
+      }
+
+      const content = choosePhoneProactiveRuleMessage(runtimeState.snapshot, contact.role_key, rule)
+      if (!content) {
+        continue
+      }
+
+      const message = sendPhoneMessageFromContact(
+        bundle,
+        runtimeState.snapshot,
+        notifications,
+        contact.role_key,
+        content,
+        {
+          sourceRuleId: rule.id
+        }
+      )
+      if (!message) {
+        continue
+      }
+
+      if (rule.favor_delta !== 0) {
+        contact.favor = clampPhoneFavor(contact.favor + rule.favor_delta, contact.favor)
+      }
+    }
+  }
+}
+
+function calculatePhoneFavorDelta(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  quickMessage: RuntimeStoryPhoneQuickMessageDefinition
+) {
+  const thread = getPhoneThread(snapshot, roleKey)
+  const previousPlayerMessage = thread?.messages
+    .slice()
+    .reverse()
+    .find((message) => message.sender === "player") ?? null
+  let favorDelta = Math.max(0, quickMessage.base_favor_delta)
+
+  if (previousPlayerMessage?.quick_message_id === quickMessage.id) {
+    favorDelta = Math.max(0, favorDelta - 1)
+  }
+
+  if (quickMessage.cooldown_hours > 0 && previousPlayerMessage) {
+    const cooldownMinutes = quickMessage.cooldown_hours * 60
+    const minuteGap = Math.max(0, getCurrentGameMinute(snapshot) - previousPlayerMessage.game_minute)
+    if (previousPlayerMessage.quick_message_id === quickMessage.id && minuteGap < cooldownMinutes) {
+      favorDelta = Math.max(0, favorDelta - 1)
+    }
+  }
+
+  const contact = ensurePhoneContact(bundle, snapshot, roleKey)
+  if (contact.favor >= 80) {
+    favorDelta = Math.max(0, favorDelta - 1)
+  }
+
+  return favorDelta
+}
+
+function autoRegisterPhoneContactsFromEvent(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  event: RuntimePlayableEvent,
+  notifications: string[]
+) {
+  if (event.presentation.type !== "dialogue") {
+    return
+  }
+
+  const speakerRoleKeys = Array.from(
+    new Set(
+      event.presentation.dialogues
+        .filter((dialogue) => dialogue.speaker_type === "object")
+        .map((dialogue) => normalizeText(dialogue.speaker_key))
+        .filter(Boolean)
+    )
+  )
+
+  for (const roleKey of speakerRoleKeys) {
+    const profile = getBundlePhoneContactProfile(bundle, roleKey)
+    if (profile && !profile.enabled) {
+      continue
+    }
+
+    if (profile && !profile.auto_add) {
+      continue
+    }
+
+    if (!isBundleRoleKey(bundle, roleKey)) {
+      continue
+    }
+
+    const existed = Boolean(getPhoneContact(snapshot, roleKey))
+    ensurePhoneContact(bundle, snapshot, roleKey)
+    if (!existed) {
+      notifications.push(`手机已新增联系人：${findRoleLabel(bundle, roleKey)}`)
+    }
+  }
+}
+
+function sendPhoneMessageFromContact(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  notifications: string[],
+  roleKey: string,
+  content: string,
+  options: {
+    sourceRuleId?: string
+  } = {}
+) {
+  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+  const message = appendPhoneMessage(snapshot, normalizedRoleKey, "contact", content, {
+    read: false,
+    sourceRuleId: options.sourceRuleId
+  })
+  if (!message) {
+    return null
+  }
+
+  notifications.push(`联系人 ${findRoleLabel(bundle, normalizedRoleKey)} 发来新消息。`)
+  appendHistory(snapshot, {
+    type: "system",
+    id: message.id,
+    title: `phone:${normalizedRoleKey}`,
+    content: `${findRoleLabel(bundle, normalizedRoleKey)}: ${message.content}`
+  })
+  return message
+}
+
+function sendPhoneMessageToContact(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  content: string
+) {
+  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+  const message = appendPhoneMessage(snapshot, normalizedRoleKey, "player", content, {
+    read: true
+  })
+  if (!message) {
+    return null
+  }
+
+  appendHistory(snapshot, {
+    type: "system",
+    id: message.id,
+    title: "phone:player",
+    content: `主角 -> ${findRoleLabel(bundle, normalizedRoleKey)}: ${message.content}`
+  })
+  return message
+}
+
+function sendPhoneQuickMessage(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  notifications: string[],
+  roleKey: string,
+  quickMessageId: string
+) {
+  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  const quickMessage = findPhoneQuickMessage(bundle, quickMessageId)
+
+  if (!quickMessage) {
+    throw new Error(`phone quick message "${quickMessageId}" does not exist in phone config.`)
+  }
+
+  const availableQuickMessages = getPhoneQuickMessagesForContact(bundle, normalizedRoleKey, snapshot)
+  if (!availableQuickMessages.some((message) => message.id === quickMessage.id)) {
+    throw new Error(`phone quick message "${quickMessageId}" is not available for "${normalizedRoleKey}".`)
+  }
+
+  ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+  const favorDelta = calculatePhoneFavorDelta(bundle, snapshot, normalizedRoleKey, quickMessage)
+  const outgoingMessage = appendPhoneMessage(snapshot, normalizedRoleKey, "player", quickMessage.text, {
+    read: true,
+    quickMessageId: quickMessage.id,
+    tags: quickMessage.tags
+  })
+  if (!outgoingMessage) {
+    return false
+  }
+
+  const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+  contact.favor = clampPhoneFavor(contact.favor + favorDelta, contact.favor)
+
+  appendHistory(snapshot, {
+    type: "system",
+    id: outgoingMessage.id,
+    title: `phone:${normalizedRoleKey}`,
+    content: `主角向 ${findRoleLabel(bundle, normalizedRoleKey)} 发送消息：${outgoingMessage.content}`
+  })
+
+  const replyContent = choosePhoneReply(bundle, normalizedRoleKey, quickMessage)
+  if (replyContent) {
+    sendPhoneMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, replyContent)
+  }
+
+  return true
+}
+
 function findLocationLabel(bundle: RuntimeStoryBundle, locationId: string) {
   const trimmedLocationId = normalizeText(locationId)
   if (!trimmedLocationId) {
@@ -2595,7 +3341,10 @@ function buildRuntimeContextValues(
 
   return {
     values: combinedValues,
-    functions: createRuntimeBagReadableFunctions(bundle, snapshot)
+    functions: {
+      ...createRuntimeBagReadableFunctions(bundle, snapshot),
+      ...createRuntimePhoneReadableFunctions(bundle, snapshot)
+    }
   } satisfies StoryScriptExecutionContext
 }
 
@@ -2748,9 +3497,98 @@ function createRuntimeBagScriptFunctions(
   }
 }
 
+function createRuntimePhoneReadableFunctions(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+) {
+  return {
+    phone_has_contact(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      return Boolean(getPhoneContact(snapshot, normalizedRoleKey))
+    },
+    phone_favor(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      return getPhoneContact(snapshot, normalizedRoleKey)?.favor ?? 0
+    },
+    phone_unread_count(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      return getPhoneUnreadCount(snapshot, normalizedRoleKey)
+    }
+  }
+}
+
+function createRuntimePhoneScriptFunctions(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  notifications: string[]
+) {
+  const readableFunctions = createRuntimePhoneReadableFunctions(bundle, snapshot)
+
+  return {
+    phone_add_contact(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      const existed = Boolean(getPhoneContact(snapshot, normalizedRoleKey))
+      ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+      if (!existed) {
+        notifications.push(`手机已新增联系人：${findRoleLabel(bundle, normalizedRoleKey)}`)
+      }
+      return true
+    },
+    phone_remove_contact(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      normalizePhoneState(snapshot)
+      const nextContacts = snapshot.phone.contacts.filter((contact) => contact.role_key !== normalizedRoleKey)
+      const nextThreads = snapshot.phone.threads.filter((thread) => thread.role_key !== normalizedRoleKey)
+      const removed = nextContacts.length !== snapshot.phone.contacts.length
+      snapshot.phone.contacts = nextContacts
+      snapshot.phone.threads = nextThreads
+      return removed
+    },
+    phone_set_favor(roleKey: unknown, favor: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+      contact.favor = clampPhoneFavor(favor, contact.favor)
+      return contact.favor
+    },
+    phone_add_favor(roleKey: unknown, delta: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+      const normalizedDelta = typeof delta === "number" && Number.isFinite(delta)
+        ? Math.trunc(delta)
+        : 0
+      contact.favor = clampPhoneFavor(contact.favor + normalizedDelta, contact.favor)
+      return contact.favor
+    },
+    phone_send_from_contact(roleKey: unknown, content: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      const normalizedContent = normalizeText(content)
+      if (!normalizedContent) {
+        throw new Error("phone message content is required.")
+      }
+      sendPhoneMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, normalizedContent)
+      return normalizedContent
+    },
+    phone_send_to_contact(roleKey: unknown, content: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      const normalizedContent = normalizeText(content)
+      if (!normalizedContent) {
+        throw new Error("phone message content is required.")
+      }
+      sendPhoneMessageToContact(bundle, snapshot, normalizedRoleKey, normalizedContent)
+      return normalizedContent
+    },
+    phone_mark_read(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      return markPhoneThreadRead(snapshot, normalizedRoleKey)
+    },
+    ...readableFunctions
+  }
+}
+
 function buildRuntimeScriptContext(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
+  notifications: string[],
   branchValues: Record<string, unknown>,
   callValues: Record<string, unknown> = {}
 ) {
@@ -2769,7 +3607,10 @@ function buildRuntimeScriptContext(
   return {
     values: combinedValues,
     assignableValues,
-    functions: createRuntimeBagScriptFunctions(bundle, snapshot)
+    functions: {
+      ...createRuntimeBagScriptFunctions(bundle, snapshot),
+      ...createRuntimePhoneScriptFunctions(bundle, snapshot, notifications)
+    }
   } satisfies StoryScriptExecutionContext
 }
 
@@ -2801,6 +3642,7 @@ function appendHistory(
 function executeEventScript(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
+  notifications: string[],
   script: string,
   branchValues: Record<string, unknown>,
   callValues: Record<string, unknown> = {}
@@ -2810,7 +3652,13 @@ function executeEventScript(
     return branchValues
   }
 
-  const executionContext = buildRuntimeScriptContext(bundle, runtimeState.snapshot, branchValues, callValues)
+  const executionContext = buildRuntimeScriptContext(
+    bundle,
+    runtimeState.snapshot,
+    notifications,
+    branchValues,
+    callValues
+  )
   const combinedValsFile = createCombinedValsFile(runtimeState.snapshot)
   const result = executeStoryScript(
     combinedValsFile,
@@ -3647,10 +4495,13 @@ function enterCurrentEventResolved(
   const nextBranchValues = executeEventScript(
     bundle,
     runtimeState,
+    notifications,
     currentNode.init_script,
     branchValues,
     callValues
   )
+
+  autoRegisterPhoneContactsFromEvent(bundle, runtimeState.snapshot, currentNode, notifications)
 
   appendHistory(runtimeState.snapshot, {
     type: "event",
@@ -3685,6 +4536,7 @@ function finishCurrentEvent(
   const nextBranchValues = executeEventScript(
     bundle,
     runtimeState,
+    notifications,
     currentNode.end_script,
     branchValues,
     callValues
@@ -3740,6 +4592,7 @@ function executeAction(
   const executionContext = buildRuntimeScriptContext(
     bundle,
     runtimeState.snapshot,
+    notifications,
     targetActionState.branchValues,
     getRuntimePlayableEventCallValues(runtimeState, sourceEvent)
   )
@@ -3889,6 +4742,89 @@ function buildRuntimeBagSummary(
     })
 }
 
+export function buildRuntimePhoneContacts(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+): RuntimePhoneContactView[] {
+  normalizePhoneState(snapshot)
+
+  return snapshot.phone.contacts
+    .map((contact) => {
+      const latest = getLatestPhoneMessagePreview(snapshot, contact.role_key)
+
+      return {
+        roleKey: contact.role_key,
+        label: findRoleLabel(bundle, contact.role_key),
+        favor: contact.favor,
+        unreadCount: getPhoneUnreadCount(snapshot, contact.role_key),
+        unlockedAtDay: contact.unlocked_at_day,
+        lastMessageGameMinute: latest.gameMinute,
+        lastMessagePreview: latest.preview,
+        messageCount: latest.messageCount
+      } satisfies RuntimePhoneContactView
+    })
+    .sort((left, right) => {
+      const rightMinute = right.lastMessageGameMinute ?? -1
+      const leftMinute = left.lastMessageGameMinute ?? -1
+
+      if (leftMinute !== rightMinute) {
+        return rightMinute - leftMinute
+      }
+
+      if (left.unreadCount !== right.unreadCount) {
+        return right.unreadCount - left.unreadCount
+      }
+
+      return left.label.localeCompare(right.label, "zh-Hans-CN")
+    })
+}
+
+export function buildRuntimePhoneThreadView(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string
+): RuntimePhoneThreadView | null {
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  if (!normalizedRoleKey) {
+    return null
+  }
+
+  normalizePhoneState(snapshot)
+  const contact = getPhoneContact(snapshot, normalizedRoleKey)
+  if (!contact) {
+    return null
+  }
+
+  const thread = getPhoneThread(snapshot, normalizedRoleKey)
+  const messages = thread?.messages ?? []
+
+  return {
+    roleKey: normalizedRoleKey,
+    contactLabel: findRoleLabel(bundle, normalizedRoleKey),
+    favor: contact.favor,
+    unreadCount: getPhoneUnreadCount(snapshot, normalizedRoleKey),
+    messages: messages.map((message) => ({
+      id: message.id,
+      sender: message.sender,
+      senderLabel: message.sender === "player"
+        ? "我"
+        : message.sender === "system"
+          ? "系统"
+          : findRoleLabel(bundle, normalizedRoleKey),
+      content: message.content,
+      gameMinute: message.game_minute,
+      read: message.read
+    })),
+    quickMessages: getPhoneQuickMessagesForContact(bundle, normalizedRoleKey, snapshot).map((message) => ({
+      id: message.id,
+      text: message.text,
+      tags: [...message.tags],
+      baseFavorDelta: message.base_favor_delta,
+      cooldownHours: message.cooldown_hours
+    }))
+  }
+}
+
 function buildViewModel(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
@@ -4022,6 +4958,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
   }
 
   normalizeBagsState(runtimeState.snapshot)
+  normalizePhoneState(runtimeState.snapshot)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)
 
   if (!options.saveState && options.customOverrides) {
@@ -4120,6 +5057,31 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         return
       }
 
+      if (action.type === "phone-mark-read") {
+        try {
+          const normalizedRoleKey = assertRuntimePhoneRoleKey(options.bundle, action.roleKey)
+          markPhoneThreadRead(runtimeState.snapshot, normalizedRoleKey)
+        } catch (error) {
+          notifications.push(error instanceof Error ? error.message : "标记手机消息已读失败。")
+        }
+        return
+      }
+
+      if (action.type === "phone-send-quick-message") {
+        try {
+          sendPhoneQuickMessage(
+            options.bundle,
+            runtimeState.snapshot,
+            notifications,
+            action.roleKey,
+            action.quickMessageId
+          )
+        } catch (error) {
+          notifications.push(error instanceof Error ? error.message : "发送手机消息失败。")
+        }
+        return
+      }
+
       if (action.type === "continue") {
         const currentEventState = getCurrentEventState(options.bundle, runtimeState)
 
@@ -4176,7 +5138,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
       let advanced = false
       while (advanceClockBySingleStep(runtimeState.snapshot)) {
         advanced = true
-        reconcileScheduler(options.bundle, runtimeState, notifications)
+        reconcileScheduler(options.bundle, runtimeState, notifications, {
+          runPhoneAutoMessages: true
+        })
 
         if (isRuntimeTimePaused(runtimeState.snapshot)) {
           break

@@ -59,6 +59,26 @@ function buildCombinedStoryScriptVals(document: StoryDocument): StoryValsFile {
   }
 }
 
+function collectValidationRoleKeys(document: StoryDocument) {
+  const keys = new Set<string>()
+
+  for (const role of document.roles.normal.roles) {
+    const roleId = role.id.trim()
+    if (roleId) {
+      keys.add(`normal:${roleId}`)
+    }
+  }
+
+  for (const role of document.roles.important.roles) {
+    const roleId = role.id.trim()
+    if (roleId) {
+      keys.add(`important:${roleId}`)
+    }
+  }
+
+  return keys
+}
+
 function collectValidationItemIds(document: StoryDocument) {
   return document.items.items.map((item) => item.id)
 }
@@ -78,27 +98,34 @@ function buildValidationScriptContext(
       ...(context?.functions ?? {})
     },
     itemIds: collectValidationItemIds(document),
-    bagMode: "write"
+    roleKeys: collectValidationRoleKeys(document),
+    bagMode: "write",
+    phoneMode: "write"
   })
 }
 
 function buildValidationReadableContext(document: StoryDocument): StoryScriptExecutionContext {
   return createStoryScriptValidationContext({
     itemIds: collectValidationItemIds(document),
-    bagMode: "read"
+    roleKeys: collectValidationRoleKeys(document),
+    bagMode: "read",
+    phoneMode: "read"
   })
 }
 
 export type StoryScriptValidationMode = "predicate" | "procedure" | "template"
 
 export type StoryScriptValidationBagMode = "read" | "write"
+export type StoryScriptValidationPhoneMode = "read" | "write"
 
 export interface StoryScriptValidationContextOptions {
   values?: Record<string, unknown>
   assignableValues?: Record<string, unknown>
   functions?: Record<string, (...args: unknown[]) => unknown>
   itemIds?: Iterable<string>
+  roleKeys?: Iterable<string>
   bagMode?: StoryScriptValidationBagMode
+  phoneMode?: StoryScriptValidationPhoneMode
 }
 
 function buildValidationBagReadableFunctionsFromIds(itemIds: Iterable<string>) {
@@ -156,10 +183,102 @@ function buildValidationBagScriptFunctionsFromIds(
   }
 }
 
+function buildValidationPhoneReadableFunctionsFromRoleKeys(roleKeys: Iterable<string>) {
+  const roleKeySet = new Set(
+    Array.from(roleKeys, (roleKey) => normalizeStoryScriptText(roleKey).trim()).filter(Boolean)
+  )
+
+  const assertRoleKey = (roleKey: unknown) => {
+    if (typeof roleKey !== "string") {
+      throw new Error("phone role key is required.")
+    }
+
+    const normalizedRoleKey = roleKey.trim()
+    if (!normalizedRoleKey) {
+      throw new Error("phone role key is required.")
+    }
+
+    if (!roleKeySet.has(normalizedRoleKey)) {
+      throw new Error(`phone role "${normalizedRoleKey}" does not exist in role library.`)
+    }
+
+    return normalizedRoleKey
+  }
+
+  return {
+    phone_has_contact(roleKey: unknown) {
+      assertRoleKey(roleKey)
+      return false
+    },
+    phone_favor(roleKey: unknown) {
+      assertRoleKey(roleKey)
+      return 0
+    },
+    phone_unread_count(roleKey: unknown) {
+      assertRoleKey(roleKey)
+      return 0
+    }
+  }
+}
+
+function buildValidationPhoneScriptFunctionsFromRoleKeys(
+  roleKeys: Iterable<string>,
+  phoneMode: StoryScriptValidationPhoneMode
+) {
+  const readableFunctions = buildValidationPhoneReadableFunctionsFromRoleKeys(roleKeys)
+
+  if (phoneMode === "read") {
+    return readableFunctions
+  }
+
+  return {
+    phone_add_contact(roleKey: unknown) {
+      readableFunctions.phone_has_contact(roleKey)
+      return true
+    },
+    phone_remove_contact(roleKey: unknown) {
+      readableFunctions.phone_has_contact(roleKey)
+      return false
+    },
+    phone_set_favor(roleKey: unknown, favor?: unknown) {
+      readableFunctions.phone_has_contact(roleKey)
+      return typeof favor === "number" && Number.isFinite(favor)
+        ? Math.max(0, Math.min(100, Math.trunc(favor)))
+        : 0
+    },
+    phone_add_favor(roleKey: unknown, delta?: unknown) {
+      readableFunctions.phone_has_contact(roleKey)
+      return typeof delta === "number" && Number.isFinite(delta)
+        ? Math.max(0, Math.min(100, Math.trunc(delta)))
+        : 0
+    },
+    phone_send_from_contact(roleKey: unknown, content?: unknown) {
+      readableFunctions.phone_has_contact(roleKey)
+      if (typeof content !== "string" || !content.trim()) {
+        throw new Error("phone message content is required.")
+      }
+      return content.trim()
+    },
+    phone_send_to_contact(roleKey: unknown, content?: unknown) {
+      readableFunctions.phone_has_contact(roleKey)
+      if (typeof content !== "string" || !content.trim()) {
+        throw new Error("phone message content is required.")
+      }
+      return content.trim()
+    },
+    phone_mark_read(roleKey: unknown) {
+      readableFunctions.phone_has_contact(roleKey)
+      return 0
+    },
+    ...readableFunctions
+  }
+}
+
 export function createStoryScriptValidationContext(
   options: StoryScriptValidationContextOptions = {}
 ): StoryScriptExecutionContext {
   const bagMode = options.bagMode ?? "write"
+  const phoneMode = options.phoneMode ?? "write"
 
   return {
     values: {
@@ -170,6 +289,7 @@ export function createStoryScriptValidationContext(
     },
     functions: {
       ...buildValidationBagScriptFunctionsFromIds(options.itemIds ?? [], bagMode),
+      ...buildValidationPhoneScriptFunctionsFromRoleKeys(options.roleKeys ?? [], phoneMode),
       ...(options.functions ?? {})
     }
   }
@@ -326,6 +446,86 @@ function collectGlobalValKeys(document: StoryDocument) {
   }
 
   return keys
+}
+
+function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[]) {
+  const roleKeys = collectValidationRoleKeys(document)
+  const quickMessageIds = new Set(document.phone.player_quick_messages.map((message) => message.id))
+  const readableContext = buildValidationReadableContext(document)
+  const valsFile = buildCombinedStoryScriptVals(document)
+
+  for (const [messageIndex, message] of document.phone.player_quick_messages.entries()) {
+    for (const [roleKeyIndex, roleKey] of message.available_role_keys.entries()) {
+      if (!roleKeys.has(roleKey)) {
+        pushIssue(
+          issues,
+          "error",
+          "phone.quick-message.missing-role",
+          `Phone quick message "${message.id}" references unknown role "${roleKey}".`,
+          ["phone", "player_quick_messages", String(messageIndex), "available_role_keys", String(roleKeyIndex)]
+        )
+      }
+    }
+  }
+
+  for (const [profileIndex, profile] of document.phone.contact_profiles.entries()) {
+    if (!roleKeys.has(profile.role_key)) {
+      pushIssue(
+        issues,
+        "error",
+        "phone.contact-profile.missing-role",
+        `Phone contact profile "${profile.role_key}" does not exist in roles library.`,
+        ["phone", "contact_profiles", String(profileIndex), "role_key"]
+      )
+    }
+
+    for (const [ruleIndex, rule] of profile.proactive_messages.entries()) {
+      const triggerIssues = validateStoryScriptContent(
+        valsFile,
+        rule.trigger_expr,
+        "predicate",
+        DEFAULT_MAX_CALC_NESTING_DEPTH,
+        readableContext
+      )
+
+      for (const triggerIssue of triggerIssues) {
+        pushIssue(
+          issues,
+          "error",
+          "phone.proactive-rule.trigger-invalid",
+          `Phone proactive rule "${profile.role_key}/${rule.id}" trigger_expr is invalid at line ${triggerIssue.lineNumber}: ${triggerIssue.message}`,
+          [
+            "phone",
+            "contact_profiles",
+            String(profileIndex),
+            "proactive_messages",
+            String(ruleIndex),
+            "trigger_expr"
+          ]
+        )
+      }
+
+      for (const [replyIndex, quickMessageId] of rule.reply_quick_message_ids.entries()) {
+        if (!quickMessageIds.has(quickMessageId)) {
+          pushIssue(
+            issues,
+            "error",
+            "phone.proactive-rule.missing-quick-message",
+            `Phone proactive rule "${profile.role_key}/${rule.id}" references missing quick message "${quickMessageId}".`,
+            [
+              "phone",
+              "contact_profiles",
+              String(profileIndex),
+              "proactive_messages",
+              String(ruleIndex),
+              "reply_quick_message_ids",
+              String(replyIndex)
+            ]
+          )
+        }
+      }
+    }
+  }
 }
 
 function getPresentationDialogues(presentation: StoryEventPresentation) {
@@ -865,6 +1065,8 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
       }
     }
   }
+
+  validatePhoneConfig(document, issues)
 
   for (const calcIssue of validateStoryValsCalcRules(document.vals)) {
     pushIssue(

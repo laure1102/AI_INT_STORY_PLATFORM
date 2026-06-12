@@ -290,6 +290,7 @@ ${player.money} += 100 // 行尾注释
 - 条件脚本只读，不允许修改全局变量、系统变量、分支变量、调用参数
 - 条件脚本不允许使用 `invoke_once`
 - 条件脚本只开放只读背包函数：`bag_count`、`bag_has`
+- 条件脚本只开放只读手机函数：`phone_has_contact`、`phone_favor`、`phone_unread_count`
 
 ### 6.2 过程脚本规则
 
@@ -386,6 +387,57 @@ bag_remove("player", "item_id", 1)
 - `trigger_expr` 只允许使用 `bag_count`、`bag_has`
 - `init_script`、`end_script`、`action.exec_script` 可以使用四个背包函数
 - 静态校验会检查字面量 `item_id` 是否存在；动态 `item_id` 在运行时检查
+
+### 6.6 手机联系人函数
+
+运行时手机联系人是玩家存档数据，角色 key 必须来自故事角色库，格式固定为：
+
+```txt
+important:role_id
+normal:role_id
+```
+
+只读函数：
+
+```ts
+phone_has_contact("important:zhuli")
+phone_favor("important:zhuli")
+phone_unread_count("important:zhuli")
+```
+
+可写函数：
+
+```ts
+phone_add_contact("important:zhuli")
+phone_remove_contact("important:zhuli")
+phone_set_favor("important:zhuli", 50)
+phone_add_favor("important:zhuli", 3)
+phone_send_from_contact("important:zhuli", "今晚有空吗？")
+phone_send_to_contact("important:zhuli", "我现在过去。")
+phone_mark_read("important:zhuli")
+```
+
+规则：
+
+- 联系人好感度范围固定为 `0 ~ 100`
+- `phone_has_contact` 返回 `boolean`
+- `phone_favor` 返回当前好感度；未加入联系人时返回 `0`
+- `phone_unread_count` 返回该联系人当前未读消息数
+- `phone_add_contact` 会在未存在时创建联系人，并返回 `true`
+- `phone_remove_contact` 会移除联系人及其聊天线程
+- `phone_set_favor` 会直接写入好感度，结果会自动截断到 `0 ~ 100`
+- `phone_add_favor` 会在当前好感度基础上增减，结果会自动截断到 `0 ~ 100`
+- `phone_send_from_contact` 用于让 NPC 主动发消息给玩家
+- `phone_send_to_contact` 用于脚本直接让主角发消息
+- `phone_mark_read` 会把该联系人的 NPC 来信标记为已读
+- `trigger_expr` 只允许使用三个只读手机函数
+- `init_script`、`end_script`、`action.exec_script` 可以使用全部手机函数
+- 静态校验会检查字面量 `role_key` 是否存在；动态 `role_key` 在运行时检查
+- `phone.json5` 中每个联系人还可以配置 `proactive_messages`
+- `proactive_messages[].trigger_expr` 使用与事件 `trigger_expr` 相同的条件脚本规则
+- 当 `trigger_expr` 为 `true` 且冷却时间满足时，运行时会自动让该联系人发送一条预设消息
+- `proactive_messages[].reply_quick_message_ids` 可指定这条来信优先展示的短句回复
+- `player_quick_messages` 可通过 `visibility: "suggested-only"` 配置为“仅在被建议时出现”的专用回复
 
 ---
 
@@ -486,6 +538,30 @@ if (!bag_has("player", "population_flow_report", 1)) {
 }
 ```
 
+### 7.7 手机联系人
+
+```ts
+if (!phone_has_contact("important:zhuli")) {
+  phone_add_contact("important:zhuli")
+}
+
+phone_add_favor("important:zhuli", 2)
+phone_send_from_contact("important:zhuli", "老板，今天的材料我已经整理好了。")
+```
+
+`phone.json5` 里的主动消息规则示例：
+
+```json5
+{
+  id: "daytime_checkin",
+  enabled: true,
+  trigger_expr: '${system.now_hour} >= 9 && ${system.now_hour} <= 18 && phone_favor("important:zhuli") >= 20',
+  cooldown_hours: 24,
+  favor_delta: 0,
+  messages: ["老板，今天的行程我已经帮您排好了。"]
+}
+```
+
 ---
 
 ## 8. 编译与运行时约束
@@ -547,5 +623,15 @@ if (!bag_has("player", "population_flow_report", 1)) {
 - `bag_has`
 - `bag_add`
 - `bag_remove`
+- `phone_has_contact`
+- `phone_favor`
+- `phone_unread_count`
+- `phone_add_contact`
+- `phone_remove_contact`
+- `phone_set_favor`
+- `phone_add_favor`
+- `phone_send_from_contact`
+- `phone_send_to_contact`
+- `phone_mark_read`
 
 ---

@@ -421,6 +421,153 @@ export const storyInitialBagsSchema = z.record(storyInitialBagSchema)
     }
   })
 
+export const storyPhoneQuickMessageSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().default(""),
+  tags: z.array(z.string()).default([]),
+  base_favor_delta: z.number().int().min(0).max(100).default(1),
+  cooldown_hours: z.number().int().min(0).default(0),
+  visibility: z.enum(["always", "suggested-only"]).default("always"),
+  available_role_keys: z.array(z.string()).default([])
+}).transform((message) => ({
+  id: message.id.trim(),
+  text: message.text.trim(),
+  tags: Array.from(new Set(message.tags.map((tag) => tag.trim()).filter(Boolean))),
+  base_favor_delta: message.base_favor_delta,
+  cooldown_hours: message.cooldown_hours,
+  visibility: message.visibility,
+  available_role_keys: Array.from(
+    new Set(message.available_role_keys.map((roleKey) => roleKey.trim()).filter(Boolean))
+  )
+}))
+
+const storyPhoneRepliesRecordSchema = z.record(z.array(z.string()).default([]))
+  .default({})
+  .transform((replyMap) => {
+    const normalizedReplyMap: Record<string, string[]> = {}
+
+    for (const [tag, replies] of Object.entries(replyMap)) {
+      const normalizedTag = tag.trim()
+      if (!normalizedTag) {
+        continue
+      }
+
+      normalizedReplyMap[normalizedTag] = replies.map((reply) => reply.trim()).filter(Boolean)
+    }
+
+    return normalizedReplyMap
+  })
+
+export const storyPhoneProactiveMessageRuleSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean().default(true),
+  trigger_expr: z.string().min(1),
+  cooldown_hours: z.number().int().min(1).default(24),
+  favor_delta: z.number().int().min(-100).max(100).default(0),
+  messages: z.array(z.string()).min(1),
+  reply_quick_message_ids: z.array(z.string()).default([])
+}).superRefine((rule, context) => {
+  if (!rule.trigger_expr.trim()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "trigger_expr is required.",
+      path: ["trigger_expr"]
+    })
+  }
+
+  if (rule.messages.map((message) => message.trim()).filter(Boolean).length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "At least one non-empty proactive message is required.",
+      path: ["messages"]
+    })
+  }
+}).transform((rule) => ({
+  id: rule.id.trim(),
+  enabled: rule.enabled,
+  trigger_expr: rule.trigger_expr.trim(),
+  cooldown_hours: rule.cooldown_hours,
+  favor_delta: rule.favor_delta,
+  messages: rule.messages.map((message) => message.trim()).filter(Boolean),
+  reply_quick_message_ids: Array.from(
+    new Set(rule.reply_quick_message_ids.map((quickMessageId) => quickMessageId.trim()).filter(Boolean))
+  )
+}))
+
+export const storyPhoneContactProfileSchema = z.object({
+  role_key: z.string().min(1),
+  enabled: z.boolean().default(true),
+  auto_add: z.boolean().default(true),
+  initial_favor: z.number().int().min(0).max(100).default(0),
+  preferred_tags: z.array(z.string()).default([]),
+  reply_by_tag: storyPhoneRepliesRecordSchema,
+  proactive_messages: z.array(storyPhoneProactiveMessageRuleSchema).default([])
+}).transform((profile) => ({
+  role_key: profile.role_key.trim(),
+  enabled: profile.enabled,
+  auto_add: profile.auto_add,
+  initial_favor: profile.initial_favor,
+  preferred_tags: Array.from(new Set(profile.preferred_tags.map((tag) => tag.trim()).filter(Boolean))),
+  reply_by_tag: profile.reply_by_tag,
+  proactive_messages: profile.proactive_messages
+}))
+
+export const storyPhoneSchema = z.object({
+  player_quick_messages: z.array(storyPhoneQuickMessageSchema).default([]),
+  contact_profiles: z.array(storyPhoneContactProfileSchema).default([]),
+  fallback_replies: storyPhoneRepliesRecordSchema
+}).superRefine((phoneFile, context) => {
+  const quickMessageIds = new Set<string>()
+  const contactProfileRoleKeys = new Set<string>()
+
+  for (const [messageIndex, message] of phoneFile.player_quick_messages.entries()) {
+    if (quickMessageIds.has(message.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate phone quick message id "${message.id}".`,
+        path: ["player_quick_messages", messageIndex, "id"]
+      })
+    }
+
+    quickMessageIds.add(message.id)
+  }
+
+  for (const [profileIndex, profile] of phoneFile.contact_profiles.entries()) {
+    if (contactProfileRoleKeys.has(profile.role_key)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate phone contact profile role_key "${profile.role_key}".`,
+        path: ["contact_profiles", profileIndex, "role_key"]
+      })
+    }
+
+    contactProfileRoleKeys.add(profile.role_key)
+
+    const proactiveRuleIds = new Set<string>()
+    for (const [ruleIndex, rule] of profile.proactive_messages.entries()) {
+      if (proactiveRuleIds.has(rule.id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate proactive phone rule id "${rule.id}" under "${profile.role_key}".`,
+          path: ["contact_profiles", profileIndex, "proactive_messages", ruleIndex, "id"]
+        })
+      }
+
+      proactiveRuleIds.add(rule.id)
+
+      for (const [replyIndex, replyQuickMessageId] of rule.reply_quick_message_ids.entries()) {
+        if (!quickMessageIds.has(replyQuickMessageId)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Phone proactive rule "${profile.role_key}/${rule.id}" references missing quick message "${replyQuickMessageId}".`,
+            path: ["contact_profiles", profileIndex, "proactive_messages", ruleIndex, "reply_quick_message_ids", replyIndex]
+          })
+        }
+      }
+    }
+  }
+})
+
 export const storyBibleSchema = z.object({
   background: z.string().default(""),
   golden_finger: z.string().default(""),
@@ -698,6 +845,7 @@ export const storyDocumentSchema = z.object({
   eventLocations: storyEventLocationSchema,
   items: storyItemsSchema.default({}),
   initialBags: storyInitialBagsSchema,
+  phone: storyPhoneSchema.default({}),
   chainEvents: storyChainEventsSchema.default([]),
   poolEvents: storyPoolEventsSchema.default([]),
   scheduleEvents: storyScheduleEventsSchema.default([]),

@@ -15,6 +15,7 @@ import {
   storyInitialBagsSchema,
   storyItemsSchema,
   storyLoopEventSchema,
+  storyPhoneSchema,
   storyScheduleEventsSchema,
   storyMetaSchema,
   storyNormalRolesDataFileSchema,
@@ -42,6 +43,7 @@ import {
   type StoryOnceEventFile,
   type StoryOnceEventsFile,
   type StoryPoolEventsFile,
+  type StoryPhoneFile,
   type StoryPlayerOverrideValsFile,
   type StoryImportantRolesDataFile,
   type StoryRolesFile,
@@ -98,6 +100,7 @@ export interface StoryFileStore {
   ): Promise<StoryEventLocationFile>
   writeItems(storyId: string, items: StoryItemsFile): Promise<StoryItemsFile>
   writeInitialBags(storyId: string, initialBags: StoryInitialBagsFile): Promise<StoryInitialBagsFile>
+  writePhone(storyId: string, phone: StoryPhoneFile): Promise<StoryPhoneFile>
   writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile>
   writePlayerOverrideVals(
     storyId: string,
@@ -294,6 +297,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
     eventLocationFile: path.join(storyDir, "event_location.json5"),
     itemsFile: path.join(storyDir, "items.json5"),
     initialBagsFile: path.join(storyDir, "initial_bags.json5"),
+    phoneFile: path.join(storyDir, "phone.json5"),
     assetsDir: path.join(storyDir, "assets"),
     backgroundDir: path.join(storyDir, "assets", "background"),
     backgroundRawDir: path.join(storyDir, "assets", "background", "raw"),
@@ -352,6 +356,14 @@ function createDefaultInitialBags(): StoryInitialBagsFile {
     player: {
       entries: []
     }
+  }
+}
+
+function createDefaultStoryPhone(): StoryPhoneFile {
+  return {
+    player_quick_messages: [],
+    contact_profiles: [],
+    fallback_replies: {}
   }
 }
 
@@ -967,6 +979,18 @@ async function readStoryInitialBags(
   return storyInitialBagsSchema.parse(initialBags)
 }
 
+async function readStoryPhone(
+  dataDir: string,
+  storyId: string
+): Promise<StoryPhoneFile> {
+  const paths = createStoryPaths(dataDir, storyId)
+  const phone = await readOptionalJson5File<StoryPhoneFile>(
+    paths.phoneFile,
+    createDefaultStoryPhone()
+  )
+  return storyPhoneSchema.parse(phone)
+}
+
 async function readStoryGraphEvents(
   dataDir: string,
   storyId: string
@@ -1085,6 +1109,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       eventLocations,
       items,
       initialBags,
+      phone,
       chainEvents,
       poolEvents,
       scheduleEvents
@@ -1100,6 +1125,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       readStoryEventLocations(dataDir, storyId),
       readStoryItems(dataDir, storyId),
       readStoryInitialBags(dataDir, storyId),
+      readStoryPhone(dataDir, storyId),
       readStoryGraphEvents(dataDir, storyId),
       readStoryOnceEvents(dataDir, storyId),
       readStoryLoopEvents(dataDir, storyId)
@@ -1116,6 +1142,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       eventLocations,
       items,
       initialBags,
+      phone,
       chainEvents,
       poolEvents,
       scheduleEvents,
@@ -1390,6 +1417,18 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return parsedInitialBags
   }
 
+  async function writePhone(
+    storyId: string,
+    phone: StoryPhoneFile
+  ): Promise<StoryPhoneFile> {
+    const parsedPhone = storyPhoneSchema.parse(phone)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(paths.phoneFile, parsedPhone satisfies StoryPhoneFile)
+
+    return parsedPhone
+  }
+
   async function writeScenes(storyId: string, scenes: StorySceneFile): Promise<StorySceneFile> {
     const parsedScenes = storySceneSchema.parse(scenes)
     const paths = createStoryPaths(dataDir, storyId)
@@ -1643,6 +1682,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     writeEventLocations,
     writeItems,
     writeInitialBags,
+    writePhone,
     writeVals,
     writePlayerOverrideVals,
     writeSystemVals,
