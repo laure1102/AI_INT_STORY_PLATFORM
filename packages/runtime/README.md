@@ -2,7 +2,7 @@
 
 `packages/runtime` contains shared runtime behavior that should be reused by:
 
-- `apps/tui-client`
+- `apps/html-client`
 - `apps/cocos-client`
 - editor-side validation paths that need the same semantics
 

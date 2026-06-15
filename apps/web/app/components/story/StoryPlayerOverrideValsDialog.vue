@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import type {
+  StoryPlayerOverrideInputOption,
+  StoryPlayerOverrideInputType,
   StoryPlayerOverrideValEntry,
   StoryPlayerOverrideValsFile,
   StoryValsFile
 } from "@story-mgr/core"
+
+interface PlayerOverrideOptionDraft {
+  draftKey: string
+  label: string
+  value: string
+}
 
 interface PlayerOverrideRowDraft {
   draftKey: string
@@ -11,6 +19,8 @@ interface PlayerOverrideRowDraft {
   needPlayerOverride: boolean
   tips: string
   groupNoText: string
+  inputType: StoryPlayerOverrideInputType
+  options: PlayerOverrideOptionDraft[]
 }
 
 const props = defineProps<{
@@ -26,6 +36,7 @@ const emit = defineEmits<{
 
 const draftRows = ref<PlayerOverrideRowDraft[]>([])
 const showingGroupTip = ref(false)
+const editingOptionsRowKey = ref<string | null>(null)
 
 let draftKeySeed = 0
 
@@ -34,12 +45,37 @@ function createDraftKey() {
   return `player-override-${draftKeySeed}`
 }
 
+function createOptionDraftKey() {
+  draftKeySeed += 1
+  return `player-override-option-${draftKeySeed}`
+}
+
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value : ""
 }
 
+function normalizeInputType(value: unknown): StoryPlayerOverrideInputType {
+  return value === "select" ? "select" : "text"
+}
+
 function normalizeGroupNo(value: unknown) {
   return Number.isInteger(value) && Number(value) >= 1 ? String(value) : "1"
+}
+
+function createOptionDraft(option?: Partial<StoryPlayerOverrideInputOption>): PlayerOverrideOptionDraft {
+  return {
+    draftKey: createOptionDraftKey(),
+    label: normalizeText(option?.label),
+    value: normalizeText(option?.value)
+  }
+}
+
+function cloneOptions(options: StoryPlayerOverrideInputOption[] | undefined): PlayerOverrideOptionDraft[] {
+  if (!Array.isArray(options)) {
+    return []
+  }
+
+  return options.map((option) => createOptionDraft(option))
 }
 
 function sanitizeGroupNoInput(value: string) {
@@ -58,7 +94,9 @@ function createEmptyRow(): PlayerOverrideRowDraft {
     varKey: "",
     needPlayerOverride: true,
     tips: "",
-    groupNoText: "1"
+    groupNoText: "1",
+    inputType: "text",
+    options: []
   }
 }
 
@@ -68,7 +106,9 @@ function cloneEntry(entry: StoryPlayerOverrideValEntry): PlayerOverrideRowDraft 
     varKey: normalizeText(entry.var_key).trim(),
     needPlayerOverride: Boolean(entry.need_player_override),
     tips: normalizeText(entry.tips),
-    groupNoText: normalizeGroupNo(entry.group_no)
+    groupNoText: normalizeGroupNo(entry.group_no),
+    inputType: normalizeInputType(entry.input_type),
+    options: cloneOptions(entry.input_options)
   }
 }
 
@@ -121,8 +161,52 @@ const hasDuplicateVarKey = computed(() => {
   return false
 })
 
+function getNormalizedOptionValues(row: PlayerOverrideRowDraft) {
+  return row.options.map((option) => option.value.trim()).filter(Boolean)
+}
+
+function hasDuplicateOptionValues(row: PlayerOverrideRowDraft) {
+  const seen = new Set<string>()
+
+  for (const value of getNormalizedOptionValues(row)) {
+    if (seen.has(value)) {
+      return true
+    }
+
+    seen.add(value)
+  }
+
+  return false
+}
+
+function isOptionValueDuplicated(row: PlayerOverrideRowDraft, value: string) {
+  const normalizedValue = value.trim()
+  if (!normalizedValue) {
+    return false
+  }
+
+  return getNormalizedOptionValues(row).filter((optionValue) => optionValue === normalizedValue).length > 1
+}
+
+const hasInvalidSelectDraft = computed(() => {
+  return draftRows.value.some((row) => {
+    if (row.inputType !== "select") {
+      return false
+    }
+
+    return row.options.length === 0
+      || row.options.some((option) => !option.value.trim())
+      || hasDuplicateOptionValues(row)
+  })
+})
+
+const editingOptionsRow = computed(() => {
+  return draftRows.value.find((row) => row.draftKey === editingOptionsRowKey.value) ?? null
+})
+
 function syncDraft(file: StoryPlayerOverrideValsFile) {
   draftRows.value = file.entries.map(cloneEntry)
+  editingOptionsRowKey.value = null
 }
 
 function addRow() {
@@ -130,6 +214,10 @@ function addRow() {
 }
 
 function removeRow(index: number) {
+  if (draftRows.value[index]?.draftKey === editingOptionsRowKey.value) {
+    editingOptionsRowKey.value = null
+  }
+
   draftRows.value.splice(index, 1)
 }
 
@@ -171,13 +259,78 @@ function handleGroupNoInput(row: PlayerOverrideRowDraft, event: Event) {
   updateGroupNo(row, nextValue)
 }
 
+function handleInputTypeChange(row: PlayerOverrideRowDraft, event: Event) {
+  const target = event.target
+  row.inputType = normalizeInputType(target instanceof HTMLSelectElement ? target.value : "text")
+
+  if (row.inputType === "select" && row.options.length === 0) {
+    row.options.push(createOptionDraft())
+  }
+}
+
+function openOptionsEditor(row: PlayerOverrideRowDraft) {
+  if (row.inputType === "select" && row.options.length === 0) {
+    row.options.push(createOptionDraft())
+  }
+
+  editingOptionsRowKey.value = row.draftKey
+}
+
+function closeOptionsEditor() {
+  editingOptionsRowKey.value = null
+}
+
+function addOption(row: PlayerOverrideRowDraft) {
+  row.options.push(createOptionDraft())
+}
+
+function removeOption(row: PlayerOverrideRowDraft, index: number) {
+  row.options.splice(index, 1)
+}
+
+function moveOptionUp(row: PlayerOverrideRowDraft, index: number) {
+  if (index <= 0) {
+    return
+  }
+
+  const [targetOption] = row.options.splice(index, 1)
+  row.options.splice(index - 1, 0, targetOption!)
+}
+
+function moveOptionDown(row: PlayerOverrideRowDraft, index: number) {
+  if (index >= row.options.length - 1) {
+    return
+  }
+
+  const [targetOption] = row.options.splice(index, 1)
+  row.options.splice(index + 1, 0, targetOption!)
+}
+
+function normalizeOutputOptions(row: PlayerOverrideRowDraft): StoryPlayerOverrideInputOption[] {
+  if (row.inputType !== "select") {
+    return []
+  }
+
+  return row.options.map((option) => {
+    const value = option.value.trim()
+    const label = option.label.trim() || value
+
+    return {
+      label,
+      value
+    }
+  })
+}
+
 function submitDraft() {
   emit("save", {
     entries: draftRows.value.map((row) => ({
       var_key: row.varKey.trim(),
       need_player_override: row.needPlayerOverride,
       tips: row.tips,
-      group_no: Number.parseInt(sanitizeGroupNoInput(row.groupNoText), 10)
+      group_no: Number.parseInt(sanitizeGroupNoInput(row.groupNoText), 10),
+      input_type: row.inputType,
+      input_options: normalizeOutputOptions(row)
     }))
   })
 }
@@ -208,7 +361,7 @@ watch(
             <button
               class="btn-primary"
               type="button"
-              :disabled="saving || hasInvalidDraft"
+              :disabled="saving || hasInvalidDraft || hasInvalidSelectDraft"
               @click="submitDraft"
             >
               {{ saving ? "保存中..." : "保存" }}
@@ -222,6 +375,9 @@ watch(
         <p v-if="hasInvalidDraft" class="player-override-dialog__warning">
           每一行都必须选择一个全局变量。
         </p>
+        <p v-else-if="hasInvalidSelectDraft" class="player-override-dialog__warning">
+          下拉选项至少要有一个选项，并且选项值不能为空、不能重复。
+        </p>
         <p v-else-if="hasDuplicateVarKey" class="player-override-dialog__warning">
           当前存在重复变量，客户端会按顺序重复询问，建议检查一下。
         </p>
@@ -233,6 +389,7 @@ watch(
                 <th class="player-override-dialog__order-col">顺序</th>
                 <th>全局变量</th>
                 <th class="player-override-dialog__checkbox-col">需要玩家覆盖</th>
+                <th class="player-override-dialog__input-type-col">输入方式</th>
                 <th class="player-override-dialog__group-col">
                   <span class="player-override-dialog__group-label">
                     分组编号
@@ -293,6 +450,26 @@ watch(
                   </label>
                 </td>
                 <td>
+                  <div class="player-override-dialog__input-type-field">
+                    <select
+                      :value="row.inputType"
+                      class="text-input player-override-dialog__cell-input"
+                      @change="handleInputTypeChange(row, $event)"
+                    >
+                      <option value="text">文本框</option>
+                      <option value="select">下拉选项</option>
+                    </select>
+                    <button
+                      v-if="row.inputType === 'select'"
+                      class="btn-secondary player-override-dialog__options-button"
+                      type="button"
+                      @click="openOptionsEditor(row)"
+                    >
+                      选项 {{ row.options.length }}
+                    </button>
+                  </div>
+                </td>
+                <td>
                   <input
                     :value="row.groupNoText"
                     class="text-input player-override-dialog__group-input"
@@ -332,6 +509,101 @@ watch(
           </button>
         </div>
       </section>
+
+      <section v-if="editingOptionsRow" class="player-override-dialog__option-panel glass-panel">
+        <div class="player-override-dialog__header">
+          <div>
+            <span class="eyebrow">下拉选项</span>
+            <h2 class="player-override-dialog__title">
+              {{ editingOptionsRow.varKey || "未选择变量" }}
+            </h2>
+          </div>
+
+          <div class="player-override-dialog__actions">
+            <button class="btn-secondary" type="button" @click="closeOptionsEditor">
+              完成
+            </button>
+          </div>
+        </div>
+
+        <p class="player-override-dialog__hint">
+          “显示文本”是玩家看到的内容，“写入值”会保存到对应变量。
+        </p>
+
+        <div class="player-override-dialog__option-table-wrap">
+          <table class="player-override-dialog__option-table">
+            <thead>
+              <tr>
+                <th class="player-override-dialog__order-col">顺序</th>
+                <th>显示文本</th>
+                <th>写入值</th>
+                <th class="player-override-dialog__action-col">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(option, optionIndex) in editingOptionsRow.options" :key="option.draftKey">
+                <td class="player-override-dialog__order-cell">
+                  <div class="player-override-dialog__order-buttons">
+                    <button
+                      class="btn-secondary player-override-dialog__icon-button"
+                      type="button"
+                      :disabled="optionIndex === 0"
+                      @click="moveOptionUp(editingOptionsRow, optionIndex)"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      class="btn-secondary player-override-dialog__icon-button"
+                      type="button"
+                      :disabled="optionIndex === editingOptionsRow.options.length - 1"
+                      @click="moveOptionDown(editingOptionsRow, optionIndex)"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </td>
+                <td>
+                  <input
+                    v-model="option.label"
+                    class="text-input player-override-dialog__cell-input"
+                    placeholder="例如：男"
+                  />
+                </td>
+                <td>
+                  <input
+                    v-model="option.value"
+                    class="text-input player-override-dialog__cell-input"
+                    :class="{
+                      'player-override-dialog__cell-input--invalid':
+                        !option.value.trim() || isOptionValueDuplicated(editingOptionsRow, option.value)
+                    }"
+                    placeholder="例如：男"
+                  />
+                </td>
+                <td class="player-override-dialog__action-cell">
+                  <button
+                    class="btn-secondary player-override-dialog__row-delete"
+                    type="button"
+                    @click="removeOption(editingOptionsRow, optionIndex)"
+                  >
+                    删除
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div v-if="!editingOptionsRow.options.length" class="player-override-dialog__empty">
+            还没有下拉选项，先添加一项。
+          </div>
+        </div>
+
+        <div class="player-override-dialog__footer">
+          <button class="btn-secondary" type="button" @click="addOption(editingOptionsRow)">
+            + 添加选项
+          </button>
+        </div>
+      </section>
     </div>
   </Teleport>
 </template>
@@ -354,6 +626,18 @@ watch(
   padding: 20px;
   overflow: auto;
   border-radius: 22px;
+}
+
+.player-override-dialog__option-panel {
+  position: fixed;
+  inset: auto 20px 20px auto;
+  z-index: 1;
+  width: min(720px, calc(100vw - 40px));
+  max-height: min(620px, calc(100vh - 40px));
+  padding: 18px;
+  overflow: auto;
+  border-radius: 20px;
+  box-shadow: 0 22px 80px rgba(0, 0, 0, 0.42);
 }
 
 .player-override-dialog__header {
@@ -397,19 +681,28 @@ watch(
 
 .player-override-dialog__table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 1260px;
+  border-collapse: collapse;
+}
+
+.player-override-dialog__option-table {
+  width: 100%;
+  min-width: 640px;
   border-collapse: collapse;
 }
 
 .player-override-dialog__table th,
-.player-override-dialog__table td {
+.player-override-dialog__table td,
+.player-override-dialog__option-table th,
+.player-override-dialog__option-table td {
   padding: 8px;
   border-bottom: 1px solid rgba(186, 220, 255, 0.12);
   text-align: left;
   vertical-align: top;
 }
 
-.player-override-dialog__table th {
+.player-override-dialog__table th,
+.player-override-dialog__option-table th {
   position: sticky;
   top: 0;
   background: rgba(9, 19, 30, 0.92);
@@ -423,6 +716,10 @@ watch(
 
 .player-override-dialog__checkbox-col {
   width: 132px;
+}
+
+.player-override-dialog__input-type-col {
+  width: 150px;
 }
 
 .player-override-dialog__group-col {
@@ -456,6 +753,21 @@ watch(
 .player-override-dialog__group-input {
   min-width: 0;
   width: 100%;
+}
+
+.player-override-dialog__cell-input--invalid {
+  border-color: var(--warning);
+}
+
+.player-override-dialog__input-type-field {
+  display: grid;
+  gap: 8px;
+}
+
+.player-override-dialog__options-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
 }
 
 .player-override-dialog__checkbox-label {
@@ -510,6 +822,14 @@ watch(
   font-size: 0.84rem;
 }
 
+.player-override-dialog__option-table-wrap {
+  margin-top: 16px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .player-override-dialog__footer {
   display: flex;
   justify-content: flex-start;
@@ -521,6 +841,11 @@ watch(
   .player-override-dialog__actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .player-override-dialog__option-panel {
+    inset: auto 12px 12px;
+    width: calc(100vw - 24px);
   }
 }
 </style>

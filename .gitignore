@@ -9,3 +9,4 @@ build/stories/
 data/setting.json5
 .cdp-profile
 .tui-client
+.html-client

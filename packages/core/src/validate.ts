@@ -1294,6 +1294,48 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
         ["playerOverrideVals", "entries", String(entryIndex), "group_no"]
       )
     }
+
+    if (entry.input_type === "select") {
+      const seenOptionValues = new Set<string>()
+      const usableOptions = entry.input_options.filter((option) => option.value.trim())
+
+      if (usableOptions.length === 0) {
+        pushIssue(
+          issues,
+          "error",
+          "player-override.empty-select-options",
+          `Player override variable "${normalizedVarKey}" uses select input but has no selectable options.`,
+          ["playerOverrideVals", "entries", String(entryIndex), "input_options"]
+        )
+      }
+
+      for (const [optionIndex, option] of entry.input_options.entries()) {
+        const normalizedOptionValue = option.value.trim()
+
+        if (!normalizedOptionValue) {
+          pushIssue(
+            issues,
+            "error",
+            "player-override.empty-select-option-value",
+            `Player override variable "${normalizedVarKey}" has an empty select option value.`,
+            ["playerOverrideVals", "entries", String(entryIndex), "input_options", String(optionIndex), "value"]
+          )
+          continue
+        }
+
+        if (seenOptionValues.has(normalizedOptionValue)) {
+          pushIssue(
+            issues,
+            "error",
+            "player-override.duplicate-select-option-value",
+            `Player override variable "${normalizedVarKey}" has duplicated select option value "${normalizedOptionValue}".`,
+            ["playerOverrideVals", "entries", String(entryIndex), "input_options", String(optionIndex), "value"]
+          )
+        } else {
+          seenOptionValues.add(normalizedOptionValue)
+        }
+      }
+    }
   }
 
   return {

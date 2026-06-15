@@ -6,9 +6,8 @@
     "dev": "concurrently -k --kill-timeout 5000 \"pnpm dev:api\" \"pnpm dev:web\"",
     "dev:api": "pnpm --filter @story-mgr/api dev",
     "dev:web": "pnpm --filter @story-mgr/web dev",
-    "tui": "powershell -NoProfile -Command \"$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); chcp 65001 > $null; pnpm --filter @story-mgr/tui-client dev\"",
-    "tui:loop-regression": "pnpm --filter @story-mgr/tui-client regression:loop",
-    "tui:storyscript-regression": "pnpm --filter @story-mgr/tui-client regression:storyscript",
+    "dev:html": "pnpm --filter @story-mgr/html-client dev",
+    "html": "pnpm dev:html",
     "build": "pnpm --filter @story-mgr/api build && pnpm --filter @story-mgr/web build",
     "typecheck": "pnpm -r typecheck"
   },

@@ -1,4 +1,4 @@
-# Story Manager Agent Guide
+﻿# Story Manager Agent Guide
 
 Last updated: `2026-06-11`
 
@@ -28,7 +28,7 @@ It is becoming a full content-authoring plus runtime prototype stack:
 
 - the editor creates and validates story content
 - the shared runtime executes variables, expressions, and scripts
-- the TUI client validates gameplay/runtime flow locally
+- the HTML client validates gameplay/runtime flow locally
 - the future Cocos client should reuse the same runtime semantics
 
 ## 2. Monorepo structure
@@ -37,7 +37,7 @@ It is becoming a full content-authoring plus runtime prototype stack:
 
 - `apps/web`: Nuxt 3 story editor
 - `apps/api`: Koa API for files, assets, AI generation, and export
-- `apps/tui-client`: text-based runtime shell over the shared runtime
+- `apps/html-client`: browser-based runtime shell over the shared runtime
 - `apps/cocos-client`: placeholder for the future game client shell
 
 ### Packages
@@ -520,7 +520,7 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - literal `item_id` arguments are validated against `items.json5`; dynamic ids are checked at runtime
 - runtime text substitution for dialogue/template content is implemented in `packages/runtime`
 - editor `?` help popovers for condition/script/dialogue fields should eventually be sourced from `StoryScript.md`
-- regression entry: `pnpm tui:storyscript-regression`
+- StoryScript validation lives in shared runtime/core paths and should be covered by future shared regression tests.
 
 ## 7. Object and location rules
 
@@ -713,7 +713,7 @@ Public runtime control surface:
 
 Important current boundary:
 
-- time progression is already part of the shared runtime and must remain reusable by both `tui-client` and future `cocos-client`
+- time progression is already part of the shared runtime and must remain reusable by both `html-client` and future `cocos-client`
 - current runtime uses a scheduler model with `scheduled`, `ready_queue`, and `active`
 - chain root discovery is already connected
 - `pool_events` are already connected to scheduler-driven playback
@@ -821,34 +821,28 @@ Current loop timing rule:
 
 `packages/core/src/vals.ts` now re-exports the runtime implementation for compatibility.
 
-## 10. TUI client status
+## 10. HTML client status
 
-`apps/tui-client` now has a working Ink-based runtime shell for graph-event flow verification.
+`apps/html-client` is the active local gameplay/runtime shell. The old `apps/tui-client` module has been removed.
 
 Implemented:
 
 - local story bundle sync by reading `data/stories/<storyId>` through `@story-mgr/file-store` and compiling through `@story-mgr/compiler`
-- local runtime storage layout under `.tui-client/stories/<storyId>/`
+- local runtime storage layout under `.html-client/stories/<storyId>/`
 - profile storage via `custom.json5`
 - player-creation flow driven by `player_override_vals.json5`
 - save slots via `*.json5`
-- runtime controller API in `apps/tui-client/src/index.ts`
-- Ink-based interactive TUI shell in `apps/tui-client/src/cli.tsx`
-- real graph-event runtime playback through `packages/runtime`
-- event title / location / dialogue display
-- action-node branch selection
-- branch-variable summary display
-- debug-panel toggle inside the TUI game screen
-- runtime time controls wired through shared session APIs
-- compact phone-like header / game area / footer layout
-- overlay pager for message flow and global variables without growing overall TUI height
-- next-day debug advance
-- scheduler debug overlay inside the game area
+- runtime session control through `apps/html-client/src/client-app.ts`
+- browser UI served by `apps/html-client/src/server.ts` and static files in `apps/html-client/public/`
+- game layout follows header / game area / footer, with footer command popups for phone, messages, variables, scheduler, bag, and saves
+- runtime time controls are wired through shared session APIs
+- phone contacts are available in the footer and unread phone messages flash as a reminder
+- number keys `1` through `9` select current game-area options
 
-Current TUI local layout:
+Current HTML local layout:
 
 ```txt
-.tui-client/
+.html-client/
   stories/
     <storyId>/
       bundle.json
@@ -859,13 +853,15 @@ Current TUI local layout:
             <slotId>.json5
 ```
 
-Profile `custom.json5` may now also include `player_setup`, while `custom_values` remains the actual override layer applied to the runtime bundle.
+Profile `custom.json5` may include `player_setup`, while `custom_values` remains the actual override layer applied to the runtime bundle.
 
 Profile creation rules:
 
 - the editor controls player-input fields through `player_override_vals.json5`
-- the TUI asks only rows where `need_player_override === true`
+- the HTML client asks only rows where `need_player_override === true`
 - prompts are grouped by `group_no`
+- `input_type: "text"` renders a text input
+- `input_type: "select"` renders a select using `input_options`
 - answers are written to `custom_values[var_key]`
 - if common player/county fields exist, `player_setup` is inferred from `custom_values`
 - runtime still consumes `custom_values` as the true override layer
@@ -882,82 +878,21 @@ Bootstrap flow:
 Command:
 
 ```bash
-pnpm tui -- --story demo
+pnpm html -- --story demo
 ```
 
-Loop regression command:
+Current HTML game-screen behavior:
 
-```bash
-pnpm tui:loop-regression
-```
-
-Current regression coverage includes:
-
-- real demo `daily_money` after `daily_population_flow`
-- synthetic `weekly`
-- synthetic `monthly`
-- synthetic `interval_days`
-- same-minute multi-loop dependency order overriding priority
-- due-time loop skip and reschedule when `trigger_expr` is false
-- graph-event auto-next fallback to the first enterable next event
-- graph-root queue continuation after an action branch cannot enter its next event
-- queued graph-root trigger lock after enqueue
-- queued once trigger lock after enqueue
-
-Notes:
-
-- the TUI must run in a real interactive TTY terminal because Ink needs raw keyboard input
-- the current runtime gameplay loop now covers chain root events from `events/chains.json5`
-- the current runtime gameplay loop now covers `pool_events.json5`
-- the current runtime gameplay loop now covers `schedule_events.json5`
-
-### Current TUI game-screen behavior
-
-Layout:
-
-- header: left shows `第N天 HH:MM 时段` and paused state; right shows `XX县(${county.level})`
-- middle game area: only runtime content, overlays, dialogue, branch options, or empty-state text
-- footer: left shows `角色名  金钱: <格式化金额>`; right shows `下一天`
-- footer extra hint row: keyboard shortcuts
-
-Current keyboard shortcuts:
-
-- `h`: return to profile menu
-- `t`: open settings menu
-- `space`: pause / resume time
-- `l`: show or hide message-flow overlay
-- `i`: show or hide global-values overlay
-- `e`: show or hide scheduler debug overlay
-- `n`: advance to next day `00:00` for debugging
-
-Overlay behavior:
-
-- message flow and global variables render inside the game area, not below the screen
-- scheduler debug also renders inside the game area with the same pager behavior
-- scheduler debug includes AI剧情导演 decision logs, selected entry source/id, candidate count, and top candidate score
-- overlay paging preserves the previous game-area state and restores it after closing
-- overlay content can be scrolled without changing the overall shell height
-
-Current TUI money/header formatting:
-
-- county header appends global county level as `XX县(${county.level})`
-- footer money display is humanized with `千 / 万 / 亿` formatting
-
-Current TUI scheduler debug overlay:
-
-- hotkey: `e`
-- sections include current active event
-- sections include scheduler summary
-- sections include ready queue
-- sections include future scheduled items
-- sections include loop states
-- scheduler times are rendered as `第N天 HH:MM`
-
-Current TUI time loop:
-
-- `apps/tui-client/src/cli.tsx` calls `app.tick(1000)` every real second while a session exists
-- pause and speed changes are delegated to the shared runtime instead of local UI-only state
-- `n` temporarily normalizes time controls, advances to the next day boundary, then restores previous pause/speed state
+- header: current event title, location/time, and running state
+- game area: runtime content, dialogue, message prompts, branch options, or empty-state text
+- footer: left shows role, money, and phone unread status; right shows `N 下一天`
+- footer command row opens popups for messages, bag, variables, scheduler, saves, and phone
+- `space` pauses/resumes time
+- `n` advances to the next day boundary
+- `p` opens/closes phone
+- `l`, `b`, `i`, `o`, `t`, and `s` open footer popups
+- `Esc` closes an open popup or phone
+- `1` to `9` select current interaction options
 
 ## 11. Cocos client status
 
@@ -965,8 +900,8 @@ Current TUI time loop:
 
 The intended rule is:
 
-- `tui-client` validates runtime semantics
-- `cocos-client` focuses on presentation and platform integration
+- `html-client` validates local runtime semantics during browser-based prototyping
+- `cocos-client` should focus on presentation and platform integration
 - both should reuse `packages/runtime`
 
 ## 12. Current known gaps
@@ -974,7 +909,7 @@ The intended rule is:
 - save snapshots do not yet persist transient cursor state such as current dialogue index, pending action list, and branch context
 - loading a save currently restores values and `current_event_id`, but does not resume mid-dialogue
 - `player_setup` inference is still convention-based for known fields such as `player.name_xing`, `player.name_ming`, `county.name_full`, `county.name_short`, `county.parent_city`, and `county.province`
-- scene/background presentation and audio are not yet represented in the TUI runtime
+- scene/background presentation and audio are not yet represented in the HTML runtime client
 - `system.now_jieqi` is still a placeholder and currently resolves to an empty string
 - long-term rule "system variables are runtime-owned and script read-only" is not fully enforced yet
 - scheduler state is present in snapshots, but save/load resume is not yet fine-grained enough to restore mid-dialogue playback cursor and branch pending state
@@ -1006,3 +941,4 @@ The intended rule is:
 - 新增代码注释统一使用中文，保持简洁，优先解释关键逻辑与边界
 - use `apply_patch` for manual file edits
 - do not revert unrelated user changes
+

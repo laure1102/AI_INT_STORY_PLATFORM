@@ -37,11 +37,20 @@ export const storyValsSchema = z.object({
   variables: z.array(storyValSchema).default([])
 })
 
+const storyPlayerOverrideInputTypeSchema = z.enum(["text", "select"])
+
+export const storyPlayerOverrideInputOptionSchema = z.object({
+  label: z.string().default(""),
+  value: z.string().default("")
+})
+
 export const storyPlayerOverrideValEntrySchema = z.object({
   var_key: z.string().min(1),
   need_player_override: z.boolean().default(false),
   tips: z.string().default(""),
-  group_no: z.number().int().min(1).default(1)
+  group_no: z.number().int().min(1).default(1),
+  input_type: storyPlayerOverrideInputTypeSchema.default("text"),
+  input_options: z.array(storyPlayerOverrideInputOptionSchema).default([])
 })
 
 export const storyPlayerOverrideValsSchema = z.object({

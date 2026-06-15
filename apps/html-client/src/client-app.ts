@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs"
+﻿import { existsSync } from "node:fs"
 import type { Dirent } from "node:fs"
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -16,8 +16,12 @@ import {
   type RuntimeStoryViewModel
 } from "@story-mgr/runtime"
 import type { StoryPlayerOverrideValEntry } from "@story-mgr/core"
+import type {
+  StoryPlayerOverrideInputOption,
+  StoryPlayerOverrideInputType
+} from "@story-mgr/core"
 
-export type TuiBootstrapStage =
+export type HtmlClientStage =
   | "boot"
   | "sync-story-bundle"
   | "select-or-create-profile"
@@ -26,7 +30,7 @@ export type TuiBootstrapStage =
   | "create-session"
   | "enter-game"
 
-export interface TuiClientPaths {
+export interface HtmlClientPaths {
   dataDir: string
   runtimeDir: string
   storyDir: string
@@ -34,7 +38,7 @@ export interface TuiClientPaths {
   profilesDir: string
 }
 
-export interface TuiProfileSummary {
+export interface HtmlProfileSummary {
   profileId: string
   profileName: string
   createdAt: string
@@ -44,42 +48,44 @@ export interface TuiProfileSummary {
   locationLabel: string | null
 }
 
-export interface TuiSaveSlotSummary {
+export interface HtmlSaveSlotSummary {
   slotId: string
   savedAt: string
   filePath: string
   activeEventId: string | null
 }
 
-export interface TuiClientAppState {
-  stage: TuiBootstrapStage
+export interface HtmlClientAppState {
+  stage: HtmlClientStage
   storyId: string
-  paths: TuiClientPaths
+  paths: HtmlClientPaths
   bundle: RuntimeStoryBundle | null
-  profiles: TuiProfileSummary[]
+  profiles: HtmlProfileSummary[]
   profile: RuntimeProfileCustomFile | null
-  saveSlots: TuiSaveSlotSummary[]
+  saveSlots: HtmlSaveSlotSummary[]
   session: RuntimeStorySession | null
   view: RuntimeStoryViewModel | null
   notifications: string[]
 }
 
-export interface CreateTuiProfileInput {
+export interface CreateHtmlProfileInput {
   profileId?: string
   profileName: string
   playerSetup?: RuntimePlayerProfileSetup
   customValues?: Record<string, unknown>
 }
 
-export interface TuiPlayerOverridePrompt {
+export interface HtmlPlayerOverridePrompt {
   varKey: string
   label: string
   tips: string
   required: boolean
   groupNo: number
+  inputType: StoryPlayerOverrideInputType
+  options: StoryPlayerOverrideInputOption[]
 }
 
-export interface CreateTuiClientAppOptions {
+export interface CreateHtmlClientAppOptions {
   storyId: string
   dataDir?: string
   runtimeDir?: string
@@ -89,15 +95,15 @@ export interface CreateTuiClientAppOptions {
   autoStartNewGame?: boolean
 }
 
-export interface TuiClientApp {
-  getState(): TuiClientAppState
-  bootstrap(): Promise<TuiClientAppState>
+export interface HtmlClientApp {
+  getState(): HtmlClientAppState
+  bootstrap(): Promise<HtmlClientAppState>
   syncStoryBundle(): Promise<RuntimeStoryBundle>
-  listProfiles(): Promise<TuiProfileSummary[]>
-  listPlayerOverridePrompts(): Promise<TuiPlayerOverridePrompt[]>
-  createProfile(input: CreateTuiProfileInput): Promise<RuntimeProfileCustomFile>
+  listProfiles(): Promise<HtmlProfileSummary[]>
+  listPlayerOverridePrompts(): Promise<HtmlPlayerOverridePrompt[]>
+  createProfile(input: CreateHtmlProfileInput): Promise<RuntimeProfileCustomFile>
   selectProfile(profileId: string): Promise<RuntimeProfileCustomFile>
-  listSaveSlots(): Promise<TuiSaveSlotSummary[]>
+  listSaveSlots(): Promise<HtmlSaveSlotSummary[]>
   startNewGame(): Promise<RuntimeStorySession>
   loadSave(slotId: string): Promise<RuntimeStorySession>
   saveToSlot(slotId: string): Promise<RuntimeStorySaveState>
@@ -107,10 +113,10 @@ export interface TuiClientApp {
   setTimeSpeed(speed: number): void
 }
 
-class TuiClientError extends Error {
+class HtmlClientError extends Error {
   constructor(message: string) {
     super(message)
-    this.name = "TuiClientError"
+    this.name = "HtmlClientError"
   }
 }
 
@@ -171,11 +177,11 @@ function findWorkspaceRoot(startDirectory: string) {
   }
 }
 
-// 统一解析 TUI 客户端的本地运行目录结构。
-function resolveTuiPaths(storyId: string, dataDir?: string, runtimeDir?: string): TuiClientPaths {
+// 统一解析 HTML 客户端的本地运行目录结构。
+function resolveHtmlPaths(storyId: string, dataDir?: string, runtimeDir?: string): HtmlClientPaths {
   const workspaceRoot = findWorkspaceRoot(process.cwd())
   const resolvedDataDir = path.resolve(dataDir ?? path.join(workspaceRoot, "data"))
-  const resolvedRuntimeDir = path.resolve(runtimeDir ?? path.join(workspaceRoot, ".tui-client"))
+  const resolvedRuntimeDir = path.resolve(runtimeDir ?? path.join(workspaceRoot, ".html-client"))
   const storyDir = path.join(resolvedRuntimeDir, "stories", storyId)
 
   return {
@@ -187,7 +193,7 @@ function resolveTuiPaths(storyId: string, dataDir?: string, runtimeDir?: string)
   }
 }
 
-function resolveProfilePaths(paths: TuiClientPaths, profileId: string) {
+function resolveProfilePaths(paths: HtmlClientPaths, profileId: string) {
   const profileDir = path.join(paths.profilesDir, profileId)
 
   return {
@@ -197,7 +203,7 @@ function resolveProfilePaths(paths: TuiClientPaths, profileId: string) {
   }
 }
 
-function resolveSaveFile(paths: TuiClientPaths, profileId: string, slotId: string) {
+function resolveSaveFile(paths: HtmlClientPaths, profileId: string, slotId: string) {
   return path.join(resolveProfilePaths(paths, profileId).savesDir, `${slotId}.json5`)
 }
 
@@ -215,7 +221,7 @@ function sanitizeSegment(value: string) {
     .replace(/^-+|-+$/g, "")
 }
 
-function createProfileId(input: CreateTuiProfileInput) {
+function createProfileId(input: CreateHtmlProfileInput) {
   const preferredId = sanitizeSegment(input.profileId ?? "")
   if (preferredId) {
     return preferredId
@@ -480,18 +486,56 @@ function buildProfileNameFromCustomValues(
   return ""
 }
 
-export function buildTuiPlayerOverridePrompts(bundle: RuntimeStoryBundle): TuiPlayerOverridePrompt[] {
+function normalizePlayerOverrideInputType(value: unknown): StoryPlayerOverrideInputType {
+  return value === "select" ? "select" : "text"
+}
+
+function normalizePlayerOverrideInputOptions(
+  value: unknown
+): StoryPlayerOverrideInputOption[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((option) => {
+      if (!option || typeof option !== "object") {
+        return null
+      }
+
+      const record = option as Record<string, unknown>
+      const optionValue = typeof record.value === "string" ? record.value.trim() : ""
+      const optionLabel = typeof record.label === "string" ? record.label.trim() : ""
+
+      if (!optionValue) {
+        return null
+      }
+
+      return {
+        label: optionLabel || optionValue,
+        value: optionValue
+      }
+    })
+    .filter((option): option is StoryPlayerOverrideInputOption => option !== null)
+}
+
+export function buildHtmlPlayerOverridePrompts(bundle: RuntimeStoryBundle): HtmlPlayerOverridePrompt[] {
   return bundle.playerOverrideVals.entries
     .filter((entry: StoryPlayerOverrideValEntry) => entry.need_player_override)
     .map((entry: StoryPlayerOverrideValEntry) => {
       const normalizedVarKey = entry.var_key.trim()
       const matchedEntry = findPlayerOverrideEntry(bundle, normalizedVarKey)
+      const inputType = normalizePlayerOverrideInputType(matchedEntry?.input_type ?? entry.input_type)
       return {
         varKey: normalizedVarKey,
         label: findBundleVarLabel(bundle, normalizedVarKey),
         tips: (matchedEntry?.tips ?? entry.tips).trim(),
         required: normalizedVarKey !== "county.name_short",
-        groupNo: Number.isInteger(entry.group_no) && entry.group_no >= 1 ? entry.group_no : 1
+        groupNo: Number.isInteger(entry.group_no) && entry.group_no >= 1 ? entry.group_no : 1,
+        inputType,
+        options: inputType === "select"
+          ? normalizePlayerOverrideInputOptions(matchedEntry?.input_options ?? entry.input_options)
+          : []
       }
     })
 }
@@ -537,7 +581,7 @@ function buildPlayerCustomValues(
 
 function assertBundle(bundle: RuntimeStoryBundle | null): RuntimeStoryBundle {
   if (!bundle) {
-    throw new TuiClientError("The story bundle has not been synced yet.")
+    throw new HtmlClientError("The story bundle has not been synced yet.")
   }
 
   return bundle
@@ -545,7 +589,7 @@ function assertBundle(bundle: RuntimeStoryBundle | null): RuntimeStoryBundle {
 
 function assertProfile(profile: RuntimeProfileCustomFile | null): RuntimeProfileCustomFile {
   if (!profile) {
-    throw new TuiClientError("No profile is selected.")
+    throw new HtmlClientError("No profile is selected.")
   }
 
   return profile
@@ -553,13 +597,13 @@ function assertProfile(profile: RuntimeProfileCustomFile | null): RuntimeProfile
 
 function assertSession(session: RuntimeStorySession | null): RuntimeStorySession {
   if (!session) {
-    throw new TuiClientError("No runtime session is active.")
+    throw new HtmlClientError("No runtime session is active.")
   }
 
   return session
 }
 
-function cloneState(state: TuiClientAppState): TuiClientAppState {
+function cloneState(state: HtmlClientAppState): HtmlClientAppState {
   return {
     ...state,
     profiles: [...state.profiles],
@@ -568,10 +612,10 @@ function cloneState(state: TuiClientAppState): TuiClientAppState {
   }
 }
 
-export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClientApp {
-  const paths = resolveTuiPaths(options.storyId, options.dataDir, options.runtimeDir)
+export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlClientApp {
+  const paths = resolveHtmlPaths(options.storyId, options.dataDir, options.runtimeDir)
   const getNow = createNowFactory(options.now)
-  const state: TuiClientAppState = {
+  const state: HtmlClientAppState = {
     stage: "boot",
     storyId: options.storyId,
     paths,
@@ -584,7 +628,7 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
     notifications: []
   }
 
-  function transition(stage: TuiBootstrapStage) {
+  function transition(stage: HtmlClientStage) {
     state.stage = stage
   }
 
@@ -625,7 +669,7 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
           customValueCount: Object.keys(profile.custom_values).length,
           playerSetup,
           locationLabel: buildLocationLabel(playerSetup)
-        } satisfies TuiProfileSummary
+        } satisfies HtmlProfileSummary
       })
     )
 
@@ -665,7 +709,7 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
             savedAt: saveState.saved_at,
             filePath,
             activeEventId: saveState.session_state.current_event_id
-          } satisfies TuiSaveSlotSummary
+          } satisfies HtmlSaveSlotSummary
         })
     )
 
@@ -722,7 +766,7 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
       return this.getState()
     },
     async syncStoryBundle() {
-      // TUI 不直接消费原始编辑器文件，而是先编译成运行时 bundle。
+      // HTML 客户端不直接消费原始编辑器文件，而是先编译成运行时 bundle。
       const store = createStoryFileStore(paths.dataDir)
       const document = await store.readStoryDocument(options.storyId)
       const { compiled, result } = compileStory(document)
@@ -746,7 +790,7 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
     },
     async listPlayerOverridePrompts() {
       const bundle = await ensureBundleLoaded()
-      return buildTuiPlayerOverridePrompts(bundle)
+      return buildHtmlPlayerOverridePrompts(bundle)
     },
     async createProfile(input) {
       const profileId = createProfileId(input)
@@ -754,7 +798,7 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
       const existingProfile = await readOptionalJson5File<RuntimeProfileCustomFile>(profilePaths.customFile)
 
       if (existingProfile) {
-        throw new TuiClientError(`Profile "${profileId}" already exists.`)
+        throw new HtmlClientError(`Profile "${profileId}" already exists.`)
       }
 
       const bundle = await ensureBundleLoaded()
@@ -813,7 +857,7 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
       const profile = await readOptionalJson5File<RuntimeProfileCustomFile>(profilePaths.customFile)
 
       if (!profile) {
-        throw new TuiClientError(`Profile "${profileId}" was not found.`)
+        throw new HtmlClientError(`Profile "${profileId}" was not found.`)
       }
 
       state.profile = profile
@@ -839,7 +883,7 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
       const saveState = await readOptionalJson5File<RuntimeStorySaveState>(saveFile)
 
       if (!saveState) {
-        throw new TuiClientError(`Save slot "${slotId}" was not found.`)
+        throw new HtmlClientError(`Save slot "${slotId}" was not found.`)
       }
 
       return createSessionFromSelection(saveState)
@@ -892,3 +936,4 @@ export function createTuiClientApp(options: CreateTuiClientAppOptions): TuiClien
     }
   }
 }
+

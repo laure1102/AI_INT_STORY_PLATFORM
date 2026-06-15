@@ -21,11 +21,20 @@ export interface StoryValsFile {
   variables: StoryValDefinition[]
 }
 
+export type StoryPlayerOverrideInputType = "text" | "select"
+
+export interface StoryPlayerOverrideInputOption {
+  label: string
+  value: string
+}
+
 export interface StoryPlayerOverrideValEntry {
   var_key: string
   need_player_override: boolean
   tips: string
   group_no: number
+  input_type: StoryPlayerOverrideInputType
+  input_options: StoryPlayerOverrideInputOption[]
 }
 
 export interface StoryPlayerOverrideValsFile {

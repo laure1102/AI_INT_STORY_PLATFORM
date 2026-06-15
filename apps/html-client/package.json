@@ -1,0 +1,20 @@
+{
+  "name": "@story-mgr/html-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@story-mgr/compiler": "workspace:*",
+    "@story-mgr/core": "workspace:*",
+    "@story-mgr/file-store": "workspace:*",
+    "@story-mgr/runtime": "workspace:*",
+    "json5": "^2.2.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  }
+}
