@@ -1,6 +1,6 @@
 ﻿# Story Manager Agent Guide
 
-Last updated: `2026-06-11`
+Last updated: `2026-06-15`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -829,14 +829,17 @@ Implemented:
 
 - local story bundle sync by reading `data/stories/<storyId>` through `@story-mgr/file-store` and compiling through `@story-mgr/compiler`
 - local runtime storage layout under `.html-client/stories/<storyId>/`
+- story-specific browser routes under `/<storyId>/` with `/` redirecting to the selected story
 - profile storage via `custom.json5`
 - player-creation flow driven by `player_override_vals.json5`
 - save slots via `*.json5`
 - runtime session control through `apps/html-client/src/client-app.ts`
 - browser UI served by `apps/html-client/src/server.ts` and static files in `apps/html-client/public/`
 - game layout follows header / game area / footer, with footer command popups for phone, messages, variables, scheduler, bag, and saves
+- the old topbar sync/profile/save/phone buttons are removed; story sync now happens automatically before starting or loading a session
 - runtime time controls are wired through shared session APIs
 - phone contacts are available in the footer and unread phone messages flash as a reminder
+- the phone drawer uses a left/right contact-thread layout; chat history keeps cross-day messages and refreshes when the next day is advanced
 - number keys `1` through `9` select current game-area options
 
 Current HTML local layout:
@@ -891,7 +894,7 @@ Current HTML game-screen behavior:
 - `n` advances to the next day boundary
 - `p` opens/closes phone
 - `l`, `b`, `i`, `o`, `t`, and `s` open footer popups
-- `Esc` closes an open popup or phone
+- `Esc` closes an open popup or phone; when no popup is open it returns to the main profile screen
 - `1` to `9` select current interaction options
 
 ## 11. Cocos client status

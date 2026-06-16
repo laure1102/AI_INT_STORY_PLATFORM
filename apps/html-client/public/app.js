@@ -3,12 +3,22 @@ const dom = {
   toast: document.querySelector("#toast")
 }
 
+const routeStorySegment = window.location.pathname.split("/").filter(Boolean)[0] ?? ""
+const route = {
+  storyId: decodeURIComponent(routeStorySegment),
+  basePath: routeStorySegment ? `/${encodeURIComponent(routeStorySegment)}` : ""
+}
+
 const ui = {
   data: null,
   busy: false,
   screen: "auto",
   menuPanel: null,
   menuPanelScrollTops: {},
+  phoneThreadScrollTops: {},
+  phoneOptionsScrollTops: {},
+  phoneThreadLastMessageKeys: {},
+  phoneThreadAutoScrollRoleKeys: {},
   createOpen: false,
   prompts: [],
   phoneOpen: false,
@@ -71,6 +81,158 @@ function restoreMenuPanelScroll() {
   window.requestAnimationFrame(apply)
 }
 
+function rememberPhoneThreadScroll() {
+  if (!ui.phoneOpen) {
+    return
+  }
+
+  const body = dom.app.querySelector("[data-phone-thread-scroll]")
+  const roleKey = body?.dataset.phoneThreadScroll
+  if (!body || !roleKey) {
+    return
+  }
+
+  ui.phoneThreadScrollTops[roleKey] = body.scrollTop
+}
+
+function restorePhoneThreadScroll() {
+  if (!ui.phoneOpen) {
+    return
+  }
+
+  const body = dom.app.querySelector("[data-phone-thread-scroll]")
+  const roleKey = body?.dataset.phoneThreadScroll
+  if (!body || !roleKey) {
+    return
+  }
+
+  if (ui.phoneThreadAutoScrollRoleKeys[roleKey]) {
+    delete ui.phoneThreadAutoScrollRoleKeys[roleKey]
+    const applyBottom = () => {
+      body.scrollTop = body.scrollHeight
+      ui.phoneThreadScrollTops[roleKey] = body.scrollTop
+    }
+    applyBottom()
+    window.requestAnimationFrame(applyBottom)
+    return
+  }
+
+  const top = ui.phoneThreadScrollTops[roleKey]
+  if (!Number.isFinite(top)) {
+    return
+  }
+
+  const apply = () => {
+    body.scrollTop = top
+  }
+  apply()
+  window.requestAnimationFrame(apply)
+}
+
+function rememberPhoneOptionsScroll() {
+  if (!ui.phoneOpen) {
+    return
+  }
+
+  const body = dom.app.querySelector("[data-phone-options-scroll]")
+  const key = body?.dataset.phoneOptionsScroll
+  if (!body || !key) {
+    return
+  }
+
+  ui.phoneOptionsScrollTops[key] = body.scrollTop
+}
+
+function restorePhoneOptionsScroll() {
+  if (!ui.phoneOpen) {
+    return
+  }
+
+  const body = dom.app.querySelector("[data-phone-options-scroll]")
+  const key = body?.dataset.phoneOptionsScroll
+  if (!body || !key) {
+    return
+  }
+
+  const top = ui.phoneOptionsScrollTops[key]
+  if (!Number.isFinite(top)) {
+    return
+  }
+
+  const apply = () => {
+    body.scrollTop = top
+  }
+  apply()
+  window.requestAnimationFrame(apply)
+}
+
+function bindScrollMemory() {
+  dom.app.querySelectorAll("[data-menu-panel-scroll]").forEach((element) => {
+    element.addEventListener("scroll", () => {
+      const panel = element.dataset.menuPanelScroll
+      if (!panel) {
+        return
+      }
+      ui.menuPanelScrollTops[panel] = element.scrollTop
+    }, { passive: true })
+  })
+
+  dom.app.querySelectorAll("[data-phone-thread-scroll]").forEach((element) => {
+    element.addEventListener("scroll", () => {
+      const roleKey = element.dataset.phoneThreadScroll
+      if (!roleKey) {
+        return
+      }
+      ui.phoneThreadScrollTops[roleKey] = element.scrollTop
+    }, { passive: true })
+  })
+
+  dom.app.querySelectorAll("[data-phone-options-scroll]").forEach((element) => {
+    element.addEventListener("scroll", () => {
+      const key = element.dataset.phoneOptionsScroll
+      if (!key) {
+        return
+      }
+      ui.phoneOptionsScrollTops[key] = element.scrollTop
+    }, { passive: true })
+  })
+}
+
+function getPhoneThreadMessageKey(thread) {
+  const messages = Array.isArray(thread?.messages) ? thread.messages : []
+  const lastMessage = messages.at(-1)
+  return `${messages.length}:${lastMessage?.id ?? ""}`
+}
+
+function updatePhoneThreadAutoScroll(roleKey, thread, { force = false } = {}) {
+  if (!roleKey) {
+    return
+  }
+
+  const nextKey = getPhoneThreadMessageKey(thread)
+  const previousKey = ui.phoneThreadLastMessageKeys[roleKey]
+  ui.phoneThreadLastMessageKeys[roleKey] = nextKey
+
+  if (force || previousKey === undefined || previousKey !== nextKey) {
+    ui.phoneThreadAutoScrollRoleKeys[roleKey] = true
+  }
+}
+
+async function fetchPhoneThread(roleKey, options = {}) {
+  const result = await api(`/api/phone/thread?roleKey=${encodeURIComponent(roleKey)}`, { method: "GET" })
+  updatePhoneThreadAutoScroll(roleKey, result.thread, { force: Boolean(options.forceScroll) })
+  ui.thread = result.thread
+  return result.thread
+}
+
+async function refreshSelectedPhoneThread(options = {}) {
+  if (!ui.phoneOpen || !ui.selectedRoleKey) {
+    return null
+  }
+
+  return fetchPhoneThread(ui.selectedRoleKey, options)
+}
+
 function openMenuPanel(panel) {
   if (ui.menuPanel !== panel) {
     ui.menuPanelScrollTops[panel] = 0
@@ -80,8 +242,21 @@ function openMenuPanel(panel) {
   render()
 }
 
+function returnToMainView() {
+  ui.phoneOpen = false
+  ui.menuPanel = null
+  ui.selectedRoleKey = null
+  ui.thread = null
+  ui.createOpen = false
+  ui.screen = "profiles"
+  render()
+}
+
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const endpoint = path.startsWith("/api/")
+    ? `${route.basePath}${path}`
+    : path
+  const response = await fetch(endpoint, {
     method: options.method ?? "POST",
     headers: options.body === undefined ? undefined : { "content-type": "application/json" },
     body: options.body === undefined ? undefined : JSON.stringify(options.body)
@@ -120,17 +295,16 @@ async function bootstrap() {
   await runTask("客户端已启动", async () => {
     const result = await api("/api/bootstrap")
     ui.data = result
-    ui.screen = result.hasSession ? "game" : result.profile ? "saves" : "profiles"
+    ui.screen = "profiles"
     return result
   })
 }
 
 async function syncStoryBundle() {
-  await runTask("故事 bundle 已同步", async () => {
-    const result = await api("/api/sync-story-bundle")
-    ui.prompts = []
-    return result
-  })
+  const result = await api("/api/sync-story-bundle")
+  ui.data = result
+  ui.prompts = []
+  return result
 }
 
 async function loadPrompts({ force = false } = {}) {
@@ -225,19 +399,12 @@ function topbar() {
   const title = data?.storyTitle ?? "Story HTML Client"
   const profile = data?.profile?.profile_name ? `角色：${data.profile.profile_name}` : "未选择角色"
   const stage = data?.stage ? `阶段：${data.stage}` : "正在初始化"
-  const phoneLabel = data?.phoneUnreadCount ? `P 手机 ${data.phoneUnreadCount}` : "P 手机"
 
   return `
     <header class="topbar">
       <div class="brand">
         <h1>${h(title)}</h1>
         <div class="subline">${h(profile)} · ${h(stage)}${ui.busy ? " · 正在处理..." : ""}</div>
-      </div>
-      <div class="top-actions">
-        <button class="ghost" data-action="sync">同步</button>
-        <button class="ghost" data-screen="profiles">角色</button>
-        <button class="ghost" data-screen="saves" ${data?.profile ? "" : "disabled"}>存档</button>
-        <button class="primary" data-action="open-phone" ${data?.hasSession ? "" : "disabled"}>${h(phoneLabel)}</button>
       </div>
     </header>
   `
@@ -529,7 +696,7 @@ function renderGameFooter(summary, data) {
         <button class="footer-command footer-next-day" data-action="advance-day">N 下一天</button>
       </div>
       <div class="footer-command-row">
-        <button class="footer-command primary" data-runtime-action='${h(JSON.stringify({ type: "continue" }))}'>Enter 继续</button>
+        <button class="footer-command primary" data-action="back-main">Esc 返回主界面</button>
         <button class="footer-command" data-action="toggle-pause">${summary.paused ? "Space 继续" : "Space 暂停"}</button>
         <button class="footer-command" data-menu-panel="notifications">L 消息</button>
         <button class="footer-command" data-menu-panel="bag">B 背包</button>
@@ -613,12 +780,12 @@ function renderPhoneDrawer() {
           </div>
         </div>
         <div class="thread-pane">
-          <div class="message-list">
+          <div class="message-list" data-phone-thread-scroll="${h(selected?.roleKey ?? "")}">
             ${selected ? `
               <div class="item-meta">${h(selected.label)} · ${h(selected.relationTrackLabel)} / ${h(selected.relationStageLabel)} · 好感 ${h(selected.favor)}/100</div>
               ${messages.length === 0 ? `<div class="empty">还没有往来消息。</div>` : messages.map((message) => `
                 <div class="bubble ${h(message.sender)}">
-                  <div class="bubble-meta">${h(message.senderLabel)} · ${h(message.gameMinute)}</div>
+                  <div class="bubble-meta">${h(message.senderLabel)} · ${h(message.gameMinuteLabel ?? message.gameMinute)}</div>
                   <div>${h(message.content)}</div>
                 </div>
               `).join("")}
@@ -630,7 +797,7 @@ function renderPhoneDrawer() {
                 <button class="${ui.phoneMode === "talk" ? "active" : ""}" data-phone-mode="talk">说话</button>
                 <button class="${ui.phoneMode === "action" ? "active" : ""}" data-phone-mode="action">动作</button>
               </div>
-              <div class="quick-grid">
+              <div class="quick-grid" data-phone-options-scroll="${h(`${selected.roleKey}:${ui.phoneMode}`)}">
                 ${thread?.canContact === false ? `<div class="empty">${h(thread.lockMessage ?? "对方现在不想理我。")}</div>` : ""}
                 ${options.length === 0 ? `<div class="empty">当前没有可用${ui.phoneMode === "talk" ? "短句" : "动作"}。</div>` : options.map((option) => {
                   const disabled = ui.phoneMode === "action" && option.disabled
@@ -655,6 +822,8 @@ function renderPhoneDrawer() {
 
 function render() {
   rememberMenuPanelScroll()
+  rememberPhoneThreadScroll()
+  rememberPhoneOptionsScroll()
 
   if (!ui.data) {
     dom.app.innerHTML = `
@@ -675,7 +844,10 @@ function render() {
   }
 
   bindEvents()
+  bindScrollMemory()
   restoreMenuPanelScroll()
+  restorePhoneThreadScroll()
+  restorePhoneOptionsScroll()
 }
 
 async function dispatchRuntimeAction(action) {
@@ -696,9 +868,8 @@ async function dispatchRuntimeAction(action) {
   }
 }
 
-async function loadPhoneThread(roleKey) {
-  const result = await api(`/api/phone/thread?roleKey=${encodeURIComponent(roleKey)}`, { method: "GET" })
-  ui.thread = result.thread
+async function loadPhoneThread(roleKey, options = {}) {
+  await fetchPhoneThread(roleKey, options)
   render()
 }
 
@@ -711,7 +882,7 @@ async function openPhoneThread(roleKey) {
   }).then((result) => {
     ui.data = result
   })
-  await loadPhoneThread(roleKey)
+  await loadPhoneThread(roleKey, { forceScroll: true })
 }
 
 async function saveGame() {
@@ -721,6 +892,15 @@ async function saveGame() {
     return
   }
   await runTask("进度已保存", async () => api("/api/session/save", { body: { slotId } }))
+}
+
+async function advanceDay() {
+  await runTask("已推进到下一天", async () => {
+    const result = await api("/api/session/advance-day")
+    ui.data = result
+    await refreshSelectedPhoneThread()
+    return result
+  })
 }
 
 async function selectInteractionOptionByNumber(key) {
@@ -755,10 +935,7 @@ async function tick() {
   try {
     const result = await api("/api/session/tick", { body: { deltaMs: 1000 } })
     ui.data = result
-    if (ui.phoneOpen && ui.selectedRoleKey) {
-      const thread = await api(`/api/phone/thread?roleKey=${encodeURIComponent(ui.selectedRoleKey)}`, { method: "GET" })
-      ui.thread = thread.thread
-    }
+    await refreshSelectedPhoneThread()
     render()
   } catch (error) {
     showToast(error instanceof Error ? error.message : String(error), "error")
@@ -778,25 +955,28 @@ function bindEvents() {
   dom.app.querySelectorAll("[data-action]").forEach((button) => {
     button.addEventListener("click", async () => {
       const action = button.dataset.action
-      if (action === "sync") {
-        await syncStoryBundle()
-      } else if (action === "toggle-create") {
+      if (action === "toggle-create") {
         ui.createOpen = !ui.createOpen
         if (ui.createOpen) {
           await runTask("建角字段已载入", async () => loadPrompts({ force: true }))
         }
         render()
       } else if (action === "new-game") {
-        await runTask("新游戏已启动", async () => api("/api/session/new"))
+        await runTask("新游戏已启动", async () => {
+          await syncStoryBundle()
+          return api("/api/session/new")
+        })
         ui.screen = "game"
       } else if (action === "refresh-saves") {
         await runTask("存档列表已刷新", async () => api("/api/saves/list"))
       } else if (action === "toggle-pause") {
         await runTask("时间状态已更新", async () => api("/api/session/time", { body: { paused: !ui.data.summary.paused } }))
       } else if (action === "advance-day") {
-        await runTask("已推进到下一天", async () => api("/api/session/advance-day"))
+        await advanceDay()
       } else if (action === "save-game") {
         await saveGame()
+      } else if (action === "back-main") {
+        returnToMainView()
       } else if (action === "open-phone") {
         ui.menuPanel = null
         ui.phoneOpen = true
@@ -828,7 +1008,10 @@ function bindEvents() {
 
   dom.app.querySelectorAll("[data-load-save]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await runTask("存档已读取", async () => api("/api/session/load", { body: { slotId: button.dataset.loadSave } }))
+      await runTask("存档已读取", async () => {
+        await syncStoryBundle()
+        return api("/api/session/load", { body: { slotId: button.dataset.loadSave } })
+      })
       ui.screen = "game"
     })
   })
@@ -848,12 +1031,16 @@ function bindEvents() {
 
   dom.app.querySelectorAll("[data-phone-contact]").forEach((button) => {
     button.addEventListener("click", async () => {
+      rememberPhoneThreadScroll()
+      rememberPhoneOptionsScroll()
       await openPhoneThread(button.dataset.phoneContact)
     })
   })
 
   dom.app.querySelectorAll("[data-phone-mode]").forEach((button) => {
     button.addEventListener("click", () => {
+      rememberPhoneThreadScroll()
+      rememberPhoneOptionsScroll()
       ui.phoneMode = button.dataset.phoneMode
       render()
     })
@@ -920,13 +1107,7 @@ document.addEventListener("keydown", async (event) => {
   }
 
   if (key === "escape") {
-    if (ui.phoneOpen || ui.menuPanel) {
-      ui.phoneOpen = false
-      ui.menuPanel = null
-      ui.selectedRoleKey = null
-      ui.thread = null
-      render()
-    }
+    returnToMainView()
   } else if (key === "p") {
     ui.menuPanel = null
     ui.phoneOpen = !ui.phoneOpen
@@ -935,7 +1116,7 @@ document.addEventListener("keydown", async (event) => {
     event.preventDefault()
     await runTask("时间状态已更新", async () => api("/api/session/time", { body: { paused: !ui.data.summary.paused } }))
   } else if (key === "n") {
-    await runTask("已推进到下一天", async () => api("/api/session/advance-day"))
+    await advanceDay()
   } else if (key === "l") {
     openMenuPanel("notifications")
   } else if (key === "i") {

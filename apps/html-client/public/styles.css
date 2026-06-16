@@ -130,7 +130,7 @@ code {
   width: min(1180px, 100%);
   min-height: 66px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 14px;
   margin: 0 auto;
@@ -171,7 +171,6 @@ code {
   font: 12px/1.4 var(--mono);
 }
 
-.top-actions,
 .button-row,
 .action-grid,
 .chip-row {
@@ -179,10 +178,6 @@ code {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-}
-
-.top-actions {
-  justify-content: flex-end;
 }
 
 .primary {
@@ -820,30 +815,23 @@ code {
 
 .phone-drawer {
   position: fixed;
-  top: max(12px, 5dvh);
-  right: max(12px, calc((100vw - 1180px) / 2));
-  bottom: max(12px, 5dvh);
+  top: max(18px, 4dvh);
+  left: 50%;
+  bottom: max(18px, 4dvh);
   z-index: 20;
-  width: min(560px, calc(100vw - 24px));
+  width: min(1120px, calc(100vw - 28px));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border: 2px solid #1c2320;
-  border-radius: 22px;
-  padding: 10px;
-  background: #070a08;
+  transform: translateX(-50%);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius);
+  background: #080d09;
   box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
 .phone-drawer::before {
-  content: "";
-  position: absolute;
-  top: 7px;
-  left: 50%;
-  width: 86px;
-  height: 5px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: #27302b;
+  content: none;
 }
 
 .drawer-backdrop {
@@ -858,11 +846,9 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-bottom: 0;
-  border-radius: 14px 14px 0 0;
+  min-height: 46px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
   background: #121a11;
 }
 
@@ -874,9 +860,7 @@ code {
 .phone-body {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(160px, 210px) minmax(0, 1fr);
-  border: 1px solid var(--line);
-  border-radius: 0 0 14px 14px;
+  grid-template-columns: minmax(230px, 30%) minmax(0, 1fr);
   background: var(--panel);
   overflow: hidden;
 }
@@ -889,13 +873,17 @@ code {
 
 .contacts-pane {
   border-right: 1px solid var(--line-soft);
-  padding: 10px;
+  padding: 8px;
   background: #0d130c;
 }
 
 .thread-pane {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  background:
+    linear-gradient(rgba(232, 240, 223, 0.022) 1px, transparent 1px),
+    #0b100a;
+  background-size: 100% 30px;
 }
 
 .message-list {
@@ -903,7 +891,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
+  padding: 14px 18px;
   overflow: auto;
 }
 
@@ -942,7 +930,7 @@ code {
 
 .phone-actions {
   border-top: 1px solid var(--line-soft);
-  padding: 10px;
+  padding: 10px 12px;
   background: #121a11;
 }
 
@@ -966,8 +954,11 @@ code {
 
 .quick-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 8px;
   margin-top: 10px;
+  max-height: min(190px, 28dvh);
+  overflow: auto;
 }
 
 .toast {
@@ -1004,10 +995,6 @@ code {
   .topbar {
     grid-template-columns: 1fr;
     align-items: stretch;
-  }
-
-  .top-actions {
-    justify-content: flex-start;
   }
 
   .content {
@@ -1113,16 +1100,17 @@ code {
   .phone-drawer {
     inset: 0;
     width: 100vw;
+    transform: none;
     border-radius: 0;
   }
 
   .phone-body {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(120px, 25dvh) minmax(0, 1fr);
+    grid-template-columns: clamp(150px, 34vw, 230px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .contacts-pane {
-    border-right: 0;
-    border-bottom: 1px solid var(--line-soft);
+    border-right: 1px solid var(--line-soft);
+    border-bottom: 0;
   }
 }

@@ -1,6 +1,6 @@
 # StoryScript 规范
 
-Last updated: `2026-06-11`
+Last updated: `2026-06-15`
 
 本文档定义 Story Manager 项目的统一脚本语言规范。
 

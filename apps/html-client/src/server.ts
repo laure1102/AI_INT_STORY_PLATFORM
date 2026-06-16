@@ -1,4 +1,4 @@
-﻿import { createReadStream, existsSync } from "node:fs"
+import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import path from "node:path"
@@ -122,6 +122,40 @@ function parseArgs(argv: string[]): HtmlClientOptions {
   }
 
   return options
+}
+
+function cloneOptionsForStory(options: HtmlClientOptions, storyId: string): HtmlClientOptions {
+  return {
+    ...options,
+    storyId
+  }
+}
+
+function normalizeStoryIdSegment(value: string) {
+  const decoded = decodeURIComponent(value).trim()
+  if (!/^[a-zA-Z0-9._-]+$/.test(decoded)) {
+    throw new HttpError(404, "故事不存在。")
+  }
+  return decoded
+}
+
+function getStoryRoute(pathname: string, defaultStoryId: string) {
+  const segments = pathname.split("/").filter(Boolean)
+  if (segments.length === 0) {
+    return {
+      storyId: defaultStoryId,
+      innerPathname: "/",
+      isRoot: true
+    }
+  }
+
+  const storyId = normalizeStoryIdSegment(segments[0]!)
+  const rest = segments.slice(1)
+  return {
+    storyId,
+    innerPathname: rest.length > 0 ? `/${rest.join("/")}` : "/",
+    isRoot: false
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -723,7 +757,7 @@ async function handleApi(app: HtmlClientApp, request: JsonRequest, response: Ser
     }
 
     const thread = state.bundle && snapshot
-      ? buildRuntimePhoneThreadView(state.bundle, snapshot, roleKey)
+      ? buildPhoneThreadClientView(buildRuntimePhoneThreadView(state.bundle, snapshot, roleKey))
       : null
 
     sendJson(response, 200, {
@@ -734,6 +768,20 @@ async function handleApi(app: HtmlClientApp, request: JsonRequest, response: Ser
   }
 
   throw new HttpError(404, "接口不存在。")
+}
+
+function buildPhoneThreadClientView(thread: ReturnType<typeof buildRuntimePhoneThreadView>) {
+  if (!thread) {
+    return null
+  }
+
+  return {
+    ...thread,
+    messages: thread.messages.map((message) => ({
+      ...message,
+      gameMinuteLabel: formatGameMinuteLabel(message.gameMinute)
+    }))
+  }
 }
 
 function getContentType(filePath: string) {
@@ -758,8 +806,18 @@ function getContentType(filePath: string) {
   }
 }
 
-async function serveStatic(request: IncomingMessage, response: ServerResponse, pathname: string) {
-  const safePathname = pathname === "/" ? "/index.html" : pathname
+async function sendIndexHtml(response: ServerResponse) {
+  const indexPath = path.join(publicDir, "index.html")
+  const indexHtml = await readFile(indexPath, "utf8")
+  response.writeHead(200, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store"
+  })
+  response.end(indexHtml)
+}
+
+async function serveStatic(request: IncomingMessage, response: ServerResponse, innerPathname: string, storyId: string) {
+  const safePathname = innerPathname === "/" ? "/index.html" : innerPathname
   const decodedPath = decodeURIComponent(safePathname)
   const normalizedPath = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, "")
   const filePath = path.join(publicDir, normalizedPath)
@@ -770,6 +828,11 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse, p
   }
 
   try {
+    if (safePathname === "/index.html") {
+      await sendIndexHtml(response)
+      return
+    }
+
     const statsRaw = await readFile(resolvedFilePath)
     response.writeHead(200, {
       "content-type": getContentType(resolvedFilePath),
@@ -778,12 +841,7 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse, p
     response.end(statsRaw)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      const indexPath = path.join(publicDir, "index.html")
-      response.writeHead(200, {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store"
-      })
-      createReadStream(indexPath).pipe(response)
+      await sendIndexHtml(response)
       return
     }
 
@@ -791,25 +849,54 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse, p
   }
 
   void request
+  void storyId
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
-  const app = createHtmlClientApp(options)
+  const apps = new Map<string, HtmlClientApp>()
+  const getApp = (storyId: string) => {
+    const cached = apps.get(storyId)
+    if (cached) {
+      return cached
+    }
+
+    const nextApp = createHtmlClientApp(cloneOptionsForStory(options, storyId))
+    apps.set(storyId, nextApp)
+    return nextApp
+  }
+
   const server = createServer(async (request: JsonRequest, response) => {
     try {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`)
       const pathname = url.pathname
+      const route = getStoryRoute(pathname, options.storyId)
 
-      if (pathname.startsWith("/api/")) {
-        if (request.method !== "GET") {
-          request.body = await readRequestBody(request)
-        }
-        await handleApi(app, request, response, pathname, url)
+      if (route.isRoot) {
+        response.writeHead(302, {
+          location: `/${encodeURIComponent(options.storyId)}/`
+        })
+        response.end()
         return
       }
 
-      await serveStatic(request, response, pathname)
+      if (route.innerPathname === "/" && !pathname.endsWith("/")) {
+        response.writeHead(302, {
+          location: `${pathname}/${url.search}`
+        })
+        response.end()
+        return
+      }
+
+      if (route.innerPathname.startsWith("/api/")) {
+        if (request.method !== "GET") {
+          request.body = await readRequestBody(request)
+        }
+        await handleApi(getApp(route.storyId), request, response, route.innerPathname, url)
+        return
+      }
+
+      await serveStatic(request, response, route.innerPathname, route.storyId)
     } catch (error) {
       sendError(response, error)
     }
@@ -817,7 +904,7 @@ async function main() {
 
   server.listen(options.port, options.host, () => {
     const displayHost = options.host === "0.0.0.0" ? "localhost" : options.host
-    console.log(`[html-client] ${options.storyId} listening on http://${displayHost}:${options.port}/`)
+    console.log(`[html-client] ${options.storyId} listening on http://${displayHost}:${options.port}/${options.storyId}`)
     console.log(`[html-client] runtime dir: ${options.runtimeDir}`)
   })
 }
