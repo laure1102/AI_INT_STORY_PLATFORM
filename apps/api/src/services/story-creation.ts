@@ -10,6 +10,9 @@ import {
   type AppAiAgentSettings,
   type AppSettingsFile,
   type StoryDocument,
+  type StoryDoingDefinition,
+  type StoryDoingFile,
+  type StoryDoingMenu,
   type StoryEventCollectionType,
   type StoryEventFile,
   type StoryEventLocationAssignment,
@@ -21,6 +24,12 @@ import {
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
+  type StoryPhoneActionLibraryEntry,
+  type StoryPhoneContactProfile,
+  type StoryPhoneFile,
+  type StoryPhonePersonalityDefinition,
+  type StoryPhoneReplyLibraryEntry,
+  type StoryPhoneTalkLibraryEntry,
   type StoryScriptValidationIssue,
   type StoryOnceDialogueDefinition,
   type StoryOnceEventFile,
@@ -39,8 +48,10 @@ import type {
   StoryCreationAgentLog,
   StoryCreationAgentRole,
   StoryCreationDraft,
+  StoryCreationDraftDoing,
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
+  StoryCreationDraftPhone,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftVariable
@@ -236,6 +247,123 @@ const draftItemSchema = z.object({
   usable: z.boolean().default(false).describe("是否可作为可使用道具。")
 })
 
+const phoneContactTrackSchema = z.enum(["none", "romance", "official", "social"])
+
+const draftPhoneLibraryScopeSchema = z.object({
+  role_keys: z.array(z.string()).default([]),
+  contact_tracks: z.array(phoneContactTrackSchema).default([]),
+  personality_ids: z.array(z.string()).default([]),
+  min_favor: z.number().int().min(0).max(100).default(0),
+  max_favor: z.number().int().min(0).max(100).default(100)
+})
+
+const draftPhoneInvokeDelaySchema = z.object({
+  unit: z.enum(["hours", "days", "months", "years"]),
+  value: z.number().int().min(1)
+})
+
+const draftPhoneInvocationSchema = z.object({
+  target_type: z.enum(["chain", "pool", "schedule"]).default("chain"),
+  event_id: z.string().min(1),
+  delay: draftPhoneInvokeDelaySchema.optional()
+})
+
+const draftPhonePersonalitySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().default(""),
+  descr: z.string().default(""),
+  style_tags: z.array(z.string()).default([])
+})
+
+const draftPhoneTalkSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().default(""),
+  tags: z.array(z.string()).default([]),
+  scope: draftPhoneLibraryScopeSchema.default({
+    role_keys: [],
+    contact_tracks: [],
+    personality_ids: [],
+    min_favor: 0,
+    max_favor: 100
+  }),
+  base_favor_delta: z.number().int().min(-100).max(100).default(0),
+  cooldown_hours: z.number().int().min(0).default(0),
+  invoke: draftPhoneInvocationSchema.optional()
+})
+
+const draftPhoneActionCostItemSchema = z.object({
+  item_id: z.string().min(1),
+  quantity: z.number().int().min(1).default(1)
+})
+
+const draftPhoneActionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().default(""),
+  text: z.string().default(""),
+  tags: z.array(z.string()).default([]),
+  scope: draftPhoneLibraryScopeSchema.default({
+    role_keys: [],
+    contact_tracks: [],
+    personality_ids: [],
+    min_favor: 0,
+    max_favor: 100
+  }),
+  base_favor_delta: z.number().int().min(-100).max(100).default(0),
+  cooldown_hours: z.number().int().min(0).default(0),
+  cost_money: z.number().min(0).default(0),
+  cost_items: z.array(draftPhoneActionCostItemSchema).default([]),
+  invoke: draftPhoneInvocationSchema.optional()
+})
+
+const draftPhoneReplySchema = z.object({
+  id: z.string().min(1),
+  tags: z.array(z.string()).default([]),
+  scope: draftPhoneLibraryScopeSchema.default({
+    role_keys: [],
+    contact_tracks: [],
+    personality_ids: [],
+    min_favor: 0,
+    max_favor: 100
+  }),
+  replies: z.array(z.string()).default([])
+})
+
+const draftPhoneProactiveMessageSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean().default(true),
+  trigger_expr: z.string().min(1),
+  cooldown_hours: z.number().int().min(1).default(24),
+  favor_delta: z.number().int().min(-100).max(100).default(0),
+  messages: z.array(z.string()).min(1),
+  reply_quick_message_ids: z.array(z.string()).default([])
+})
+
+const draftPhoneContactProfileSchema = z.object({
+  role_key: z.string().min(1),
+  enabled: z.boolean().default(true),
+  auto_add: z.boolean().default(true),
+  initial_favor: z.number().int().min(0).max(100).default(20),
+  preferred_tags: z.array(z.string()).default([]),
+  reply_by_tag: z.record(z.array(z.string()).default([])).default({}),
+  proactive_messages: z.array(draftPhoneProactiveMessageSchema).default([])
+})
+
+const emptyDraftPhone = {
+  personality_library: [],
+  talk_library: [],
+  action_library: [],
+  reply_library: [],
+  contact_profiles: []
+}
+
+const draftPhoneSchema = z.object({
+  personality_library: z.array(draftPhonePersonalitySchema).default([]),
+  talk_library: z.array(draftPhoneTalkSchema).default([]),
+  action_library: z.array(draftPhoneActionSchema).default([]),
+  reply_library: z.array(draftPhoneReplySchema).default([]),
+  contact_profiles: z.array(draftPhoneContactProfileSchema).default([])
+}).default(emptyDraftPhone)
+
 const draftEventSchema = z.object({
   collectionType: z.enum(["chain", "pool", "schedule"]).describe("目标事件集合。"),
   id: z.string().min(1).describe("ASCII 风格事件 id。"),
@@ -253,6 +381,41 @@ const draftEventSchema = z.object({
   loop: draftLoopRuleSchema.optional().describe("schedule 事件的定时规则。")
 })
 
+const draftDoingMenuSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  parent_id: z.string().default(""),
+  sort_order: z.number().int().default(100),
+  visible_expr: z.string().default(""),
+  descr: z.string().default("")
+})
+
+const draftDoingDefinitionSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  menu_id: z.string().min(1),
+  descr: z.string().default(""),
+  visible_expr: z.string().default(""),
+  cooldown_hours: z.number().int().min(0).default(0),
+  once: z.boolean().default(false),
+  init_script: z.string().default(""),
+  object_keys: z.array(z.string()).default([]),
+  presentation: draftPresentationSchema.default({ type: "silent" }),
+  location: z.string().default(""),
+  bgm: z.string().default(""),
+  end_script: z.string().default("")
+})
+
+const emptyDraftDoing = {
+  menus: [],
+  doings: []
+}
+
+const draftDoingSchema = z.object({
+  menus: z.array(draftDoingMenuSchema).default([]),
+  doings: z.array(draftDoingDefinitionSchema).default([])
+}).default(emptyDraftDoing)
+
 const draftSchema = z.object({
   title: z.string().min(1).describe("这批生成内容的标题。"),
   summary: z.string().describe("这批内容如何服务可玩网文体验。"),
@@ -262,6 +425,8 @@ const draftSchema = z.object({
   items: z.array(draftItemSchema).default([]).describe("建议新增或复用的物品。"),
   events: z.array(draftEventSchema).describe("建议新增的剧情事件草稿。"),
   variables: z.array(draftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
+  phone: draftPhoneSchema,
+  doing: draftDoingSchema,
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),
   warnings: z.array(z.string()).describe("风险、待人工确认点和不确定项。")
 })
@@ -327,6 +492,125 @@ const structuredDraftPresentationSchema = z.object({
   dialogues: z.array(draftDialogueSchema).describe("dialogue 类型的对白列表；其他类型填空数组。")
 })
 
+const structuredPhoneLibraryScopeSchema = z.object({
+  role_keys: z.array(z.string()).describe("适用角色 key，例如 important:zhuli；不限角色时填空数组。"),
+  contact_tracks: z.array(phoneContactTrackSchema).describe("适用关系轨道；不限轨道时填空数组。"),
+  personality_ids: z.array(z.string()).describe("适用性格 id；不限性格时填空数组。"),
+  min_favor: z.number().int().min(0).max(100).describe("最低好感度。"),
+  max_favor: z.number().int().min(0).max(100).describe("最高好感度。")
+})
+
+const structuredPhoneInvokeDelaySchema = z.object({
+  unit: z.enum(["hours", "days", "months", "years"]).describe("游戏内延迟单位。"),
+  value: z.number().int().min(1).describe("游戏内延迟数值。")
+})
+
+const structuredPhoneInvocationSchema = z.object({
+  target_type: z.enum(["chain", "pool", "schedule"]).describe("调用事件集合。"),
+  event_id: z.string().describe("调用目标事件 id。"),
+  delay: structuredPhoneInvokeDelaySchema.nullable().describe("延迟调用；不延迟时填 null。")
+})
+
+const structuredPhonePersonalitySchema = z.object({
+  id: z.string().min(1).describe("性格 id。"),
+  name: z.string().describe("性格名称。"),
+  descr: z.string().describe("性格说明。"),
+  style_tags: z.array(z.string()).describe("说话风格标签。")
+})
+
+const structuredPhoneTalkSchema = z.object({
+  id: z.string().min(1).describe("闲聊短句 id。"),
+  text: z.string().describe("玩家可选的闲聊短句文本。"),
+  tags: z.array(z.string()).describe("短句标签。"),
+  scope: structuredPhoneLibraryScopeSchema.describe("适用范围。"),
+  base_favor_delta: z.number().int().min(-100).max(100).describe("基础好感变化。"),
+  cooldown_hours: z.number().int().min(0).describe("冷却小时数。"),
+  invoke: structuredPhoneInvocationSchema.nullable().describe("发送后调用事件；不调用事件时填 null。")
+})
+
+const structuredPhoneActionCostItemSchema = z.object({
+  item_id: z.string().min(1).describe("消耗物品 id。"),
+  quantity: z.number().int().min(1).describe("消耗数量。")
+})
+
+const structuredPhoneActionSchema = z.object({
+  id: z.string().min(1).describe("动作 id。"),
+  label: z.string().describe("动作按钮名称。"),
+  text: z.string().describe("主角发出的动作消息文本。"),
+  tags: z.array(z.string()).describe("动作标签，例如 gift_basic、date、hotel。"),
+  scope: structuredPhoneLibraryScopeSchema.describe("适用范围。"),
+  base_favor_delta: z.number().int().min(-100).max(100).describe("基础好感变化。"),
+  cooldown_hours: z.number().int().min(0).describe("冷却小时数。"),
+  cost_money: z.number().min(0).describe("消耗资金；不消耗填 0。"),
+  cost_items: z.array(structuredPhoneActionCostItemSchema).describe("消耗物品；没有时填空数组。"),
+  invoke: structuredPhoneInvocationSchema.nullable().describe("动作后调用事件；不调用事件时填 null。")
+})
+
+const structuredPhoneReplySchema = z.object({
+  id: z.string().min(1).describe("回复库 id。"),
+  tags: z.array(z.string()).describe("匹配标签。"),
+  scope: structuredPhoneLibraryScopeSchema.describe("适用范围。"),
+  replies: z.array(z.string()).describe("NPC 可回复文本。")
+})
+
+const structuredPhoneProactiveMessageSchema = z.object({
+  id: z.string().min(1).describe("主动消息规则 id。"),
+  enabled: z.boolean().describe("是否启用。"),
+  trigger_expr: z.string().min(1).describe("触发条件 StoryScript 表达式。"),
+  cooldown_hours: z.number().int().min(1).describe("冷却小时数。"),
+  favor_delta: z.number().int().min(-100).max(100).describe("发送后好感变化。"),
+  messages: z.array(z.string()).describe("NPC 主动发送的消息；至少一条。"),
+  reply_quick_message_ids: z.array(z.string()).describe("推荐玩家回复短句 id；没有时填空数组。")
+})
+
+const structuredPhoneContactProfileSchema = z.object({
+  role_key: z.string().min(1).describe("联系人角色 key，例如 important:zhuli。"),
+  enabled: z.boolean().describe("是否启用联系人配置。"),
+  auto_add: z.boolean().describe("是否交互后自动加入联系人。"),
+  initial_favor: z.number().int().min(0).max(100).describe("初始好感度。"),
+  preferred_tags: z.array(z.string()).describe("该联系人偏好的短句/动作标签。"),
+  reply_by_tag: z.record(z.array(z.string())).describe("按标签定制 NPC 回复；没有填空对象。"),
+  proactive_messages: z.array(structuredPhoneProactiveMessageSchema).describe("主动消息规则；没有填空数组。")
+})
+
+const structuredPhoneDraftSchema = z.object({
+  personality_library: z.array(structuredPhonePersonalitySchema).describe("建议新增或覆盖的性格定义；没有填空数组。"),
+  talk_library: z.array(structuredPhoneTalkSchema).describe("建议新增或覆盖的闲聊短句；没有填空数组。"),
+  action_library: z.array(structuredPhoneActionSchema).describe("建议新增或覆盖的联系人动作；没有填空数组。"),
+  reply_library: z.array(structuredPhoneReplySchema).describe("建议新增或覆盖的 NPC 回复；没有填空数组。"),
+  contact_profiles: z.array(structuredPhoneContactProfileSchema).describe("建议新增或覆盖的联系人特配；没有填空数组。")
+})
+
+const structuredDoingMenuSchema = z.object({
+  id: z.string().min(1).describe("行动菜单 id。"),
+  title: z.string().min(1).describe("行动菜单显示名。"),
+  parent_id: z.string().describe("父菜单 id；根菜单填空字符串。"),
+  sort_order: z.number().int().describe("排序值，越小越靠前。"),
+  visible_expr: z.string().describe("显示条件 StoryScript；默认显示填空字符串。"),
+  descr: z.string().describe("菜单说明。")
+})
+
+const structuredDoingDefinitionSchema = z.object({
+  id: z.string().min(1).describe("行动 id。"),
+  title: z.string().min(1).describe("行动显示名。"),
+  menu_id: z.string().min(1).describe("所属行动菜单 id。"),
+  descr: z.string().describe("行动说明。"),
+  visible_expr: z.string().describe("显示条件 StoryScript；默认显示填空字符串。"),
+  cooldown_hours: z.number().int().min(0).describe("执行后冷却小时数。"),
+  once: z.boolean().describe("是否一次性行动。"),
+  init_script: z.string().describe("进入行动时执行的 StoryScript；没有填空字符串。"),
+  object_keys: z.array(z.string()).describe("事件对象引用，例如 player、normal:xxx、important:xxx。"),
+  presentation: structuredDraftPresentationSchema.describe("行动事件表现。"),
+  location: z.string().describe("地点 id；没有填空字符串。"),
+  bgm: z.string().describe("背景音乐；没有填空字符串。"),
+  end_script: z.string().describe("行动结束时执行的 StoryScript；没有填空字符串。")
+})
+
+const structuredDoingDraftSchema = z.object({
+  menus: z.array(structuredDoingMenuSchema).describe("建议新增或覆盖的行动菜单；没有填空数组。"),
+  doings: z.array(structuredDoingDefinitionSchema).describe("建议新增或覆盖的行动事件；没有填空数组。")
+})
+
 const structuredDraftEventSchema = z.object({
   collectionType: z.enum(["chain", "pool", "schedule"]).describe("目标事件集合。"),
   id: z.string().min(1).describe("ASCII 风格事件 id。"),
@@ -355,6 +639,8 @@ const structuredDraftSchema = z.object({
   items: z.array(structuredDraftItemSchema).describe("建议新增或复用的物品；没有物品时填空数组。"),
   events: z.array(structuredDraftEventSchema).describe("建议新增的剧情事件草稿。"),
   variables: z.array(structuredDraftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
+  phone: structuredPhoneDraftSchema.describe("建议新增或覆盖的手机联系人资产；没有时所有数组填空。"),
+  doing: structuredDoingDraftSchema.describe("建议新增或覆盖的玩家主动行动资产；没有时所有数组填空。"),
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),
   warnings: z.array(z.string()).describe("风险、待人工确认点和不确定项。")
 })
@@ -362,6 +648,8 @@ const structuredDraftSchema = z.object({
 type StructuredCreationDraft = z.infer<typeof structuredDraftSchema>
 type StructuredCreationDraftLoopRule = z.infer<typeof structuredDraftLoopRuleSchema>
 type StructuredCreationDraftPresentation = z.infer<typeof structuredDraftPresentationSchema>
+type StructuredCreationPhoneDraft = z.infer<typeof structuredPhoneDraftSchema>
+type StructuredCreationDoingDraft = z.infer<typeof structuredDoingDraftSchema>
 
 const generatedDialogueSchema = z.object({
   summary: z.string().describe("对白生成简述。"),
@@ -1091,6 +1379,74 @@ function formatExistingEvents(story: StoryDocument) {
   }, 12000)
 }
 
+function formatExistingPhoneAndDoing(story: StoryDocument) {
+  return formatJson({
+    phone: {
+      relationship_tracks: story.phone.relationship_tracks.map((track) => ({
+        id: track.id,
+        name: track.name,
+        stages: track.stages.map((stage) => ({
+          id: stage.id,
+          name: stage.name,
+          min_favor: stage.min_favor,
+          max_favor: stage.max_favor,
+          allow_contact: stage.allow_contact,
+          unlock_action_tags: stage.unlock_action_tags
+        }))
+      })),
+      personality_library: story.phone.personality_library.map((personality) => ({
+        id: personality.id,
+        name: personality.name,
+        style_tags: personality.style_tags
+      })),
+      talk_library: story.phone.talk_library.slice(0, 80).map((entry) => ({
+        id: entry.id,
+        text: entry.text,
+        tags: entry.tags,
+        scope: entry.scope
+      })),
+      action_library: story.phone.action_library.slice(0, 80).map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        tags: entry.tags,
+        scope: entry.scope,
+        cost_money: entry.cost_money
+      })),
+      reply_library: story.phone.reply_library.slice(0, 80).map((entry) => ({
+        id: entry.id,
+        tags: entry.tags,
+        scope: entry.scope,
+        replies: entry.replies.slice(0, 5)
+      })),
+      contact_profiles: story.phone.contact_profiles.map((profile) => ({
+        role_key: profile.role_key,
+        enabled: profile.enabled,
+        auto_add: profile.auto_add,
+        initial_favor: profile.initial_favor,
+        preferred_tags: profile.preferred_tags,
+        proactive_message_ids: profile.proactive_messages.map((rule) => rule.id)
+      }))
+    },
+    doing: {
+      menus: story.doing.menus.map((menu) => ({
+        id: menu.id,
+        title: menu.title,
+        parent_id: menu.parent_id,
+        visible_expr: menu.visible_expr
+      })),
+      doings: story.doing.doings.map((doing) => ({
+        id: doing.id,
+        title: doing.title,
+        menu_id: doing.menu_id,
+        visible_expr: doing.visible_expr,
+        cooldown_hours: doing.cooldown_hours,
+        once: doing.once,
+        location: doing.location
+      }))
+    }
+  }, 16000)
+}
+
 function buildStoryContext(
   story: StoryDocument,
   instruction: string,
@@ -1109,6 +1465,9 @@ function buildStoryContext(
     "",
     "【现有地点/角色/场景/物品】",
     formatExistingAssets(story, instruction, baseDraft),
+    "",
+    "【现有手机联系人/行动资产】",
+    formatExistingPhoneAndDoing(story),
     "",
     "【现有事件简表】",
     formatExistingEvents(story)
@@ -1139,6 +1498,9 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "物品获得、消耗和检查必须走 StoryScript 背包函数，不要编造 reward/items/consume 等未知事件字段。",
     "背包函数：bag_add(\"player\", \"item_id\", 1) 添加物品；bag_remove(\"player\", \"item_id\", 1) 扣除物品并返回 boolean；bag_count(\"player\", \"item_id\") 返回数量；bag_has(\"player\", \"item_id\", 1) 检查数量。",
     "背包函数里的 item_id 必须来自现有物品或本次 items 草稿；如果新增物品，事件脚本必须引用该新增物品 id。",
+    "手机联系人资产写入 phone 草稿：新增/调整联系人短句、动作、回复、联系人特配、主动消息规则时输出 phone，不要只在 notes 里描述。事件脚本只用于运行时行为，例如 phone_add_contact、phone_send_from_contact、phone_add_favor。",
+    "行动资产写入 doing 草稿：玩家可主动选择的玩法入口必须输出 doing 菜单/行动。doing 行动不配置 trigger_mode、trigger_expr、invoke_params；显示条件写 visible_expr，触发只来自菜单选择。",
+    "如果手机消息或剧情会临时开放一个玩家主动入口，应同时生成 doing 草稿，并在事件脚本或手机相关事件中使用 doing_unlock(\"doing_id\")。",
     "schedule 事件的 loop 必须包含 at、priority、after、before：at 用 HH:mm；同一时间点内 priority 数字越小越先执行；如果事件依赖另一个定时事件结果，必须把前置事件 id 写入 after。",
     "schedule priority 建议：结算/统计类 10-49，发放/奖励类 50-99，展示/日报/提示类 100+。例如每日发钱依赖每日人口结算时，发钱事件 after 应包含人口结算事件 id。",
     "只有在新增脚本且 StoryScript.md 明确不支持所需能力时才允许留空；如果当前待优化草稿里已有非空脚本，除非用户明确要求删除，否则必须保留并按规范修正。",
@@ -1443,6 +1805,95 @@ function toDraftPresentation(
   }
 }
 
+function toStructuredPhoneInvocation(
+  invoke: z.infer<typeof structuredPhoneInvocationSchema> | null
+): NonNullable<StoryPhoneTalkLibraryEntry["invoke"]> | undefined {
+  if (!invoke) {
+    return undefined
+  }
+
+  return {
+    target_type: invoke.target_type,
+    event_id: invoke.event_id,
+    ...(invoke.delay ? { delay: invoke.delay } : {})
+  }
+}
+
+function normalizeStructuredPhoneDraft(phone: StructuredCreationPhoneDraft): StoryCreationDraftPhone {
+  return {
+    personality_library: phone.personality_library.map((personality) => ({
+      id: personality.id,
+      name: personality.name,
+      descr: personality.descr,
+      style_tags: personality.style_tags
+    })),
+    talk_library: phone.talk_library.map((entry) => ({
+      id: entry.id,
+      text: entry.text,
+      tags: entry.tags,
+      scope: entry.scope,
+      base_favor_delta: entry.base_favor_delta,
+      cooldown_hours: entry.cooldown_hours,
+      ...(entry.invoke ? { invoke: toStructuredPhoneInvocation(entry.invoke) } : {})
+    })),
+    action_library: phone.action_library.map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      text: entry.text,
+      tags: entry.tags,
+      scope: entry.scope,
+      base_favor_delta: entry.base_favor_delta,
+      cooldown_hours: entry.cooldown_hours,
+      cost_money: entry.cost_money,
+      cost_items: entry.cost_items,
+      ...(entry.invoke ? { invoke: toStructuredPhoneInvocation(entry.invoke) } : {})
+    })),
+    reply_library: phone.reply_library.map((entry) => ({
+      id: entry.id,
+      tags: entry.tags,
+      scope: entry.scope,
+      replies: entry.replies
+    })),
+    contact_profiles: phone.contact_profiles.map((profile) => ({
+      role_key: profile.role_key,
+      enabled: profile.enabled,
+      auto_add: profile.auto_add,
+      initial_favor: profile.initial_favor,
+      preferred_tags: profile.preferred_tags,
+      reply_by_tag: profile.reply_by_tag,
+      proactive_messages: profile.proactive_messages
+    }))
+  }
+}
+
+function normalizeStructuredDoingDraft(doing: StructuredCreationDoingDraft): StoryCreationDraftDoing {
+  return {
+    menus: doing.menus.map((menu) => ({
+      id: menu.id,
+      title: menu.title,
+      parent_id: menu.parent_id,
+      sort_order: menu.sort_order,
+      visible_expr: menu.visible_expr,
+      descr: menu.descr
+    })),
+    doings: doing.doings.map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      menu_id: entry.menu_id,
+      descr: entry.descr,
+      visible_expr: entry.visible_expr,
+      cooldown_hours: entry.cooldown_hours,
+      once: entry.once,
+      init_script: entry.init_script,
+      object_keys: entry.object_keys,
+      presentation: toDraftPresentation(entry.presentation),
+      location: entry.location,
+      bgm: entry.bgm,
+      end_script: entry.end_script
+    }))
+  }
+}
+
 function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryCreationDraft {
   return {
     title: draft.title,
@@ -1501,6 +1952,8 @@ function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryCreation
       calc_rule: variable.calc_rule,
       ...(variable.value_type === "value" ? { value: variable.value } : {})
     })),
+    phone: normalizeStructuredPhoneDraft(draft.phone),
+    doing: normalizeStructuredDoingDraft(draft.doing),
     notes: draft.notes,
     warnings: draft.warnings
   }
@@ -1511,6 +1964,11 @@ interface DraftStoryScriptValidationIssue {
   eventId: string
   field: string
   message: string
+}
+
+interface DraftScriptValidationTarget {
+  collectionType: StoryCreationDraftEvent["collectionType"]
+  id: string
 }
 
 function cloneStoryValGroup(group: StoryValDefinition): StoryValDefinition {
@@ -1616,6 +2074,53 @@ function collectDraftValidationItemIds(story: StoryDocument, draft: StoryCreatio
   return Array.from(itemIds)
 }
 
+function collectDraftValidationRoleKeys(story: StoryDocument, draft: StoryCreationDraft) {
+  const roleKeys = new Set<string>()
+
+  for (const role of story.roles.normal.roles) {
+    const roleId = role.id.trim()
+    if (roleId) {
+      roleKeys.add(`normal:${roleId}`)
+    }
+  }
+
+  for (const role of story.roles.important.roles) {
+    const roleId = role.id.trim()
+    if (roleId) {
+      roleKeys.add(`important:${roleId}`)
+    }
+  }
+
+  for (const role of draft.roles) {
+    roleKeys.add(draftRoleKey(role))
+  }
+
+  return Array.from(roleKeys)
+}
+
+function collectDraftValidationDoingIds(story: StoryDocument, draft: StoryCreationDraft) {
+  const doingIds = new Set<string>()
+
+  for (const doing of story.doing.doings) {
+    const doingId = doing.id.trim()
+    if (doingId) {
+      doingIds.add(doingId)
+    }
+  }
+
+  for (const doing of draft.doing?.doings ?? []) {
+    const doingId = doing.id.trim()
+    if (!doingId) {
+      continue
+    }
+
+    doingIds.add(doingId)
+    doingIds.add(makeLooseId(doingId))
+  }
+
+  return Array.from(doingIds)
+}
+
 function formatStoryScriptIssue(issue: StoryScriptValidationIssue) {
   return issue.lineNumber > 0
     ? `第 ${issue.lineNumber} 行: ${issue.message}`
@@ -1624,14 +2129,14 @@ function formatStoryScriptIssue(issue: StoryScriptValidationIssue) {
 
 function pushDraftScriptValidationIssues(
   issues: DraftStoryScriptValidationIssue[],
-  event: StoryCreationDraftEvent,
+  target: DraftScriptValidationTarget,
   field: string,
   scriptIssues: StoryScriptValidationIssue[]
 ) {
   for (const issue of scriptIssues) {
     issues.push({
-      collectionType: event.collectionType,
-      eventId: event.id,
+      collectionType: target.collectionType,
+      eventId: target.id,
       field,
       message: formatStoryScriptIssue(issue)
     })
@@ -1649,14 +2154,40 @@ function getDraftEventCallTokens(event: StoryCreationDraftEvent) {
 
 function createDraftEventValidationContext(
   event: StoryCreationDraftEvent,
-  itemIds: string[],
+  context: {
+    itemIds: string[]
+    roleKeys: string[]
+    doingIds: string[]
+  },
   mode: "read" | "write"
 ) {
   return createStoryScriptValidationContext({
     values: mode === "write" ? getDraftEventCallTokens(event) : {},
     assignableValues: {},
-    itemIds,
-    bagMode: mode
+    itemIds: context.itemIds,
+    roleKeys: context.roleKeys,
+    doingIds: context.doingIds,
+    bagMode: mode,
+    phoneMode: mode,
+    doingMode: mode
+  })
+}
+
+function createDraftGlobalValidationContext(
+  context: {
+    itemIds: string[]
+    roleKeys: string[]
+    doingIds: string[]
+  },
+  mode: "read" | "write"
+) {
+  return createStoryScriptValidationContext({
+    itemIds: context.itemIds,
+    roleKeys: context.roleKeys,
+    doingIds: context.doingIds,
+    bagMode: mode,
+    phoneMode: mode,
+    doingMode: mode
   })
 }
 
@@ -1694,7 +2225,11 @@ function collectDraftStoryScriptValidationIssues(
   draft: StoryCreationDraft
 ) {
   const vals = buildDraftValidationVals(story, draft)
-  const itemIds = collectDraftValidationItemIds(story, draft)
+  const validationContext = {
+    itemIds: collectDraftValidationItemIds(story, draft),
+    roleKeys: collectDraftValidationRoleKeys(story, draft),
+    doingIds: collectDraftValidationDoingIds(story, draft)
+  }
   const issues: DraftStoryScriptValidationIssue[] = []
 
   for (const event of draft.events) {
@@ -1716,7 +2251,7 @@ function collectDraftStoryScriptValidationIssues(
             event.trigger_expr,
             "predicate",
             undefined,
-            createDraftEventValidationContext(event, itemIds, "read")
+            createDraftEventValidationContext(event, validationContext, "read")
           )
         )
       }
@@ -1731,7 +2266,7 @@ function collectDraftStoryScriptValidationIssues(
         event.init_script,
         "procedure",
         undefined,
-        createDraftEventValidationContext(event, itemIds, "write")
+        createDraftEventValidationContext(event, validationContext, "write")
       )
     )
 
@@ -1744,11 +2279,101 @@ function collectDraftStoryScriptValidationIssues(
         event.end_script,
         "procedure",
         undefined,
-        createDraftEventValidationContext(event, itemIds, "write")
+        createDraftEventValidationContext(event, validationContext, "write")
       )
     )
 
     validateDraftEventPresentationTemplates(vals, event, issues)
+  }
+
+  for (const doing of draft.doing?.menus ?? []) {
+    if (!doing.visible_expr.trim()) {
+      continue
+    }
+
+    pushDraftScriptValidationIssues(
+      issues,
+      {
+        collectionType: "pool",
+        id: `doing.menu:${doing.id}`
+      },
+      "visible_expr",
+      validateStoryScriptContent(
+        vals,
+        doing.visible_expr,
+        "predicate",
+        undefined,
+        createDraftGlobalValidationContext(validationContext, "read")
+      )
+    )
+  }
+
+  for (const doing of draft.doing?.doings ?? []) {
+    const target = {
+      collectionType: "pool" as const,
+      id: `doing:${doing.id}`
+    }
+
+    if (doing.visible_expr.trim()) {
+      pushDraftScriptValidationIssues(
+        issues,
+        target,
+        "visible_expr",
+        validateStoryScriptContent(
+          vals,
+          doing.visible_expr,
+          "predicate",
+          undefined,
+          createDraftGlobalValidationContext(validationContext, "read")
+        )
+      )
+    }
+
+    pushDraftScriptValidationIssues(
+      issues,
+      target,
+      "init_script",
+      validateStoryScriptContent(
+        vals,
+        doing.init_script,
+        "procedure",
+        undefined,
+        createDraftGlobalValidationContext(validationContext, "write")
+      )
+    )
+
+    pushDraftScriptValidationIssues(
+      issues,
+      target,
+      "end_script",
+      validateStoryScriptContent(
+        vals,
+        doing.end_script,
+        "procedure",
+        undefined,
+        createDraftGlobalValidationContext(validationContext, "write")
+      )
+    )
+  }
+
+  for (const profile of draft.phone?.contact_profiles ?? []) {
+    for (const rule of profile.proactive_messages) {
+      pushDraftScriptValidationIssues(
+        issues,
+        {
+          collectionType: "pool",
+          id: `phone:${profile.role_key}:${rule.id}`
+        },
+        "proactive_messages.trigger_expr",
+        validateStoryScriptContent(
+          vals,
+          rule.trigger_expr,
+          "predicate",
+          undefined,
+          createDraftGlobalValidationContext(validationContext, "read")
+        )
+      )
+    }
   }
 
   return issues
@@ -1938,6 +2563,202 @@ function normalizeDraftPresentation(
   }
 }
 
+function normalizePhoneScope(
+  scope: StoryPhoneTalkLibraryEntry["scope"],
+  roleIdMap: Map<string, string>
+): StoryPhoneTalkLibraryEntry["scope"] {
+  const minFavor = Number.isFinite(scope.min_favor) ? Math.max(0, Math.min(100, Math.trunc(scope.min_favor))) : 0
+  const maxFavor = Number.isFinite(scope.max_favor) ? Math.max(0, Math.min(100, Math.trunc(scope.max_favor))) : 100
+
+  return {
+    role_keys: Array.from(
+      new Set((scope.role_keys ?? []).map((roleKey) => normalizeRoleReference(roleKey, roleIdMap)).filter(Boolean))
+    ),
+    contact_tracks: Array.from(new Set((scope.contact_tracks ?? []).filter((track) => track !== "none"))),
+    personality_ids: Array.from(new Set((scope.personality_ids ?? []).map(makeLooseId).filter(Boolean))),
+    min_favor: Math.min(minFavor, maxFavor),
+    max_favor: Math.max(minFavor, maxFavor)
+  }
+}
+
+function normalizePhoneInvoke<T extends { invoke?: StoryPhoneTalkLibraryEntry["invoke"] }>(entry: T): T {
+  if (!entry.invoke) {
+    return entry
+  }
+
+  return {
+    ...entry,
+    invoke: {
+      ...entry.invoke,
+      event_id: makeLooseId(entry.invoke.event_id)
+    }
+  }
+}
+
+function normalizeDraftPhone(
+  phone: StoryCreationDraft["phone"],
+  roleIdMap: Map<string, string>
+): StoryCreationDraftPhone {
+  const usedPersonalityIds = new Set<string>()
+  const usedTalkIds = new Set<string>()
+  const usedActionIds = new Set<string>()
+  const usedReplyIds = new Set<string>()
+  const usedProfileRoleKeys = new Set<string>()
+
+  const personalities = (phone?.personality_library ?? []).map((personality, index) => ({
+    id: makeUniqueId(personality.id, `phone-personality-${index + 1}`, usedPersonalityIds),
+    name: personality.name?.trim() ?? "",
+    descr: personality.descr ?? "",
+    style_tags: Array.from(new Set((personality.style_tags ?? []).map((tag) => tag.trim()).filter(Boolean)))
+  }))
+
+  const talks = (phone?.talk_library ?? []).map((entry, index) => normalizePhoneInvoke({
+    id: makeUniqueId(entry.id, `phone-talk-${index + 1}`, usedTalkIds),
+    text: entry.text ?? "",
+    tags: Array.from(new Set((entry.tags ?? []).map((tag) => tag.trim()).filter(Boolean))),
+    scope: normalizePhoneScope(entry.scope, roleIdMap),
+    base_favor_delta: Math.max(-100, Math.min(100, Math.trunc(entry.base_favor_delta ?? 0))),
+    cooldown_hours: Math.max(0, Math.trunc(entry.cooldown_hours ?? 0)),
+    ...(entry.invoke ? { invoke: entry.invoke } : {})
+  }))
+
+  const actions = (phone?.action_library ?? []).map((entry, index) => normalizePhoneInvoke({
+    id: makeUniqueId(entry.id, `phone-action-${index + 1}`, usedActionIds),
+    label: entry.label ?? "",
+    text: entry.text ?? "",
+    tags: Array.from(new Set((entry.tags ?? []).map((tag) => tag.trim()).filter(Boolean))),
+    scope: normalizePhoneScope(entry.scope, roleIdMap),
+    base_favor_delta: Math.max(-100, Math.min(100, Math.trunc(entry.base_favor_delta ?? 0))),
+    cooldown_hours: Math.max(0, Math.trunc(entry.cooldown_hours ?? 0)),
+    cost_money: Math.max(0, entry.cost_money ?? 0),
+    cost_items: (entry.cost_items ?? []).map((item) => ({
+      item_id: makeLooseId(item.item_id),
+      quantity: Math.max(1, Math.trunc(item.quantity ?? 1))
+    })).filter((item) => item.item_id),
+    ...(entry.invoke ? { invoke: entry.invoke } : {})
+  }))
+
+  const replies = (phone?.reply_library ?? []).map((entry, index) => ({
+    id: makeUniqueId(entry.id, `phone-reply-${index + 1}`, usedReplyIds),
+    tags: Array.from(new Set((entry.tags ?? []).map((tag) => tag.trim()).filter(Boolean))),
+    scope: normalizePhoneScope(entry.scope, roleIdMap),
+    replies: (entry.replies ?? []).map((reply) => reply.trim()).filter(Boolean)
+  }))
+
+  const contactProfiles = (phone?.contact_profiles ?? []).flatMap((profile) => {
+    const roleKey = normalizeRoleReference(profile.role_key, roleIdMap)
+    if (!roleKey || roleKey === "player" || usedProfileRoleKeys.has(roleKey)) {
+      return []
+    }
+
+    usedProfileRoleKeys.add(roleKey)
+
+    return [{
+      role_key: roleKey,
+      enabled: profile.enabled ?? true,
+      auto_add: profile.auto_add ?? true,
+      initial_favor: Math.max(0, Math.min(100, Math.trunc(profile.initial_favor ?? 20))),
+      preferred_tags: Array.from(new Set((profile.preferred_tags ?? []).map((tag) => tag.trim()).filter(Boolean))),
+      reply_by_tag: Object.fromEntries(
+        Object.entries(profile.reply_by_tag ?? {})
+          .map(([tag, replies]) => {
+            const nextTag = tag.trim()
+            const nextReplies = (replies ?? []).map((reply) => reply.trim()).filter(Boolean)
+            return [nextTag, nextReplies] as const
+          })
+          .filter(([tag, replies]) => tag && replies.length > 0)
+      ),
+      proactive_messages: (profile.proactive_messages ?? []).map((rule, index) => ({
+        id: makeLooseId(rule.id) || `proactive-${index + 1}`,
+        enabled: rule.enabled ?? true,
+        trigger_expr: rule.trigger_expr ?? "",
+        cooldown_hours: Math.max(1, Math.trunc(rule.cooldown_hours ?? 24)),
+        favor_delta: Math.max(-100, Math.min(100, Math.trunc(rule.favor_delta ?? 0))),
+        messages: (rule.messages ?? []).map((message) => message.trim()).filter(Boolean),
+        reply_quick_message_ids: Array.from(new Set((rule.reply_quick_message_ids ?? []).map(makeLooseId).filter(Boolean)))
+      })).filter((rule) => rule.trigger_expr.trim() && rule.messages.length > 0)
+    }]
+  })
+
+  return {
+    personality_library: personalities,
+    talk_library: talks,
+    action_library: actions,
+    reply_library: replies,
+    contact_profiles: contactProfiles
+  }
+}
+
+function normalizeDraftDoing(
+  doing: StoryCreationDraft["doing"],
+  roleIdMap: Map<string, string>,
+  locationIdMap: Map<string, string>
+): StoryCreationDraftDoing {
+  const usedMenuIds = new Set<string>()
+  const usedDoingIds = new Set<string>()
+  const menuIdMap = new Map<string, string>()
+
+  const menus = (doing?.menus ?? []).map((menu, index) => {
+    const id = makeUniqueId(menu.id, `doing-menu-${index + 1}`, usedMenuIds)
+    menuIdMap.set(menu.id, id)
+    menuIdMap.set(makeLooseId(menu.id), id)
+
+    return {
+      id,
+      title: menu.title?.trim() || id,
+      parent_id: "",
+      sort_order: Number.isFinite(menu.sort_order) ? Math.trunc(menu.sort_order) : 100,
+      visible_expr: menu.visible_expr ?? "",
+      descr: menu.descr ?? ""
+    }
+  })
+
+  const menuIds = new Set(menus.map((menu) => menu.id))
+  const normalizedMenus = menus.map((menu, index) => {
+    const sourceMenu = doing?.menus?.[index]
+    const parentId = sourceMenu?.parent_id
+      ? menuIdMap.get(sourceMenu.parent_id) ?? menuIdMap.get(makeLooseId(sourceMenu.parent_id)) ?? makeLooseId(sourceMenu.parent_id)
+      : ""
+
+    return {
+      ...menu,
+      parent_id: parentId && parentId !== menu.id && menuIds.has(parentId) ? parentId : ""
+    }
+  })
+
+  const firstMenuId = normalizedMenus[0]?.id ?? ""
+  const doings = (doing?.doings ?? []).map((entry, index) => {
+    const id = makeUniqueId(entry.id, `doing-${index + 1}`, usedDoingIds)
+    const menuId = menuIdMap.get(entry.menu_id) ?? menuIdMap.get(makeLooseId(entry.menu_id)) ?? makeLooseId(entry.menu_id)
+    const location = entry.location.trim()
+      ? locationIdMap.get(entry.location) ?? makeLooseId(entry.location)
+      : ""
+
+    return {
+      id,
+      title: entry.title?.trim() || id,
+      menu_id: menuIds.has(menuId) ? menuId : firstMenuId,
+      descr: entry.descr ?? "",
+      visible_expr: entry.visible_expr ?? "",
+      cooldown_hours: Math.max(0, Math.trunc(entry.cooldown_hours ?? 0)),
+      once: entry.once ?? false,
+      init_script: entry.init_script ?? "",
+      object_keys: Array.from(
+        new Set((entry.object_keys ?? []).map((roleKey) => normalizeRoleReference(roleKey, roleIdMap)).filter(Boolean))
+      ),
+      presentation: normalizeDraftPresentation(entry.presentation, roleIdMap),
+      location,
+      bgm: entry.bgm ?? "",
+      end_script: entry.end_script ?? ""
+    }
+  }).filter((entry) => entry.menu_id)
+
+  return {
+    menus: normalizedMenus,
+    doings
+  }
+}
+
 function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
   const locationIdMap = new Map<string, string>()
   const roleIdMap = new Map<string, string>()
@@ -2059,7 +2880,9 @@ function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
     roles,
     items,
     events,
-    variables
+    variables,
+    phone: normalizeDraftPhone(draft.phone, roleIdMap),
+    doing: normalizeDraftDoing(draft.doing, roleIdMap, locationIdMap)
   }
 }
 
@@ -2082,6 +2905,17 @@ function draftEventKey(event: StoryCreationDraftEvent) {
 
 function upsertById<T extends { id: string }>(items: T[], nextItem: T) {
   const existingIndex = items.findIndex((item) => item.id === nextItem.id)
+
+  if (existingIndex < 0) {
+    return [...items, nextItem]
+  }
+
+  return items.map((item, index) => (index === existingIndex ? nextItem : item))
+}
+
+function upsertByKey<T>(items: T[], nextItem: T, getKey: (item: T) => string) {
+  const nextKey = getKey(nextItem)
+  const existingIndex = items.findIndex((item) => getKey(item) === nextKey)
 
   if (existingIndex < 0) {
     return [...items, nextItem]
@@ -2185,6 +3019,202 @@ function collectAvailableRoleKeys(roles: StoryRolesFile) {
     ...roles.normal.roles.map((role) => `normal:${role.id}`),
     ...roles.important.roles.map((role) => `important:${role.id}`)
   ])
+}
+
+function filterPhoneScopeForApply(
+  scope: StoryPhoneTalkLibraryEntry["scope"],
+  options: {
+    availableRoleKeys: Set<string>
+    availablePersonalityIds: Set<string>
+    warnings: string[]
+    label: string
+  }
+): StoryPhoneTalkLibraryEntry["scope"] {
+  const roleKeys = scope.role_keys.filter((roleKey) => {
+    if (options.availableRoleKeys.has(roleKey)) {
+      return true
+    }
+
+    options.warnings.push(`${options.label} 引用了不存在或未应用的联系人角色 ${roleKey}，已从适用范围移除。`)
+    return false
+  })
+  const personalityIds = scope.personality_ids.filter((personalityId) => {
+    if (options.availablePersonalityIds.has(personalityId)) {
+      return true
+    }
+
+    options.warnings.push(`${options.label} 引用了不存在或未应用的性格 ${personalityId}，已从适用范围移除。`)
+    return false
+  })
+
+  return {
+    ...scope,
+    role_keys: roleKeys,
+    personality_ids: personalityIds
+  }
+}
+
+function filterPhoneInvokeForApply<T extends { invoke?: StoryPhoneTalkLibraryEntry["invoke"] }>(
+  entry: T,
+  options: {
+    availableEventIdsByType: Record<"chain" | "pool" | "schedule", Set<string>>
+    warnings: string[]
+    label: string
+  }
+): T {
+  if (!entry.invoke) {
+    return entry
+  }
+
+  if (options.availableEventIdsByType[entry.invoke.target_type].has(entry.invoke.event_id)) {
+    return entry
+  }
+
+  options.warnings.push(
+    `${options.label} 调用了不存在或未应用的${entry.invoke.target_type}事件 ${entry.invoke.event_id}，已移除该调用。`
+  )
+
+  const { invoke: _invoke, ...rest } = entry
+  return rest as T
+}
+
+function filterPhoneActionCostItems(
+  entry: StoryPhoneActionLibraryEntry,
+  availableItemIds: Set<string>,
+  warnings: string[]
+) {
+  return {
+    ...entry,
+    cost_items: entry.cost_items.filter((item) => {
+      if (availableItemIds.has(item.item_id)) {
+        return true
+      }
+
+      warnings.push(`联系人动作 ${entry.id} 消耗了不存在或未应用的物品 ${item.item_id}，已移除该消耗。`)
+      return false
+    })
+  }
+}
+
+function mergePhoneContactProfile(
+  draftProfile: StoryPhoneContactProfile,
+  existing?: StoryPhoneContactProfile
+): StoryPhoneContactProfile {
+  return {
+    ...draftProfile,
+    reply_by_tag: {
+      ...(existing?.reply_by_tag ?? {}),
+      ...draftProfile.reply_by_tag
+    },
+    proactive_messages: [
+      ...(existing?.proactive_messages ?? []).filter((rule) =>
+        !draftProfile.proactive_messages.some((draftRule) => draftRule.id === rule.id)
+      ),
+      ...draftProfile.proactive_messages
+    ]
+  }
+}
+
+function filterDoingPresentationForApply(
+  doing: StoryDoingDefinition,
+  availableRoleKeys: Set<string>,
+  warnings: string[]
+): StoryDoingDefinition["presentation"] {
+  if (doing.presentation.type !== "dialogue") {
+    return doing.presentation
+  }
+
+  const objectKeys = new Set(doing.object_keys)
+  return {
+    type: "dialogue",
+    dialogues: doing.presentation.dialogues.map((dialogue) => {
+      if (dialogue.speaker_type === "player") {
+        return {
+          ...dialogue,
+          speaker_key: "player"
+        }
+      }
+
+      if (objectKeys.has(dialogue.speaker_key) && availableRoleKeys.has(dialogue.speaker_key)) {
+        return dialogue
+      }
+
+      warnings.push(`行动 ${doing.id} 的对白说话人 ${dialogue.speaker_key} 不可用，已改为 player。`)
+      return {
+        ...dialogue,
+        speaker_type: "player" as const,
+        speaker_key: "player"
+      }
+    })
+  }
+}
+
+function normalizeDoingForApply(
+  doing: StoryDoingDefinition,
+  options: {
+    availableLocationIds: Set<string>
+    availableRoleKeys: Set<string>
+    availableMenuIds: Set<string>
+    warnings: string[]
+  }
+): StoryDoingDefinition | null {
+  if (!options.availableMenuIds.has(doing.menu_id)) {
+    options.warnings.push(`行动 ${doing.id} 引用了不存在或未应用的菜单 ${doing.menu_id}，未写入 doing.json5。`)
+    return null
+  }
+
+  const location = doing.location.trim()
+  const nextLocation = location && options.availableLocationIds.has(location) ? location : ""
+  if (location && !nextLocation) {
+    options.warnings.push(`行动 ${doing.id} 引用了不存在或未应用的地点 ${location}，已清空地点。`)
+  }
+
+  const objectKeys = doing.object_keys.filter((objectKey) => {
+    if (objectKey === "player" || options.availableRoleKeys.has(objectKey)) {
+      return true
+    }
+
+    options.warnings.push(`行动 ${doing.id} 引用了不存在或未应用的角色 ${objectKey}，已从对象列表移除。`)
+    return false
+  })
+  const nextDoing = {
+    ...doing,
+    location: nextLocation,
+    object_keys: objectKeys
+  }
+
+  return {
+    ...nextDoing,
+    presentation: filterDoingPresentationForApply(nextDoing, options.availableRoleKeys, options.warnings)
+  }
+}
+
+function normalizeDoingMenuForApply(
+  menu: StoryDoingMenu,
+  availableMenuIds: Set<string>,
+  warnings: string[]
+): StoryDoingMenu {
+  const parentId = menu.parent_id.trim()
+
+  if (!parentId || parentId === menu.id) {
+    return {
+      ...menu,
+      parent_id: ""
+    }
+  }
+
+  if (availableMenuIds.has(parentId)) {
+    return {
+      ...menu,
+      parent_id: parentId
+    }
+  }
+
+  warnings.push(`行动菜单 ${menu.id} 引用了不存在或未应用的父级菜单 ${parentId}，已作为根菜单写入。`)
+  return {
+    ...menu,
+    parent_id: ""
+  }
 }
 
 function draftVariableKey(variable: StoryCreationDraftVariable) {
@@ -2562,6 +3592,13 @@ export async function applyStoryCreationDraft(
   const selectedRoleKeys = toSelectionSet(request.selection.roleKeys ?? [])
   const selectedLegacyRoleIds = toSelectionSet(request.selection.roleIds ?? [])
   const selectedItemIds = toSelectionSet(request.selection.itemIds ?? [])
+  const selectedPhonePersonalityIds = toSelectionSet(request.selection.phonePersonalityIds ?? [])
+  const selectedPhoneTalkIds = toSelectionSet(request.selection.phoneTalkIds ?? [])
+  const selectedPhoneActionIds = toSelectionSet(request.selection.phoneActionIds ?? [])
+  const selectedPhoneReplyIds = toSelectionSet(request.selection.phoneReplyIds ?? [])
+  const selectedPhoneContactProfileKeys = toSelectionSet(request.selection.phoneContactProfileKeys ?? [])
+  const selectedDoingMenuIds = toSelectionSet(request.selection.doingMenuIds ?? [])
+  const selectedDoingIds = toSelectionSet(request.selection.doingIds ?? [])
   const selectedEventKeys = toSelectionSet(request.selection.eventKeys)
   const selectedVariableKeys = toSelectionSet([
     ...(request.selection.variableKeys ?? []),
@@ -2573,6 +3610,13 @@ export async function applyStoryCreationDraft(
   let appliedRoles = 0
   let appliedItems = 0
   let appliedVariables = 0
+  let appliedPhonePersonalities = 0
+  let appliedPhoneTalks = 0
+  let appliedPhoneActions = 0
+  let appliedPhoneReplies = 0
+  let appliedPhoneContactProfiles = 0
+  let appliedDoingMenus = 0
+  let appliedDoings = 0
 
   const nextEventLocations: StoryEventLocationFile = {
     ...story.eventLocations,
@@ -2657,8 +3701,24 @@ export async function applyStoryCreationDraft(
       .filter((event) => event.collectionType === "chain")
       .map((event) => event.id)
   ])
+  const availableEventIdsByType = {
+    chain: availableChainIds,
+    pool: new Set([
+      ...story.poolEvents.map((event) => event.id),
+      ...selectedEvents
+        .filter((event) => event.collectionType === "pool")
+        .map((event) => event.id)
+    ]),
+    schedule: new Set([
+      ...story.scheduleEvents.map((event) => event.id),
+      ...selectedEvents
+        .filter((event) => event.collectionType === "schedule")
+        .map((event) => event.id)
+    ])
+  } satisfies Record<"chain" | "pool" | "schedule", Set<string>>
   const availableLocationIds = new Set(nextEventLocations.assignments.map((location) => location.id))
   const availableRoleKeys = collectAvailableRoleKeys(nextRoles)
+  const availableItemIds = new Set(nextItems.items.map((item) => item.id))
   const eventsToWrite = selectedEvents.map((event) =>
     toStoryEvent(event, {
       availableChainIds,
@@ -2667,6 +3727,165 @@ export async function applyStoryCreationDraft(
       warnings
     })
   )
+
+  const nextPhone: StoryPhoneFile = {
+    ...story.phone,
+    personality_library: story.phone.personality_library,
+    talk_library: story.phone.talk_library,
+    action_library: story.phone.action_library,
+    reply_library: story.phone.reply_library,
+    player_quick_messages: story.phone.player_quick_messages,
+    contact_profiles: story.phone.contact_profiles
+  }
+  const availablePhonePersonalityIds = new Set(nextPhone.personality_library.map((personality) => personality.id))
+
+  for (const personality of draft.phone?.personality_library ?? []) {
+    if (!selectedPhonePersonalityIds.has(personality.id)) {
+      continue
+    }
+
+    nextPhone.personality_library = upsertById(nextPhone.personality_library, personality)
+    availablePhonePersonalityIds.add(personality.id)
+    appliedPhonePersonalities += 1
+  }
+
+  for (const entry of draft.phone?.talk_library ?? []) {
+    if (!selectedPhoneTalkIds.has(entry.id)) {
+      continue
+    }
+
+    const nextEntry = filterPhoneInvokeForApply(
+      {
+        ...entry,
+        scope: filterPhoneScopeForApply(entry.scope, {
+          availablePersonalityIds: availablePhonePersonalityIds,
+          availableRoleKeys,
+          label: `联系人闲聊 ${entry.id}`,
+          warnings
+        })
+      },
+      {
+        availableEventIdsByType,
+        label: `联系人闲聊 ${entry.id}`,
+        warnings
+      }
+    )
+
+    nextPhone.talk_library = upsertById(nextPhone.talk_library, nextEntry)
+    appliedPhoneTalks += 1
+  }
+
+  for (const entry of draft.phone?.action_library ?? []) {
+    if (!selectedPhoneActionIds.has(entry.id)) {
+      continue
+    }
+
+    const nextEntry = filterPhoneInvokeForApply(
+      filterPhoneActionCostItems(
+        {
+          ...entry,
+          scope: filterPhoneScopeForApply(entry.scope, {
+            availablePersonalityIds: availablePhonePersonalityIds,
+            availableRoleKeys,
+            label: `联系人动作 ${entry.id}`,
+            warnings
+          })
+        },
+        availableItemIds,
+        warnings
+      ),
+      {
+        availableEventIdsByType,
+        label: `联系人动作 ${entry.id}`,
+        warnings
+      }
+    )
+
+    nextPhone.action_library = upsertById(nextPhone.action_library, nextEntry)
+    appliedPhoneActions += 1
+  }
+
+  for (const entry of draft.phone?.reply_library ?? []) {
+    if (!selectedPhoneReplyIds.has(entry.id)) {
+      continue
+    }
+
+    const nextEntry = {
+      ...entry,
+      scope: filterPhoneScopeForApply(entry.scope, {
+        availablePersonalityIds: availablePhonePersonalityIds,
+        availableRoleKeys,
+        label: `联系人回复 ${entry.id}`,
+        warnings
+      })
+    }
+
+    nextPhone.reply_library = upsertById(nextPhone.reply_library, nextEntry)
+    appliedPhoneReplies += 1
+  }
+
+  for (const profile of draft.phone?.contact_profiles ?? []) {
+    if (!selectedPhoneContactProfileKeys.has(profile.role_key)) {
+      continue
+    }
+
+    if (!availableRoleKeys.has(profile.role_key) || profile.role_key === "player") {
+      warnings.push(`联系人配置 ${profile.role_key} 引用了不存在或未应用的 NPC 角色，未写入 phone.json5。`)
+      continue
+    }
+
+    const existingProfile = nextPhone.contact_profiles.find((item) => item.role_key === profile.role_key)
+    nextPhone.contact_profiles = upsertByKey(
+      nextPhone.contact_profiles,
+      mergePhoneContactProfile(profile, existingProfile),
+      (item) => item.role_key
+    )
+    appliedPhoneContactProfiles += 1
+  }
+
+  const nextDoing: StoryDoingFile = {
+    menus: story.doing.menus,
+    doings: story.doing.doings
+  }
+  const availableDoingMenuIdsForMenus = new Set([
+    ...story.doing.menus.map((menu) => menu.id),
+    ...(draft.doing?.menus ?? [])
+      .filter((menu) => selectedDoingMenuIds.has(menu.id))
+      .map((menu) => menu.id)
+  ])
+
+  for (const menu of draft.doing?.menus ?? []) {
+    if (!selectedDoingMenuIds.has(menu.id)) {
+      continue
+    }
+
+    nextDoing.menus = upsertById(
+      nextDoing.menus,
+      normalizeDoingMenuForApply(menu, availableDoingMenuIdsForMenus, warnings)
+    )
+    appliedDoingMenus += 1
+  }
+
+  const availableDoingMenuIds = new Set(nextDoing.menus.map((menu) => menu.id))
+  for (const doing of draft.doing?.doings ?? []) {
+    if (!selectedDoingIds.has(doing.id)) {
+      continue
+    }
+
+    const nextDoingDefinition = normalizeDoingForApply(doing, {
+      availableLocationIds,
+      availableMenuIds: availableDoingMenuIds,
+      availableRoleKeys,
+      warnings
+    })
+
+    if (!nextDoingDefinition) {
+      continue
+    }
+
+    nextDoing.doings = upsertById(nextDoing.doings, nextDoingDefinition)
+    appliedDoings += 1
+  }
 
   if (appliedLocations > 0) {
     await store.writeEventLocations(storyId, nextEventLocations)
@@ -2682,6 +3901,20 @@ export async function applyStoryCreationDraft(
 
   for (const item of eventsToWrite) {
     await store.writeEvent(storyId, item.event.id, item.event, item.collectionType)
+  }
+
+  if (
+    appliedPhonePersonalities > 0
+    || appliedPhoneTalks > 0
+    || appliedPhoneActions > 0
+    || appliedPhoneReplies > 0
+    || appliedPhoneContactProfiles > 0
+  ) {
+    await store.writePhone(storyId, nextPhone)
+  }
+
+  if (appliedDoingMenus > 0 || appliedDoings > 0) {
+    await store.writeDoing(storyId, nextDoing)
   }
 
   if (selectedVariableKeys.size > 0) {
@@ -2712,7 +3945,14 @@ export async function applyStoryCreationDraft(
       locations: appliedLocations,
       roles: appliedRoles,
       items: appliedItems,
-      variables: appliedVariables
+      variables: appliedVariables,
+      phonePersonalities: appliedPhonePersonalities,
+      phoneTalks: appliedPhoneTalks,
+      phoneActions: appliedPhoneActions,
+      phoneReplies: appliedPhoneReplies,
+      phoneContactProfiles: appliedPhoneContactProfiles,
+      doingMenus: appliedDoingMenus,
+      doings: appliedDoings
     },
     warnings
   }
@@ -2949,7 +4189,9 @@ export async function runStoryCreationAgents(
         "如果用户要求改变一个 calc 汇总，例如人口总量，应写入它依赖的普通 value 分项；如现有分项不足，在 variables 中新增普通 value 变量并在脚本中引用。",
         "写 init_script/end_script 时，非空脚本必须包含中文注释。注释至少覆盖：规则目的、关键变量含义、核心公式含义、写回目标。不要只输出一串无解释的 Math 公式。",
         "如剧情涉及玩家获得、消耗或检查物品，在 init_script/end_script/操作脚本中使用 bag_add、bag_remove、bag_count、bag_has；不要在事件 JSON 中新增奖励或消耗字段。",
-        "不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议和风险说明。"
+        "如果本次内容涉及手机联系人关系、短句、联系人动作、NPC 回复、主动消息或联系人特配，必须写入 draft.phone 对应数组；不要只在 notes 中描述。",
+        "如果本次内容涉及玩家主动可选入口，例如去县长办公室、KTV、会所、购物送礼、约会地点等，必须写入 draft.doing.menus 和 draft.doing.doings；doing 事件内容复用平面事件结构，但没有 trigger_mode、trigger_expr、invoke_params。",
+        "draft.phone 和 draft.doing 是结构化输出的一部分；没有新增内容时也要保留空数组。不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议、手机联系人资产、行动资产和风险说明。"
       ].join("\n\n"),
       signal
     )
@@ -3002,6 +4244,8 @@ export async function runStoryCreationAgents(
             "必须按照每条确定性校验错误修改；不要用删除事件、删除变量、清空所有脚本来逃避问题。",
             "如果当前待优化草稿里同一事件已有非空 init_script 或 end_script，而用户没有明确要求删除，你必须保留或修正它，不能把它清空。",
             "如果脚本写入 calc、system.* 或 call.*，改成写普通 value 变量；如果引用不存在的物品 id，优先改为现有物品或本次 items 草稿里的合法 id。",
+            "如果 phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script 不符合 StoryScript.md，也要一并修复。",
+            "修复脚本时必须保留 draft.phone 和 draft.doing 的结构化资产；除非用户明确要求删除，不要把手机短句、联系人动作、行动菜单或行动事件清空。",
             "非空过程脚本必须保留中文注释，解释变量来源、计算规则和写回目标。"
           ].join("\n\n"),
           signal
@@ -3053,7 +4297,9 @@ export async function runStoryCreationAgents(
           "脚本可读性审校重点：非空过程脚本必须保留或补充中文注释，说明规则意图、变量来源、计算依据和写回结果；不要删除有用注释。",
           "不要因为脚本涉及持久化变量写入就清空脚本；只有无法确定具体 value 写入目标时才允许对全新脚本留空并说明需要新增变量。",
           "如果当前待优化草稿里同一事件已有非空 init_script 或 end_script，而用户没有明确要求删除，你必须保留或修正它，不能清空。",
-          "脚本是否支持，必须以 StoryScript.md 和确定性静态校验为准；不要自行声称“规范未说明”来回避修复。"
+          "phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script 也属于脚本审校范围。",
+          "脚本是否支持，必须以 StoryScript.md 和确定性静态校验为准；不要自行声称“规范未说明”来回避修复。",
+          "输出完整 draft 时必须保留 phone 和 doing 字段。没有相关内容时填空数组；有相关内容时不要把结构化资产降级成 notes。"
         ].join("\n\n"),
         signal
       )
@@ -3091,7 +4337,10 @@ export async function runStoryCreationAgents(
       [
         buildBasePrompt("一致性检查", state),
         `待检查草稿:\n${formatJson(state.draft, 16000)}`,
-        "你的任务：检查角色引用、地点引用、物品分类、事件 next、触发方式和玩家自由度是否一致。",
+        "你的任务：检查角色引用、地点引用、物品分类、事件 next、触发方式、手机联系人资产、行动菜单/行动事件和玩家自由度是否一致。",
+        "手机联系人检查重点：contact_profiles.role_key 必须是现有或本次生成 NPC 角色；短句/动作/回复的 scope 不要引用不存在的性格或角色；invoke 目标必须是现有或本次生成事件。",
+        "行动检查重点：doing.doings[].menu_id 必须引用现有或本次生成菜单；visible_expr 用 StoryScript 条件表达式；行动没有 trigger_mode、trigger_expr、invoke_params。",
+        "如果剧情或手机消息承诺玩家可以主动去某处做某事，应确认草稿里有对应 doing 入口，或在 warnings 中说明为什么本次不生成。",
         "保留草稿预览性质，不要声称已经写入数据文件。"
       ].join("\n\n"),
       signal

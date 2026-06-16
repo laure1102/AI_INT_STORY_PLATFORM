@@ -53,6 +53,7 @@ export function compileStory(document: StoryDocument): {
       items: document.items,
       initialBags: document.initialBags,
       phone: document.phone,
+      doing: document.doing,
       chainEvents,
       poolEvents: poolEventsSource,
       scheduleEvents: scheduleEventsSource,

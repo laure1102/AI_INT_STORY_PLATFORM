@@ -487,8 +487,20 @@ code {
   gap: 5px;
 }
 
+.footer-status-right {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
 .footer-next-day {
   margin-left: auto;
+}
+
+.footer-status-right .footer-next-day {
+  margin-left: 0;
 }
 
 .footer-stat,
@@ -796,6 +808,50 @@ code {
 .panel-menu-actions {
   display: grid;
   gap: 8px;
+}
+
+.doing-panel {
+  min-height: min(420px, 58dvh);
+  display: grid;
+  grid-template-columns: minmax(180px, 30%) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.doing-menu-tree,
+.doing-list {
+  min-height: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 8px;
+  background: #0d130c;
+  overflow: auto;
+}
+
+.doing-menu-tree {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.doing-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.doing-menu-tree .list-item.active {
+  border-color: var(--gold);
+  background: #1a1b10;
+}
+
+.doing-menu-tree .list-item:disabled,
+.doing-list .option-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.doing-list .option-button.disabled {
+  border-color: rgba(133, 211, 111, 0.18);
 }
 
 .bag-list {
@@ -1107,6 +1163,11 @@ code {
   .phone-body {
     grid-template-columns: clamp(150px, 34vw, 230px) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
+  }
+
+  .doing-panel {
+    grid-template-columns: 1fr;
+    min-height: min(520px, 68dvh);
   }
 
   .contacts-pane {

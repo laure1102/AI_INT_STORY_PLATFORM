@@ -29,7 +29,8 @@ export {
   validateStoryScriptInvokeReferences
 } from "@story-mgr/runtime"
 
-type EventValidationGroupKey = "chainEvents" | "poolEvents" | "scheduleEvents"
+type EventValidationGroupKey = "chainEvents" | "poolEvents" | "scheduleEvents" | "doing"
+type PlayableValidationGroupKey = EventValidationGroupKey
 
 function normalizeStoryScriptText(value: unknown) {
   return typeof value === "string" ? value : ""
@@ -83,6 +84,10 @@ function collectValidationItemIds(document: StoryDocument) {
   return document.items.items.map((item) => item.id)
 }
 
+function collectValidationDoingIds(document: StoryDocument) {
+  return document.doing.doings.map((doing) => doing.id)
+}
+
 function buildValidationScriptContext(
   document: StoryDocument,
   context?: StoryScriptExecutionContext
@@ -99,8 +104,10 @@ function buildValidationScriptContext(
     },
     itemIds: collectValidationItemIds(document),
     roleKeys: collectValidationRoleKeys(document),
+    doingIds: collectValidationDoingIds(document),
     bagMode: "write",
-    phoneMode: "write"
+    phoneMode: "write",
+    doingMode: "write"
   })
 }
 
@@ -108,8 +115,10 @@ function buildValidationReadableContext(document: StoryDocument): StoryScriptExe
   return createStoryScriptValidationContext({
     itemIds: collectValidationItemIds(document),
     roleKeys: collectValidationRoleKeys(document),
+    doingIds: collectValidationDoingIds(document),
     bagMode: "read",
-    phoneMode: "read"
+    phoneMode: "read",
+    doingMode: "read"
   })
 }
 
@@ -117,6 +126,7 @@ export type StoryScriptValidationMode = "predicate" | "procedure" | "template"
 
 export type StoryScriptValidationBagMode = "read" | "write"
 export type StoryScriptValidationPhoneMode = "read" | "write"
+export type StoryScriptValidationDoingMode = "read" | "write"
 
 export interface StoryScriptValidationContextOptions {
   values?: Record<string, unknown>
@@ -124,8 +134,10 @@ export interface StoryScriptValidationContextOptions {
   functions?: Record<string, (...args: unknown[]) => unknown>
   itemIds?: Iterable<string>
   roleKeys?: Iterable<string>
+  doingIds?: Iterable<string>
   bagMode?: StoryScriptValidationBagMode
   phoneMode?: StoryScriptValidationPhoneMode
+  doingMode?: StoryScriptValidationDoingMode
 }
 
 function buildValidationBagReadableFunctionsFromIds(itemIds: Iterable<string>) {
@@ -274,11 +286,79 @@ function buildValidationPhoneScriptFunctionsFromRoleKeys(
   }
 }
 
+function buildValidationDoingReadableFunctionsFromIds(doingIds: Iterable<string>) {
+  const doingIdSet = new Set(
+    Array.from(doingIds, (doingId) => normalizeStoryScriptText(doingId).trim()).filter(Boolean)
+  )
+
+  const assertDoingId = (doingId: unknown) => {
+    if (typeof doingId !== "string") {
+      throw new Error("doing id is required.")
+    }
+
+    const normalizedDoingId = doingId.trim()
+    if (!normalizedDoingId) {
+      throw new Error("doing id is required.")
+    }
+
+    if (!doingIdSet.has(normalizedDoingId)) {
+      throw new Error(`doing "${normalizedDoingId}" does not exist in doing library.`)
+    }
+
+    return normalizedDoingId
+  }
+
+  return {
+    doing_has(doingId: unknown) {
+      assertDoingId(doingId)
+      return false
+    },
+    doing_used_count(doingId: unknown) {
+      assertDoingId(doingId)
+      return 0
+    },
+    doing_cooldown_left(doingId: unknown) {
+      assertDoingId(doingId)
+      return 0
+    }
+  }
+}
+
+function buildValidationDoingScriptFunctionsFromIds(
+  doingIds: Iterable<string>,
+  doingMode: StoryScriptValidationDoingMode
+) {
+  const readableFunctions = buildValidationDoingReadableFunctionsFromIds(doingIds)
+
+  if (doingMode === "read") {
+    return readableFunctions
+  }
+
+  return {
+    doing_unlock(doingId: unknown) {
+      readableFunctions.doing_has(doingId)
+      return true
+    },
+    doing_lock(doingId: unknown) {
+      readableFunctions.doing_has(doingId)
+      return false
+    },
+    doing_set_cooldown(doingId: unknown, hours?: unknown) {
+      readableFunctions.doing_has(doingId)
+      return typeof hours === "number" && Number.isFinite(hours)
+        ? Math.max(0, Math.trunc(hours))
+        : 0
+    },
+    ...readableFunctions
+  }
+}
+
 export function createStoryScriptValidationContext(
   options: StoryScriptValidationContextOptions = {}
 ): StoryScriptExecutionContext {
   const bagMode = options.bagMode ?? "write"
   const phoneMode = options.phoneMode ?? "write"
+  const doingMode = options.doingMode ?? "write"
 
   return {
     values: {
@@ -290,6 +370,7 @@ export function createStoryScriptValidationContext(
     functions: {
       ...buildValidationBagScriptFunctionsFromIds(options.itemIds ?? [], bagMode),
       ...buildValidationPhoneScriptFunctionsFromRoleKeys(options.roleKeys ?? [], phoneMode),
+      ...buildValidationDoingScriptFunctionsFromIds(options.doingIds ?? [], doingMode),
       ...(options.functions ?? {})
     }
   }
@@ -704,9 +785,21 @@ function getPresentationDialogues(presentation: StoryEventPresentation) {
   return presentation.type === "dialogue" ? presentation.dialogues : []
 }
 
+function buildEventValidationPath(
+  eventGroupKey: EventValidationGroupKey,
+  eventIndex: number,
+  ...segments: string[]
+) {
+  if (eventGroupKey === "doing") {
+    return ["doing", "doings", String(eventIndex), ...segments]
+  }
+
+  return [eventGroupKey, String(eventIndex), ...segments]
+}
+
 function validatePresentationTemplates(
   issues: ValidationIssue[],
-  eventGroupKey: EventValidationGroupKey,
+  eventGroupKey: PlayableValidationGroupKey,
   eventIndex: number,
   eventId: string,
   presentation: StoryEventPresentation
@@ -718,7 +811,7 @@ function validatePresentationTemplates(
         "error",
         `${eventGroupKey}.message-template-invalid`,
         `${eventId} message template is invalid at line ${issue.lineNumber}: ${issue.message}`,
-        [eventGroupKey, String(eventIndex), "presentation", "message", "content"]
+        buildEventValidationPath(eventGroupKey, eventIndex, "presentation", "message", "content")
       )
     }
     return
@@ -732,7 +825,14 @@ function validatePresentationTemplates(
         "error",
         `${eventGroupKey}.dialogue-template-invalid`,
         `${eventId} dialogue template is invalid at line ${issue.lineNumber}: ${issue.message}`,
-        [eventGroupKey, String(eventIndex), "presentation", "dialogues", String(dialogueIndex), "content"]
+        buildEventValidationPath(
+          eventGroupKey,
+          eventIndex,
+          "presentation",
+          "dialogues",
+          String(dialogueIndex),
+          "content"
+        )
       )
     }
   }
@@ -745,6 +845,10 @@ function getEventValidationMeta(eventGroupKey: EventValidationGroupKey) {
 
   if (eventGroupKey === "scheduleEvents") {
     return { codePrefix: "schedule", label: "Schedule event" }
+  }
+
+  if (eventGroupKey === "doing") {
+    return { codePrefix: "doing", label: "Doing" }
   }
 
   return { codePrefix: "pool", label: "Pool event" }
@@ -771,7 +875,7 @@ function validateInvokeParamDefinitions(
         "error",
         `${codePrefix}.invoke-param-invalid`,
         `${label} "${event.id}" invoke param "${param.name}" must be a valid identifier.`,
-        [eventGroupKey, String(eventIndex), "invoke_params", String(paramIndex), "name"]
+        buildEventValidationPath(eventGroupKey, eventIndex, "invoke_params", String(paramIndex), "name")
       )
     }
   }
@@ -801,7 +905,7 @@ function validatePlayableEvent(
         "error",
         `${codePrefix}.trigger-expr-required`,
         `${label} "${event.id}" trigger_expr is required when trigger_mode is condition.`,
-        [eventGroupKey, String(eventIndex), "trigger_expr"]
+        buildEventValidationPath(eventGroupKey, eventIndex, "trigger_expr")
       )
     }
 
@@ -819,7 +923,7 @@ function validatePlayableEvent(
           "error",
           `${codePrefix}.trigger-expr-invalid`,
           `${label} "${event.id}" trigger_expr is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
-          [eventGroupKey, String(eventIndex), "trigger_expr"]
+          buildEventValidationPath(eventGroupKey, eventIndex, "trigger_expr")
         )
       }
     }
@@ -831,7 +935,7 @@ function validatePlayableEvent(
       "error",
       `${codePrefix}.trigger-expr-not-allowed`,
       `${label} "${event.id}" trigger_expr must stay empty when trigger_mode is invoke.`,
-      [eventGroupKey, String(eventIndex), "trigger_expr"]
+      buildEventValidationPath(eventGroupKey, eventIndex, "trigger_expr")
     )
   }
 
@@ -852,7 +956,7 @@ function validatePlayableEvent(
         "error",
         scriptField.code,
         `${label} "${event.id}" ${scriptField.key} is invalid at line ${issue.lineNumber}: ${issue.message}`,
-        [eventGroupKey, String(eventIndex), scriptField.key]
+        buildEventValidationPath(eventGroupKey, eventIndex, scriptField.key)
       )
     }
 
@@ -862,7 +966,7 @@ function validatePlayableEvent(
         "error",
         `${codePrefix}.${scriptField.key === "init_script" ? "init" : "end"}-script-invoke-invalid`,
         `${label} "${event.id}" ${scriptField.key} invoke_once 引用无效，第 ${issue.lineNumber} 行: ${issue.message}`,
-        [eventGroupKey, String(eventIndex), scriptField.key]
+        buildEventValidationPath(eventGroupKey, eventIndex, scriptField.key)
       )
     }
   }
@@ -874,7 +978,7 @@ function validatePlayableEvent(
         "error",
         `${codePrefix}.missing-object`,
         `${label} "${event.id}" references missing object "${objectKey}".`,
-        [eventGroupKey, String(eventIndex), "object_keys", String(objectIndex)]
+        buildEventValidationPath(eventGroupKey, eventIndex, "object_keys", String(objectIndex))
       )
     }
   }
@@ -885,7 +989,7 @@ function validatePlayableEvent(
       "error",
       `${codePrefix}.missing-location`,
       `${label} "${event.id}" references missing location "${event.location}".`,
-      [eventGroupKey, String(eventIndex), "location"]
+      buildEventValidationPath(eventGroupKey, eventIndex, "location")
     )
   }
 
@@ -898,7 +1002,14 @@ function validatePlayableEvent(
           "error",
           `${codePrefix}.invalid-player-speaker`,
           `${label} "${event.id}" player dialogue must use speaker_key "player".`,
-          [eventGroupKey, String(eventIndex), "presentation", "dialogues", String(dialogueIndex), "speaker_key"]
+          buildEventValidationPath(
+            eventGroupKey,
+            eventIndex,
+            "presentation",
+            "dialogues",
+            String(dialogueIndex),
+            "speaker_key"
+          )
         )
       }
       continue
@@ -910,7 +1021,14 @@ function validatePlayableEvent(
         "error",
         `${codePrefix}.invalid-object-speaker`,
         `${label} "${event.id}" dialogue speaker "${dialogue.speaker_key}" is not in the current event objects.`,
-        [eventGroupKey, String(eventIndex), "presentation", "dialogues", String(dialogueIndex), "speaker_key"]
+        buildEventValidationPath(
+          eventGroupKey,
+          eventIndex,
+          "presentation",
+          "dialogues",
+          String(dialogueIndex),
+          "speaker_key"
+        )
       )
     }
   }
@@ -922,6 +1040,114 @@ function validatePlayableEvent(
     `${label} "${event.id}"`,
     event.presentation
   )
+}
+
+function validateDoingPredicateField(
+  source: string,
+  basePath: string[],
+  code: string,
+  label: string,
+  scriptVals: StoryValsFile,
+  readableContext: StoryScriptExecutionContext,
+  issues: ValidationIssue[]
+) {
+  if (!source.trim()) {
+    return
+  }
+
+  try {
+    evaluateStoryBooleanExpression(
+      scriptVals,
+      source,
+      undefined,
+      readableContext
+    )
+  } catch (error) {
+    pushIssue(
+      issues,
+      "error",
+      code,
+      `${label} is invalid: ${error instanceof Error ? error.message : "Validation failed."}`,
+      basePath
+    )
+  }
+}
+
+function validateDoingConfig(document: StoryDocument, issues: ValidationIssue[]) {
+  const scriptVals = buildCombinedStoryScriptVals(document)
+  const readableContext = buildValidationReadableContext(document)
+  const menuIds = new Set(document.doing.menus.map((menu) => menu.id))
+
+  for (const [menuIndex, menu] of document.doing.menus.entries()) {
+    const basePath = ["doing", "menus", String(menuIndex)]
+
+    if (menu.parent_id && !menuIds.has(menu.parent_id)) {
+      pushIssue(
+        issues,
+        "error",
+        "doing.menu.missing-parent",
+        `Doing menu "${menu.id}" references missing parent menu "${menu.parent_id}".`,
+        [...basePath, "parent_id"]
+      )
+    }
+
+    if (menu.parent_id === menu.id) {
+      pushIssue(
+        issues,
+        "error",
+        "doing.menu.self-parent",
+        `Doing menu "${menu.id}" cannot use itself as parent.`,
+        [...basePath, "parent_id"]
+      )
+    }
+
+    validateDoingPredicateField(
+      menu.visible_expr,
+      [...basePath, "visible_expr"],
+      "doing.menu.visible-expr-invalid",
+      `Doing menu "${menu.id}" visible_expr`,
+      scriptVals,
+      readableContext,
+      issues
+    )
+  }
+
+  for (const [doingIndex, doing] of document.doing.doings.entries()) {
+    const basePath = ["doing", "doings", String(doingIndex)]
+
+    if (!menuIds.has(doing.menu_id)) {
+      pushIssue(
+        issues,
+        "error",
+        "doing.missing-menu",
+        `Doing "${doing.id}" references missing menu "${doing.menu_id}".`,
+        [...basePath, "menu_id"]
+      )
+    }
+
+    validateDoingPredicateField(
+      doing.visible_expr,
+      [...basePath, "visible_expr"],
+      "doing.visible-expr-invalid",
+      `Doing "${doing.id}" visible_expr`,
+      scriptVals,
+      readableContext,
+      issues
+    )
+
+    validatePlayableEvent(
+      {
+        ...doing,
+        trigger_mode: "default",
+        trigger_expr: "",
+        invoke_params: []
+      },
+      doingIndex,
+      "doing",
+      document,
+      issues
+    )
+  }
 }
 
 function validatePoolEvent(
@@ -1236,6 +1462,7 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
   }
 
   validatePhoneConfig(document, issues)
+  validateDoingConfig(document, issues)
 
   for (const calcIssue of validateStoryValsCalcRules(document.vals)) {
     pushIssue(

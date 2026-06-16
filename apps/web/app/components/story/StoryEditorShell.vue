@@ -4,6 +4,7 @@ import type {
   StoryAnyEventFile,
   StoryActionFile,
   StoryBibleFile,
+  StoryDoingFile,
   StoryDocument,
   StoryEventCollectionType,
   StoryEventFile,
@@ -36,6 +37,7 @@ import GraphEventDetailPanel from "./GraphEventDetailPanel.vue"
 import LoopEventDetailPanel from "./LoopEventDetailPanel.vue"
 import OnceEventDetailPanel from "./OnceEventDetailPanel.vue"
 import StoryCreationWorkspace from "./StoryCreationWorkspace.vue"
+import StoryDoingDialog from "./StoryDoingDialog.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
 import StoryItemsDialog from "./StoryItemsDialog.vue"
 import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
@@ -55,6 +57,7 @@ import {
 } from "./storyScriptEditor"
 
 type EventCanvasTab = Extract<StoryEventCollectionType, "chain" | "pool" | "schedule">
+type EventWorkbenchTab = EventCanvasTab | "doing"
 type EventTriggerFilter = "all" | "normal" | "invoke"
 type StoryWorkspaceTab = "creation" | "events"
 type StoryCreationAgentRunMode = "new" | "feedback"
@@ -75,6 +78,7 @@ const {
   saveAppSettings,
   saveEvent,
   saveEventLocations,
+  saveDoing,
   saveStoryCreationHistorySession,
   saveItems,
   savePhone,
@@ -121,9 +125,10 @@ const scenesSaveSuccessMessage = shallowRef<string | null>(null)
 const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const itemsSaveSuccessMessage = shallowRef<string | null>(null)
 const phoneSaveSuccessMessage = shallowRef<string | null>(null)
+const doingSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
 const activeWorkspaceTab = shallowRef<StoryWorkspaceTab>("creation")
-const activeEventTab = shallowRef<EventCanvasTab>("chain")
+const activeEventTab = shallowRef<EventWorkbenchTab>("chain")
 const eventTriggerFilter = shallowRef<EventTriggerFilter>("all")
 
 const workspaceTabOptions: Array<{ key: StoryWorkspaceTab; label: string }> = [
@@ -131,10 +136,11 @@ const workspaceTabOptions: Array<{ key: StoryWorkspaceTab; label: string }> = [
   { key: "events", label: "事件" }
 ]
 
-const eventTabOptions: Array<{ key: EventCanvasTab; label: string }> = [
+const eventTabOptions: Array<{ key: EventWorkbenchTab; label: string }> = [
   { key: "chain", label: "链式剧情线" },
   { key: "pool", label: "平面事件池" },
-  { key: "schedule", label: "定时规则事件" }
+  { key: "schedule", label: "定时规则事件" },
+  { key: "doing", label: "行动" }
 ]
 
 const eventTriggerFilterOptions: Array<{ key: EventTriggerFilter; label: string }> = [
@@ -142,6 +148,10 @@ const eventTriggerFilterOptions: Array<{ key: EventTriggerFilter; label: string 
   { key: "normal", label: "普通" },
   { key: "invoke", label: "被调用" }
 ]
+
+function isEventCanvasTab(tab: EventWorkbenchTab): tab is EventCanvasTab {
+  return tab === "chain" || tab === "pool" || tab === "schedule"
+}
 
 function getEventsByCollectionType(collectionType: EventCanvasTab) {
   if (!storyDocument.value) {
@@ -195,6 +205,10 @@ function matchesEventTriggerFilter(
 }
 
 const activeEvents = computed<StoryAnyEventFile[]>(() => {
+  if (!isEventCanvasTab(activeEventTab.value)) {
+    return []
+  }
+
   if (activeEventTab.value === "chain") {
     return getGraphNodes()
   }
@@ -273,7 +287,9 @@ const filteredLoopCanvasEvents = computed(() => {
 })
 
 const selectedEventId = computed(() =>
-  projectStore.getSelectedEventId(props.storyId, activeEventTab.value)
+  isEventCanvasTab(activeEventTab.value)
+    ? projectStore.getSelectedEventId(props.storyId, activeEventTab.value)
+    : null
 )
 
 const selectedEvent = computed(() => {
@@ -877,6 +893,7 @@ async function loadStory() {
   creationApplyWarnings.value = []
   creationHistory.value = { sessions: [] }
   activeCreationHistorySessionId.value = null
+  doingSaveSuccessMessage.value = null
 
   try {
     const [story, settings, history] = await Promise.all([
@@ -919,10 +936,18 @@ async function loadStory() {
 }
 
 function handleSelectEvent(eventId: string) {
+  if (!isEventCanvasTab(activeEventTab.value)) {
+    return
+  }
+
   projectStore.selectEvent(props.storyId, activeEventTab.value, eventId)
 }
 
 function handleEditEvent(eventId: string) {
+  if (!isEventCanvasTab(activeEventTab.value)) {
+    return
+  }
+
   creatingFromEventId.value = null
   editingEventId.value = eventId
   projectStore.selectEvent(props.storyId, activeEventTab.value, eventId)
@@ -1064,36 +1089,41 @@ function handleCreateGraphEvent(parentEventId: string) {
   creatingFromEventId.value = parentEventId
   editingEventId.value = null
   creatingEventDraft.value = buildNewEventFromParent(parentEventId)
-  projectStore.selectEvent(props.storyId, activeEventTab.value, parentEventId)
+  projectStore.selectEvent(props.storyId, "chain", parentEventId)
 }
 
 function handleCreateGraphAction(parentEventId: string) {
   creatingFromEventId.value = parentEventId
   editingEventId.value = null
   creatingEventDraft.value = buildNewActionFromParent(parentEventId)
-  projectStore.selectEvent(props.storyId, activeEventTab.value, parentEventId)
+  projectStore.selectEvent(props.storyId, "chain", parentEventId)
 }
 
 function handleCreateGraphRootEvent() {
   creatingFromEventId.value = null
   editingEventId.value = null
   creatingEventDraft.value = buildNewRootEvent()
-  projectStore.clearEvent(props.storyId, activeEventTab.value)
+  projectStore.clearEvent(props.storyId, "chain")
 }
 
 function handleCreateStandaloneEvent() {
+  if (!isEventCanvasTab(activeEventTab.value)) {
+    return
+  }
+
   creatingFromEventId.value = null
   editingEventId.value = null
   creatingEventDraft.value = buildNewStandaloneEvent()
   projectStore.clearEvent(props.storyId, activeEventTab.value)
 }
 
-function handleSwitchEventTab(tab: EventCanvasTab) {
+function handleSwitchEventTab(tab: EventWorkbenchTab) {
   if (activeEventTab.value === tab) {
     return
   }
 
   closeEditor()
+  doingSaveSuccessMessage.value = null
   activeEventTab.value = tab
 }
 
@@ -1118,6 +1148,10 @@ async function handleDeleteGraphNode(eventId: string) {
 }
 
 async function handleSaveEvent(event: StoryAnyEventFile) {
+  if (!isEventCanvasTab(activeEventTab.value)) {
+    return
+  }
+
   isSaving.value = true
   errorMessage.value = null
 
@@ -1171,7 +1205,7 @@ async function handleSaveEvent(event: StoryAnyEventFile) {
 }
 
 async function handleDeleteEvent(eventId: string) {
-  if (!storyDocument.value) {
+  if (!storyDocument.value || !isEventCanvasTab(activeEventTab.value)) {
     return
   }
 
@@ -1370,6 +1404,30 @@ async function handleSavePhone(phone: StoryPhoneFile) {
     await refreshValidation()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "保存手机联系人配置失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function handleSaveDoing(doing: StoryDoingFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+  doingSaveSuccessMessage.value = null
+
+  try {
+    const savedDoing = await saveDoing(props.storyId, doing)
+    storyDocument.value = {
+      ...storyDocument.value,
+      doing: savedDoing
+    }
+    doingSaveSuccessMessage.value = "已保存"
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存行动配置失败。"
   } finally {
     isSaving.value = false
   }
@@ -1725,6 +1783,7 @@ watch(
     locationsSaveSuccessMessage.value = null
     itemsSaveSuccessMessage.value = null
     phoneSaveSuccessMessage.value = null
+    doingSaveSuccessMessage.value = null
     rolesSaveSuccessMessage.value = null
     void loadStory()
   },
@@ -1886,7 +1945,7 @@ watch(
           </button>
         </div>
 
-        <div class="editor-trigger-filter" role="group" aria-label="触发方式筛选">
+        <div v-if="isEventCanvasTab(activeEventTab)" class="editor-trigger-filter" role="group" aria-label="触发方式筛选">
           <span class="editor-trigger-filter__label">触发</span>
           <button
             v-for="option in eventTriggerFilterOptions"
@@ -1925,7 +1984,7 @@ watch(
       />
 
       <StoryLoopEventCanvas
-        v-else
+        v-else-if="activeEventTab === 'schedule'"
         :events="filteredLoopCanvasEvents"
         :selected-event-id="selectedEventId"
         @select="handleSelectEvent"
@@ -1933,12 +1992,27 @@ watch(
         @delete="handleDeleteEvent"
         @create="handleCreateStandaloneEvent"
       />
+
+      <StoryDoingDialog
+        v-else-if="activeEventTab === 'doing'"
+        embedded
+        :doing="storyDocument.doing"
+        :item-ids="storyScriptItemIds"
+        :roles="storyDocument.roles"
+        :save-success-message="doingSaveSuccessMessage"
+        :saving="isSaving"
+        :story="storyDocument"
+        :vals="storyScriptVals"
+        @quick-create-location="handleQuickCreateLocation"
+        @quick-create-role="handleQuickCreateRole"
+        @save="handleSaveDoing"
+      />
     </section>
 
     <Teleport to="body">
       <Transition name="fade">
         <div
-          v-if="storyDocument && activeWorkspaceTab === 'events' && (editingEvent || creatingEventDraft)"
+          v-if="storyDocument && activeWorkspaceTab === 'events' && isEventCanvasTab(activeEventTab) && (editingEvent || creatingEventDraft)"
           class="editor-modal"
           @click.self="closeEditor"
         >

@@ -5,7 +5,9 @@ import type {
   RunStoryCreationAgentResponse,
   StoryCreationAgentRole,
   StoryCreationDraft,
+  StoryCreationDraftDoing,
   StoryCreationDraftEvent,
+  StoryCreationDraftPhone,
   StoryCreationHistoryFile,
   StoryCreationHistorySession,
   StoryCreationDraftItem,
@@ -74,6 +76,13 @@ const selectedLocationIds = shallowRef<string[]>([])
 const selectedRoleKeys = shallowRef<string[]>([])
 const selectedItemIds = shallowRef<string[]>([])
 const selectedVariableKeys = shallowRef<string[]>([])
+const selectedPhonePersonalityIds = shallowRef<string[]>([])
+const selectedPhoneTalkIds = shallowRef<string[]>([])
+const selectedPhoneActionIds = shallowRef<string[]>([])
+const selectedPhoneReplyIds = shallowRef<string[]>([])
+const selectedPhoneContactProfileKeys = shallowRef<string[]>([])
+const selectedDoingMenuIds = shallowRef<string[]>([])
+const selectedDoingIds = shallowRef<string[]>([])
 const feedbackHistory = ref<FeedbackHistoryItem[]>([])
 const editableDraft = ref<StoryCreationDraft | null>(null)
 const draftApplied = shallowRef(false)
@@ -254,12 +263,43 @@ const eventTypeSummary = computed(() => {
   }
 })
 
+const phoneDraftCount = computed(() => {
+  const phone = draftPreview.value?.phone
+
+  if (!phone) {
+    return 0
+  }
+
+  return phone.personality_library.length
+    + phone.talk_library.length
+    + phone.action_library.length
+    + phone.reply_library.length
+    + phone.contact_profiles.length
+})
+
+const doingDraftCount = computed(() => {
+  const doing = draftPreview.value?.doing
+
+  if (!doing) {
+    return 0
+  }
+
+  return doing.menus.length + doing.doings.length
+})
+
 const selectedApplyCount = computed(() => {
   return selectedEventKeys.value.length
     + selectedLocationIds.value.length
     + selectedRoleKeys.value.length
     + selectedItemIds.value.length
     + selectedVariableKeys.value.length
+    + selectedPhonePersonalityIds.value.length
+    + selectedPhoneTalkIds.value.length
+    + selectedPhoneActionIds.value.length
+    + selectedPhoneReplyIds.value.length
+    + selectedPhoneContactProfileKeys.value.length
+    + selectedDoingMenuIds.value.length
+    + selectedDoingIds.value.length
 })
 
 const canApplyDraft = computed(() => {
@@ -305,6 +345,34 @@ const existingVariableKeys = computed(() => {
   )
 })
 
+const existingPhonePersonalityIds = computed(() => {
+  return new Set(props.story.phone.personality_library.map((personality) => personality.id))
+})
+
+const existingPhoneTalkIds = computed(() => {
+  return new Set(props.story.phone.talk_library.map((entry) => entry.id))
+})
+
+const existingPhoneActionIds = computed(() => {
+  return new Set(props.story.phone.action_library.map((entry) => entry.id))
+})
+
+const existingPhoneReplyIds = computed(() => {
+  return new Set(props.story.phone.reply_library.map((entry) => entry.id))
+})
+
+const existingPhoneContactProfileKeys = computed(() => {
+  return new Set(props.story.phone.contact_profiles.map((profile) => profile.role_key))
+})
+
+const existingDoingMenuIds = computed(() => {
+  return new Set(props.story.doing.menus.map((menu) => menu.id))
+})
+
+const existingDoingIds = computed(() => {
+  return new Set(props.story.doing.doings.map((doing) => doing.id))
+})
+
 const existingChainIds = computed(() => {
   return new Set(props.story.chainEvents.map((event) => event.id))
 })
@@ -345,6 +413,13 @@ const availableChainIdsForApply = computed(() => {
   return new Set([
     ...Array.from(existingChainIds.value),
     ...Array.from(selectedDraftChainIds.value)
+  ])
+})
+
+const availableDoingMenuIdsForApply = computed(() => {
+  return new Set([
+    ...Array.from(existingDoingMenuIds.value),
+    ...selectedDoingMenuIds.value
   ])
 })
 
@@ -394,6 +469,48 @@ const selectedImpactSummary = computed(() => {
     }
   }
 
+  for (const personality of draft.phone?.personality_library ?? []) {
+    if (selectedPhonePersonalityIds.value.includes(personality.id)) {
+      addImpact(getPhonePersonalityImpact(personality))
+    }
+  }
+
+  for (const entry of draft.phone?.talk_library ?? []) {
+    if (selectedPhoneTalkIds.value.includes(entry.id)) {
+      addImpact(getPhoneTalkImpact(entry))
+    }
+  }
+
+  for (const entry of draft.phone?.action_library ?? []) {
+    if (selectedPhoneActionIds.value.includes(entry.id)) {
+      addImpact(getPhoneActionImpact(entry))
+    }
+  }
+
+  for (const entry of draft.phone?.reply_library ?? []) {
+    if (selectedPhoneReplyIds.value.includes(entry.id)) {
+      addImpact(getPhoneReplyImpact(entry))
+    }
+  }
+
+  for (const profile of draft.phone?.contact_profiles ?? []) {
+    if (selectedPhoneContactProfileKeys.value.includes(profile.role_key)) {
+      addImpact(getPhoneContactProfileImpact(profile))
+    }
+  }
+
+  for (const menu of draft.doing?.menus ?? []) {
+    if (selectedDoingMenuIds.value.includes(menu.id)) {
+      addImpact(getDoingMenuImpact(menu))
+    }
+  }
+
+  for (const doing of draft.doing?.doings ?? []) {
+    if (selectedDoingIds.value.includes(doing.id)) {
+      addImpact(getDoingImpact(doing))
+    }
+  }
+
   return summary
 })
 
@@ -409,7 +526,7 @@ const applyPreviewMessage = computed(() => {
   ].filter(Boolean)
 
   if (parts.length === 0) {
-    return "确认后会写入所选地点、角色、物品、变量和事件。"
+    return "确认后会写入所选地点、角色、物品、变量、事件、手机联系人资产和行动资产。"
   }
 
   return `确认后将${parts.join("、")}。`
@@ -622,6 +739,17 @@ function getVariableKey(variable: StoryCreationDraftVariable) {
 function cloneCreationDraft(draft: StoryCreationDraft): StoryCreationDraft {
   const cloned = JSON.parse(JSON.stringify(toRaw(draft))) as StoryCreationDraft
   cloned.items = cloned.items ?? []
+  cloned.phone = {
+    personality_library: cloned.phone?.personality_library ?? [],
+    talk_library: cloned.phone?.talk_library ?? [],
+    action_library: cloned.phone?.action_library ?? [],
+    reply_library: cloned.phone?.reply_library ?? [],
+    contact_profiles: cloned.phone?.contact_profiles ?? []
+  }
+  cloned.doing = {
+    menus: cloned.doing?.menus ?? [],
+    doings: cloned.doing?.doings ?? []
+  }
   return cloned
 }
 
@@ -641,6 +769,13 @@ function syncApplySelection(draft: StoryCreationDraft | null) {
   selectedRoleKeys.value = draft?.roles.map(getRoleKey) ?? []
   selectedItemIds.value = draft?.items.map((item) => item.id) ?? []
   selectedVariableKeys.value = draft?.variables.map(getVariableKey) ?? []
+  selectedPhonePersonalityIds.value = draft?.phone?.personality_library.map((personality) => personality.id) ?? []
+  selectedPhoneTalkIds.value = draft?.phone?.talk_library.map((entry) => entry.id) ?? []
+  selectedPhoneActionIds.value = draft?.phone?.action_library.map((entry) => entry.id) ?? []
+  selectedPhoneReplyIds.value = draft?.phone?.reply_library.map((entry) => entry.id) ?? []
+  selectedPhoneContactProfileKeys.value = draft?.phone?.contact_profiles.map((profile) => profile.role_key) ?? []
+  selectedDoingMenuIds.value = draft?.doing?.menus.map((menu) => menu.id) ?? []
+  selectedDoingIds.value = draft?.doing?.doings.map((doing) => doing.id) ?? []
 }
 
 function toggleStringSelection(source: string[], value: string, checked: boolean) {
@@ -677,6 +812,42 @@ function setVariableSelected(variable: StoryCreationDraftVariable, checked: bool
   )
 }
 
+function setPhonePersonalitySelected(personalityId: string, checked: boolean) {
+  selectedPhonePersonalityIds.value = toggleStringSelection(
+    selectedPhonePersonalityIds.value,
+    personalityId,
+    checked
+  )
+}
+
+function setPhoneTalkSelected(talkId: string, checked: boolean) {
+  selectedPhoneTalkIds.value = toggleStringSelection(selectedPhoneTalkIds.value, talkId, checked)
+}
+
+function setPhoneActionSelected(actionId: string, checked: boolean) {
+  selectedPhoneActionIds.value = toggleStringSelection(selectedPhoneActionIds.value, actionId, checked)
+}
+
+function setPhoneReplySelected(replyId: string, checked: boolean) {
+  selectedPhoneReplyIds.value = toggleStringSelection(selectedPhoneReplyIds.value, replyId, checked)
+}
+
+function setPhoneContactProfileSelected(roleKey: string, checked: boolean) {
+  selectedPhoneContactProfileKeys.value = toggleStringSelection(
+    selectedPhoneContactProfileKeys.value,
+    roleKey,
+    checked
+  )
+}
+
+function setDoingMenuSelected(menuId: string, checked: boolean) {
+  selectedDoingMenuIds.value = toggleStringSelection(selectedDoingMenuIds.value, menuId, checked)
+}
+
+function setDoingSelected(doingId: string, checked: boolean) {
+  selectedDoingIds.value = toggleStringSelection(selectedDoingIds.value, doingId, checked)
+}
+
 function getCheckboxChecked(event: Event) {
   return event.target instanceof HTMLInputElement && event.target.checked
 }
@@ -701,6 +872,34 @@ function handleEventSelectionChange(draftEvent: StoryCreationDraftEvent, event: 
   setEventSelected(draftEvent, getCheckboxChecked(event))
 }
 
+function handlePhonePersonalitySelectionChange(personalityId: string, event: Event) {
+  setPhonePersonalitySelected(personalityId, getCheckboxChecked(event))
+}
+
+function handlePhoneTalkSelectionChange(talkId: string, event: Event) {
+  setPhoneTalkSelected(talkId, getCheckboxChecked(event))
+}
+
+function handlePhoneActionSelectionChange(actionId: string, event: Event) {
+  setPhoneActionSelected(actionId, getCheckboxChecked(event))
+}
+
+function handlePhoneReplySelectionChange(replyId: string, event: Event) {
+  setPhoneReplySelected(replyId, getCheckboxChecked(event))
+}
+
+function handlePhoneContactProfileSelectionChange(roleKey: string, event: Event) {
+  setPhoneContactProfileSelected(roleKey, getCheckboxChecked(event))
+}
+
+function handleDoingMenuSelectionChange(menuId: string, event: Event) {
+  setDoingMenuSelected(menuId, getCheckboxChecked(event))
+}
+
+function handleDoingSelectionChange(doingId: string, event: Event) {
+  setDoingSelected(doingId, getCheckboxChecked(event))
+}
+
 function applyDraft() {
   if (!editableDraft.value || props.applying || selectedApplyCount.value === 0) {
     return
@@ -711,7 +910,14 @@ function applyDraft() {
     locationIds: selectedLocationIds.value,
     roleKeys: selectedRoleKeys.value,
     itemIds: selectedItemIds.value,
-    variableKeys: selectedVariableKeys.value
+    variableKeys: selectedVariableKeys.value,
+    phonePersonalityIds: selectedPhonePersonalityIds.value,
+    phoneTalkIds: selectedPhoneTalkIds.value,
+    phoneActionIds: selectedPhoneActionIds.value,
+    phoneReplyIds: selectedPhoneReplyIds.value,
+    phoneContactProfileKeys: selectedPhoneContactProfileKeys.value,
+    doingMenuIds: selectedDoingMenuIds.value,
+    doingIds: selectedDoingIds.value
   })
 }
 
@@ -799,6 +1005,60 @@ function getEventImpact(event: StoryCreationDraftEvent): DraftImpact {
     : createImpact("create", "新增", "应用后会新增事件。")
 }
 
+function getPhonePersonalityImpact(personality: StoryCreationDraftPhone["personality_library"][number]): DraftImpact {
+  return existingPhonePersonalityIds.value.has(personality.id)
+    ? createImpact("update", "覆盖", "同 id 性格已存在，应用后会更新性格说明和风格标签。")
+    : createImpact("create", "新增", "应用后会写入 phone.json5 的性格库。")
+}
+
+function getPhoneTalkImpact(entry: StoryCreationDraftPhone["talk_library"][number]): DraftImpact {
+  return existingPhoneTalkIds.value.has(entry.id)
+    ? createImpact("update", "覆盖", "同 id 闲聊短句已存在，应用后会更新短句、作用域和好感变化。")
+    : createImpact("create", "新增", "应用后会写入 phone.json5 的闲聊短句库。")
+}
+
+function getPhoneActionImpact(entry: StoryCreationDraftPhone["action_library"][number]): DraftImpact {
+  return existingPhoneActionIds.value.has(entry.id)
+    ? createImpact("update", "覆盖", "同 id 联系人动作已存在，应用后会更新动作规则。")
+    : createImpact("create", "新增", "应用后会写入 phone.json5 的动作库。")
+}
+
+function getPhoneReplyImpact(entry: StoryCreationDraftPhone["reply_library"][number]): DraftImpact {
+  return existingPhoneReplyIds.value.has(entry.id)
+    ? createImpact("update", "覆盖", "同 id NPC 回复已存在，应用后会更新回复规则。")
+    : createImpact("create", "新增", "应用后会写入 phone.json5 的回复库。")
+}
+
+function getPhoneContactProfileImpact(profile: StoryCreationDraftPhone["contact_profiles"][number]): DraftImpact {
+  if (!availableRoleKeysForApply.value.has(profile.role_key) || profile.role_key === "player") {
+    return createImpact("skip", "跳过", "联系人配置必须引用已存在或本次选中的 NPC 角色。")
+  }
+
+  return existingPhoneContactProfileKeys.value.has(profile.role_key)
+    ? createImpact("update", "覆盖", "同角色联系人配置已存在，应用后会合并主动消息和偏好设置。")
+    : createImpact("create", "新增", "应用后会写入 phone.json5 的联系人特配。")
+}
+
+function getDoingMenuImpact(menu: StoryCreationDraftDoing["menus"][number]): DraftImpact {
+  if (menu.parent_id && !availableDoingMenuIdsForApply.value.has(menu.parent_id)) {
+    return createImpact("skip", "跳过", "父级菜单未选中且不存在，应用后会降级为根菜单。")
+  }
+
+  return existingDoingMenuIds.value.has(menu.id)
+    ? createImpact("update", "覆盖", "同 id 行动菜单已存在，应用后会更新菜单信息。")
+    : createImpact("create", "新增", "应用后会写入 doing.json5 的菜单树。")
+}
+
+function getDoingImpact(doing: StoryCreationDraftDoing["doings"][number]): DraftImpact {
+  if (!availableDoingMenuIdsForApply.value.has(doing.menu_id)) {
+    return createImpact("skip", "跳过", "所属菜单未选中且不存在，应用时不会写入该行动。")
+  }
+
+  return existingDoingIds.value.has(doing.id)
+    ? createImpact("update", "覆盖", "同 id 行动已存在，应用后会替换行动内容。")
+    : createImpact("create", "新增", "应用后会写入 doing.json5。")
+}
+
 function getDraftPresentationDialogues(event: StoryCreationDraftEvent) {
   return event.presentation.type === "dialogue" ? event.presentation.dialogues : []
 }
@@ -828,11 +1088,89 @@ function getItemTagsText(item: StoryCreationDraftItem) {
   return item.tags.join(", ")
 }
 
-function setItemTagsText(item: StoryCreationDraftItem, rawValue: string) {
-  item.tags = rawValue
+function splitListInput(rawValue: string) {
+  return rawValue
     .split(/[,\n，、]/g)
-    .map((tag) => tag.trim())
+    .map((item) => item.trim())
     .filter(Boolean)
+}
+
+function setItemTagsText(item: StoryCreationDraftItem, rawValue: string) {
+  item.tags = splitListInput(rawValue)
+}
+
+function getPhoneScopeText(scope: StoryCreationDraftPhone["talk_library"][number]["scope"]) {
+  const tracks = scope.contact_tracks.length ? scope.contact_tracks.join(", ") : "不限关系"
+  const personalities = scope.personality_ids.length ? scope.personality_ids.join(", ") : "不限性格"
+  const roles = scope.role_keys.length ? scope.role_keys.join(", ") : "不限角色"
+  return `${scope.min_favor}-${scope.max_favor} / ${tracks} / ${personalities} / ${roles}`
+}
+
+function getStringListText(values: string[] | undefined) {
+  return (values ?? []).join(", ")
+}
+
+function setStringListText(target: { value: string[] }, rawValue: string) {
+  target.value = splitListInput(rawValue)
+}
+
+function setPhonePersonalityTags(
+  personality: StoryCreationDraftPhone["personality_library"][number],
+  rawValue: string
+) {
+  personality.style_tags = splitListInput(rawValue)
+}
+
+function setPhoneTalkTags(entry: StoryCreationDraftPhone["talk_library"][number], rawValue: string) {
+  entry.tags = splitListInput(rawValue)
+}
+
+function setPhoneActionTags(entry: StoryCreationDraftPhone["action_library"][number], rawValue: string) {
+  entry.tags = splitListInput(rawValue)
+}
+
+function setPhoneReplyTags(entry: StoryCreationDraftPhone["reply_library"][number], rawValue: string) {
+  entry.tags = splitListInput(rawValue)
+}
+
+function setPhoneContactPreferredTags(
+  profile: StoryCreationDraftPhone["contact_profiles"][number],
+  rawValue: string
+) {
+  profile.preferred_tags = splitListInput(rawValue)
+}
+
+function getPhoneCostItemsText(entry: StoryCreationDraftPhone["action_library"][number]) {
+  return entry.cost_items.map((item) => `${item.item_id} x${item.quantity}`).join(", ")
+}
+
+function getPhoneRepliesText(entry: StoryCreationDraftPhone["reply_library"][number]) {
+  return entry.replies.join(" / ")
+}
+
+function setPhoneRepliesText(entry: StoryCreationDraftPhone["reply_library"][number], rawValue: string) {
+  entry.replies = rawValue
+    .split(/[\/\n]/g)
+    .map((reply) => reply.trim())
+    .filter(Boolean)
+}
+
+function getContactProfileSummary(profile: StoryCreationDraftPhone["contact_profiles"][number]) {
+  const messages = profile.proactive_messages.length
+  const preferredTags = profile.preferred_tags.length ? profile.preferred_tags.join(", ") : "无偏好标签"
+  return `${profile.auto_add ? "自动加入" : "手动加入"} / 初始好感 ${profile.initial_favor} / ${preferredTags} / 主动消息 ${messages} 条`
+}
+
+function getDoingPresentationSummary(doing: StoryCreationDraftDoing["doings"][number]) {
+  if (doing.presentation.type === "dialogue") {
+    return `对白 ${doing.presentation.dialogues.length} 条`
+  }
+
+  if (doing.presentation.type === "message") {
+    return `消息：${doing.presentation.message.content}`
+  }
+
+  return "静默执行"
 }
 
 function setItemMaxStackFromInput(item: StoryCreationDraftItem, rawValue: string) {
@@ -1190,6 +1528,8 @@ watch(
               <span>链式 {{ eventTypeSummary.chain }}</span>
               <span>事件池 {{ eventTypeSummary.pool }}</span>
               <span>定时 {{ eventTypeSummary.schedule }}</span>
+              <span v-if="phoneDraftCount">手机 {{ phoneDraftCount }}</span>
+              <span v-if="doingDraftCount">行动 {{ doingDraftCount }}</span>
             </div>
           </div>
 
@@ -1471,6 +1811,338 @@ watch(
                 </li>
               </ul>
               <p v-else class="creation-result__muted">未生成变量建议。</p>
+            </section>
+
+            <section class="creation-result__section">
+              <h4 class="creation-result__section-title">手机联系人资产</h4>
+
+              <template v-if="draftPreview.phone && phoneDraftCount > 0">
+                <div v-if="draftPreview.phone.personality_library.length" class="creation-draft-subgroup">
+                  <strong class="creation-draft-subgroup__title">性格库</strong>
+                  <ul class="creation-chip-list">
+                    <li
+                      v-for="personality in draftPreview.phone.personality_library"
+                      :key="personality.id"
+                      class="creation-chip-list__item"
+                    >
+                      <label class="creation-select">
+                        <input
+                          type="checkbox"
+                          :checked="selectedPhonePersonalityIds.includes(personality.id)"
+                          @change="handlePhonePersonalitySelectionChange(personality.id, $event)"
+                        >
+                      </label>
+                      <strong>{{ personality.id }} · {{ personality.name }}</strong>
+                      <span
+                        class="creation-impact"
+                        :class="getImpactClass(getPhonePersonalityImpact(personality))"
+                        :title="getPhonePersonalityImpact(personality).detail"
+                      >
+                        {{ getPhonePersonalityImpact(personality).label }}
+                      </span>
+                      <label class="creation-edit-field">
+                        <span>名称</span>
+                        <input v-model="personality.name" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>风格标签</span>
+                        <input
+                          class="creation-edit-input"
+                          :value="getStringListText(personality.style_tags)"
+                          @input="setPhonePersonalityTags(personality, ($event.target as HTMLInputElement).value)"
+                        >
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>说明</span>
+                        <textarea v-model="personality.descr" class="creation-edit-textarea" rows="2" />
+                      </label>
+                    </li>
+                  </ul>
+                </div>
+
+                <div v-if="draftPreview.phone.talk_library.length" class="creation-draft-subgroup">
+                  <strong class="creation-draft-subgroup__title">闲聊短句</strong>
+                  <ul class="creation-chip-list">
+                    <li
+                      v-for="entry in draftPreview.phone.talk_library"
+                      :key="entry.id"
+                      class="creation-chip-list__item"
+                    >
+                      <label class="creation-select">
+                        <input
+                          type="checkbox"
+                          :checked="selectedPhoneTalkIds.includes(entry.id)"
+                          @change="handlePhoneTalkSelectionChange(entry.id, $event)"
+                        >
+                      </label>
+                      <strong>{{ entry.id }}</strong>
+                      <span
+                        class="creation-impact"
+                        :class="getImpactClass(getPhoneTalkImpact(entry))"
+                        :title="getPhoneTalkImpact(entry).detail"
+                      >
+                        {{ getPhoneTalkImpact(entry).label }}
+                      </span>
+                      <label class="creation-edit-field">
+                        <span>短句</span>
+                        <input v-model="entry.text" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>标签</span>
+                        <input
+                          class="creation-edit-input"
+                          :value="getStringListText(entry.tags)"
+                          @input="setPhoneTalkTags(entry, ($event.target as HTMLInputElement).value)"
+                        >
+                      </label>
+                      <small class="creation-result__muted">
+                        {{ getPhoneScopeText(entry.scope) }} / 好感 {{ entry.base_favor_delta >= 0 ? "+" : "" }}{{ entry.base_favor_delta }} / 冷却 {{ entry.cooldown_hours }}h
+                      </small>
+                    </li>
+                  </ul>
+                </div>
+
+                <div v-if="draftPreview.phone.action_library.length" class="creation-draft-subgroup">
+                  <strong class="creation-draft-subgroup__title">联系人动作</strong>
+                  <ul class="creation-chip-list">
+                    <li
+                      v-for="entry in draftPreview.phone.action_library"
+                      :key="entry.id"
+                      class="creation-chip-list__item"
+                    >
+                      <label class="creation-select">
+                        <input
+                          type="checkbox"
+                          :checked="selectedPhoneActionIds.includes(entry.id)"
+                          @change="handlePhoneActionSelectionChange(entry.id, $event)"
+                        >
+                      </label>
+                      <strong>{{ entry.id }} · {{ entry.label }}</strong>
+                      <span
+                        class="creation-impact"
+                        :class="getImpactClass(getPhoneActionImpact(entry))"
+                        :title="getPhoneActionImpact(entry).detail"
+                      >
+                        {{ getPhoneActionImpact(entry).label }}
+                      </span>
+                      <label class="creation-edit-field">
+                        <span>动作消息</span>
+                        <input v-model="entry.text" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>标签</span>
+                        <input
+                          class="creation-edit-input"
+                          :value="getStringListText(entry.tags)"
+                          @input="setPhoneActionTags(entry, ($event.target as HTMLInputElement).value)"
+                        >
+                      </label>
+                      <small class="creation-result__muted">
+                        {{ getPhoneScopeText(entry.scope) }} / 金钱 {{ entry.cost_money }} / {{ getPhoneCostItemsText(entry) || "无物品消耗" }}
+                      </small>
+                    </li>
+                  </ul>
+                </div>
+
+                <div v-if="draftPreview.phone.reply_library.length" class="creation-draft-subgroup">
+                  <strong class="creation-draft-subgroup__title">NPC 回复</strong>
+                  <ul class="creation-chip-list">
+                    <li
+                      v-for="entry in draftPreview.phone.reply_library"
+                      :key="entry.id"
+                      class="creation-chip-list__item"
+                    >
+                      <label class="creation-select">
+                        <input
+                          type="checkbox"
+                          :checked="selectedPhoneReplyIds.includes(entry.id)"
+                          @change="handlePhoneReplySelectionChange(entry.id, $event)"
+                        >
+                      </label>
+                      <strong>{{ entry.id }}</strong>
+                      <span
+                        class="creation-impact"
+                        :class="getImpactClass(getPhoneReplyImpact(entry))"
+                        :title="getPhoneReplyImpact(entry).detail"
+                      >
+                        {{ getPhoneReplyImpact(entry).label }}
+                      </span>
+                      <label class="creation-edit-field">
+                        <span>匹配标签</span>
+                        <input
+                          class="creation-edit-input"
+                          :value="getStringListText(entry.tags)"
+                          @input="setPhoneReplyTags(entry, ($event.target as HTMLInputElement).value)"
+                        >
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>回复文本（用 / 分隔）</span>
+                        <textarea
+                          class="creation-edit-textarea"
+                          rows="2"
+                          :value="getPhoneRepliesText(entry)"
+                          @input="setPhoneRepliesText(entry, ($event.target as HTMLTextAreaElement).value)"
+                        />
+                      </label>
+                    </li>
+                  </ul>
+                </div>
+
+                <div v-if="draftPreview.phone.contact_profiles.length" class="creation-draft-subgroup">
+                  <strong class="creation-draft-subgroup__title">联系人特配</strong>
+                  <ul class="creation-chip-list">
+                    <li
+                      v-for="profile in draftPreview.phone.contact_profiles"
+                      :key="profile.role_key"
+                      class="creation-chip-list__item"
+                    >
+                      <label class="creation-select">
+                        <input
+                          type="checkbox"
+                          :checked="selectedPhoneContactProfileKeys.includes(profile.role_key)"
+                          @change="handlePhoneContactProfileSelectionChange(profile.role_key, $event)"
+                        >
+                      </label>
+                      <strong>{{ profile.role_key }}</strong>
+                      <span
+                        class="creation-impact"
+                        :class="getImpactClass(getPhoneContactProfileImpact(profile))"
+                        :title="getPhoneContactProfileImpact(profile).detail"
+                      >
+                        {{ getPhoneContactProfileImpact(profile).label }}
+                      </span>
+                      <div class="creation-item-flags">
+                        <label class="creation-item-flags__check">
+                          <input v-model="profile.enabled" type="checkbox">
+                          启用
+                        </label>
+                        <label class="creation-item-flags__check">
+                          <input v-model="profile.auto_add" type="checkbox">
+                          自动加入
+                        </label>
+                      </div>
+                      <label class="creation-edit-field">
+                        <span>初始好感</span>
+                        <input v-model.number="profile.initial_favor" class="creation-edit-input" min="0" max="100" type="number">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>偏好标签</span>
+                        <input
+                          class="creation-edit-input"
+                          :value="getStringListText(profile.preferred_tags)"
+                          @input="setPhoneContactPreferredTags(profile, ($event.target as HTMLInputElement).value)"
+                        >
+                      </label>
+                      <small class="creation-result__muted">{{ getContactProfileSummary(profile) }}</small>
+                    </li>
+                  </ul>
+                </div>
+              </template>
+
+              <p v-else class="creation-result__muted">未生成手机联系人资产。</p>
+            </section>
+
+            <section class="creation-result__section">
+              <h4 class="creation-result__section-title">行动资产</h4>
+
+              <template v-if="draftPreview.doing && doingDraftCount > 0">
+                <div v-if="draftPreview.doing.menus.length" class="creation-draft-subgroup">
+                  <strong class="creation-draft-subgroup__title">行动菜单</strong>
+                  <ul class="creation-chip-list">
+                    <li
+                      v-for="menu in draftPreview.doing.menus"
+                      :key="menu.id"
+                      class="creation-chip-list__item"
+                    >
+                      <label class="creation-select">
+                        <input
+                          type="checkbox"
+                          :checked="selectedDoingMenuIds.includes(menu.id)"
+                          @change="handleDoingMenuSelectionChange(menu.id, $event)"
+                        >
+                      </label>
+                      <strong>{{ menu.id }} · {{ menu.title }}</strong>
+                      <span
+                        class="creation-impact"
+                        :class="getImpactClass(getDoingMenuImpact(menu))"
+                        :title="getDoingMenuImpact(menu).detail"
+                      >
+                        {{ getDoingMenuImpact(menu).label }}
+                      </span>
+                      <label class="creation-edit-field">
+                        <span>标题</span>
+                        <input v-model="menu.title" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>父级菜单</span>
+                        <input v-model="menu.parent_id" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>显示条件</span>
+                        <input v-model="menu.visible_expr" class="creation-edit-input">
+                      </label>
+                    </li>
+                  </ul>
+                </div>
+
+                <div v-if="draftPreview.doing.doings.length" class="creation-draft-subgroup">
+                  <strong class="creation-draft-subgroup__title">行动事件</strong>
+                  <ul class="creation-chip-list">
+                    <li
+                      v-for="doing in draftPreview.doing.doings"
+                      :key="doing.id"
+                      class="creation-chip-list__item"
+                    >
+                      <label class="creation-select">
+                        <input
+                          type="checkbox"
+                          :checked="selectedDoingIds.includes(doing.id)"
+                          @change="handleDoingSelectionChange(doing.id, $event)"
+                        >
+                      </label>
+                      <strong>{{ doing.id }} · {{ doing.title }}</strong>
+                      <span
+                        class="creation-impact"
+                        :class="getImpactClass(getDoingImpact(doing))"
+                        :title="getDoingImpact(doing).detail"
+                      >
+                        {{ getDoingImpact(doing).label }}
+                      </span>
+                      <label class="creation-edit-field">
+                        <span>所属菜单</span>
+                        <input v-model="doing.menu_id" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>显示条件</span>
+                        <input v-model="doing.visible_expr" class="creation-edit-input">
+                      </label>
+                      <div class="creation-event-edit-grid">
+                        <label class="creation-edit-field">
+                          <span>冷却小时</span>
+                          <input v-model.number="doing.cooldown_hours" class="creation-edit-input" min="0" type="number">
+                        </label>
+                        <label class="creation-item-flags__check">
+                          <input v-model="doing.once" type="checkbox">
+                          一次性
+                        </label>
+                      </div>
+                      <label class="creation-edit-field">
+                        <span>开场脚本</span>
+                        <textarea v-model="doing.init_script" class="creation-edit-textarea" rows="2" />
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>结束脚本</span>
+                        <textarea v-model="doing.end_script" class="creation-edit-textarea" rows="2" />
+                      </label>
+                      <small class="creation-result__muted">
+                        {{ getDoingPresentationSummary(doing) }} / 地点 {{ doing.location || "无" }}
+                      </small>
+                    </li>
+                  </ul>
+                </div>
+              </template>
+
+              <p v-else class="creation-result__muted">未生成行动资产。</p>
             </section>
           </div>
 

@@ -190,6 +190,43 @@ interface RuntimeStoryPhoneFile {
   fallback_replies: Record<string, string[]>
 }
 
+interface RuntimeStoryDoingMenu {
+  id: string
+  title: string
+  parent_id: string
+  sort_order: number
+  visible_expr: string
+  descr: string
+}
+
+interface RuntimeStoryDoingDefinition {
+  id: string
+  title: string
+  trigger_mode?: RuntimeEventTriggerMode
+  trigger_expr?: string
+  invoke_params?: Array<{
+    name: string
+    descr?: string
+  }>
+  menu_id: string
+  descr: string
+  visible_expr: string
+  cooldown_hours: number
+  once: boolean
+  init_script: string
+  object_keys: string[]
+  presentation: RuntimeStoryPresentation
+  location: string
+  bgm: string
+  end_script: string
+  meta?: Record<string, unknown>
+}
+
+interface RuntimeStoryDoingFile {
+  menus: RuntimeStoryDoingMenu[]
+  doings: RuntimeStoryDoingDefinition[]
+}
+
 export interface RuntimeBagEntry {
   item_id: string
   quantity: number
@@ -235,6 +272,19 @@ export interface RuntimePhoneThreadState {
 export interface RuntimePhoneState {
   contacts: RuntimePhoneContactState[]
   threads: RuntimePhoneThreadState[]
+}
+
+export interface RuntimeDoingRecord {
+  id: string
+  used_count: number
+  last_used_game_minute: number | null
+  cooldown_until_game_minute: number | null
+}
+
+export interface RuntimeDoingState {
+  unlocked_ids: string[]
+  locked_ids: string[]
+  records: RuntimeDoingRecord[]
 }
 
 interface RuntimeInitialBagEntry {
@@ -309,7 +359,7 @@ interface CompiledAction {
 }
 
 interface RuntimeStandaloneEvent extends CompiledEvent {
-  runtime_source_type: "pool" | "schedule"
+  runtime_source_type: "pool" | "schedule" | "doing"
   trigger_mode?: RuntimeEventTriggerMode
   invoke_params?: Array<{
     name: string
@@ -377,7 +427,7 @@ export interface RuntimeClockState {
   step_minutes: number
 }
 
-export type RuntimeSchedulerSourceType = "chain_root" | "pool" | "schedule" | "invoke"
+export type RuntimeSchedulerSourceType = "chain_root" | "pool" | "schedule" | "doing" | "invoke"
 
 export type RuntimeSchedulerEventStatus =
   | "scheduled"
@@ -453,6 +503,7 @@ export interface RuntimeStorySessionSnapshot {
   scheduler: RuntimeSchedulerState
   bags: RuntimeBagsState
   phone: RuntimePhoneState
+  doing: RuntimeDoingState
   triggered_once_events: RuntimeTriggeredOnceState[]
   /** @deprecated 请改用 triggered_once_events */
   loop_event_states: RuntimeLoopEventState[]
@@ -472,6 +523,7 @@ export interface RuntimeStoryBundle {
   items?: RuntimeStoryItemsFile
   initialBags?: RuntimeInitialBagsFile
   phone?: RuntimeStoryPhoneFile
+  doing?: RuntimeStoryDoingFile
   chainEvents?: Record<string, unknown>
   poolEvents?: unknown[]
   scheduleEvents?: unknown[]
@@ -627,6 +679,32 @@ export interface RuntimePhoneThreadView {
   quickMessages: RuntimePhoneQuickMessageView[]
 }
 
+export interface RuntimeDoingMenuView {
+  id: string
+  title: string
+  parentId: string
+  sortOrder: number
+  descr: string
+}
+
+export interface RuntimeDoingActionView {
+  id: string
+  title: string
+  menuId: string
+  descr: string
+  cooldownHours: number
+  cooldownLeftHours: number
+  usedCount: number
+  once: boolean
+  disabled: boolean
+  disabledReason: string | null
+}
+
+export interface RuntimeDoingView {
+  menus: RuntimeDoingMenuView[]
+  doings: RuntimeDoingActionView[]
+}
+
 export interface RuntimeStoryViewModel {
   screen: "boot" | "profile" | "save-select" | "game" | "debug"
   storyTitle: string
@@ -645,6 +723,7 @@ export interface RuntimeStoryViewModel {
     value: string
   }>
   bagSummary: RuntimeBagSummary[]
+  doing: RuntimeDoingView
   debugSummary: {
     globalGroupCount: number
     systemGroupCount: number
@@ -662,6 +741,7 @@ export type RuntimeStorySessionAction =
   | { type: "phone-send-action"; roleKey: string; actionId: string }
   | { type: "phone-send-quick-message"; roleKey: string; quickMessageId: string }
   | { type: "phone-mark-read"; roleKey: string }
+  | { type: "start-doing"; doingId: string }
   | { type: "open-debug" }
   | { type: "close-debug" }
 
@@ -1187,6 +1267,21 @@ function createDefaultPhoneState(): RuntimePhoneState {
   }
 }
 
+function createDefaultDoingConfig(): RuntimeStoryDoingFile {
+  return {
+    menus: [],
+    doings: []
+  }
+}
+
+function createDefaultDoingState(): RuntimeDoingState {
+  return {
+    unlocked_ids: [],
+    locked_ids: [],
+    records: []
+  }
+}
+
 function normalizeOwnerId(ownerId: unknown) {
   return typeof ownerId === "string" ? ownerId.trim() : ""
 }
@@ -1197,6 +1292,10 @@ function normalizeItemId(itemId: unknown) {
 
 function normalizePhoneRoleKey(roleKey: unknown) {
   return typeof roleKey === "string" ? roleKey.trim() : ""
+}
+
+function normalizeDoingId(doingId: unknown) {
+  return typeof doingId === "string" ? doingId.trim() : ""
 }
 
 function normalizePhoneContactTrackId(value: unknown): RuntimePhoneContactTrackId {
@@ -1325,6 +1424,46 @@ function normalizePhoneState(snapshot: RuntimeStorySessionSnapshot) {
         messages: normalizePhoneMessages(thread.messages)
       }))
       .filter((thread) => thread.role_key)
+  }
+}
+
+function normalizeDoingState(snapshot: RuntimeStorySessionSnapshot) {
+  const rawDoing = snapshot.doing ?? createDefaultDoingState()
+  const unlockedIds = Array.isArray(rawDoing.unlocked_ids)
+    ? Array.from(new Set(rawDoing.unlocked_ids.map((item) => normalizeDoingId(item)).filter(Boolean)))
+    : []
+  const lockedIds = Array.isArray(rawDoing.locked_ids)
+    ? Array.from(new Set(rawDoing.locked_ids.map((item) => normalizeDoingId(item)).filter(Boolean)))
+    : []
+  const records = new Map<string, RuntimeDoingRecord>()
+  const rawRecords = Array.isArray(rawDoing.records) ? rawDoing.records : []
+
+  for (const record of rawRecords) {
+    const id = normalizeDoingId(record.id)
+    if (!id) {
+      continue
+    }
+
+    const usedCount = Math.max(0, clampInteger(record.used_count, 0))
+    const lastUsedGameMinute = record.last_used_game_minute === null || record.last_used_game_minute === undefined
+      ? null
+      : Math.max(0, clampInteger(record.last_used_game_minute, 0))
+    const cooldownUntilGameMinute = record.cooldown_until_game_minute === null || record.cooldown_until_game_minute === undefined
+      ? null
+      : Math.max(0, clampInteger(record.cooldown_until_game_minute, 0))
+
+    records.set(id, {
+      id,
+      used_count: usedCount,
+      last_used_game_minute: lastUsedGameMinute,
+      cooldown_until_game_minute: cooldownUntilGameMinute
+    })
+  }
+
+  snapshot.doing = {
+    unlocked_ids: unlockedIds,
+    locked_ids: lockedIds,
+    records: Array.from(records.values())
   }
 }
 
@@ -1526,7 +1665,7 @@ function normalizeSchedulerDedupeKey(
 }
 
 function normalizeSchedulerSourceType(value: unknown): RuntimeSchedulerSourceType | undefined {
-  if (value === "chain_root" || value === "pool" || value === "schedule" || value === "invoke") {
+  if (value === "chain_root" || value === "pool" || value === "schedule" || value === "doing" || value === "invoke") {
     return value
   }
 
@@ -1699,6 +1838,233 @@ function syncSystemTimeFieldsFromClock(snapshot: RuntimeStorySessionSnapshot) {
 
 function getBundleItemIds(bundle: RuntimeStoryBundle) {
   return new Set((bundle.items?.items ?? []).map((item) => item.id.trim()).filter(Boolean))
+}
+
+function getBundleDoingConfig(bundle: RuntimeStoryBundle): RuntimeStoryDoingFile {
+  const rawConfig = bundle.doing ?? createDefaultDoingConfig()
+  return {
+    menus: Array.isArray(rawConfig.menus) ? rawConfig.menus : [],
+    doings: Array.isArray(rawConfig.doings) ? rawConfig.doings : []
+  }
+}
+
+function getBundleDoingIds(bundle: RuntimeStoryBundle) {
+  return new Set(getBundleDoingConfig(bundle).doings.map((doing) => normalizeDoingId(doing.id)).filter(Boolean))
+}
+
+function findBundleDoing(bundle: RuntimeStoryBundle, doingId: string) {
+  const normalizedDoingId = normalizeDoingId(doingId)
+  if (!normalizedDoingId) {
+    return null
+  }
+
+  return getBundleDoingConfig(bundle).doings.find((doing) => doing.id === normalizedDoingId) ?? null
+}
+
+function findDoingRecord(snapshot: RuntimeStorySessionSnapshot, doingId: string) {
+  normalizeDoingState(snapshot)
+  const normalizedDoingId = normalizeDoingId(doingId)
+  if (!normalizedDoingId) {
+    return null
+  }
+
+  return snapshot.doing.records.find((record) => record.id === normalizedDoingId) ?? null
+}
+
+function ensureDoingRecord(snapshot: RuntimeStorySessionSnapshot, doingId: string) {
+  normalizeDoingState(snapshot)
+  const normalizedDoingId = normalizeDoingId(doingId)
+  let record = snapshot.doing.records.find((item) => item.id === normalizedDoingId)
+  if (!record) {
+    record = {
+      id: normalizedDoingId,
+      used_count: 0,
+      last_used_game_minute: null,
+      cooldown_until_game_minute: null
+    }
+    snapshot.doing.records.push(record)
+  }
+
+  return record
+}
+
+function getDoingCooldownLeftHours(snapshot: RuntimeStorySessionSnapshot, doingId: string) {
+  const record = findDoingRecord(snapshot, doingId)
+  if (!record?.cooldown_until_game_minute) {
+    return 0
+  }
+
+  const remainingMinutes = Math.max(0, record.cooldown_until_game_minute - getCurrentGameMinute(snapshot))
+  return remainingMinutes / 60
+}
+
+function assertRuntimeDoingId(bundle: RuntimeStoryBundle, doingId: unknown) {
+  const normalizedDoingId = normalizeDoingId(doingId)
+  if (!normalizedDoingId) {
+    throw new Error("doing id is required.")
+  }
+
+  if (!getBundleDoingIds(bundle).has(normalizedDoingId)) {
+    throw new Error(`doing "${normalizedDoingId}" does not exist in runtime doing library.`)
+  }
+
+  return normalizedDoingId
+}
+
+function evaluateRuntimeDoingPredicate(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  source: string
+) {
+  const normalizedSource = normalizeText(source)
+  if (!normalizedSource) {
+    return {
+      ok: true,
+      error: ""
+    }
+  }
+
+  try {
+    const result = evaluateStoryBooleanExpression(
+      createCombinedValsFile(snapshot),
+      normalizedSource,
+      DEFAULT_MAX_CALC_NESTING_DEPTH,
+      buildRuntimeContextValues(bundle, snapshot, {})
+    )
+    return {
+      ok: Boolean(result.result),
+      error: ""
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "条件计算失败。"
+    }
+  }
+}
+
+function buildRuntimeDoingMenuState(bundle: RuntimeStoryBundle, snapshot: RuntimeStorySessionSnapshot) {
+  const doingConfig = getBundleDoingConfig(bundle)
+  const menuById = new Map(doingConfig.menus.map((menu) => [menu.id, menu]))
+  const stateById = new Map<string, {
+    visible: boolean
+    hiddenReason: string | null
+  }>()
+
+  const resolveMenuState = (
+    menu: RuntimeStoryDoingMenu,
+    visiting = new Set<string>()
+  ): { visible: boolean; hiddenReason: string | null } => {
+    const cached = stateById.get(menu.id)
+    if (cached) {
+      return cached
+    }
+
+    if (visiting.has(menu.id)) {
+      const cyclicState = {
+        visible: false,
+        hiddenReason: "菜单父级配置存在循环。"
+      }
+      stateById.set(menu.id, cyclicState)
+      return cyclicState
+    }
+
+    visiting.add(menu.id)
+
+    const visibleResult = evaluateRuntimeDoingPredicate(bundle, snapshot, menu.visible_expr)
+    if (!visibleResult.ok) {
+      const hiddenState = {
+        visible: false,
+        hiddenReason: visibleResult.error || null
+      }
+      stateById.set(menu.id, hiddenState)
+      return hiddenState
+    }
+
+    const parentMenu = menu.parent_id ? menuById.get(menu.parent_id) : null
+    if (parentMenu) {
+      const parentState = resolveMenuState(parentMenu, visiting)
+      if (!parentState.visible) {
+        const hiddenState = {
+          visible: false,
+          hiddenReason: parentState.hiddenReason
+        }
+        stateById.set(menu.id, hiddenState)
+        return hiddenState
+      }
+    }
+
+    const state = {
+      visible: true,
+      hiddenReason: null
+    }
+    stateById.set(menu.id, state)
+    return state
+  }
+
+  for (const menu of doingConfig.menus) {
+    resolveMenuState(menu)
+  }
+
+  return stateById
+}
+
+function resolveDoingAvailability(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  doing: RuntimeStoryDoingDefinition
+) {
+  normalizeDoingState(snapshot)
+  const menuStates = buildRuntimeDoingMenuState(bundle, snapshot)
+  const menuState = menuStates.get(doing.menu_id)
+  if (!menuState?.visible) {
+    return {
+      visible: false,
+      disabled: true,
+      disabledReason: menuState?.hiddenReason ?? "行动所属菜单不可见。"
+    }
+  }
+
+  const visibleResult = evaluateRuntimeDoingPredicate(bundle, snapshot, doing.visible_expr)
+  if (!visibleResult.ok) {
+    return {
+      visible: false,
+      disabled: true,
+      disabledReason: visibleResult.error || "行动条件不满足。"
+    }
+  }
+
+  if (snapshot.doing.locked_ids.includes(doing.id)) {
+    return {
+      visible: true,
+      disabled: true,
+      disabledReason: "该行动已锁定。"
+    }
+  }
+
+  const record = findDoingRecord(snapshot, doing.id)
+  if (doing.once && (record?.used_count ?? 0) > 0) {
+    return {
+      visible: true,
+      disabled: true,
+      disabledReason: "该行动已经完成。"
+    }
+  }
+
+  const cooldownLeftHours = getDoingCooldownLeftHours(snapshot, doing.id)
+  if (cooldownLeftHours > 0) {
+    return {
+      visible: true,
+      disabled: true,
+      disabledReason: `冷却中，还需 ${Math.ceil(cooldownLeftHours)} 小时。`
+    }
+  }
+
+  return {
+    visible: true,
+    disabled: false,
+    disabledReason: null
+  }
 }
 
 function getBundlePhoneConfig(bundle: RuntimeStoryBundle): RuntimeStoryPhoneFile {
@@ -2084,6 +2450,7 @@ function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnap
     scheduler: createDefaultSchedulerState(),
     bags: createInitialBagsState(bundle, clock),
     phone: createDefaultPhoneState(),
+    doing: createDefaultDoingState(),
     triggered_once_events: [],
     loop_event_states: [],
     history: []
@@ -2925,6 +3292,53 @@ function scanDirectorEntryEvents(
   enqueueReadyEvent(runtimeState.snapshot, readyEvent)
 }
 
+function queueDoingEvent(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  doingId: string
+) {
+  normalizeSchedulerState(runtimeState.snapshot)
+  if (runtimeState.snapshot.scheduler.active || runtimeState.snapshot.current_event_id) {
+    throw new Error("当前事件进行中，暂不能发起行动。")
+  }
+
+  const normalizedDoingId = assertRuntimeDoingId(bundle, doingId)
+  const doing = findBundleDoing(bundle, normalizedDoingId)
+  if (!doing) {
+    throw new Error(`行动 "${normalizedDoingId}" 不存在。`)
+  }
+
+  const availability = resolveDoingAvailability(bundle, runtimeState.snapshot, doing)
+  if (!availability.visible) {
+    throw new Error("该行动当前不可见。")
+  }
+
+  if (availability.disabled) {
+    throw new Error(availability.disabledReason ?? "该行动当前不可执行。")
+  }
+
+  const nextSeq = runtimeState.snapshot.scheduler.next_seq
+  const dedupeKey = `doing:${doing.id}:${nextSeq}`
+  const scheduledEvent = createScheduledEvent(
+    runtimeState.snapshot,
+    "doing",
+    doing.id,
+    doing.id,
+    getCurrentGameMinute(runtimeState.snapshot),
+    dedupeKey,
+    true,
+    {
+      __doing_cooldown_hours: Math.max(0, clampInteger(doing.cooldown_hours, 0))
+    }
+  )
+
+  return enqueueReadyEvent(
+    runtimeState.snapshot,
+    scheduledEvent,
+    `行动进入就绪队列：${doing.title}`
+  )
+}
+
 function getBundleOnceEvents(bundle: RuntimeStoryBundle) {
   const onceEventsSource = Array.isArray(bundle.poolEvents)
     ? bundle.poolEvents
@@ -3118,6 +3532,45 @@ function startNextReadyEventIfIdle(
       return
     }
 
+    if (nextScheduledEvent.source_type === "doing") {
+      const event = findBundleDoing(bundle, nextScheduledEvent.entry_event_id)
+
+      if (!event) {
+        continue
+      }
+
+      runtimeState.snapshot.scheduler.active = {
+        ...cloneValue(nextScheduledEvent),
+        status: "running"
+      }
+      runtimeState.snapshot.scheduler.event_pause = true
+      runtimeState.snapshot.clock.pending_minutes = 0
+      appendSchedulerAudit(runtimeState.snapshot, {
+        kind: "start-event",
+        source_type: nextScheduledEvent.source_type,
+        source_id: nextScheduledEvent.source_id,
+        entry_event_id: nextScheduledEvent.entry_event_id,
+        due_game_minute: nextScheduledEvent.due_game_minute,
+        message: "开始执行行动"
+      })
+      runtimeState.activeStandaloneEvent = createStandaloneEvent(
+        "doing",
+        event,
+        nextScheduledEvent.call_values
+      )
+      runtimeState.snapshot.current_event_id = event.id
+      runtimeState.currentEventEntered = false
+      runtimeState.currentDialogueIndex = 0
+      runtimeState.currentMessageElapsedMs = 0
+      runtimeState.pendingActions = []
+      runtimeState.lastAction = null
+      enterCurrentEventResolved(bundle, runtimeState, notifications, {
+        skipTriggerCheck: Boolean(nextScheduledEvent.trigger_locked)
+      })
+      settlePassiveEvents(bundle, runtimeState, notifications)
+      return
+    }
+
     runtimeState.snapshot.scheduler.active = {
       ...cloneValue(nextScheduledEvent),
       status: "running"
@@ -3186,11 +3639,11 @@ function getBundleChainNodes(bundle: RuntimeStoryBundle) {
 }
 
 function createStandaloneEvent(
-  sourceType: "pool" | "schedule",
+  sourceType: "pool" | "schedule" | "doing",
   event: {
     id: string
     title: string
-    trigger_expr: string
+    trigger_expr?: string
     trigger_mode?: RuntimeEventTriggerMode
     invoke_params?: Array<{
       name: string
@@ -3201,7 +3654,7 @@ function createStandaloneEvent(
     object_keys: string[]
     presentation: RuntimeStoryPresentation
     location: string
-    bgm: string
+    bgm?: string
   },
   callValues: Record<string, unknown> = {}
 ): RuntimeStandaloneEvent {
@@ -3210,15 +3663,15 @@ function createStandaloneEvent(
     node_type: "event",
     id: event.id,
     title: event.title,
-    trigger_expr: event.trigger_expr,
-    trigger_mode: event.trigger_mode,
+    trigger_expr: event.trigger_expr ?? "",
+    trigger_mode: event.trigger_mode ?? "default",
     invoke_params: cloneValue(event.invoke_params ?? []),
     init_script: event.init_script,
     end_script: event.end_script,
     object_keys: cloneValue(event.object_keys),
     presentation: cloneValue(event.presentation),
     location: event.location,
-    bgm: event.bgm,
+    bgm: event.bgm ?? "",
     call_values: cloneValue(callValues),
     next: []
   }
@@ -4216,7 +4669,8 @@ function buildRuntimeContextValues(
     values: combinedValues,
     functions: {
       ...createRuntimeBagReadableFunctions(bundle, snapshot),
-      ...createRuntimePhoneReadableFunctions(bundle, snapshot)
+      ...createRuntimePhoneReadableFunctions(bundle, snapshot),
+      ...createRuntimeDoingReadableFunctions(bundle, snapshot)
     }
   } satisfies StoryScriptExecutionContext
 }
@@ -4458,6 +4912,67 @@ function createRuntimePhoneScriptFunctions(
   }
 }
 
+function createRuntimeDoingReadableFunctions(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+) {
+  return {
+    doing_has(doingId: unknown) {
+      const normalizedDoingId = assertRuntimeDoingId(bundle, doingId)
+      normalizeDoingState(snapshot)
+      return snapshot.doing.unlocked_ids.includes(normalizedDoingId)
+        && !snapshot.doing.locked_ids.includes(normalizedDoingId)
+    },
+    doing_used_count(doingId: unknown) {
+      const normalizedDoingId = assertRuntimeDoingId(bundle, doingId)
+      return findDoingRecord(snapshot, normalizedDoingId)?.used_count ?? 0
+    },
+    doing_cooldown_left(doingId: unknown) {
+      const normalizedDoingId = assertRuntimeDoingId(bundle, doingId)
+      return getDoingCooldownLeftHours(snapshot, normalizedDoingId)
+    }
+  }
+}
+
+function createRuntimeDoingScriptFunctions(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+) {
+  const readableFunctions = createRuntimeDoingReadableFunctions(bundle, snapshot)
+
+  return {
+    doing_unlock(doingId: unknown) {
+      const normalizedDoingId = assertRuntimeDoingId(bundle, doingId)
+      normalizeDoingState(snapshot)
+      if (!snapshot.doing.unlocked_ids.includes(normalizedDoingId)) {
+        snapshot.doing.unlocked_ids.push(normalizedDoingId)
+      }
+      snapshot.doing.locked_ids = snapshot.doing.locked_ids.filter((item) => item !== normalizedDoingId)
+      return true
+    },
+    doing_lock(doingId: unknown) {
+      const normalizedDoingId = assertRuntimeDoingId(bundle, doingId)
+      normalizeDoingState(snapshot)
+      if (!snapshot.doing.locked_ids.includes(normalizedDoingId)) {
+        snapshot.doing.locked_ids.push(normalizedDoingId)
+      }
+      return false
+    },
+    doing_set_cooldown(doingId: unknown, hours: unknown) {
+      const normalizedDoingId = assertRuntimeDoingId(bundle, doingId)
+      const normalizedHours = typeof hours === "number" && Number.isFinite(hours)
+        ? Math.max(0, Math.trunc(hours))
+        : 0
+      const record = ensureDoingRecord(snapshot, normalizedDoingId)
+      record.cooldown_until_game_minute = normalizedHours > 0
+        ? getCurrentGameMinute(snapshot) + normalizedHours * 60
+        : null
+      return record.cooldown_until_game_minute ?? 0
+    },
+    ...readableFunctions
+  }
+}
+
 function buildRuntimeScriptContext(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
@@ -4482,7 +4997,8 @@ function buildRuntimeScriptContext(
     assignableValues,
     functions: {
       ...createRuntimeBagScriptFunctions(bundle, snapshot),
-      ...createRuntimePhoneScriptFunctions(bundle, snapshot, notifications)
+      ...createRuntimePhoneScriptFunctions(bundle, snapshot, notifications),
+      ...createRuntimeDoingScriptFunctions(bundle, snapshot)
     }
   } satisfies StoryScriptExecutionContext
 }
@@ -5122,6 +5638,21 @@ function completeActiveScheduledEvent(snapshot: RuntimeStorySessionSnapshot) {
     }
   }
 
+  if (activeScheduledEvent.source_type === "doing") {
+    const doingRecord = ensureDoingRecord(snapshot, activeScheduledEvent.source_id)
+    const completedGameMinute = getCurrentGameMinute(snapshot)
+    const cooldownHours = Math.max(
+      0,
+      clampInteger(activeScheduledEvent.call_values?.__doing_cooldown_hours, 0)
+    )
+
+    doingRecord.used_count += 1
+    doingRecord.last_used_game_minute = completedGameMinute
+    doingRecord.cooldown_until_game_minute = cooldownHours > 0
+      ? completedGameMinute + cooldownHours * 60
+      : null
+  }
+
   snapshot.scheduler.active = null
   snapshot.scheduler.event_pause = false
   return activeScheduledEvent
@@ -5615,6 +6146,87 @@ function buildRuntimeBagSummary(
     })
 }
 
+function buildRuntimeDoingView(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+): RuntimeDoingView {
+  normalizeDoingState(snapshot)
+
+  const doingConfig = getBundleDoingConfig(bundle)
+  const menuStates = buildRuntimeDoingMenuState(bundle, snapshot)
+  const menus = doingConfig.menus
+    .map((menu) => {
+      const menuState = menuStates.get(menu.id) ?? {
+        visible: false,
+        hiddenReason: "菜单状态不可用。"
+      }
+
+      if (!menuState.visible) {
+        return null
+      }
+
+      return {
+        id: menu.id,
+        title: menu.title,
+        parentId: menu.parent_id,
+        sortOrder: menu.sort_order,
+        descr: menu.descr
+      } satisfies RuntimeDoingMenuView
+    })
+    .filter((menu): menu is RuntimeDoingMenuView => Boolean(menu))
+    .sort((left, right) => {
+      if (left.parentId !== right.parentId) {
+        return left.parentId.localeCompare(right.parentId)
+      }
+
+      if (left.sortOrder !== right.sortOrder) {
+        return left.sortOrder - right.sortOrder
+      }
+
+      return left.title.localeCompare(right.title, "zh-Hans-CN")
+    })
+
+  const visibleMenuIds = new Set(menus.map((menu) => menu.id))
+  const doings = doingConfig.doings
+    .map((doing) => {
+      if (!visibleMenuIds.has(doing.menu_id)) {
+        return null
+      }
+
+      const availability = resolveDoingAvailability(bundle, snapshot, doing)
+      if (!availability.visible) {
+        return null
+      }
+
+      const record = findDoingRecord(snapshot, doing.id)
+      return {
+        id: doing.id,
+        title: doing.title,
+        menuId: doing.menu_id,
+        descr: doing.descr,
+        cooldownHours: Math.max(0, clampInteger(doing.cooldown_hours, 0)),
+        cooldownLeftHours: getDoingCooldownLeftHours(snapshot, doing.id),
+        usedCount: record?.used_count ?? 0,
+        once: Boolean(doing.once),
+        disabled: availability.disabled,
+        disabledReason: availability.disabledReason
+      } satisfies RuntimeDoingActionView
+    })
+    .filter((doing): doing is RuntimeDoingActionView => Boolean(doing))
+    .sort((left, right) => {
+      if (left.menuId !== right.menuId) {
+        return left.menuId.localeCompare(right.menuId)
+      }
+
+      return left.title.localeCompare(right.title, "zh-Hans-CN")
+    })
+
+  return {
+    menus,
+    doings
+  }
+}
+
 export function buildRuntimePhoneContacts(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot
@@ -5806,6 +6418,7 @@ function buildViewModel(
   )
 
   const bagSummary = buildRuntimeBagSummary(bundle, runtimeState.snapshot)
+  const doing = buildRuntimeDoingView(bundle, runtimeState.snapshot)
 
   const availableBranches = (currentEventState?.availableActions ?? []).flatMap((actionState) => {
     const actionNode = getBundleGraphNode(bundle, actionState.nodeId)
@@ -5840,6 +6453,7 @@ function buildViewModel(
     availableBranches,
     branchContextSummary,
     bagSummary,
+    doing,
     debugSummary: {
       globalGroupCount: runtimeState.snapshot.vals.variables.length,
       systemGroupCount: runtimeState.snapshot.system_vals.variables.length,
@@ -5878,6 +6492,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
   normalizeBagsState(runtimeState.snapshot)
   normalizePhoneState(runtimeState.snapshot)
+  normalizeDoingState(runtimeState.snapshot)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)
 
   if (!options.saveState && options.customOverrides) {
@@ -5962,6 +6577,20 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
       if (action.type === "invoke-once") {
         invokeOnceEventResolved(action.targetType, action.eventId, action.args, true)
+        return
+      }
+
+      if (action.type === "start-doing") {
+        try {
+          const queued = queueDoingEvent(options.bundle, runtimeState, action.doingId)
+          if (!queued) {
+            notifications.push("行动未能进入队列。")
+            return
+          }
+          reconcileScheduler(options.bundle, runtimeState, notifications)
+        } catch (error) {
+          notifications.push(error instanceof Error ? error.message : "发起行动失败。")
+        }
         return
       }
 

@@ -4,6 +4,7 @@ import type {
   StoryBibleFile,
   CompiledStory,
   StoryDocument,
+  StoryDoingFile,
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
@@ -155,6 +156,19 @@ export interface StoryCreationDraftVariable {
   calc_rule: string
 }
 
+export interface StoryCreationDraftPhone {
+  personality_library: StoryPhoneFile["personality_library"]
+  talk_library: StoryPhoneFile["talk_library"]
+  action_library: StoryPhoneFile["action_library"]
+  reply_library: StoryPhoneFile["reply_library"]
+  contact_profiles: StoryPhoneFile["contact_profiles"]
+}
+
+export interface StoryCreationDraftDoing {
+  menus: StoryDoingFile["menus"]
+  doings: StoryDoingFile["doings"]
+}
+
 export interface StoryCreationDraftEvent {
   collectionType: "chain" | "pool" | "schedule"
   id: string
@@ -181,6 +195,8 @@ export interface StoryCreationDraft {
   items: StoryCreationDraftItem[]
   events: StoryCreationDraftEvent[]
   variables: StoryCreationDraftVariable[]
+  phone?: StoryCreationDraftPhone
+  doing?: StoryCreationDraftDoing
   notes: string[]
   warnings: string[]
 }
@@ -253,6 +269,13 @@ export interface ApplyStoryCreationDraftSelection {
   locationIds: string[]
   roleKeys?: string[]
   itemIds?: string[]
+  phonePersonalityIds?: string[]
+  phoneTalkIds?: string[]
+  phoneActionIds?: string[]
+  phoneReplyIds?: string[]
+  phoneContactProfileKeys?: string[]
+  doingMenuIds?: string[]
+  doingIds?: string[]
   /** @deprecated 请改用 roleKeys，格式为 normal:<id> 或 important:<id> */
   roleIds?: string[]
   variableKeys?: string[]
@@ -274,6 +297,13 @@ export interface ApplyStoryCreationDraftResponse {
     roles: number
     items: number
     variables: number
+    phonePersonalities: number
+    phoneTalks: number
+    phoneActions: number
+    phoneReplies: number
+    phoneContactProfiles: number
+    doingMenus: number
+    doings: number
   }
   warnings: string[]
 }
@@ -353,6 +383,14 @@ export interface StoryPhoneResponse {
 
 export interface SaveStoryPhoneRequest {
   phone: StoryPhoneFile
+}
+
+export interface StoryDoingResponse {
+  doing: StoryDoingFile
+}
+
+export interface SaveStoryDoingRequest {
+  doing: StoryDoingFile
 }
 
 export interface AppSettingsResponse {

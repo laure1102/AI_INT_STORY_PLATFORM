@@ -1,6 +1,6 @@
 # StoryScript 规范
 
-Last updated: `2026-06-15`
+Last updated: `2026-06-16`
 
 本文档定义 Story Manager 项目的统一脚本语言规范。
 
@@ -17,6 +17,8 @@ Last updated: `2026-06-15`
 StoryScript 适用于以下字段：
 
 - `trigger_expr`
+- `doing.menus[].visible_expr`
+- `doing.doings[].visible_expr`
 - `init_script`
 - `end_script`
 - `action.exec_script`
@@ -31,6 +33,8 @@ StoryScript 适用于以下字段：
 适用字段：
 
 - `trigger_expr`
+- `doing.menus[].visible_expr`
+- `doing.doings[].visible_expr`
 
 规则：
 
@@ -39,6 +43,7 @@ StoryScript 适用于以下字段：
 - `trigger_mode: "condition"` 时，`trigger_expr` 必须为非空字符串
 - 最终结果必须为 `boolean`
 - `trigger_mode: "default"` 的事件不执行 `trigger_expr`
+- doing 的 `visible_expr` 也是条件脚本，但允许为空；空字符串表示默认显示
 
 允许两种写法：
 
@@ -286,11 +291,13 @@ ${player.money} += 100 // 行尾注释
 
 - 最终结果必须为 `boolean`
 - `trigger_expr` 必须为非空字符串
+- doing 的 `visible_expr` 可以为空，空字符串按显示处理
 - 若使用完整写法，应保证所有执行路径满足布尔语义
 - 条件脚本只读，不允许修改全局变量、系统变量、分支变量、调用参数
 - 条件脚本不允许使用 `invoke_once`
 - 条件脚本只开放只读背包函数：`bag_count`、`bag_has`
 - 条件脚本只开放只读手机函数：`phone_has_contact`、`phone_favor`、`phone_unread_count`
+- 条件脚本只开放只读行动函数：`doing_has`、`doing_used_count`、`doing_cooldown_left`
 
 ### 6.2 过程脚本规则
 
@@ -439,6 +446,39 @@ phone_mark_read("important:zhuli")
 - `proactive_messages[].reply_quick_message_ids` 可指定这条来信优先展示的短句回复
 - `player_quick_messages` 可通过 `visibility: "suggested-only"` 配置为“仅在被建议时出现”的专用回复
 
+### 6.7 行动 doing 函数
+
+运行时行动是玩家存档数据，行动 id 必须来自故事的 `doing.json5`。
+
+只读函数：
+
+```ts
+doing_has("visit_mayor_office")
+doing_used_count("go_ktv")
+doing_cooldown_left("go_ktv")
+```
+
+可写函数：
+
+```ts
+doing_unlock("visit_mayor_office")
+doing_lock("visit_mayor_office")
+doing_set_cooldown("go_ktv", 24)
+```
+
+规则：
+
+- `doing_has` 返回该行动是否处于“已解锁且未被显式锁定”的状态
+- `doing_used_count` 返回该行动累计完成次数；从未执行时返回 `0`
+- `doing_cooldown_left` 返回该行动剩余冷却小时数；无冷却或冷却已结束时返回 `0`
+- `doing_unlock` 会把预设行动加入当前存档的解锁列表，并返回 `true`
+- `doing_lock` 会把预设行动加入当前存档的锁定列表，并返回 `true`
+- `doing_set_cooldown` 会按游戏小时设置该行动的冷却时间，并返回冷却结束时的游戏分钟
+- `trigger_expr`、doing 菜单/行动的 `visible_expr` 只允许使用三个只读行动函数
+- `init_script`、`end_script`、`action.exec_script` 可以使用全部行动函数
+- 静态校验会检查字面量 `doing_id` 是否存在；动态 `doing_id` 在运行时检查
+- 第一阶段只支持解锁/锁定 `doing.json5` 中已经预设的行动，不支持脚本动态创建全新行动
+
 ---
 
 ## 7. 示例
@@ -562,6 +602,28 @@ phone_send_from_contact("important:zhuli", "老板，今天的材料我已经整
 }
 ```
 
+### 7.8 行动 doing
+
+`doing.json5` 的 `doings[]` 复用平面事件池的事件内容和执行字段，支持 `init_script`、`object_keys`、`presentation`、`location`、`bgm`、`end_script` 等字段。行动额外字段为 `menu_id`、`descr`、`visible_expr`、`cooldown_hours`、`once`。
+
+行动不配置 `trigger_mode`、`trigger_expr`、`invoke_params`。行动只有一种触发方式：从行动菜单选择。菜单入口是否显示由菜单/行动的 `visible_expr` 决定。
+
+玩家主动点击行动时，入口是否显示由菜单/行动的 `visible_expr` 决定；是否可执行仍受锁定状态、一次性状态和冷却限制。入队执行后按普通事件流程执行脚本与事件表现。
+
+```ts
+if (!doing_has("visit_mayor_office")) {
+  doing_unlock("visit_mayor_office")
+}
+
+doing_set_cooldown("go_ktv", 12)
+```
+
+`doing.json5` 中的可见条件示例：
+
+```ts
+doing_has("visit_mayor_office") && doing_cooldown_left("visit_mayor_office") <= 0
+```
+
 ---
 
 ## 8. 编译与运行时约束
@@ -583,6 +645,7 @@ phone_send_from_contact("important:zhuli", "老板，今天的材料我已经整
 - 所有脚本执行必须受最大步数限制
 - 所有循环必须受最大迭代数限制
 - `trigger_expr` 运行时按只读条件脚本执行
+- doing 的 `visible_expr` 运行时按只读条件脚本执行
 
 ---
 
@@ -591,6 +654,7 @@ phone_send_from_contact("important:zhuli", "老板，今天的材料我已经整
 以下界面说明应引用本规范：
 
 - `trigger_expr` 的 `?` 帮助
+- doing 菜单/行动 `visible_expr` 的校验按钮
 - `init_script` 的 `?` 帮助
 - `end_script` 的 `?` 帮助
 - `action.exec_script` 的 `?` 帮助
@@ -633,5 +697,11 @@ phone_send_from_contact("important:zhuli", "老板，今天的材料我已经整
 - `phone_send_from_contact`
 - `phone_send_to_contact`
 - `phone_mark_read`
+- `doing_has`
+- `doing_used_count`
+- `doing_cooldown_left`
+- `doing_unlock`
+- `doing_lock`
+- `doing_set_cooldown`
 
 ---

@@ -328,6 +328,37 @@ export interface StoryPhoneFile {
   fallback_replies: Record<string, string[]>
 }
 
+export interface StoryDoingMenu {
+  id: string
+  title: string
+  parent_id: string
+  sort_order: number
+  visible_expr: string
+  descr: string
+}
+
+export interface StoryDoingDefinition {
+  id: string
+  title: string
+  menu_id: string
+  descr: string
+  visible_expr: string
+  cooldown_hours: number
+  once: boolean
+  init_script: string
+  object_keys: string[]
+  presentation: StoryEventPresentation
+  location: string
+  bgm: string
+  end_script: string
+  meta?: Record<string, unknown>
+}
+
+export interface StoryDoingFile {
+  menus: StoryDoingMenu[]
+  doings: StoryDoingDefinition[]
+}
+
 export interface StoryBibleFile {
   background: string
   golden_finger: string
@@ -524,6 +555,7 @@ export interface StoryDocument {
   items: StoryItemsFile
   initialBags: StoryInitialBagsFile
   phone: StoryPhoneFile
+  doing: StoryDoingFile
   chainEvents: StoryChainEventsFile
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile
@@ -594,6 +626,7 @@ export interface CompiledStory {
   items: StoryItemsFile
   initialBags: StoryInitialBagsFile
   phone: StoryPhoneFile
+  doing: StoryDoingFile
   chainEvents: Record<string, CompiledEvent | CompiledAction>
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile

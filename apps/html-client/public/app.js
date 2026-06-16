@@ -14,6 +14,7 @@ const ui = {
   busy: false,
   screen: "auto",
   menuPanel: null,
+  selectedDoingMenuId: null,
   menuPanelScrollTops: {},
   phoneThreadScrollTops: {},
   phoneOptionsScrollTops: {},
@@ -240,6 +241,20 @@ function openMenuPanel(panel) {
   ui.phoneOpen = false
   ui.menuPanel = panel
   render()
+}
+
+function getDoingView() {
+  return ui.data?.view?.doing ?? { menus: [], doings: [] }
+}
+
+function getSelectedDoingMenu(menus) {
+  if (menus.some((menu) => menu.id === ui.selectedDoingMenuId)) {
+    return ui.selectedDoingMenuId
+  }
+
+  const firstMenuId = menus[0]?.id ?? null
+  ui.selectedDoingMenuId = firstMenuId
+  return firstMenuId
 }
 
 function returnToMainView() {
@@ -626,6 +641,42 @@ function renderMenuPanelBody(panelId) {
     body = `<pre class="pre-lines">${h((data?.schedulerLines ?? []).join("\n"))}</pre>`
   } else if (panelId === "bag") {
     body = `<pre class="pre-lines">${h((data?.bagLines ?? []).join("\n"))}</pre>`
+  } else if (panelId === "doing") {
+    const doing = getDoingView()
+    const menus = Array.isArray(doing?.menus) ? doing.menus : []
+    const items = Array.isArray(doing?.doings) ? doing.doings : []
+    const selectedMenuId = getSelectedDoingMenu(menus)
+    const selectedItems = selectedMenuId
+      ? items.filter((item) => item.menuId === selectedMenuId)
+      : []
+    body = `
+      <div class="doing-panel">
+        <div class="doing-menu-tree">
+          ${menus.length === 0 ? `<div class="empty">暂无行动菜单。</div>` : menus.map((menu) => `
+            <button class="list-item ${menu.id === selectedMenuId ? "active" : ""}" data-doing-menu="${h(menu.id)}">
+              <span class="item-title">${h(menu.title ?? menu.id)}</span>
+              <span class="item-meta">${h(menu.descr ?? "")}</span>
+            </button>
+          `).join("")}
+        </div>
+        <div class="doing-list">
+          ${menus.length === 0 ? `<div class="empty">暂无可执行行动。请先在故事编辑器中配置 doing.json5。</div>` : ""}
+          ${menus.length > 0 && selectedItems.length === 0 ? `<div class="empty">当前菜单下暂无行动。</div>` : ""}
+          ${selectedItems.map((item) => `
+            <button class="option-button ${item.disabled ? "disabled" : ""}" ${item.disabled ? "disabled" : ""} data-doing-action="${h(item.id)}">
+              ${h(item.title ?? item.id)}
+              <span class="item-meta">${h([
+                item.descr,
+                item.once ? "一次性" : "",
+                item.cooldownHours > 0 ? `冷却 ${item.cooldownHours} 小时` : "",
+                item.usedCount > 0 ? `已执行 ${item.usedCount} 次` : "",
+                item.disabledReason
+              ].filter(Boolean).join(" · "))}</span>
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    `
   } else if (panelId === "save") {
     body = `
       <div class="panel-menu-actions">
@@ -652,6 +703,7 @@ function renderMenuPanel() {
     system: "系统变量",
     scheduler: "调度",
     bag: "背包",
+    doing: "行动",
     save: "存档",
     debug: "调试"
   }
@@ -693,7 +745,10 @@ function renderGameFooter(summary, data) {
           <span class="footer-stat">资金 ${h(summary.moneyLabel)}</span>
           <button class="${phoneClass}" data-action="open-phone">手机 ${h(data?.phoneUnreadCount ?? 0)}</button>
         </div>
-        <button class="footer-command footer-next-day" data-action="advance-day">N 下一天</button>
+        <div class="footer-status-right">
+          <button class="footer-command" data-menu-panel="doing">D 行动</button>
+          <button class="footer-command footer-next-day" data-action="advance-day">N 下一天</button>
+        </div>
       </div>
       <div class="footer-command-row">
         <button class="footer-command primary" data-action="back-main">Esc 返回主界面</button>
@@ -999,6 +1054,20 @@ function bindEvents() {
     })
   })
 
+  dom.app.querySelectorAll("[data-doing-menu]").forEach((button) => {
+    button.addEventListener("click", () => {
+      ui.selectedDoingMenuId = button.dataset.doingMenu
+      render()
+    })
+  })
+
+  dom.app.querySelectorAll("[data-doing-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      ui.menuPanel = null
+      await dispatchRuntimeAction({ type: "start-doing", doingId: button.dataset.doingAction })
+    })
+  })
+
   dom.app.querySelectorAll("[data-select-profile]").forEach((button) => {
     button.addEventListener("click", async () => {
       await runTask("角色已载入", async () => api("/api/profiles/select", { body: { profileId: button.dataset.selectProfile } }))
@@ -1117,6 +1186,8 @@ document.addEventListener("keydown", async (event) => {
     await runTask("时间状态已更新", async () => api("/api/session/time", { body: { paused: !ui.data.summary.paused } }))
   } else if (key === "n") {
     await advanceDay()
+  } else if (key === "d") {
+    openMenuPanel("doing")
   } else if (key === "l") {
     openMenuPanel("notifications")
   } else if (key === "i") {

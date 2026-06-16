@@ -17,9 +17,13 @@ export interface StoryScriptFieldValidationOptions {
   source: string
   mode: StoryScriptValidationMode
   itemIds?: string[]
+  roleKeys?: string[]
+  doingIds?: string[]
   readableTokens?: string[]
   writableTokens?: string[]
   bagMode?: "read" | "write"
+  phoneMode?: "read" | "write"
+  doingMode?: "read" | "write"
   story?: StoryDocument | null
 }
 
@@ -39,6 +43,25 @@ function toContextValueMap(tokens: string[] | undefined) {
       .filter(Boolean)
       .map((token) => [token, null] as const)
   )
+}
+
+function collectStoryRoleKeys(story: StoryDocument | null | undefined) {
+  if (!story) {
+    return []
+  }
+
+  return [
+    ...story.roles.important.roles.map((role) => `important:${role.id.trim()}`),
+    ...story.roles.normal.roles.map((role) => `normal:${role.id.trim()}`)
+  ].filter((roleKey) => roleKey !== "important:" && roleKey !== "normal:")
+}
+
+function collectStoryDoingIds(story: StoryDocument | null | undefined) {
+  return story?.doing.doings.map((doing) => doing.id.trim()).filter(Boolean) ?? []
+}
+
+function collectStoryItemIds(story: StoryDocument | null | undefined) {
+  return story?.items.items.map((item) => item.id.trim()).filter(Boolean) ?? []
 }
 
 function validateInvokeOnceReferences(
@@ -71,8 +94,12 @@ export function validateStoryScriptField(
     createStoryScriptValidationContext({
       values: toContextValueMap(options.readableTokens),
       assignableValues: toContextValueMap(options.writableTokens),
-      itemIds: options.itemIds ?? [],
-      bagMode: options.bagMode ?? (options.mode === "predicate" ? "read" : "write")
+      itemIds: options.itemIds ?? collectStoryItemIds(options.story),
+      roleKeys: options.roleKeys ?? collectStoryRoleKeys(options.story),
+      doingIds: options.doingIds ?? collectStoryDoingIds(options.story),
+      bagMode: options.bagMode ?? (options.mode === "predicate" ? "read" : "write"),
+      phoneMode: options.phoneMode ?? (options.mode === "predicate" ? "read" : "write"),
+      doingMode: options.doingMode ?? (options.mode === "predicate" ? "read" : "write")
     })
   )
   const invokeIssues = options.mode === "procedure"

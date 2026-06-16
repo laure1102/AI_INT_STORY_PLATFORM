@@ -2,6 +2,7 @@ import type {
   AppSettingsFile,
   StoryAnyEventFile,
   StoryBibleFile,
+  StoryDoingFile,
   StoryEventCollectionType,
   StoryDocument,
   StoryEventLocationFile,
@@ -40,6 +41,7 @@ import type {
   SaveAppSettingsRequest,
   SaveStoryCreationHistorySessionRequest,
   SaveStoryCreationHistorySessionResponse,
+  SaveStoryDoingRequest,
   SaveEventRequest,
   SaveEventLocationsRequest,
   SaveStoryItemsRequest,
@@ -56,6 +58,7 @@ import type {
   StoryCreationHistoryResponse,
   StoryCreationHistorySession,
   StoryDeleteEventResponse,
+  StoryDoingResponse,
   StoryEventResponse,
   StoryEventLocationsResponse,
   StoryItemsResponse,
@@ -333,6 +336,17 @@ export function useStoryApi() {
     return response.phone
   }
 
+  async function saveDoing(storyId: string, doing: StoryDoingFile): Promise<StoryDoingFile> {
+    const response = await $fetch<StoryDoingResponse>(`${apiBase}/stories/${storyId}/doing`, {
+      method: "PUT",
+      body: {
+        doing
+      } satisfies SaveStoryDoingRequest
+    })
+
+    return response.doing
+  }
+
   async function saveAppSettings(settings: AppSettingsFile): Promise<AppSettingsFile> {
     const response = await $fetch<AppSettingsResponse>(`${apiBase}/settings`, {
       method: "PUT",
@@ -556,6 +570,7 @@ export function useStoryApi() {
     runStoryCreationAgent,
     deleteEvent,
     saveAppSettings,
+    saveDoing,
     saveEvent,
     saveEventLocations,
     saveStoryCreationHistorySession,

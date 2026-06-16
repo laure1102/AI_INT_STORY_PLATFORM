@@ -102,6 +102,7 @@ interface ScriptValidationState {
 type ScriptEditorFieldKey = Exclude<ScriptFieldKey, "triggerExpr">
 
 const props = defineProps<{
+  eyebrow?: string
   event: StoryOnceEventFile | null
   eventLocations: StoryEventLocationFile
   itemIds: string[]
@@ -459,6 +460,10 @@ const submitLabel = computed(() => {
 })
 
 const panelEyebrow = computed(() => {
+  if (props.eyebrow) {
+    return props.eyebrow
+  }
+
   return props.mode === "create" ? "新一次性事件" : "一次性事件编辑"
 })
 
@@ -1471,8 +1476,12 @@ function handleDocumentPointerDown(event: MouseEvent) {
                   <option v-for="bgm in bgmOptions" :key="bgm" :value="bgm" />
                 </datalist>
               </label>
+
+              <slot name="base-info-extra" />
             </div>
           </section>
+
+          <slot name="extra-main" />
 
           <section class="detail-card">
             <div class="detail-grid detail-grid--event-config">
@@ -1485,195 +1494,197 @@ function handleDocumentPointerDown(event: MouseEvent) {
                 @quick-create="requestQuickCreateRole"
               />
 
-              <div ref="triggerExprField" class="field detail-panel__trigger-config">
-                <span class="field-label">触发方式</span>
-                <div class="detail-panel__trigger-mode">
-                  <label class="detail-panel__trigger-mode-option">
-                    <input
-                      v-model="draft.triggerMode"
-                      class="detail-panel__trigger-mode-input"
-                      type="radio"
-                      value="default"
-                    />
-                    <span>默认触发</span>
-                  </label>
-                  <label class="detail-panel__trigger-mode-option">
-                    <input
-                      v-model="draft.triggerMode"
-                      class="detail-panel__trigger-mode-input"
-                      type="radio"
-                      value="condition"
-                    />
-                    <span>条件触发</span>
-                  </label>
-                  <label class="detail-panel__trigger-mode-option">
-                    <input
-                      v-model="draft.triggerMode"
-                      class="detail-panel__trigger-mode-input"
-                      type="radio"
-                      value="invoke"
-                    />
-                    <span>被调用</span>
-                  </label>
-                </div>
+              <slot name="event-config-trigger">
+                <div ref="triggerExprField" class="field detail-panel__trigger-config">
+                  <span class="field-label">触发方式</span>
+                  <div class="detail-panel__trigger-mode">
+                    <label class="detail-panel__trigger-mode-option">
+                      <input
+                        v-model="draft.triggerMode"
+                        class="detail-panel__trigger-mode-input"
+                        type="radio"
+                        value="default"
+                      />
+                      <span>默认触发</span>
+                    </label>
+                    <label class="detail-panel__trigger-mode-option">
+                      <input
+                        v-model="draft.triggerMode"
+                        class="detail-panel__trigger-mode-input"
+                        type="radio"
+                        value="condition"
+                      />
+                      <span>条件触发</span>
+                    </label>
+                    <label class="detail-panel__trigger-mode-option">
+                      <input
+                        v-model="draft.triggerMode"
+                        class="detail-panel__trigger-mode-input"
+                        type="radio"
+                        value="invoke"
+                      />
+                      <span>被调用</span>
+                    </label>
+                  </div>
 
-                <template v-if="draft.triggerMode === 'condition'">
-                  <div class="detail-panel__label-row">
-                    <span class="field-label">触发条件</span>
-                    <div class="detail-panel__help">
-                      <button
-                        class="detail-panel__help-button"
-                        type="button"
-                        aria-label="查看触发条件说明"
-                        @click.stop="toggleTriggerHelp"
+                  <template v-if="draft.triggerMode === 'condition'">
+                    <div class="detail-panel__label-row">
+                      <span class="field-label">触发条件</span>
+                      <div class="detail-panel__help">
+                        <button
+                          class="detail-panel__help-button"
+                          type="button"
+                          aria-label="查看触发条件说明"
+                          @click.stop="toggleTriggerHelp"
+                      >
+                        ?
+                      </button>
+                    </div>
+                    <button
+                      class="detail-panel__validate-button"
+                      type="button"
+                      :disabled="scriptValidationState.triggerExpr.status === 'checking'"
+                      @click.stop="validateScriptField('triggerExpr')"
                     >
-                      ?
+                      {{
+                        scriptValidationState.triggerExpr.status === "checking"
+                          ? "校验中"
+                          : "校验"
+                      }}
                     </button>
                   </div>
-                  <button
-                    class="detail-panel__validate-button"
-                    type="button"
-                    :disabled="scriptValidationState.triggerExpr.status === 'checking'"
-                    @click.stop="validateScriptField('triggerExpr')"
-                  >
-                    {{
-                      scriptValidationState.triggerExpr.status === "checking"
-                        ? "校验中"
-                        : "校验"
-                    }}
-                  </button>
-                </div>
-                <div class="detail-panel__expression-wrap">
-                    <textarea
-                      ref="triggerExprTextarea"
-                      v-model="draft.triggerExpr"
-                      class="text-area detail-panel__expression"
-                      placeholder="${county.gdp} >= 10000000000 && ${county.jiaoyu} >= 60"
-                      @input="onTriggerExprInput"
-                      @click="updateScriptAutocompleteFromCaret('triggerExpr')"
-                      @keyup="updateScriptAutocompleteFromCaret('triggerExpr')"
-                      @keydown="onTriggerExprKeydown"
-                    />
-
-                    <div
-                      v-if="isTriggerAutocompleteOpen"
-                      class="detail-panel__autocomplete"
-                      :class="{
-                        'detail-panel__autocomplete--top':
-                          triggerAutocompleteState.placement === 'top'
-                      }"
-                    >
-                      <button
-                        v-for="(item, index) in triggerAutocompleteItems"
-                        :key="item.name"
-                        class="detail-panel__autocomplete-item"
-                        :class="{
-                          'detail-panel__autocomplete-item--active':
-                            index === triggerAutocompleteState.activeIndex
-                        }"
-                        type="button"
-                        @mousedown.prevent="insertScriptAutocompleteItem('triggerExpr', item.name)"
-                      >
-                        <span class="detail-panel__autocomplete-name">{{ item.name }}</span>
-                        <span
-                          v-if="item.description"
-                          class="detail-panel__autocomplete-description"
-                        >
-                          {{ item.description }}
-                        </span>
-                      </button>
+                  <div class="detail-panel__expression-wrap">
+                      <textarea
+                        ref="triggerExprTextarea"
+                        v-model="draft.triggerExpr"
+                        class="text-area detail-panel__expression"
+                        placeholder="${county.gdp} >= 10000000000 && ${county.jiaoyu} >= 60"
+                        @input="onTriggerExprInput"
+                        @click="updateScriptAutocompleteFromCaret('triggerExpr')"
+                        @keyup="updateScriptAutocompleteFromCaret('triggerExpr')"
+                        @keydown="onTriggerExprKeydown"
+                      />
 
                       <div
-                        v-if="!triggerAutocompleteItems.length"
-                        class="detail-panel__autocomplete-empty"
+                        v-if="isTriggerAutocompleteOpen"
+                        class="detail-panel__autocomplete"
+                        :class="{
+                          'detail-panel__autocomplete--top':
+                            triggerAutocompleteState.placement === 'top'
+                        }"
                       >
-                        没有匹配的变量
+                        <button
+                          v-for="(item, index) in triggerAutocompleteItems"
+                          :key="item.name"
+                          class="detail-panel__autocomplete-item"
+                          :class="{
+                            'detail-panel__autocomplete-item--active':
+                              index === triggerAutocompleteState.activeIndex
+                          }"
+                          type="button"
+                          @mousedown.prevent="insertScriptAutocompleteItem('triggerExpr', item.name)"
+                        >
+                          <span class="detail-panel__autocomplete-name">{{ item.name }}</span>
+                          <span
+                            v-if="item.description"
+                            class="detail-panel__autocomplete-description"
+                          >
+                            {{ item.description }}
+                          </span>
+                        </button>
+
+                        <div
+                          v-if="!triggerAutocompleteItems.length"
+                          class="detail-panel__autocomplete-empty"
+                        >
+                          没有匹配的变量
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div
-                    v-if="scriptValidationState.triggerExpr.status !== 'idle'"
-                    class="detail-panel__validation"
-                    :class="getScriptValidationClass('triggerExpr')"
-                  >
-                    <strong class="detail-panel__validation-title">
-                      {{ getScriptValidationLabel("triggerExpr") }}
-                    </strong>
-                    <span
-                      v-if="!scriptValidationState.triggerExpr.issues.length"
-                      class="detail-panel__validation-message"
-                    >
-                      {{ getScriptValidationMessage("triggerExpr") }}
-                    </span>
-                    <ul v-else class="detail-panel__validation-list">
-                      <li
-                        v-for="issue in scriptValidationState.triggerExpr.issues"
-                        :key="issue"
-                      >
-                        {{ issue }}
-                      </li>
-                    </ul>
-                  </div>
-                </template>
-
-                <template v-else-if="draft.triggerMode === 'invoke'">
-                  <div class="detail-panel__label-row">
-                    <span class="field-label">调用参数</span>
-                    <button
-                      class="btn-secondary detail-panel__param-add"
-                      type="button"
-                      @click="addInvokeParam"
-                    >
-                      添加参数
-                    </button>
-                  </div>
-
-                  <div v-if="draft.invokeParams.length" class="detail-panel__param-table">
-                    <div class="detail-panel__param-table-head">
-                      <span>参数名</span>
-                      <span>说明</span>
-                      <span>操作</span>
-                    </div>
-
                     <div
-                      v-for="param in draft.invokeParams"
-                      :key="param.id"
-                      class="detail-panel__param-row"
+                      v-if="scriptValidationState.triggerExpr.status !== 'idle'"
+                      class="detail-panel__validation"
+                      :class="getScriptValidationClass('triggerExpr')"
                     >
-                      <input
-                        v-model="param.name"
-                        class="text-input"
-                        type="text"
-                        placeholder="county_name"
-                      />
-                      <input
-                        v-model="param.descr"
-                        class="text-input"
-                        type="text"
-                        placeholder="调用方需要传什么值"
-                      />
-                      <button
-                        class="btn-secondary detail-panel__param-remove"
-                        type="button"
-                        @click="removeInvokeParam(param.id)"
+                      <strong class="detail-panel__validation-title">
+                        {{ getScriptValidationLabel("triggerExpr") }}
+                      </strong>
+                      <span
+                        v-if="!scriptValidationState.triggerExpr.issues.length"
+                        class="detail-panel__validation-message"
                       >
-                        删除
+                        {{ getScriptValidationMessage("triggerExpr") }}
+                      </span>
+                      <ul v-else class="detail-panel__validation-list">
+                        <li
+                          v-for="issue in scriptValidationState.triggerExpr.issues"
+                          :key="issue"
+                        >
+                          {{ issue }}
+                        </li>
+                      </ul>
+                    </div>
+                  </template>
+
+                  <template v-else-if="draft.triggerMode === 'invoke'">
+                    <div class="detail-panel__label-row">
+                      <span class="field-label">调用参数</span>
+                      <button
+                        class="btn-secondary detail-panel__param-add"
+                        type="button"
+                        @click="addInvokeParam"
+                      >
+                        添加参数
                       </button>
                     </div>
-                  </div>
 
-                  <div v-else class="detail-panel__param-empty">
-                    这个事件不会自动扫描，只有通过 `invoke_once pool {{ draft.id || 'event_id' }}`
-                    传参后才会入队。
-                  </div>
-                </template>
+                    <div v-if="draft.invokeParams.length" class="detail-panel__param-table">
+                      <div class="detail-panel__param-table-head">
+                        <span>参数名</span>
+                        <span>说明</span>
+                        <span>操作</span>
+                      </div>
 
-                <template v-else>
-                  <div class="detail-panel__param-empty">
-                    默认触发会参与运行时自动扫描，不需要填写触发条件。
-                  </div>
-                </template>
-              </div>
+                      <div
+                        v-for="param in draft.invokeParams"
+                        :key="param.id"
+                        class="detail-panel__param-row"
+                      >
+                        <input
+                          v-model="param.name"
+                          class="text-input"
+                          type="text"
+                          placeholder="county_name"
+                        />
+                        <input
+                          v-model="param.descr"
+                          class="text-input"
+                          type="text"
+                          placeholder="调用方需要传什么值"
+                        />
+                        <button
+                          class="btn-secondary detail-panel__param-remove"
+                          type="button"
+                          @click="removeInvokeParam(param.id)"
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+
+                    <div v-else class="detail-panel__param-empty">
+                      这个事件不会自动扫描，只有通过 `invoke_once pool {{ draft.id || 'event_id' }}`
+                      传参后才会入队。
+                    </div>
+                  </template>
+
+                  <template v-else>
+                    <div class="detail-panel__param-empty">
+                      默认触发会参与运行时自动扫描，不需要填写触发条件。
+                    </div>
+                  </template>
+                </div>
+              </slot>
 
               <label ref="initScriptField" class="field">
                 <div class="detail-panel__label-row">
