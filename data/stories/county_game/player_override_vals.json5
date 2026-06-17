@@ -1,0 +1,61 @@
+{
+  entries: [
+    {
+      group_no: 1,
+      input_options: [],
+      input_type: 'text',
+      need_player_override: true,
+      tips: '请输入主角的姓',
+      var_key: 'player.name_xing',
+    },
+    {
+      group_no: 1,
+      input_options: [],
+      input_type: 'text',
+      need_player_override: true,
+      tips: '请输入主角的名',
+      var_key: 'player.name_ming',
+    },
+    {
+      group_no: 1,
+      input_options: [
+        {
+          label: '男',
+          value: '男',
+        },
+        {
+          label: '女',
+          value: '女',
+        },
+      ],
+      input_type: 'select',
+      need_player_override: true,
+      tips: '请选择主角的性别',
+      var_key: 'player.gender',
+    },
+    {
+      group_no: 1,
+      input_options: [],
+      input_type: 'text',
+      need_player_override: true,
+      tips: '请选择主角的头像',
+      var_key: 'player.avatar',
+    },
+    {
+      group_no: 2,
+      input_options: [],
+      input_type: 'text',
+      need_player_override: true,
+      tips: '请输入你所在的县名，不含‘县’字',
+      var_key: 'county.name_full',
+    },
+    {
+      group_no: 2,
+      input_options: [],
+      input_type: 'text',
+      need_player_override: true,
+      tips: '请输入县简称，留空则默认取县名首字',
+      var_key: 'county.name_short',
+    },
+  ],
+}

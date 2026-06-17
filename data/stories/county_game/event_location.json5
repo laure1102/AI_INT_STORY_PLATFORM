@@ -1,0 +1,35 @@
+{
+  ai: {
+    compress_quality_1: 10,
+    compress_quality_2: 40,
+    global_prompt: 'Game background UI, establishing shot, modern Japanese anime art style, colorful digital painting, Kyoto Animation style, cinematic lighting, crisp focus, vibrant colors, highly detailed, masterpieces, trending on artstation, no humans, --ar 1:1',
+    height: 1024,
+    width: 1024,
+  },
+  assignments: [
+    {
+      descr: '崭新但简单的办公室',
+      img_compress_1: 'assets/event_location/office_small_c1.webp',
+      img_compress_2: 'assets/event_location/office_small_c2.webp',
+      img_raw: 'assets/event_location/raw/mpp1id6l-office_small.png',
+      id: 'office_small',
+      prompt: 'a brand-new yet simple small office interior, clean minimalist workspace, plain desks and chairs, modest storage shelves, neat arrangement, modern but understated design, neutral color palette, smooth painted walls, laminate flooring, subtle reflections, soft daylight streaming through windows, gentle ambient lighting, realistic materials, tidy and quiet atmosphere, game environment background, wide-angle view, architectural interior scene, no people, no close-up, highly detailed, cinematic composition, soft shadows, immersive atmosphere',
+    },
+    {
+      descr: '人少的街道',
+      img_compress_1: '',
+      img_compress_2: '',
+      img_raw: '',
+      id: 'jiedao_renshao',
+      prompt: '',
+    },
+    {
+      descr: '县城汽车站门口',
+      img_compress_1: '',
+      img_compress_2: '',
+      img_raw: '',
+      id: 'qichezhan_lvl1',
+      prompt: '',
+    },
+  ],
+}

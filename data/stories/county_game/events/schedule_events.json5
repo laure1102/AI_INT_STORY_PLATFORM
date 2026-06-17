@@ -1,0 +1,56 @@
+[
+  {
+    bgm: '',
+    end_script: '${player.money} += ${player.day_give_money}',
+    id: 'daily_money',
+    init_script: '',
+    invoke_params: [],
+    location: '',
+    loop: {
+      after: [
+        'daily_population_flow',
+      ],
+      at: '00:00',
+      before: [],
+      mode: 'daily',
+      priority: 50,
+    },
+    object_keys: [],
+    presentation: {
+      message: {
+        content: '今日到账 ${player.day_give_money}。',
+        duration_seconds: 2,
+      },
+      type: 'message',
+    },
+    title: '每日签到发钱',
+    trigger_expr: '',
+    trigger_mode: 'default',
+  },
+  {
+    bgm: '',
+    end_script: '',
+    id: 'daily_population_flow',
+    init_script: "// 【规则目的】\n// 这个每日规则事件不做“真实逐人统计”，而是根据县域现有指数，近似模拟昨日常住人口的迁入与迁出。\n// 设计目标是让玩家感知：就业、教育、医疗、治安、基建这些长期经营指标，会每天反馈到人口变化，进而影响次日系统发钱金额。\n// 注意：county.renkou 是只读 calc，只读取用于计算；不能直接写。实际持久化必须写回 county.renkou_young / county.renkou_kid / county.renkou_old 三个可写分项。\n\n// 【读取变量】\n// 读取当前总人口与三类人口结构：总人口用于计算流动规模，真正写回的是 young/kid/old 三个 value 分项。\n// 读取就业、教育、医疗、治安、基建指数：就业作为主导项，其余作为家庭迁移与长期定居意愿的辅助项。\nlet totalPop = Math.max(1, ${county.renkou});\nlet young = Math.max(0, ${county.renkou_young});\nlet kid = Math.max(0, ${county.renkou_kid});\nlet old = Math.max(0, ${county.renkou_old});\n\nlet jiuye = Math.max(0, Math.min(100, ${county.jiuye}));\nlet jiaoyu = Math.max(0, ${county.jiaoyu});\nlet yiliao = Math.max(0, ${county.yiliao});\nlet zhian = Math.max(0, Math.min(100, ${county.zhian}));\nlet jijian = Math.max(0, Math.min(100, ${county.jijian}));\n\n// 【指标归一化】\n// 教育、医疗原始量纲和 0-100 指数不同，这里做经验压缩/放大，统一到接近 0-100 的可比较区间。\n// 这样可以避免教育或医疗在公式里因为量纲差异而失真。\nlet eduScore = Math.min(100, jiaoyu / 2);\nlet medScore = Math.min(100, yiliao * 12);\n\n// 【综合吸引力】\n// 就业是人口流动主因，所以权重最高；\n// 教育、医疗会影响带娃家庭、返乡定居和老人随迁；\n// 治安、基建影响居住稳定性与外部人口进入意愿。\nlet attractScore = jiuye * 0.45 + eduScore * 0.18 + medScore * 0.12 + zhian * 0.10 + jijian * 0.15;\n\n// 【人口规模系数】\n// 人口越多，绝对流动人数会略高；但系数被限制在较小区间，避免出现一天暴涨暴跌。\nlet scaleFactor = Math.max(0.85, Math.min(1.15, Math.sqrt(totalPop / 500000)));\n\n// 【迁入迁出基值】\n// 迁入：返乡、尝试就业、家庭投靠、普通落户。\n// 迁出：升学外出、务工外流、异地就医、家庭搬离。\n// 综合吸引力高则迁入更高、迁出更低；综合吸引力低则相反。\nlet popInRaw = totalPop * (0.00018 + Math.max(-20, Math.min(30, attractScore - 50)) * 0.000006) * scaleFactor;\nlet popOutRaw = totalPop * (0.00016 + Math.max(-20, Math.min(30, 50 - attractScore)) * 0.000006) * scaleFactor;\n\n// 【轻微波动】\n// 不使用随机函数，改用 system.now_day 生成可复现的小幅扰动。\n// 这样在相同县域指标下，每天数据也会有轻微上下浮动，但仍保持规则稳定、可解释。\nlet daySeed = Math.abs(${system.now_day}) % 17;\nlet inJitter = daySeed % 5 - 2;\nlet outJitter = Math.floor(daySeed / 2) % 5 - 2;\n\n//浮动比例\nlet inFudong = Number((Math.random() * 0.2 + 1 ).toFixed(4));\nlet outFudong = Number((Math.random() * 0.2 + 1 ).toFixed(4));\n// 【极值保护】\n// 每日人口流动应当是总人口中的极小比例，这里做上下限控制，保持长期经营节奏稳定。\nlet popIn = Math.floor(Math.max(20, Math.min(totalPop * 0.0006, popInRaw)) * inFudong);\nlet popOut = Math.floor(Math.max(20, Math.min(totalPop * 0.0006, popOutRaw)) * outFudong);\npopIn = Math.max(0, popIn + inJitter);\npopOut = Math.max(0, popOut + outJitter);\n\n// 【按人口结构分配】\n// 年轻人口是流动主体；儿童随家庭与教育资源迁移，教育越强占比略高；\n// 老人随医疗与照护条件迁移，医疗越强占比略高；其余归入年轻人口。\n// 这样能在“简单规则”下，至少体现县域人口结构与教育/医疗条件的关系。\nlet kidShareIn = Math.max(0.10, Math.min(0.18, 0.12 + (eduScore - 50) / 500));\nlet oldShareIn = Math.max(0.06, Math.min(0.14, 0.08 + (medScore - 50) / 500));\nlet youngShareIn = Math.max(0.68, 1 - kidShareIn - oldShareIn);\n\nlet kidShareOut = Math.max(0.10, Math.min(0.18, 0.12 + (50 - eduScore) / 500));\nlet oldShareOut = Math.max(0.06, Math.min(0.14, 0.08 + (50 - medScore) / 500));\nlet youngShareOut = Math.max(0.68, 1 - kidShareOut - oldShareOut);\n\n\nlet inYoung = Math.floor(popIn * youngShareIn);\nlet inKid = Math.floor(popIn * kidShareIn);\nlet inOld = popIn - inYoung - inKid;\n\nlet outYoung = Math.floor(popOut * youngShareOut);\nlet outKid = Math.floor(popOut * kidShareOut);\nlet outOld = popOut - outYoung - outKid;\n\n// 【安全扣减】\n// 迁出不能把任何年龄段人口扣成负数，因此按现有人口存量做上限保护。\noutYoung = Math.min(outYoung, young);\noutKid = Math.min(outKid, kid);\noutOld = Math.min(outOld, old);\n\nlet actualOut = outYoung + outKid + outOld;\nlet net = popIn - actualOut;\n\n// 【写回人口结构】\n// 不写 county.renkou，因为它是只读 calc；\n// 只写三个可持久化的 value 分项，让总人口按既有 calc_rule 自动更新。\n${county.renkou_young} = Math.max(0, young + inYoung - outYoung);\n${county.renkou_kid} = Math.max(0, kid + inKid - outKid);\n${county.renkou_old} = Math.max(0, old + inOld - outOld);\n\n// 【写回日报缓存】\n// 这些 value 变量供每日消息提示、UI 面板和后续事件读取复用。\n${county.daily_pop_in} = popIn;\n${county.daily_pop_out} = actualOut;\n${county.daily_pop_net} = net;\n\n// 【日报文案】\n// 用户要求：少于 1 万显示具体数字；达到或超过 1 万显示“约 x.xx 万”。\n// StoryScript 不支持 number.toFixed() 这类对象方法，所以这里手动拼接两位小数文本。\nlet inWanScaled = Math.floor(popIn / 100);\nlet inWanMajor = Math.floor(inWanScaled / 100);\nlet inWanMinor = inWanScaled % 100;\nlet inWanMinorText = '';\nif (inWanMinor < 10) {\n  inWanMinorText = '0' + inWanMinor;\n} else {\n  inWanMinorText = '' + inWanMinor;\n}\n\nlet outWanScaled = Math.floor(actualOut / 100);\nlet outWanMajor = Math.floor(outWanScaled / 100);\nlet outWanMinor = outWanScaled % 100;\nlet outWanMinorText = '';\nif (outWanMinor < 10) {\n  outWanMinorText = '0' + outWanMinor;\n} else {\n  outWanMinorText = '' + outWanMinor;\n}\n\nlet netAbs = Math.abs(net);\nlet netWanScaled = Math.floor(netAbs / 100);\nlet netWanMajor = Math.floor(netWanScaled / 100);\nlet netWanMinor = netWanScaled % 100;\nlet netWanMinorText = '';\nif (netWanMinor < 10) {\n  netWanMinorText = '0' + netWanMinor;\n} else {\n  netWanMinorText = '' + netWanMinor;\n}\n\nlet inText = '';\nif (popIn < 10000) {\n  inText = '' + popIn;\n} else {\n  inText = '约 ' + inWanMajor + '.' + inWanMinorText + ' 万';\n}\n\nlet outText = '';\nif (actualOut < 10000) {\n  outText = '' + actualOut;\n} else {\n  outText = '约 ' + outWanMajor + '.' + outWanMinorText + ' 万';\n}\n\nlet netAbsText = '';\nif (netAbs < 10000) {\n  netAbsText = '' + netAbs;\n} else {\n  netAbsText = '约 ' + netWanMajor + '.' + netWanMinorText + ' 万';\n}\n\n// 【原因概括】\n// 文案只反馈规则结果，不把未来剧情后果写死，给后续衍生事件保留空间。\nlet reason = '';\nif (attractScore >= 60) {\n  reason = '就业与综合民生条件对人口形成明显吸引';\n} else if (attractScore >= 50) {\n  reason = '就业与生活条件略有改善，人口流动趋稳';\n} else if (attractScore >= 40) {\n  reason = '岗位与公共服务承接力一般，仍有外流压力';\n} else {\n  reason = '就业机会与基础配套偏弱，县域仍在持续失血';\n}\n\nlet netText = '';\nif (net >= 0) {\n  netText = '净流入 ' + netAbsText;\n} else {\n  netText = '净流出 ' + netAbsText;\n}\n\n${county.daily_pop_msg} = '【人口流动日报】昨日迁入 ' + inText + '，迁出 ' + outText + '，' + netText + '。' + reason + '。';",
+    invoke_params: [],
+    location: '',
+    loop: {
+      after: [],
+      at: '00:00',
+      before: [],
+      mode: 'daily',
+      priority: 20,
+    },
+    object_keys: [],
+    presentation: {
+      message: {
+        content: '${county.daily_pop_msg}',
+        duration_seconds: 3,
+      },
+      type: 'message',
+    },
+    title: '每日人口流动结算（轻微波动）',
+    trigger_expr: '',
+    trigger_mode: 'default',
+  },
+]

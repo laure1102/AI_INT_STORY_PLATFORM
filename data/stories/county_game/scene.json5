@@ -1,0 +1,49 @@
+{
+  ai: {
+    compress_quality: 60,
+  },
+  scenes: [
+    {
+      day_img: 'assets/background/1_day.webp',
+      description: '落后穷县',
+      level: 1,
+      music: '',
+      night_img: 'assets/background/1_night.webp',
+    },
+    {
+      day_img: 'assets/background/2_day.webp',
+      description: '省强县',
+      level: 2,
+      music: '',
+      night_img: 'assets/background/2_night.webp',
+    },
+    {
+      day_img: 'assets/background/3_day.webp',
+      description: '百强县',
+      level: 3,
+      music: '',
+      night_img: 'assets/background/3_night.webp',
+    },
+    {
+      day_img: 'assets/background/4_day.webp',
+      description: '二线城市',
+      level: 4,
+      music: '',
+      night_img: 'assets/background/4_night.webp',
+    },
+    {
+      day_img: 'assets/background/5_day.webp',
+      description: '一线城市',
+      level: 5,
+      music: '',
+      night_img: 'assets/background/5_night.webp',
+    },
+    {
+      day_img: 'assets/background/6_day.webp',
+      description: '圣城',
+      level: 6,
+      music: '',
+      night_img: 'assets/background/6_night.webp',
+    },
+  ],
+}
