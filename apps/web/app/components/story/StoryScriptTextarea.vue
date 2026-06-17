@@ -8,6 +8,7 @@ import {
   buildStoryScriptBuiltinAutocompleteItems,
   buildStoryScriptHighlightTokens,
   buildStoryScriptInvokeAutocompleteContext,
+  buildStoryReferAutocompleteItems,
   buildStoryScriptValAutocompleteItems,
   filterStoryScriptAutocompleteItems,
   mergeStoryScriptAutocompleteItems,
@@ -48,7 +49,8 @@ const autocompleteState = reactive({
 const autocompleteCandidates = computed(() =>
   mergeStoryScriptAutocompleteItems(
     buildStoryScriptBuiltinAutocompleteItems(),
-    buildStoryScriptValAutocompleteItems(props.vals)
+    buildStoryScriptValAutocompleteItems(props.vals),
+    buildStoryReferAutocompleteItems(props.story)
   )
 )
 

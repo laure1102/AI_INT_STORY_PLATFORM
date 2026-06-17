@@ -47,6 +47,7 @@ export function compileStory(document: StoryDocument): {
       vals: document.vals,
       playerOverrideVals: document.playerOverrideVals,
       systemVals: document.systemVals,
+      refer: document.refer,
       scenes: document.scenes,
       roles: document.roles,
       eventLocations: document.eventLocations,

@@ -25,6 +25,7 @@ import {
   buildStoryScriptBuiltinAutocompleteItems,
   buildStoryScriptHighlightTokens,
   buildStoryScriptInvokeAutocompleteContext,
+  buildStoryReferAutocompleteItems,
   buildStoryScriptValAutocompleteItems,
   filterStoryScriptAutocompleteItems,
   mergeStoryScriptAutocompleteItems,
@@ -313,7 +314,8 @@ const dialogueEditorTitle = computed(() => {
 const globalAutocompleteCandidates = computed(() => {
   return mergeStoryScriptAutocompleteItems(
     buildStoryScriptBuiltinAutocompleteItems(),
-    buildStoryScriptValAutocompleteItems(props.vals)
+    buildStoryScriptValAutocompleteItems(props.vals),
+    buildStoryReferAutocompleteItems(props.story)
   )
 })
 const invokeParamAutocompleteCandidates = computed<StoryScriptAutocompleteItem[]>(() => {

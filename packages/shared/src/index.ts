@@ -14,6 +14,7 @@ import type {
   StoryOnceEventFile,
   StoryPhoneFile,
   StoryPlayerOverrideValsFile,
+  StoryReferFile,
   StoryRolesFile,
   StorySceneBackgroundVariant,
   StorySceneFile,
@@ -414,6 +415,14 @@ export interface StoryPhoneResponse {
 
 export interface SaveStoryPhoneRequest {
   phone: StoryPhoneFile
+}
+
+export interface StoryReferResponse {
+  refer: StoryReferFile
+}
+
+export interface SaveStoryReferRequest {
+  refer: StoryReferFile
 }
 
 export interface StoryDoingResponse {

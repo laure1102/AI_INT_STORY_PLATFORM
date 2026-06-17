@@ -17,6 +17,7 @@ import {
   storyItemsSchema,
   storyLoopEventSchema,
   storyPhoneSchema,
+  storyReferSchema,
   storyScheduleEventsSchema,
   storyShopSchema,
   storyMetaSchema,
@@ -48,6 +49,7 @@ import {
   type StoryPoolEventsFile,
   type StoryPhoneFile,
   type StoryPlayerOverrideValsFile,
+  type StoryReferFile,
   type StoryImportantRolesDataFile,
   type StoryRolesFile,
   type StoryScheduleEventsFile,
@@ -107,6 +109,7 @@ export interface StoryFileStore {
   writeShop(storyId: string, shop: StoryShopFile): Promise<StoryShopFile>
   writeInitialBags(storyId: string, initialBags: StoryInitialBagsFile): Promise<StoryInitialBagsFile>
   writePhone(storyId: string, phone: StoryPhoneFile): Promise<StoryPhoneFile>
+  writeRefer(storyId: string, refer: StoryReferFile): Promise<StoryReferFile>
   writeDoing(storyId: string, doing: StoryDoingFile): Promise<StoryDoingFile>
   writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile>
   writePlayerOverrideVals(
@@ -313,6 +316,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
     shopFile: path.join(storyDir, "shop.json5"),
     initialBagsFile: path.join(storyDir, "initial_bags.json5"),
     phoneFile: path.join(storyDir, "phone.json5"),
+    referFile: path.join(storyDir, "refer.json5"),
     doingFile: path.join(storyDir, "doing.json5"),
     assetsDir: path.join(storyDir, "assets"),
     backgroundDir: path.join(storyDir, "assets", "background"),
@@ -393,6 +397,67 @@ function createDefaultStoryPhone(): StoryPhoneFile {
     player_quick_messages: [],
     contact_profiles: [],
     fallback_replies: {}
+  }
+}
+
+function createDefaultStoryRefer(): StoryReferFile {
+  return {
+    gender_value_key: "player.gender",
+    gender_aliases: {
+      male: ["男", "male", "m"],
+      female: ["女", "female", "f"]
+    },
+    terms: [
+      {
+        id: "player.respect",
+        label: "NPC尊称玩家",
+        male: "先生",
+        female: "女士",
+        fallback: "贵客"
+      },
+      {
+        id: "player.casual",
+        label: "熟人称呼玩家",
+        male: "哥",
+        female: "姐",
+        fallback: "朋友"
+      },
+      {
+        id: "player.self",
+        label: "玩家普通自称",
+        male: "我",
+        female: "我",
+        fallback: "我"
+      },
+      {
+        id: "player.self_proud",
+        label: "玩家自信自称",
+        male: "本少",
+        female: "本小姐",
+        fallback: "我"
+      },
+      {
+        id: "player.ta",
+        label: "玩家第三人称",
+        male: "他",
+        female: "她",
+        fallback: "TA"
+      },
+      {
+        id: "player.him_her",
+        label: "玩家宾格/指代",
+        male: "他",
+        female: "她",
+        fallback: "TA"
+      },
+      {
+        id: "player.young_title",
+        label: "年轻身份称呼",
+        male: "少爷",
+        female: "小姐",
+        fallback: "贵客"
+      }
+    ]
   }
 }
 
@@ -1140,6 +1205,18 @@ async function readStoryPhone(
   return storyPhoneSchema.parse(phone)
 }
 
+async function readStoryRefer(
+  dataDir: string,
+  storyId: string
+): Promise<StoryReferFile> {
+  const paths = createStoryPaths(dataDir, storyId)
+  const refer = await readOptionalJson5File<StoryReferFile>(
+    paths.referFile,
+    createDefaultStoryRefer()
+  )
+  return storyReferSchema.parse(refer)
+}
+
 async function readStoryDoing(
   dataDir: string,
   storyId: string
@@ -1276,6 +1353,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     const shop = storyShopSchema.parse(createDefaultStoryShop())
     const initialBags = storyInitialBagsSchema.parse(createDefaultInitialBags())
     const phone = storyPhoneSchema.parse(createDefaultStoryPhone())
+    const refer = storyReferSchema.parse(createDefaultStoryRefer())
     const doing = storyDoingSchema.parse(createDefaultStoryDoing())
     const chainEvents = storyChainEventsSchema.parse([])
     const poolEvents = storyPoolEventsSchema.parse([])
@@ -1300,6 +1378,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       writeJson5File(paths.shopFile, shop),
       writeJson5File(paths.initialBagsFile, initialBags),
       writeJson5File(paths.phoneFile, phone),
+      writeJson5File(paths.referFile, refer),
       writeJson5File(paths.doingFile, doing),
       writeJson5File(paths.chainEventsFile, chainEvents),
       writeJson5File(paths.poolEventsFile, poolEvents),
@@ -1323,6 +1402,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       shop,
       initialBags,
       phone,
+      refer,
       doing,
       chainEvents,
       poolEvents,
@@ -1341,6 +1421,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       readStoryShop(dataDir, storyId),
       readStoryInitialBags(dataDir, storyId),
       readStoryPhone(dataDir, storyId),
+      readStoryRefer(dataDir, storyId),
       readStoryDoing(dataDir, storyId),
       readStoryGraphEvents(dataDir, storyId),
       readStoryOnceEvents(dataDir, storyId),
@@ -1360,6 +1441,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       shop,
       initialBags,
       phone,
+      refer,
       doing,
       chainEvents,
       poolEvents,
@@ -1656,6 +1738,18 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return parsedPhone
   }
 
+  async function writeRefer(
+    storyId: string,
+    refer: StoryReferFile
+  ): Promise<StoryReferFile> {
+    const parsedRefer = storyReferSchema.parse(refer)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(paths.referFile, parsedRefer satisfies StoryReferFile)
+
+    return parsedRefer
+  }
+
   async function writeDoing(
     storyId: string,
     doing: StoryDoingFile
@@ -1924,6 +2018,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     writeShop,
     writeInitialBags,
     writePhone,
+    writeRefer,
     writeDoing,
     writeVals,
     writePlayerOverrideVals,

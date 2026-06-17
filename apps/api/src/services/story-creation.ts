@@ -1449,6 +1449,18 @@ function formatExistingEvents(story: StoryDocument) {
 
 function formatExistingPhoneAndDoing(story: StoryDocument) {
   return formatJson({
+    refer: {
+      gender_value_key: story.refer.gender_value_key,
+      gender_aliases: story.refer.gender_aliases,
+      terms: story.refer.terms.map((term) => ({
+        id: term.id,
+        label: term.label,
+        male: term.male,
+        female: term.female,
+        fallback: term.fallback,
+        placeholder: `\${term.${term.id.replace(/^term\./, "")}}`
+      }))
+    },
     phone: {
       relationship_tracks: story.phone.relationship_tracks.map((track) => ({
         id: track.id,
@@ -1554,7 +1566,7 @@ function buildStoryContext(
     "【现有地点/角色/场景/物品】",
     formatExistingAssets(story, instruction, baseDraft),
     "",
-    "【现有手机联系人/行动/商城资产】",
+    "【现有称谓库/手机联系人/行动/商城资产】",
     formatExistingPhoneAndDoing(story),
     "",
     "【现有事件简表】",
@@ -1572,6 +1584,8 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "事件必须贴近项目数据格式：chain 是链式剧情线，pool 是平面一次性事件池，schedule 是定时规则事件。",
     "chain/pool/schedule 中 trigger_mode 为 invoke 的事件只供脚本调用，不参与普通调度。",
     "角色引用使用 player、normal:<roleId>、important:<roleId>。",
+    "涉及玩家性别差异的称呼、自称和代词时，必须优先使用 refer.json5 称谓库占位符，例如 `${term.player.respect}`、`${term.player.self_proud}`；不要硬编码先生/女士/少爷/小姐。",
+    "生成对白、消息提示、手机短句、NPC 主动消息、phone_send_from_contact/phone_send_to_contact 文本时，都可以使用 `${term.xxx}`。称谓库只读，不要把 term.* 当作普通变量写入。",
     "地点使用地点 id。所有 id 尽量使用 ASCII 小写、数字、下划线或短横线。",
     "变量必须优先复用现有变量；判断变量是否已存在时必须先查 variableIndexAll 全量轻量索引；relevantVariableDetails 只提供本次更相关变量的详细字段，不代表完整变量库。",
     "现有变量里的 calc 变量就是现成规则资产，尤其是教育、就业、医疗、治安、基础建设等指数；不要默认不存在，也不要为了表达方便新造同义变量。",
@@ -2294,6 +2308,15 @@ function getDraftEventCallTokens(event: StoryCreationDraftEvent) {
   )
 }
 
+function getStoryReferTokens(story: StoryDocument) {
+  return Object.fromEntries(
+    story.refer.terms
+      .map((term) => term.id.trim().replace(/^term\./, ""))
+      .filter(Boolean)
+      .map((termId) => [`term.${termId}`, null] as const)
+  )
+}
+
 function createDraftEventValidationContext(
   event: StoryCreationDraftEvent,
   context: {
@@ -2301,11 +2324,15 @@ function createDraftEventValidationContext(
     roleKeys: string[]
     doingIds: string[]
     shopProductIds: string[]
+    referTokens: Record<string, null>
   },
   mode: "read" | "write"
 ) {
   return createStoryScriptValidationContext({
-    values: mode === "write" ? getDraftEventCallTokens(event) : {},
+    values: {
+      ...context.referTokens,
+      ...(mode === "write" ? getDraftEventCallTokens(event) : {})
+    },
     assignableValues: {},
     itemIds: context.itemIds,
     roleKeys: context.roleKeys,
@@ -2324,10 +2351,12 @@ function createDraftGlobalValidationContext(
     roleKeys: string[]
     doingIds: string[]
     shopProductIds: string[]
+    referTokens: Record<string, null>
   },
   mode: "read" | "write"
 ) {
   return createStoryScriptValidationContext({
+    values: context.referTokens,
     itemIds: context.itemIds,
     roleKeys: context.roleKeys,
     doingIds: context.doingIds,
@@ -2342,14 +2371,27 @@ function createDraftGlobalValidationContext(
 function validateDraftEventPresentationTemplates(
   vals: StoryValsFile,
   event: StoryCreationDraftEvent,
-  issues: DraftStoryScriptValidationIssue[]
+  issues: DraftStoryScriptValidationIssue[],
+  context: {
+    itemIds: string[]
+    roleKeys: string[]
+    doingIds: string[]
+    shopProductIds: string[]
+    referTokens: Record<string, null>
+  }
 ) {
   if (event.presentation.type === "message") {
     pushDraftScriptValidationIssues(
       issues,
       event,
       "presentation.message.content",
-      validateStoryScriptContent(vals, event.presentation.message.content, "template")
+      validateStoryScriptContent(
+        vals,
+        event.presentation.message.content,
+        "template",
+        undefined,
+        createDraftEventValidationContext(event, context, "write")
+      )
     )
     return
   }
@@ -2363,7 +2405,13 @@ function validateDraftEventPresentationTemplates(
       issues,
       event,
       `presentation.dialogues[${index}].content`,
-      validateStoryScriptContent(vals, dialogue.content, "template")
+      validateStoryScriptContent(
+        vals,
+        dialogue.content,
+        "template",
+        undefined,
+        createDraftEventValidationContext(event, context, "write")
+      )
     )
   })
 }
@@ -2377,7 +2425,8 @@ function collectDraftStoryScriptValidationIssues(
     itemIds: collectDraftValidationItemIds(story, draft),
     roleKeys: collectDraftValidationRoleKeys(story, draft),
     doingIds: collectDraftValidationDoingIds(story, draft),
-    shopProductIds: collectDraftValidationShopProductIds(story, draft)
+    shopProductIds: collectDraftValidationShopProductIds(story, draft),
+    referTokens: getStoryReferTokens(story)
   }
   const issues: DraftStoryScriptValidationIssue[] = []
 
@@ -2432,7 +2481,7 @@ function collectDraftStoryScriptValidationIssues(
       )
     )
 
-    validateDraftEventPresentationTemplates(vals, event, issues)
+    validateDraftEventPresentationTemplates(vals, event, issues, validationContext)
   }
 
   for (const doing of draft.doing?.menus ?? []) {
@@ -4319,16 +4368,19 @@ export async function generateStoryEventDialogues(
     "对白应该自然、短促、可点击推进。避免一条对白过长。",
     "如当前事件对象里没有合适的说话人，不要凭空新增角色，只在 player 和现有对象里分配。",
     "可以复用 `${group.value}` 这样的占位符，但只在确有必要时使用，且不要编造不存在的变量。",
+    "涉及玩家性别差异的称呼、自称和代词时，优先使用 `${term.xxx}` 称谓库占位符，例如 `${term.player.respect}`、`${term.player.self_proud}`；不要硬编码先生/女士/少爷/小姐。",
     "默认覆盖当前对白，因此输出需要是完整版本，而不是增量 patch。",
     "如果用户想要大致对白风格，你要把它落成可直接运行的对白序列。",
     "",
     "【创作设定】",
     formatStoryBible(story),
     "",
-    "【现有变量与资产上下文】",
+    "【现有变量、称谓与资产上下文】",
     formatExistingVariables(story, instruction, null),
     "",
     formatExistingAssets(story, instruction, null),
+    "",
+    formatExistingPhoneAndDoing(story),
     "",
     "【事件上下文】",
     summarizeEventForDialogueGeneration(story, collectionType, event),

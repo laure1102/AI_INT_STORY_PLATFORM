@@ -9,6 +9,7 @@ import type {
   StoryItemsFile,
   StoryPhoneFile,
   StoryPlayerOverrideValsFile,
+  StoryReferFile,
   StoryRolesFile,
   StorySceneFile,
   StoryShopFile,
@@ -49,6 +50,7 @@ import type {
   SaveEventLocationsRequest,
   SaveStoryItemsRequest,
   SaveStoryPhoneRequest,
+  SaveStoryReferRequest,
   SaveStoryShopRequest,
   SavePlayerOverrideValsRequest,
   SaveRolesRequest,
@@ -68,6 +70,7 @@ import type {
   StoryItemsResponse,
   StoryPhoneResponse,
   StoryPlayerOverrideValsResponse,
+  StoryReferResponse,
   StoryRolesResponse,
   StoryListResponse,
   StoryShopResponse,
@@ -359,6 +362,17 @@ export function useStoryApi() {
     return response.phone
   }
 
+  async function saveRefer(storyId: string, refer: StoryReferFile): Promise<StoryReferFile> {
+    const response = await $fetch<StoryReferResponse>(`${apiBase}/stories/${storyId}/refer`, {
+      method: "PUT",
+      body: {
+        refer
+      } satisfies SaveStoryReferRequest
+    })
+
+    return response.refer
+  }
+
   async function saveDoing(storyId: string, doing: StoryDoingFile): Promise<StoryDoingFile> {
     const response = await $fetch<StoryDoingResponse>(`${apiBase}/stories/${storyId}/doing`, {
       method: "PUT",
@@ -601,6 +615,7 @@ export function useStoryApi() {
     saveItems,
     saveShop,
     savePhone,
+    saveRefer,
     savePlayerOverrideVals,
     saveRoles,
     saveScenes,

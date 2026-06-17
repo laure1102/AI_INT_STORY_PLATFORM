@@ -26,6 +26,7 @@ import {
   buildStoryScriptBuiltinAutocompleteItems,
   buildStoryScriptHighlightTokens,
   buildStoryScriptInvokeAutocompleteContext,
+  buildStoryReferAutocompleteItems,
   buildStoryScriptValAutocompleteItems,
   filterStoryScriptAutocompleteItems,
   mergeStoryScriptAutocompleteItems,
@@ -386,7 +387,8 @@ const filteredScheduleDependencyOptions = computed(() => {
 const globalAutocompleteCandidates = computed(() => {
   return mergeStoryScriptAutocompleteItems(
     buildStoryScriptBuiltinAutocompleteItems(),
-    buildStoryScriptValAutocompleteItems(props.vals)
+    buildStoryScriptValAutocompleteItems(props.vals),
+    buildStoryReferAutocompleteItems(props.story)
   )
 })
 const invokeParamAutocompleteCandidates = computed<StoryScriptAutocompleteItem[]>(() => {

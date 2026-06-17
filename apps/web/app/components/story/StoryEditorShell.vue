@@ -10,6 +10,7 @@ import type {
   StoryEventFile,
   StoryEventLocationFile,
   StoryPhoneFile,
+  StoryReferFile,
   StoryEventTriggerMode,
   StoryItemsFile,
   StoryLoopEventFile,
@@ -46,6 +47,7 @@ import StoryLocationsDialog from "./StoryLocationsDialog.vue"
 import StoryOnceCanvas from "./StoryOnceCanvas.vue"
 import StoryPhoneDialog from "./StoryPhoneDialog.vue"
 import StoryPlayerOverrideValsDialog from "./StoryPlayerOverrideValsDialog.vue"
+import StoryReferDialog from "./StoryReferDialog.vue"
 import StoryRolesDialog from "./StoryRolesDialog.vue"
 import StoryScenesDialog from "./StoryScenesDialog.vue"
 import StoryShopDialog from "./StoryShopDialog.vue"
@@ -84,6 +86,7 @@ const {
   saveStoryCreationHistorySession,
   saveItems,
   savePhone,
+  saveRefer,
   saveShop,
   savePlayerOverrideVals,
   saveRoles,
@@ -123,6 +126,7 @@ const isLocationsDialogOpen = shallowRef(false)
 const isItemsDialogOpen = shallowRef(false)
 const isShopDialogOpen = shallowRef(false)
 const isPhoneDialogOpen = shallowRef(false)
+const isReferDialogOpen = shallowRef(false)
 const isRolesDialogOpen = shallowRef(false)
 const isSettingsDialogOpen = shallowRef(false)
 const scenesSaveSuccessMessage = shallowRef<string | null>(null)
@@ -130,6 +134,7 @@ const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const itemsSaveSuccessMessage = shallowRef<string | null>(null)
 const shopSaveSuccessMessage = shallowRef<string | null>(null)
 const phoneSaveSuccessMessage = shallowRef<string | null>(null)
+const referSaveSuccessMessage = shallowRef<string | null>(null)
 const doingSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
 const activeWorkspaceTab = shallowRef<StoryWorkspaceTab>("creation")
@@ -642,6 +647,7 @@ function openValsDialog() {
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
   isPhoneDialogOpen.value = false
+  isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   isValsDialogOpen.value = true
 }
@@ -663,6 +669,7 @@ function openPlayerOverrideValsDialog() {
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
   isPhoneDialogOpen.value = false
+  isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   isPlayerOverrideValsDialogOpen.value = true
 }
@@ -684,6 +691,7 @@ function openSystemValsDialog() {
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
   isPhoneDialogOpen.value = false
+  isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   isSystemValsDialogOpen.value = true
 }
@@ -705,6 +713,7 @@ function openScenesDialog() {
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
   isPhoneDialogOpen.value = false
+  isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   scenesSaveSuccessMessage.value = null
   isScenesDialogOpen.value = true
@@ -728,6 +737,7 @@ function openLocationsDialog() {
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
   isPhoneDialogOpen.value = false
+  isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   locationsSaveSuccessMessage.value = null
   isLocationsDialogOpen.value = true
@@ -751,6 +761,7 @@ function openItemsDialog() {
   isLocationsDialogOpen.value = false
   isShopDialogOpen.value = false
   isPhoneDialogOpen.value = false
+  isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   itemsSaveSuccessMessage.value = null
   isItemsDialogOpen.value = true
@@ -774,6 +785,7 @@ function openShopDialog() {
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
   isPhoneDialogOpen.value = false
+  isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   shopSaveSuccessMessage.value = null
   isShopDialogOpen.value = true
@@ -797,6 +809,7 @@ function openPhoneDialog() {
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
+  isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   phoneSaveSuccessMessage.value = null
   isPhoneDialogOpen.value = true
@@ -805,6 +818,30 @@ function openPhoneDialog() {
 function closePhoneDialog() {
   phoneSaveSuccessMessage.value = null
   isPhoneDialogOpen.value = false
+}
+
+function openReferDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  closeEditor()
+  isValsDialogOpen.value = false
+  isPlayerOverrideValsDialogOpen.value = false
+  isSystemValsDialogOpen.value = false
+  isScenesDialogOpen.value = false
+  isLocationsDialogOpen.value = false
+  isItemsDialogOpen.value = false
+  isShopDialogOpen.value = false
+  isPhoneDialogOpen.value = false
+  isRolesDialogOpen.value = false
+  referSaveSuccessMessage.value = null
+  isReferDialogOpen.value = true
+}
+
+function closeReferDialog() {
+  referSaveSuccessMessage.value = null
+  isReferDialogOpen.value = false
 }
 
 function openRolesDialog() {
@@ -821,6 +858,7 @@ function openRolesDialog() {
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
   isPhoneDialogOpen.value = false
+  isReferDialogOpen.value = false
   rolesSaveSuccessMessage.value = null
   isRolesDialogOpen.value = true
 }
@@ -929,6 +967,7 @@ async function loadStory() {
   creationApplyWarnings.value = []
   creationHistory.value = { sessions: [] }
   activeCreationHistorySessionId.value = null
+  referSaveSuccessMessage.value = null
   doingSaveSuccessMessage.value = null
 
   try {
@@ -1469,6 +1508,30 @@ async function handleSavePhone(phone: StoryPhoneFile) {
   }
 }
 
+async function handleSaveRefer(refer: StoryReferFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+  referSaveSuccessMessage.value = null
+
+  try {
+    const savedRefer = await saveRefer(props.storyId, refer)
+    storyDocument.value = {
+      ...storyDocument.value,
+      refer: savedRefer
+    }
+    referSaveSuccessMessage.value = "已保存"
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存称谓配置失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
 async function handleSaveDoing(doing: StoryDoingFile) {
   if (!storyDocument.value) {
     return
@@ -1833,6 +1896,7 @@ watch(
     isItemsDialogOpen.value = false
     isShopDialogOpen.value = false
     isPhoneDialogOpen.value = false
+    isReferDialogOpen.value = false
     isRolesDialogOpen.value = false
     activeWorkspaceTab.value = "creation"
     creationAgentResult.value = null
@@ -1845,6 +1909,7 @@ watch(
     itemsSaveSuccessMessage.value = null
     shopSaveSuccessMessage.value = null
     phoneSaveSuccessMessage.value = null
+    referSaveSuccessMessage.value = null
     doingSaveSuccessMessage.value = null
     rolesSaveSuccessMessage.value = null
     void loadStory()
@@ -1889,6 +1954,9 @@ watch(
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openPhoneDialog">
             手机
+          </button>
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openReferDialog">
+            称谓
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openRolesDialog">
             角色
@@ -2106,6 +2174,7 @@ watch(
               :graph-node-options="graphNodeOptions"
               :mode="isCreateMode ? 'create' : 'edit'"
               :saving="isSaving"
+              :story="storyDocument"
               :vals="storyScriptVals"
               @close="closeEditor"
               @save="handleSaveEvent"
@@ -2229,6 +2298,15 @@ watch(
       :saving="isSaving"
       @close="closePhoneDialog"
       @save="handleSavePhone"
+    />
+
+    <StoryReferDialog
+      v-if="storyDocument && isReferDialogOpen"
+      :refer="storyDocument.refer"
+      :save-success-message="referSaveSuccessMessage"
+      :saving="isSaving"
+      @close="closeReferDialog"
+      @save="handleSaveRefer"
     />
 
     <StoryRolesDialog

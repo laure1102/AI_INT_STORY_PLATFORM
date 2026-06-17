@@ -1,0 +1,58 @@
+{
+  gender_value_key: "player.gender",
+  gender_aliases: {
+    male: ["男", "male", "m"],
+    female: ["女", "female", "f"],
+  },
+  terms: [
+    {
+      id: "player.respect",
+      label: "NPC尊称玩家",
+      male: "先生",
+      female: "女士",
+      fallback: "贵客",
+    },
+    {
+      id: "player.casual",
+      label: "熟人称呼玩家",
+      male: "哥",
+      female: "姐",
+      fallback: "朋友",
+    },
+    {
+      id: "player.self",
+      label: "玩家普通自称",
+      male: "我",
+      female: "我",
+      fallback: "我",
+    },
+    {
+      id: "player.self_proud",
+      label: "玩家自信自称",
+      male: "本少",
+      female: "本小姐",
+      fallback: "我",
+    },
+    {
+      id: "player.ta",
+      label: "玩家第三人称",
+      male: "他",
+      female: "她",
+      fallback: "TA",
+    },
+    {
+      id: "player.him_her",
+      label: "玩家宾格/指代",
+      male: "他",
+      female: "她",
+      fallback: "TA",
+    },
+    {
+      id: "player.young_title",
+      label: "年轻身份称呼",
+      male: "少爷",
+      female: "小姐",
+      fallback: "贵客",
+    },
+  ],
+}

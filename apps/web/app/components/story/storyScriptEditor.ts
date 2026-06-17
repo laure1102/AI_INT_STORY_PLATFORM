@@ -3,6 +3,7 @@ import type {
   StoryEventFile,
   StoryLoopEventFile,
   StoryOnceEventFile,
+  StoryReferFile,
   StoryValsFile
 } from "@story-mgr/core"
 
@@ -181,6 +182,41 @@ export function buildStoryScriptValAutocompleteItems(vals: StoryValsFile) {
           .join(" / ")
       }]
     })
+  })
+}
+
+export function buildStoryReferAutocompleteItems(
+  storyOrRefer: Pick<StoryDocument, "refer"> | StoryReferFile | null | undefined
+) {
+  const refer = storyOrRefer && "terms" in storyOrRefer
+    ? storyOrRefer
+    : storyOrRefer?.refer
+  const seen = new Set<string>()
+
+  return (refer?.terms ?? []).flatMap((term) => {
+    const rawId = normalizeStoryScriptAutocompleteText(term.id).replace(/^term\./, "")
+    if (!rawId || seen.has(rawId)) {
+      return []
+    }
+
+    seen.add(rawId)
+
+    const label = normalizeStoryScriptAutocompleteText(term.label)
+    const fallback = normalizeStoryScriptAutocompleteText(term.fallback)
+    const male = normalizeStoryScriptAutocompleteText(term.male)
+    const female = normalizeStoryScriptAutocompleteText(term.female)
+
+    return [{
+      name: `term.${rawId}`,
+      description: label || "称谓库占位符",
+      detailTitle: `term.${rawId}`,
+      detailLines: [
+        label ? `用途：${label}` : "",
+        male ? `男：${male}` : "",
+        female ? `女：${female}` : "",
+        fallback ? `兜底：${fallback}` : ""
+      ].filter(Boolean)
+    }]
   })
 }
 

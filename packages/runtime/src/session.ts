@@ -257,6 +257,23 @@ interface RuntimeStoryShopFile {
   products: RuntimeStoryShopProduct[]
 }
 
+interface RuntimeStoryReferTerm {
+  id: string
+  label: string
+  male: string
+  female: string
+  fallback: string
+}
+
+interface RuntimeStoryReferFile {
+  gender_value_key: string
+  gender_aliases: {
+    male: string[]
+    female: string[]
+  }
+  terms: RuntimeStoryReferTerm[]
+}
+
 export interface RuntimeBagEntry {
   item_id: string
   quantity: number
@@ -574,6 +591,7 @@ export interface RuntimeStoryBundle {
   items?: RuntimeStoryItemsFile
   initialBags?: RuntimeInitialBagsFile
   phone?: RuntimeStoryPhoneFile
+  refer?: RuntimeStoryReferFile
   doing?: RuntimeStoryDoingFile
   shop?: RuntimeStoryShopFile
   chainEvents?: Record<string, unknown>
@@ -1351,6 +1369,17 @@ function createDefaultPhoneState(): RuntimePhoneState {
   return {
     contacts: [],
     threads: []
+  }
+}
+
+function createDefaultReferConfig(): RuntimeStoryReferFile {
+  return {
+    gender_value_key: "player.gender",
+    gender_aliases: {
+      male: ["男", "male", "m"],
+      female: ["女", "female", "f"]
+    },
+    terms: []
   }
 }
 
@@ -4457,7 +4486,9 @@ function resolvePhoneTalkOptionsForContact(
       const tags = Array.from(new Set((entry.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
       return {
         id: normalizeText(entry.id),
-        text: normalizeText(entry.text),
+        text: snapshot
+          ? renderDialogueContent(bundle, snapshot, entry.text, {})
+          : normalizeText(entry.text),
         tags,
         baseFavorDelta: Math.max(0, clampInteger(entry.base_favor_delta, 0)),
         cooldownHours: Math.max(0, clampInteger(entry.cooldown_hours, 0)),
@@ -4487,7 +4518,9 @@ function resolvePhoneTalkOptionsForContact(
       const tags = Array.from(new Set((message.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
       return {
         id: normalizeText(message.id),
-        text: normalizeText(message.text),
+        text: snapshot
+          ? renderDialogueContent(bundle, snapshot, message.text, {})
+          : normalizeText(message.text),
         tags,
         baseFavorDelta: Math.max(0, clampInteger(message.base_favor_delta, 0)),
         cooldownHours: Math.max(0, clampInteger(message.cooldown_hours, 0)),
@@ -4633,8 +4666,8 @@ function resolvePhoneActionOptionsForContact(
       const tags = Array.from(new Set((entry.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
       return {
         id: normalizeText(entry.id),
-        label: normalizeText(entry.label),
-        text: normalizeText(entry.text),
+        label: renderDialogueContent(bundle, snapshot, entry.label, {}),
+        text: renderDialogueContent(bundle, snapshot, entry.text, {}),
         tags,
         baseFavorDelta: Math.max(0, clampInteger(entry.base_favor_delta, 0)),
         cooldownHours: Math.max(0, clampInteger(entry.cooldown_hours, 0)),
@@ -4932,8 +4965,9 @@ function sendPhoneMessageFromContact(
   } = {}
 ) {
   const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  const renderedContent = renderDialogueContent(bundle, snapshot, content, {})
   ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-  const message = appendPhoneMessage(snapshot, normalizedRoleKey, "contact", content, {
+  const message = appendPhoneMessage(snapshot, normalizedRoleKey, "contact", renderedContent, {
     read: false,
     sourceRuleId: options.sourceRuleId
   })
@@ -4958,8 +4992,9 @@ function sendPhoneMessageToContact(
   content: string
 ) {
   const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  const renderedContent = renderDialogueContent(bundle, snapshot, content, {})
   ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-  const message = appendPhoneMessage(snapshot, normalizedRoleKey, "player", content, {
+  const message = appendPhoneMessage(snapshot, normalizedRoleKey, "player", renderedContent, {
     read: true
   })
   if (!message) {
@@ -5183,13 +5218,108 @@ function getRuntimePlayableEventCallValues(
   return getRuntimeActiveCallValues(runtimeState)
 }
 
+function normalizeReferAliasList(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) {
+    return fallback
+  }
+
+  const aliases = Array.from(
+    new Set(value.map((item) => normalizeText(item)).filter(Boolean))
+  )
+
+  return aliases.length > 0 ? aliases : fallback
+}
+
+function getBundleReferConfig(bundle: RuntimeStoryBundle): RuntimeStoryReferFile {
+  const rawConfig = bundle.refer ?? createDefaultReferConfig()
+  const rawAliases = rawConfig.gender_aliases ?? {
+    male: ["男", "male", "m"],
+    female: ["女", "female", "f"]
+  }
+
+  return {
+    gender_value_key: normalizeText(rawConfig.gender_value_key) || "player.gender",
+    gender_aliases: {
+      male: normalizeReferAliasList(rawAliases.male, ["男", "male", "m"]),
+      female: normalizeReferAliasList(rawAliases.female, ["女", "female", "f"])
+    },
+    terms: Array.isArray(rawConfig.terms)
+      ? rawConfig.terms.map((term) => ({
+          id: normalizeText(term.id),
+          label: normalizeText(term.label),
+          male: normalizeText(term.male),
+          female: normalizeText(term.female),
+          fallback: normalizeText(term.fallback)
+        }))
+      : []
+  }
+}
+
+function resolveReferGenderKind(
+  refer: RuntimeStoryReferFile,
+  genderValue: unknown
+): "male" | "female" | null {
+  const normalizedGender = normalizeText(genderValue).toLowerCase()
+  if (!normalizedGender) {
+    return null
+  }
+
+  const maleAliases = refer.gender_aliases.male.map((item) => item.toLowerCase())
+  if (maleAliases.includes(normalizedGender)) {
+    return "male"
+  }
+
+  const femaleAliases = refer.gender_aliases.female.map((item) => item.toLowerCase())
+  if (femaleAliases.includes(normalizedGender)) {
+    return "female"
+  }
+
+  return null
+}
+
+function getReferTermValue(term: RuntimeStoryReferTerm, genderKind: "male" | "female" | null) {
+  if (genderKind === "male") {
+    return term.male || term.fallback
+  }
+
+  if (genderKind === "female") {
+    return term.female || term.fallback
+  }
+
+  return term.fallback || term.male || term.female
+}
+
+function buildRuntimeReferContextValues(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+) {
+  const refer = getBundleReferConfig(bundle)
+  const combinedValsFile = createCombinedValsFile(snapshot)
+  const genderValue = readValEntryValue(combinedValsFile, refer.gender_value_key)
+  const genderKind = resolveReferGenderKind(refer, genderValue)
+  const values: Record<string, unknown> = {}
+
+  for (const term of refer.terms) {
+    const rawTermId = normalizeText(term.id)
+    const termId = rawTermId.startsWith("term.") ? rawTermId.slice("term.".length) : rawTermId
+
+    if (!termId) {
+      continue
+    }
+
+    values[`term.${termId}`] = getReferTermValue(term, genderKind)
+  }
+
+  return values
+}
+
 function buildRuntimeContextValues(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   branchValues: Record<string, unknown>,
   callValues: Record<string, unknown> = {}
 ) {
-  const combinedValues: Record<string, unknown> = {}
+  const combinedValues: Record<string, unknown> = buildRuntimeReferContextValues(bundle, snapshot)
 
   for (const [key, value] of Object.entries(branchValues)) {
     combinedValues[`branch.${key}`] = cloneValue(value)
@@ -5557,7 +5687,10 @@ function buildRuntimeScriptContext(
   branchValues: Record<string, unknown>,
   callValues: Record<string, unknown> = {}
 ) {
-  const combinedValues: Record<string, unknown> = {}
+  const referValues = buildRuntimeReferContextValues(bundle, snapshot)
+  const combinedValues: Record<string, unknown> = {
+    ...referValues
+  }
   const assignableValues: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(branchValues)) {

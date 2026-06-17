@@ -20,7 +20,7 @@
           speaker_type: 'player',
         },
         {
-          content: '累死大爷了。',
+          content: '累死 ${term.player.self_proud}了。',
           speaker_key: 'player',
           speaker_type: 'player',
         },

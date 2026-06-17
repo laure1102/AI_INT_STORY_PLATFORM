@@ -1,6 +1,6 @@
 # StoryScript 规范
 
-Last updated: `2026-06-16`
+Last updated: `2026-06-17`
 
 本文档定义 Story Manager 项目的统一脚本语言规范。
 
@@ -114,6 +114,7 @@ ${county.level}
 ${player.money}
 ${branch.score}
 ${call.mama}
+${term.player.respect}
 ```
 
 ### 3.2 模板文本中的写法
@@ -199,6 +200,29 @@ let localName = ...
 - 仅在当前脚本内有效
 - 可读可写
 - 当前版本只允许使用 `let` 声明临时变量；`const` 和 `var` 不属于本规范
+
+### 4.6 称谓变量
+
+格式：
+
+```txt
+${term.xxx}
+```
+
+来源：
+
+- `refer.json5`
+
+规则：
+
+- 称谓变量是运行时模板上下文，不是 `vals.json5` 里的普通变量
+- `refer.json5.gender_value_key` 指向玩家性别变量，默认 `player.gender`
+- `refer.json5.gender_aliases` 定义哪些性别值按男/女处理
+- `refer.json5.terms[]` 定义每个称谓在男、女和兜底情况下的文本
+- 称谓变量可读，不可写
+- 对白、消息提示、手机短句、主动消息、脚本发送的手机消息都可以使用 `${term.xxx}`
+- 条件脚本和过程脚本中也可读取 `${term.xxx}` 作为文本值，但不建议用它承载业务判断
+- 涉及玩家性别差异的称呼、自称、代词，优先使用称谓变量，不要在对白里硬编码“先生/女士/少爷/小姐”
 
 ---
 
@@ -608,6 +632,13 @@ if (${call.mama} > 60) {
 老板，现在县城等级是 ${county.level}，账上还有 ${player.money}。
 ```
 
+称谓会从 `refer.json5` 按玩家性别解析：
+
+```txt
+${term.player.respect}，今天的县里日报已经放到您桌上了。
+这事交给${term.player.self_proud}来办。
+```
+
 ### 7.6 背包
 
 ```ts
@@ -726,6 +757,7 @@ ${county.level} >= 2 && shop_purchase_cooldown_left("shop_business_sedan") <= 0
 - 系统变量
 - `branch.xxx`
 - `call.xxx`
+- `term.xxx`
 - `Math.xxx`
 - `Number`
 - `String`

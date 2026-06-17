@@ -1,6 +1,6 @@
 ﻿# Story Manager Agent Guide
 
-Last updated: `2026-06-16`
+Last updated: `2026-06-17`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -60,6 +60,7 @@ Core files:
 - `vals.json5`
 - `player_override_vals.json5`
 - `system_vals.json5`
+- `refer.json5` // gender-aware player address/self-reference terms
 - `scene.json5`
 - `nomal_roles.json5`
 - `import_roles.json5`
@@ -83,6 +84,7 @@ Notes:
 - Chain event nodes and action nodes now live together in `events/chains.json5`.
 - `items.json5` is the story-level item asset library; it is separate from event/location/role assets and includes editable item categories.
 - `initial_bags.json5` is only a new-save initialization template; live inventory is stored in the runtime session snapshot as `bags`.
+- `refer.json5` is the story-level称谓库. It defines gender-aware text terms exposed as `${term.xxx}` in dialogue/message/phone text templates.
 - `doing.json5` is the story-level player-initiated action config. It contains menu tree data plus doings that reuse flat-event presentation/script semantics.
 - `shop.json5` is the story-level shop shelf config. It must only reference existing `items.json5` item ids; it owns price, display/purchase conditions, gift favor delta, and cooldowns.
 - `events/events.json5`, `events/once_events.json5`, and `events/loop_events.json5` are legacy fallback file names only.
@@ -297,6 +299,38 @@ Rules:
 - `group_no` controls grouped input screens in clients; rows with the same number should be entered on the same screen step
 - `need_player_override: true` means the client should ask the player to fill this field during profile creation
 - `tips` is the client-side prompt / helper text
+
+### `refer.json5`
+
+Story-level gender-aware term library:
+
+```json5
+{
+  gender_value_key: "player.gender",
+  gender_aliases: {
+    male: ["男", "male", "m"],
+    female: ["女", "female", "f"]
+  },
+  terms: [
+    {
+      id: "player.respect",
+      label: "NPC尊称玩家",
+      male: "先生",
+      female: "女士",
+      fallback: "贵客"
+    }
+  ]
+}
+```
+
+Rules:
+
+- the file name is `refer.json5`
+- term ids are referenced in text templates as `${term.<id>}`, for example `${term.player.respect}`
+- runtime resolves each term from `gender_value_key`, defaulting to `player.gender`
+- `gender_aliases.male` and `gender_aliases.female` map raw player gender values to male/female variants
+- terms are read-only template context values, not writable story variables
+- Agent-generated dialogue, message prompts, phone quick messages, and phone proactive messages should use `${term.*}` for player gender-sensitive称呼、自称、代词 instead of hardcoding male/female wording
 
 ### `story.json5`
 
@@ -604,6 +638,7 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - StoryScript placeholder syntax is only `${...}`
 - comments are stripped before placeholder and `invoke_once` preprocessing while preserving line numbers
 - legacy `{...}` placeholders are invalid in StoryScript fields and text templates
+- `term.xxx` placeholders are read from `refer.json5` and should be used for gender-aware player称呼、自称、代词
 - `branch.xxx` is only available when runtime provides action-branch context
 - `call.xxx` is only available for `invoke` mode event scripts/dialogue after runtime provides invocation args
 - event/action scripts can use `bag_add("player", "item_id", 1)` and `bag_remove("player", "item_id", 1)` to mutate runtime inventory

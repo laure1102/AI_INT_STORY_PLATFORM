@@ -66,6 +66,19 @@ function collectStoryShopProductIds(story: StoryDocument | null | undefined) {
   return story?.shop.products.map((product) => product.id.trim()).filter(Boolean) ?? []
 }
 
+function collectStoryReferValues(story: StoryDocument | null | undefined) {
+  if (!story) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    story.refer.terms
+      .map((term) => term.id.trim().replace(/^term\./, ""))
+      .filter(Boolean)
+      .map((termId) => [`term.${termId}`, null] as const)
+  )
+}
+
 function collectStoryItemIds(story: StoryDocument | null | undefined) {
   return story?.items.items.map((item) => item.id.trim()).filter(Boolean) ?? []
 }
@@ -98,7 +111,10 @@ export function validateStoryScriptField(
     options.mode,
     undefined,
     createStoryScriptValidationContext({
-      values: toContextValueMap(options.readableTokens),
+      values: {
+        ...collectStoryReferValues(options.story),
+        ...toContextValueMap(options.readableTokens)
+      },
       assignableValues: toContextValueMap(options.writableTokens),
       itemIds: options.itemIds ?? collectStoryItemIds(options.story),
       roleKeys: options.roleKeys ?? collectStoryRoleKeys(options.story),

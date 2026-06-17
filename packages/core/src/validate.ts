@@ -96,12 +96,29 @@ function collectValidationShopProductIds(document: StoryDocument) {
   return document.shop.products.map((product) => product.id)
 }
 
+function collectValidationReferValues(document: StoryDocument) {
+  const values: Record<string, unknown> = {}
+
+  for (const term of document.refer.terms) {
+    const rawTermId = term.id.trim()
+    const termId = rawTermId.startsWith("term.") ? rawTermId.slice("term.".length) : rawTermId
+    if (!termId) {
+      continue
+    }
+
+    values[`term.${termId}`] = term.fallback || term.male || term.female || ""
+  }
+
+  return values
+}
+
 function buildValidationScriptContext(
   document: StoryDocument,
   context?: StoryScriptExecutionContext
 ): StoryScriptExecutionContext {
   return createStoryScriptValidationContext({
     values: {
+      ...collectValidationReferValues(document),
       ...(context?.values ?? {})
     },
     assignableValues: {
@@ -123,6 +140,7 @@ function buildValidationScriptContext(
 
 function buildValidationReadableContext(document: StoryDocument): StoryScriptExecutionContext {
   return createStoryScriptValidationContext({
+    values: collectValidationReferValues(document),
     itemIds: collectValidationItemIds(document),
     roleKeys: collectValidationRoleKeys(document),
     doingIds: collectValidationDoingIds(document),

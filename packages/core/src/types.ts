@@ -45,6 +45,25 @@ export interface StoryPlayerOverrideValsFile {
   entries: StoryPlayerOverrideValEntry[]
 }
 
+export interface StoryReferGenderAliases {
+  male: string[]
+  female: string[]
+}
+
+export interface StoryReferTerm {
+  id: string
+  label: string
+  male: string
+  female: string
+  fallback: string
+}
+
+export interface StoryReferFile {
+  gender_value_key: string
+  gender_aliases: StoryReferGenderAliases
+  terms: StoryReferTerm[]
+}
+
 export interface StorySceneDefinition {
   level: number
   description: string
@@ -579,6 +598,7 @@ export interface StoryDocument {
   vals: StoryValsFile
   playerOverrideVals: StoryPlayerOverrideValsFile
   systemVals: StoryValsFile
+  refer: StoryReferFile
   scenes: StorySceneFile
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
@@ -651,6 +671,7 @@ export interface CompiledStory {
   vals: StoryValsFile
   playerOverrideVals: StoryPlayerOverrideValsFile
   systemVals: StoryValsFile
+  refer: StoryReferFile
   scenes: StorySceneFile
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile

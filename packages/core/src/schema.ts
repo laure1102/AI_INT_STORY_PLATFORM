@@ -57,6 +57,62 @@ export const storyPlayerOverrideValsSchema = z.object({
   entries: z.array(storyPlayerOverrideValEntrySchema).default([])
 })
 
+export const storyReferGenderAliasesSchema = z.object({
+  male: z.array(z.string()).default(["男", "male", "m"]),
+  female: z.array(z.string()).default(["女", "female", "f"])
+}).transform((aliases) => ({
+  male: Array.from(new Set(aliases.male.map((item) => item.trim()).filter(Boolean))),
+  female: Array.from(new Set(aliases.female.map((item) => item.trim()).filter(Boolean)))
+}))
+
+export const storyReferTermSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().default(""),
+  male: z.string().default(""),
+  female: z.string().default(""),
+  fallback: z.string().default("")
+}).transform((term) => ({
+  id: term.id.trim(),
+  label: term.label.trim(),
+  male: term.male.trim(),
+  female: term.female.trim(),
+  fallback: term.fallback.trim()
+}))
+
+export const storyReferSchema = z.object({
+  gender_value_key: z.string().default("player.gender"),
+  gender_aliases: storyReferGenderAliasesSchema.default({
+    male: ["男", "male", "m"],
+    female: ["女", "female", "f"]
+  }),
+  terms: z.array(storyReferTermSchema).default([])
+}).default({
+  gender_value_key: "player.gender",
+  gender_aliases: {
+    male: ["男", "male", "m"],
+    female: ["女", "female", "f"]
+  },
+  terms: []
+}).superRefine((refer, context) => {
+  const termIds = new Set<string>()
+
+  for (const [termIndex, term] of refer.terms.entries()) {
+    if (termIds.has(term.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate refer term id "${term.id}".`,
+        path: ["terms", termIndex, "id"]
+      })
+    }
+
+    termIds.add(term.id)
+  }
+}).transform((refer) => ({
+  gender_value_key: refer.gender_value_key.trim() || "player.gender",
+  gender_aliases: refer.gender_aliases,
+  terms: refer.terms
+}))
+
 export const storySceneEntrySchema = z.object({
   level: z.number().int().min(1),
   description: z.string().default(""),
@@ -1328,6 +1384,7 @@ export const storyDocumentSchema = z.object({
   vals: storyValsSchema,
   playerOverrideVals: storyPlayerOverrideValsSchema,
   systemVals: storyValsSchema,
+  refer: storyReferSchema.default({}),
   scenes: storySceneSchema,
   roles: storyRolesSchema,
   eventLocations: storyEventLocationSchema,

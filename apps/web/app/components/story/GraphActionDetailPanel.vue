@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { StoryActionFile, StoryValsFile } from "@story-mgr/core"
+import type { StoryActionFile, StoryDocument, StoryValsFile } from "@story-mgr/core"
 import {
   buildStoryScriptBuiltinAutocompleteItems,
   buildStoryScriptHighlightTokens,
+  buildStoryReferAutocompleteItems,
   buildStoryScriptValAutocompleteItems,
   filterStoryScriptAutocompleteItems,
   mergeStoryScriptAutocompleteItems,
@@ -39,6 +40,7 @@ const props = defineProps<{
   graphNodeOptions: GraphNodeOption[]
   mode?: "create" | "edit"
   saving: boolean
+  story?: StoryDocument | null
   vals: StoryValsFile
 }>()
 
@@ -86,7 +88,8 @@ function createVarDraft(value?: { descr?: string; initial_value?: string; name?:
 const globalAutocompleteCandidates = computed(() => {
   return mergeStoryScriptAutocompleteItems(
     buildStoryScriptBuiltinAutocompleteItems(),
-    buildStoryScriptValAutocompleteItems(props.vals)
+    buildStoryScriptValAutocompleteItems(props.vals),
+    buildStoryReferAutocompleteItems(props.story)
   )
 })
 
