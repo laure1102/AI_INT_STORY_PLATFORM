@@ -77,6 +77,7 @@ export function isFileStoreError(error: unknown): error is FileStoreError {
 export interface StoryFileStore {
   readAppSettings(): Promise<AppSettingsFile>
   listStorySummaries(): Promise<StorySummary[]>
+  createStory(request: CreateStoryInput): Promise<StoryDocument>
   readStoryDocument(storyId: string): Promise<StoryDocument>
   readStoryBible(storyId: string): Promise<StoryBibleFile>
   readEvent(
@@ -155,6 +156,13 @@ export interface StoryFileStore {
   ): Promise<StoryAssetMetadata>
   readStoryAssetMeta(storyId: string, assetPath: string): Promise<StoryAssetMetadata>
   resolveStoryAssetPath(storyId: string, assetPath: string): string
+}
+
+export interface CreateStoryInput {
+  id: string
+  title: string
+  description?: string
+  tags?: string[]
 }
 
 export interface StoryAssetMetadata {
@@ -395,6 +403,41 @@ function createDefaultStoryDoing(): StoryDoingFile {
   }
 }
 
+function createDefaultStoryScenes(): StorySceneFile {
+  return {
+    ai: {
+      compress_quality: 60
+    },
+    scenes: []
+  }
+}
+
+function createDefaultStoryRoleData(): StoryNormalRolesDataFile {
+  return {
+    ai: {
+      width: 1536,
+      height: 1024,
+      global_prompt: "",
+      compress_quality_1: 60,
+      compress_quality_2: 80
+    },
+    roles: []
+  }
+}
+
+function createDefaultStoryEventLocations(): StoryEventLocationFile {
+  return {
+    ai: {
+      width: 1536,
+      height: 1024,
+      global_prompt: "",
+      compress_quality_1: 60,
+      compress_quality_2: 80
+    },
+    assignments: []
+  }
+}
+
 function createDefaultAppSettings(): AppSettingsFile {
   return {
     ai: {
@@ -420,6 +463,72 @@ function createDefaultAppSettings(): AppSettingsFile {
         temperature: 0.7
       }
     }
+  }
+}
+
+function normalizeNewStoryId(rawId: string) {
+  const storyId = rawId.trim().toLowerCase()
+
+  if (!storyId) {
+    throw new FileStoreError("Story id is required.", 400, "story.id-required")
+  }
+
+  if (!/^[a-z0-9][a-z0-9_-]*$/.test(storyId)) {
+    throw new FileStoreError(
+      "Story id must use lowercase letters, numbers, underscores, or hyphens, and start with a letter or number.",
+      400,
+      "story.invalid-id"
+    )
+  }
+
+  if (storyId === "." || storyId === "..") {
+    throw new FileStoreError("Story id is invalid.", 400, "story.invalid-id")
+  }
+
+  return storyId
+}
+
+function normalizeNewStoryTags(tags: string[] | undefined) {
+  return Array.from(new Set((tags ?? []).map((tag) => tag.trim()).filter(Boolean)))
+}
+
+function createStoryMetaFromInput(input: CreateStoryInput): StoryMetaFile {
+  const id = normalizeNewStoryId(input.id)
+  const title = input.title.trim()
+
+  if (!title) {
+    throw new FileStoreError("Story title is required.", 400, "story.title-required")
+  }
+
+  const description = input.description?.trim() ?? ""
+  const tags = normalizeNewStoryTags(input.tags)
+
+  return storyMetaSchema.parse({
+    id,
+    title,
+    ...(description ? { description } : {}),
+    ...(tags.length ? { tags } : {})
+  })
+}
+
+async function assertStoryCanBeCreated(dataDir: string, storyId: string) {
+  const paths = createStoryPaths(dataDir, storyId)
+  const storiesRoot = path.resolve(dataDir, "stories")
+  const storyDir = path.resolve(paths.storyDir)
+
+  if (storyDir === storiesRoot || !storyDir.startsWith(`${storiesRoot}${path.sep}`)) {
+    throw new FileStoreError("Story id resolves outside stories directory.", 400, "story.invalid-id")
+  }
+
+  try {
+    await stat(storyDir)
+    throw new FileStoreError(`Story already exists: ${storyId}`, 409, "story.already-exists")
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return
+    }
+
+    throw error
   }
 }
 
@@ -1149,6 +1258,57 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return stories
   }
 
+  async function createStory(input: CreateStoryInput): Promise<StoryDocument> {
+    const story = createStoryMetaFromInput(input)
+    const paths = createStoryPaths(dataDir, story.id)
+
+    await assertStoryCanBeCreated(dataDir, story.id)
+
+    const storyBible = storyBibleSchema.parse(createDefaultStoryBible())
+    const vals = storyValsSchema.parse({ variables: [] })
+    const playerOverrideVals = storyPlayerOverrideValsSchema.parse({ entries: [] })
+    const systemVals = storyValsSchema.parse({ variables: [] })
+    const scenes = storySceneSchema.parse(createDefaultStoryScenes())
+    const normalRoles = storyNormalRolesDataFileSchema.parse(createDefaultStoryRoleData())
+    const importantRoles = storyImportantRolesDataFileSchema.parse(createDefaultStoryRoleData())
+    const eventLocations = storyEventLocationSchema.parse(createDefaultStoryEventLocations())
+    const items = storyItemsSchema.parse(createDefaultStoryItems())
+    const shop = storyShopSchema.parse(createDefaultStoryShop())
+    const initialBags = storyInitialBagsSchema.parse(createDefaultInitialBags())
+    const phone = storyPhoneSchema.parse(createDefaultStoryPhone())
+    const doing = storyDoingSchema.parse(createDefaultStoryDoing())
+    const chainEvents = storyChainEventsSchema.parse([])
+    const poolEvents = storyPoolEventsSchema.parse([])
+    const scheduleEvents = storyScheduleEventsSchema.parse([])
+
+    await Promise.all([
+      mkdir(paths.eventsDir, { recursive: true }),
+      mkdir(paths.assetsDir, { recursive: true })
+    ])
+
+    await Promise.all([
+      writeJson5File(paths.metaFile, story),
+      writeJson5File(paths.storyBibleFile, storyBible),
+      writeJson5File(paths.valsFile, vals),
+      writeJson5File(paths.playerOverrideValsFile, playerOverrideVals),
+      writeJson5File(paths.systemValsFile, systemVals),
+      writeJson5File(paths.sceneFile, scenes),
+      writeJson5File(paths.normalRolesFile, normalRoles),
+      writeJson5File(paths.importantRolesFile, importantRoles),
+      writeJson5File(paths.eventLocationFile, eventLocations),
+      writeJson5File(paths.itemsFile, items),
+      writeJson5File(paths.shopFile, shop),
+      writeJson5File(paths.initialBagsFile, initialBags),
+      writeJson5File(paths.phoneFile, phone),
+      writeJson5File(paths.doingFile, doing),
+      writeJson5File(paths.chainEventsFile, chainEvents),
+      writeJson5File(paths.poolEventsFile, poolEvents),
+      writeJson5File(paths.scheduleEventsFile, scheduleEvents)
+    ])
+
+    return readStoryDocument(story.id)
+  }
+
   async function readStoryDocument(storyId: string): Promise<StoryDocument> {
     const [
       story,
@@ -1750,6 +1910,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   return {
     readAppSettings,
     listStorySummaries,
+    createStory,
     readStoryDocument,
     readStoryBible,
     readEvent,

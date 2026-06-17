@@ -13,6 +13,8 @@ import type {
   CompressLocationImageRequest,
   CompressRoleImageRequest,
   CompressSceneBackgroundRequest,
+  CreateStoryRequest,
+  CreateStoryResponse,
   GenerateItemImageRequest,
   GenerateItemImageResponse,
   GenerateItemPromptRequest,
@@ -122,6 +124,25 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       stories: await store.listStorySummaries()
     }
+  })
+
+  router.post("/stories", async (context) => {
+    const body = context.request.body as CreateStoryRequest
+    const story = await store.createStory(body)
+    const summaries = await store.listStorySummaries()
+    const summary = summaries.find((item) => item.id === story.story.id) ?? {
+      id: story.story.id,
+      title: story.story.title,
+      description: story.story.description,
+      eventCount: story.chainEvents.length,
+      updatedAt: undefined
+    }
+
+    context.status = 201
+    context.body = {
+      story,
+      summary
+    } satisfies CreateStoryResponse
   })
 
   router.get("/settings", async (context) => {

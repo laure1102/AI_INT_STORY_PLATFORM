@@ -22,6 +22,8 @@ import type {
   CompressLocationImageRequest,
   CompressRoleImageRequest,
   CompressSceneBackgroundRequest,
+  CreateStoryRequest,
+  CreateStoryResponse,
   ExportResponse,
   GenerateItemImageRequest,
   GenerateItemImageResponse,
@@ -84,6 +86,13 @@ export function useStoryApi() {
   async function listStories() {
     const response = await $fetch<StoryListResponse>(`${apiBase}/stories`)
     return response.stories
+  }
+
+  async function createStory(payload: CreateStoryRequest): Promise<CreateStoryResponse> {
+    return $fetch<CreateStoryResponse>(`${apiBase}/stories`, {
+      method: "POST",
+      body: payload
+    })
   }
 
   async function getStory(storyId: string): Promise<StoryDocument> {
@@ -562,6 +571,7 @@ export function useStoryApi() {
 
   return {
     applyStoryCreationDraft,
+    createStory,
     compressItemImage,
     compressLocationImage,
     compressRoleImage,

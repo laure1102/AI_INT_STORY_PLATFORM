@@ -36,6 +36,18 @@ export interface StoryListResponse {
   stories: StorySummary[]
 }
 
+export interface CreateStoryRequest {
+  id: string
+  title: string
+  description?: string
+  tags?: string[]
+}
+
+export interface CreateStoryResponse {
+  story: StoryDocument
+  summary: StorySummary
+}
+
 export interface StoryDocumentResponse {
   story: StoryDocument
 }

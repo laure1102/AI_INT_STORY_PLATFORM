@@ -1,20 +1,24 @@
 <script setup lang="ts">
 import type { AppSettingsFile, StorySummary } from "@story-mgr/core"
+import type { CreateStoryRequest } from "@story-mgr/shared"
 import AppSettingsDialog from "./AppSettingsDialog.vue"
 import StoryBrowserSettingsBar from "./StoryBrowserSettingsBar.vue"
+import StoryCreateDialog from "./StoryCreateDialog.vue"
 import StoryList from "./StoryList.vue"
 
-const { getAppSettings, listStories, saveAppSettings } = useStoryApi()
+const { createStory, getAppSettings, listStories, saveAppSettings } = useStoryApi()
 
 const stories = ref<StorySummary[]>([])
 const appSettings = ref<AppSettingsFile | null>(null)
 const selectedStoryId = shallowRef<string | null>(null)
 const isLoading = shallowRef(true)
+const isCreatingStory = shallowRef(false)
 const isSavingSettings = shallowRef(false)
+const isCreateDialogOpen = shallowRef(false)
 const isSettingsDialogOpen = shallowRef(false)
 const errorMessage = shallowRef<string | null>(null)
 
-async function loadStories() {
+async function loadStories(preferredStoryId = selectedStoryId.value) {
   isLoading.value = true
   errorMessage.value = null
 
@@ -22,7 +26,9 @@ async function loadStories() {
     const [storyList, settings] = await Promise.all([listStories(), getAppSettings()])
     stories.value = storyList
     appSettings.value = settings
-    selectedStoryId.value = storyList[0]?.id ?? null
+    selectedStoryId.value = preferredStoryId && storyList.some((story) => story.id === preferredStoryId)
+      ? preferredStoryId
+      : storyList[0]?.id ?? null
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "加载故事列表失败。"
   } finally {
@@ -46,6 +52,18 @@ function closeSettingsDialog() {
   isSettingsDialogOpen.value = false
 }
 
+function openCreateDialog() {
+  isCreateDialogOpen.value = true
+}
+
+function closeCreateDialog() {
+  if (isCreatingStory.value) {
+    return
+  }
+
+  isCreateDialogOpen.value = false
+}
+
 async function handleSaveSettings(settings: AppSettingsFile) {
   isSavingSettings.value = true
   errorMessage.value = null
@@ -57,6 +75,21 @@ async function handleSaveSettings(settings: AppSettingsFile) {
     errorMessage.value = error instanceof Error ? error.message : "保存设置失败。"
   } finally {
     isSavingSettings.value = false
+  }
+}
+
+async function handleCreateStory(payload: CreateStoryRequest) {
+  isCreatingStory.value = true
+  errorMessage.value = null
+
+  try {
+    const response = await createStory(payload)
+    await loadStories(response.summary.id)
+    isCreateDialogOpen.value = false
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "创建故事失败。"
+  } finally {
+    isCreatingStory.value = false
   }
 }
 
@@ -93,7 +126,10 @@ onMounted(() => {
       <div class="workspace__sidebar">
         <div class="workspace__header">
           <h2 class="section-title">故事列表</h2>
-          <button class="btn-secondary" type="button" @click="loadStories">刷新</button>
+          <div class="workspace__header-actions">
+            <button class="btn-primary" type="button" @click="openCreateDialog">新建故事</button>
+            <button class="btn-secondary" type="button" @click="loadStories()">刷新</button>
+          </div>
         </div>
 
         <p v-if="isLoading" class="muted">正在读取 `data/stories` ...</p>
@@ -150,6 +186,14 @@ onMounted(() => {
       :settings="appSettings"
       @close="closeSettingsDialog"
       @save="handleSaveSettings"
+    />
+
+    <StoryCreateDialog
+      v-if="isCreateDialogOpen"
+      :existing-story-ids="stories.map((story) => story.id)"
+      :saving="isCreatingStory"
+      @close="closeCreateDialog"
+      @create="handleCreateStory"
     />
   </main>
 </template>
@@ -211,6 +255,20 @@ onMounted(() => {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.workspace__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.workspace__header-actions :deep(.btn-primary),
+.workspace__header-actions :deep(.btn-secondary) {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 12px;
 }
 
 .workspace__error {
@@ -281,6 +339,11 @@ onMounted(() => {
   .hero,
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .workspace__header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .workspace__stats {
