@@ -19,11 +19,13 @@ export interface StoryScriptFieldValidationOptions {
   itemIds?: string[]
   roleKeys?: string[]
   doingIds?: string[]
+  shopProductIds?: string[]
   readableTokens?: string[]
   writableTokens?: string[]
   bagMode?: "read" | "write"
   phoneMode?: "read" | "write"
   doingMode?: "read" | "write"
+  shopMode?: "read" | "write"
   story?: StoryDocument | null
 }
 
@@ -58,6 +60,10 @@ function collectStoryRoleKeys(story: StoryDocument | null | undefined) {
 
 function collectStoryDoingIds(story: StoryDocument | null | undefined) {
   return story?.doing.doings.map((doing) => doing.id.trim()).filter(Boolean) ?? []
+}
+
+function collectStoryShopProductIds(story: StoryDocument | null | undefined) {
+  return story?.shop.products.map((product) => product.id.trim()).filter(Boolean) ?? []
 }
 
 function collectStoryItemIds(story: StoryDocument | null | undefined) {
@@ -97,9 +103,11 @@ export function validateStoryScriptField(
       itemIds: options.itemIds ?? collectStoryItemIds(options.story),
       roleKeys: options.roleKeys ?? collectStoryRoleKeys(options.story),
       doingIds: options.doingIds ?? collectStoryDoingIds(options.story),
+      shopProductIds: options.shopProductIds ?? collectStoryShopProductIds(options.story),
       bagMode: options.bagMode ?? (options.mode === "predicate" ? "read" : "write"),
       phoneMode: options.phoneMode ?? (options.mode === "predicate" ? "read" : "write"),
-      doingMode: options.doingMode ?? (options.mode === "predicate" ? "read" : "write")
+      doingMode: options.doingMode ?? (options.mode === "predicate" ? "read" : "write"),
+      shopMode: options.shopMode ?? (options.mode === "predicate" ? "read" : "write")
     })
   )
   const invokeIssues = options.mode === "procedure"

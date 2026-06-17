@@ -227,6 +227,36 @@ interface RuntimeStoryDoingFile {
   doings: RuntimeStoryDoingDefinition[]
 }
 
+interface RuntimeStoryShopCategory {
+  id: string
+  name: string
+  sort_order: number
+  visible_expr: string
+  descr: string
+}
+
+interface RuntimeStoryShopProduct {
+  id: string
+  category_id: string
+  item_id: string
+  price: number
+  quantity: number
+  sort_order: number
+  enabled: boolean
+  available_expr: string
+  unavailable_reason: string
+  allow_gift: boolean
+  gift_favor_delta: number
+  purchase_cooldown_hours: number
+  gift_cooldown_hours: number
+}
+
+interface RuntimeStoryShopFile {
+  currency_value_key: string
+  categories: RuntimeStoryShopCategory[]
+  products: RuntimeStoryShopProduct[]
+}
+
 export interface RuntimeBagEntry {
   item_id: string
   quantity: number
@@ -285,6 +315,26 @@ export interface RuntimeDoingState {
   unlocked_ids: string[]
   locked_ids: string[]
   records: RuntimeDoingRecord[]
+}
+
+export interface RuntimeShopPurchaseRecord {
+  product_id: string
+  purchased_count: number
+  last_purchased_game_minute: number | null
+  cooldown_until_game_minute: number | null
+}
+
+export interface RuntimeShopGiftRecord {
+  product_id: string
+  role_key: string
+  gifted_count: number
+  last_gifted_game_minute: number | null
+  cooldown_until_game_minute: number | null
+}
+
+export interface RuntimeShopState {
+  purchases: RuntimeShopPurchaseRecord[]
+  gifts: RuntimeShopGiftRecord[]
 }
 
 interface RuntimeInitialBagEntry {
@@ -504,6 +554,7 @@ export interface RuntimeStorySessionSnapshot {
   bags: RuntimeBagsState
   phone: RuntimePhoneState
   doing: RuntimeDoingState
+  shop: RuntimeShopState
   triggered_once_events: RuntimeTriggeredOnceState[]
   /** @deprecated 请改用 triggered_once_events */
   loop_event_states: RuntimeLoopEventState[]
@@ -524,6 +575,7 @@ export interface RuntimeStoryBundle {
   initialBags?: RuntimeInitialBagsFile
   phone?: RuntimeStoryPhoneFile
   doing?: RuntimeStoryDoingFile
+  shop?: RuntimeStoryShopFile
   chainEvents?: Record<string, unknown>
   poolEvents?: unknown[]
   scheduleEvents?: unknown[]
@@ -705,6 +757,38 @@ export interface RuntimeDoingView {
   doings: RuntimeDoingActionView[]
 }
 
+export interface RuntimeShopCategoryView {
+  id: string
+  name: string
+  sortOrder: number
+  descr: string
+}
+
+export interface RuntimeShopProductView {
+  id: string
+  categoryId: string
+  itemId: string
+  itemName: string
+  price: number
+  quantity: number
+  sortOrder: number
+  allowGift: boolean
+  giftFavorDelta: number
+  purchaseCooldownHours: number
+  purchaseCooldownLeftHours: number
+  giftCooldownHours: number
+  ownedQuantity: number
+  disabled: boolean
+  disabledReason: string | null
+  unavailableReason: string | null
+}
+
+export interface RuntimeShopView {
+  currencyValueKey: string
+  categories: RuntimeShopCategoryView[]
+  products: RuntimeShopProductView[]
+}
+
 export interface RuntimeStoryViewModel {
   screen: "boot" | "profile" | "save-select" | "game" | "debug"
   storyTitle: string
@@ -724,6 +808,7 @@ export interface RuntimeStoryViewModel {
   }>
   bagSummary: RuntimeBagSummary[]
   doing: RuntimeDoingView
+  shop: RuntimeShopView
   debugSummary: {
     globalGroupCount: number
     systemGroupCount: number
@@ -742,6 +827,8 @@ export type RuntimeStorySessionAction =
   | { type: "phone-send-quick-message"; roleKey: string; quickMessageId: string }
   | { type: "phone-mark-read"; roleKey: string }
   | { type: "start-doing"; doingId: string }
+  | { type: "shop-buy"; productId: string }
+  | { type: "shop-gift"; productId: string; roleKey: string }
   | { type: "open-debug" }
   | { type: "close-debug" }
 
@@ -1282,6 +1369,21 @@ function createDefaultDoingState(): RuntimeDoingState {
   }
 }
 
+function createDefaultShopConfig(): RuntimeStoryShopFile {
+  return {
+    currency_value_key: "player.money",
+    categories: [],
+    products: []
+  }
+}
+
+function createDefaultShopState(): RuntimeShopState {
+  return {
+    purchases: [],
+    gifts: []
+  }
+}
+
 function normalizeOwnerId(ownerId: unknown) {
   return typeof ownerId === "string" ? ownerId.trim() : ""
 }
@@ -1296,6 +1398,10 @@ function normalizePhoneRoleKey(roleKey: unknown) {
 
 function normalizeDoingId(doingId: unknown) {
   return typeof doingId === "string" ? doingId.trim() : ""
+}
+
+function normalizeShopProductId(productId: unknown) {
+  return typeof productId === "string" ? productId.trim() : ""
 }
 
 function normalizePhoneContactTrackId(value: unknown): RuntimePhoneContactTrackId {
@@ -1464,6 +1570,58 @@ function normalizeDoingState(snapshot: RuntimeStorySessionSnapshot) {
     unlocked_ids: unlockedIds,
     locked_ids: lockedIds,
     records: Array.from(records.values())
+  }
+}
+
+function normalizeShopState(snapshot: RuntimeStorySessionSnapshot) {
+  const rawShop = snapshot.shop ?? createDefaultShopState()
+  const purchases = new Map<string, RuntimeShopPurchaseRecord>()
+  const rawPurchases = Array.isArray(rawShop.purchases) ? rawShop.purchases : []
+
+  for (const record of rawPurchases) {
+    const productId = normalizeShopProductId(record.product_id)
+    if (!productId) {
+      continue
+    }
+
+    purchases.set(productId, {
+      product_id: productId,
+      purchased_count: Math.max(0, clampInteger(record.purchased_count, 0)),
+      last_purchased_game_minute: record.last_purchased_game_minute === null || record.last_purchased_game_minute === undefined
+        ? null
+        : Math.max(0, clampInteger(record.last_purchased_game_minute, 0)),
+      cooldown_until_game_minute: record.cooldown_until_game_minute === null || record.cooldown_until_game_minute === undefined
+        ? null
+        : Math.max(0, clampInteger(record.cooldown_until_game_minute, 0))
+    })
+  }
+
+  const gifts = new Map<string, RuntimeShopGiftRecord>()
+  const rawGifts = Array.isArray(rawShop.gifts) ? rawShop.gifts : []
+
+  for (const record of rawGifts) {
+    const productId = normalizeShopProductId(record.product_id)
+    const roleKey = normalizePhoneRoleKey(record.role_key)
+    if (!productId || !roleKey) {
+      continue
+    }
+
+    gifts.set(`${productId}\n${roleKey}`, {
+      product_id: productId,
+      role_key: roleKey,
+      gifted_count: Math.max(0, clampInteger(record.gifted_count, 0)),
+      last_gifted_game_minute: record.last_gifted_game_minute === null || record.last_gifted_game_minute === undefined
+        ? null
+        : Math.max(0, clampInteger(record.last_gifted_game_minute, 0)),
+      cooldown_until_game_minute: record.cooldown_until_game_minute === null || record.cooldown_until_game_minute === undefined
+        ? null
+        : Math.max(0, clampInteger(record.cooldown_until_game_minute, 0))
+    })
+  }
+
+  snapshot.shop = {
+    purchases: Array.from(purchases.values()),
+    gifts: Array.from(gifts.values())
   }
 }
 
@@ -1848,8 +2006,21 @@ function getBundleDoingConfig(bundle: RuntimeStoryBundle): RuntimeStoryDoingFile
   }
 }
 
+function getBundleShopConfig(bundle: RuntimeStoryBundle): RuntimeStoryShopFile {
+  const rawConfig = bundle.shop ?? createDefaultShopConfig()
+  return {
+    currency_value_key: normalizeText(rawConfig.currency_value_key) || "player.money",
+    categories: Array.isArray(rawConfig.categories) ? rawConfig.categories : [],
+    products: Array.isArray(rawConfig.products) ? rawConfig.products : []
+  }
+}
+
 function getBundleDoingIds(bundle: RuntimeStoryBundle) {
   return new Set(getBundleDoingConfig(bundle).doings.map((doing) => normalizeDoingId(doing.id)).filter(Boolean))
+}
+
+function getBundleShopProductIds(bundle: RuntimeStoryBundle) {
+  return new Set(getBundleShopConfig(bundle).products.map((product) => normalizeShopProductId(product.id)).filter(Boolean))
 }
 
 function findBundleDoing(bundle: RuntimeStoryBundle, doingId: string) {
@@ -1859,6 +2030,15 @@ function findBundleDoing(bundle: RuntimeStoryBundle, doingId: string) {
   }
 
   return getBundleDoingConfig(bundle).doings.find((doing) => doing.id === normalizedDoingId) ?? null
+}
+
+function findBundleShopProduct(bundle: RuntimeStoryBundle, productId: string) {
+  const normalizedProductId = normalizeShopProductId(productId)
+  if (!normalizedProductId) {
+    return null
+  }
+
+  return getBundleShopConfig(bundle).products.find((product) => product.id === normalizedProductId) ?? null
 }
 
 function findDoingRecord(snapshot: RuntimeStorySessionSnapshot, doingId: string) {
@@ -1909,6 +2089,359 @@ function assertRuntimeDoingId(bundle: RuntimeStoryBundle, doingId: unknown) {
   }
 
   return normalizedDoingId
+}
+
+function assertRuntimeShopProductId(bundle: RuntimeStoryBundle, productId: unknown) {
+  const normalizedProductId = normalizeShopProductId(productId)
+  if (!normalizedProductId) {
+    throw new Error("shop product id is required.")
+  }
+
+  if (!getBundleShopProductIds(bundle).has(normalizedProductId)) {
+    throw new Error(`shop product "${normalizedProductId}" does not exist in runtime shop library.`)
+  }
+
+  return normalizedProductId
+}
+
+function findShopPurchaseRecord(snapshot: RuntimeStorySessionSnapshot, productId: string) {
+  normalizeShopState(snapshot)
+  const normalizedProductId = normalizeShopProductId(productId)
+  if (!normalizedProductId) {
+    return null
+  }
+
+  return snapshot.shop.purchases.find((record) => record.product_id === normalizedProductId) ?? null
+}
+
+function ensureShopPurchaseRecord(snapshot: RuntimeStorySessionSnapshot, productId: string) {
+  normalizeShopState(snapshot)
+  const normalizedProductId = normalizeShopProductId(productId)
+  let record = snapshot.shop.purchases.find((item) => item.product_id === normalizedProductId)
+  if (!record) {
+    record = {
+      product_id: normalizedProductId,
+      purchased_count: 0,
+      last_purchased_game_minute: null,
+      cooldown_until_game_minute: null
+    }
+    snapshot.shop.purchases.push(record)
+  }
+
+  return record
+}
+
+function findShopGiftRecord(snapshot: RuntimeStorySessionSnapshot, productId: string, roleKey: string) {
+  normalizeShopState(snapshot)
+  const normalizedProductId = normalizeShopProductId(productId)
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  if (!normalizedProductId || !normalizedRoleKey) {
+    return null
+  }
+
+  return snapshot.shop.gifts.find(
+    (record) => record.product_id === normalizedProductId && record.role_key === normalizedRoleKey
+  ) ?? null
+}
+
+function ensureShopGiftRecord(snapshot: RuntimeStorySessionSnapshot, productId: string, roleKey: string) {
+  normalizeShopState(snapshot)
+  const normalizedProductId = normalizeShopProductId(productId)
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  let record = snapshot.shop.gifts.find(
+    (item) => item.product_id === normalizedProductId && item.role_key === normalizedRoleKey
+  )
+  if (!record) {
+    record = {
+      product_id: normalizedProductId,
+      role_key: normalizedRoleKey,
+      gifted_count: 0,
+      last_gifted_game_minute: null,
+      cooldown_until_game_minute: null
+    }
+    snapshot.shop.gifts.push(record)
+  }
+
+  return record
+}
+
+function getShopPurchaseCooldownLeftHours(snapshot: RuntimeStorySessionSnapshot, productId: string) {
+  const record = findShopPurchaseRecord(snapshot, productId)
+  if (!record?.cooldown_until_game_minute) {
+    return 0
+  }
+
+  const remainingMinutes = Math.max(0, record.cooldown_until_game_minute - getCurrentGameMinute(snapshot))
+  return remainingMinutes / 60
+}
+
+function getShopGiftCooldownLeftHours(
+  snapshot: RuntimeStorySessionSnapshot,
+  productId: string,
+  roleKey: string
+) {
+  const record = findShopGiftRecord(snapshot, productId, roleKey)
+  if (!record?.cooldown_until_game_minute) {
+    return 0
+  }
+
+  const remainingMinutes = Math.max(0, record.cooldown_until_game_minute - getCurrentGameMinute(snapshot))
+  return remainingMinutes / 60
+}
+
+function getSnapshotNumericValue(snapshot: RuntimeStorySessionSnapshot, token: string) {
+  const value = readSnapshotValue(snapshot, token)
+  const normalized = typeof value === "number" && Number.isFinite(value)
+    ? value
+    : typeof value === "string" && value.trim()
+      ? Number(value)
+      : Number.NaN
+
+  return Number.isFinite(normalized) ? normalized : null
+}
+
+function getShopCurrencyBalance(bundle: RuntimeStoryBundle, snapshot: RuntimeStorySessionSnapshot) {
+  return getSnapshotNumericValue(snapshot, getBundleShopConfig(bundle).currency_value_key)
+}
+
+function writeShopCurrencyBalance(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  value: number
+) {
+  return writeSnapshotValue(
+    snapshot,
+    getBundleShopConfig(bundle).currency_value_key,
+    Math.max(0, Math.trunc(value))
+  )
+}
+
+function evaluateRuntimeShopPredicate(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  source: string
+) {
+  const normalizedSource = normalizeText(source)
+  if (!normalizedSource) {
+    return {
+      ok: true,
+      error: ""
+    }
+  }
+
+  try {
+    const result = evaluateStoryBooleanExpression(
+      createCombinedValsFile(snapshot),
+      normalizedSource,
+      DEFAULT_MAX_CALC_NESTING_DEPTH,
+      buildRuntimeContextValues(bundle, snapshot, {})
+    )
+    return {
+      ok: Boolean(result.result),
+      error: ""
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "条件计算失败。"
+    }
+  }
+}
+
+function isRuntimeShopCategoryVisible(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  category: RuntimeStoryShopCategory
+) {
+  const visibleResult = evaluateRuntimeShopPredicate(bundle, snapshot, category.visible_expr)
+  return visibleResult.ok
+}
+
+function getRuntimeShopVisibleCategoryIds(bundle: RuntimeStoryBundle, snapshot: RuntimeStorySessionSnapshot) {
+  const shopConfig = getBundleShopConfig(bundle)
+  return new Set(
+    shopConfig.categories
+      .filter((category) => isRuntimeShopCategoryVisible(bundle, snapshot, category))
+      .map((category) => category.id)
+  )
+}
+
+function resolveShopProductDisabledReason(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  product: RuntimeStoryShopProduct,
+  options: {
+    checkMoney?: boolean
+  } = {}
+) {
+  const checkMoney = options.checkMoney ?? true
+  const itemId = normalizeItemId(product.item_id)
+
+  if (!product.enabled) {
+    return "商品已下架。"
+  }
+
+  if (!getRuntimeShopVisibleCategoryIds(bundle, snapshot).has(product.category_id)) {
+    return "商品所属分类当前不可见。"
+  }
+
+  if (!itemId || !getBundleItemIds(bundle).has(itemId)) {
+    return `商品引用的物品 "${itemId || product.item_id}" 不存在。`
+  }
+
+  const availableResult = evaluateRuntimeShopPredicate(bundle, snapshot, product.available_expr)
+  if (!availableResult.ok) {
+    return availableResult.error || product.unavailable_reason || "当前展示条件不满足。"
+  }
+
+  const cooldownLeftHours = getShopPurchaseCooldownLeftHours(snapshot, product.id)
+  if (cooldownLeftHours > 0) {
+    return `购买冷却中，还需 ${Math.ceil(cooldownLeftHours)} 小时。`
+  }
+
+  if (checkMoney && product.price > 0) {
+    const currentMoney = getShopCurrencyBalance(bundle, snapshot)
+    if (currentMoney === null) {
+      return `扣款变量 ${getBundleShopConfig(bundle).currency_value_key} 当前不可读取。`
+    }
+
+    if (currentMoney < product.price) {
+      return `需要 ${product.price} 元，当前只有 ${Math.max(0, Math.trunc(currentMoney))} 元。`
+    }
+  }
+
+  return null
+}
+
+function canBuyShopProduct(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  productId: string
+) {
+  const product = findBundleShopProduct(bundle, productId)
+  if (!product) {
+    return false
+  }
+
+  return !resolveShopProductDisabledReason(bundle, snapshot, product)
+}
+
+function buyShopProduct(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  notifications: string[],
+  productId: string
+) {
+  const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
+  const product = findBundleShopProduct(bundle, normalizedProductId)
+  if (!product) {
+    throw new Error(`商城商品 "${normalizedProductId}" 不存在。`)
+  }
+
+  const disabledReason = resolveShopProductDisabledReason(bundle, snapshot, product)
+  if (disabledReason) {
+    throw new Error(disabledReason)
+  }
+
+  if (product.price > 0) {
+    const currentMoney = getShopCurrencyBalance(bundle, snapshot)
+    if (currentMoney === null) {
+      throw new Error(`扣款变量 ${getBundleShopConfig(bundle).currency_value_key} 当前不可读取。`)
+    }
+
+    if (currentMoney < product.price) {
+      throw new Error(`需要 ${product.price} 元，当前只有 ${Math.max(0, Math.trunc(currentMoney))} 元。`)
+    }
+
+    if (!writeShopCurrencyBalance(bundle, snapshot, currentMoney - product.price)) {
+      throw new Error(`${getBundleShopConfig(bundle).currency_value_key} 不是可写 value 变量，无法扣款。`)
+    }
+  }
+
+  createRuntimeBagScriptFunctions(bundle, snapshot).bag_add("player", product.item_id, product.quantity)
+
+  const record = ensureShopPurchaseRecord(snapshot, product.id)
+  const currentGameMinute = getCurrentGameMinute(snapshot)
+  record.purchased_count += 1
+  record.last_purchased_game_minute = currentGameMinute
+  record.cooldown_until_game_minute = product.purchase_cooldown_hours > 0
+    ? currentGameMinute + product.purchase_cooldown_hours * 60
+    : null
+
+  const itemName = getBundleItemNameMap(bundle).get(product.item_id) ?? product.item_id
+  notifications.push(`已购买：${itemName} x${product.quantity}`)
+  appendHistory(snapshot, {
+    type: "system",
+    id: `shop-buy:${product.id}:${record.purchased_count}`,
+    title: "shop:buy",
+    content: `购买 ${itemName} x${product.quantity}，花费 ${product.price}。`
+  })
+
+  return true
+}
+
+function giftShopProduct(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  notifications: string[],
+  productId: string,
+  roleKey: string
+) {
+  const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
+  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  const product = findBundleShopProduct(bundle, normalizedProductId)
+  if (!product) {
+    throw new Error(`商城商品 "${normalizedProductId}" 不存在。`)
+  }
+
+  if (!product.allow_gift) {
+    throw new Error("该商品不能送人。")
+  }
+
+  const itemId = normalizeItemId(product.item_id)
+  if (!itemId || !getBundleItemIds(bundle).has(itemId)) {
+    throw new Error(`商品引用的物品 "${itemId || product.item_id}" 不存在。`)
+  }
+
+  const cooldownLeftHours = getShopGiftCooldownLeftHours(snapshot, product.id, normalizedRoleKey)
+  if (cooldownLeftHours > 0) {
+    throw new Error(`送礼冷却中，还需 ${Math.ceil(cooldownLeftHours)} 小时。`)
+  }
+
+  const currentQuantity = findBagEntry(snapshot, "player", itemId)?.quantity ?? 0
+  if (currentQuantity < product.quantity) {
+    const itemName = getBundleItemNameMap(bundle).get(itemId) ?? itemId
+    throw new Error(`背包里 ${itemName} 数量不足，需要 ${product.quantity}，当前只有 ${currentQuantity}。`)
+  }
+
+  const removed = createRuntimeBagScriptFunctions(bundle, snapshot).bag_remove("player", itemId, product.quantity)
+  if (!removed) {
+    throw new Error("送礼扣除背包物品失败。")
+  }
+
+  const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+  contact.favor = clampPhoneFavor(contact.favor + product.gift_favor_delta, contact.favor)
+
+  const record = ensureShopGiftRecord(snapshot, product.id, normalizedRoleKey)
+  const currentGameMinute = getCurrentGameMinute(snapshot)
+  record.gifted_count += 1
+  record.last_gifted_game_minute = currentGameMinute
+  record.cooldown_until_game_minute = product.gift_cooldown_hours > 0
+    ? currentGameMinute + product.gift_cooldown_hours * 60
+    : null
+
+  const itemName = getBundleItemNameMap(bundle).get(itemId) ?? itemId
+  const roleLabel = findRoleLabel(bundle, normalizedRoleKey)
+  sendPhoneMessageToContact(bundle, snapshot, normalizedRoleKey, `我给你准备了${itemName}。`)
+  notifications.push(`已送给 ${roleLabel}：${itemName} x${product.quantity}，好感 ${product.gift_favor_delta >= 0 ? "+" : ""}${product.gift_favor_delta}`)
+  appendHistory(snapshot, {
+    type: "system",
+    id: `shop-gift:${product.id}:${normalizedRoleKey}:${record.gifted_count}`,
+    title: "shop:gift",
+    content: `送给 ${roleLabel} ${itemName} x${product.quantity}，好感变化 ${product.gift_favor_delta}。`
+  })
+
+  return true
 }
 
 function evaluateRuntimeDoingPredicate(
@@ -2451,6 +2984,7 @@ function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnap
     bags: createInitialBagsState(bundle, clock),
     phone: createDefaultPhoneState(),
     doing: createDefaultDoingState(),
+    shop: createDefaultShopState(),
     triggered_once_events: [],
     loop_event_states: [],
     history: []
@@ -4670,7 +5204,8 @@ function buildRuntimeContextValues(
     functions: {
       ...createRuntimeBagReadableFunctions(bundle, snapshot),
       ...createRuntimePhoneReadableFunctions(bundle, snapshot),
-      ...createRuntimeDoingReadableFunctions(bundle, snapshot)
+      ...createRuntimeDoingReadableFunctions(bundle, snapshot),
+      ...createRuntimeShopReadableFunctions(bundle, snapshot)
     }
   } satisfies StoryScriptExecutionContext
 }
@@ -4934,6 +5469,27 @@ function createRuntimeDoingReadableFunctions(
   }
 }
 
+function createRuntimeShopReadableFunctions(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+) {
+  return {
+    shop_can_buy(productId: unknown) {
+      const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
+      return canBuyShopProduct(bundle, snapshot, normalizedProductId)
+    },
+    shop_purchase_cooldown_left(productId: unknown) {
+      const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
+      return getShopPurchaseCooldownLeftHours(snapshot, normalizedProductId)
+    },
+    shop_gift_cooldown_left(productId: unknown, roleKey: unknown) {
+      const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      return getShopGiftCooldownLeftHours(snapshot, normalizedProductId, normalizedRoleKey)
+    }
+  }
+}
+
 function createRuntimeDoingScriptFunctions(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot
@@ -4973,6 +5529,27 @@ function createRuntimeDoingScriptFunctions(
   }
 }
 
+function createRuntimeShopScriptFunctions(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  notifications: string[]
+) {
+  const readableFunctions = createRuntimeShopReadableFunctions(bundle, snapshot)
+
+  return {
+    shop_buy(productId: unknown) {
+      const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
+      return buyShopProduct(bundle, snapshot, notifications, normalizedProductId)
+    },
+    shop_gift(productId: unknown, roleKey: unknown) {
+      const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
+      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      return giftShopProduct(bundle, snapshot, notifications, normalizedProductId, normalizedRoleKey)
+    },
+    ...readableFunctions
+  }
+}
+
 function buildRuntimeScriptContext(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
@@ -4998,7 +5575,8 @@ function buildRuntimeScriptContext(
     functions: {
       ...createRuntimeBagScriptFunctions(bundle, snapshot),
       ...createRuntimePhoneScriptFunctions(bundle, snapshot, notifications),
-      ...createRuntimeDoingScriptFunctions(bundle, snapshot)
+      ...createRuntimeDoingScriptFunctions(bundle, snapshot),
+      ...createRuntimeShopScriptFunctions(bundle, snapshot, notifications)
     }
   } satisfies StoryScriptExecutionContext
 }
@@ -6227,6 +6805,82 @@ function buildRuntimeDoingView(
   }
 }
 
+function buildRuntimeShopView(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+): RuntimeShopView {
+  normalizeShopState(snapshot)
+  normalizeBagsState(snapshot)
+
+  const shopConfig = getBundleShopConfig(bundle)
+  const itemNameMap = getBundleItemNameMap(bundle)
+  const visibleCategoryIds = getRuntimeShopVisibleCategoryIds(bundle, snapshot)
+  const categories = shopConfig.categories
+    .filter((category) => visibleCategoryIds.has(category.id))
+    .map((category) => ({
+      id: category.id,
+      name: category.name || category.id,
+      sortOrder: category.sort_order,
+      descr: category.descr
+    } satisfies RuntimeShopCategoryView))
+    .sort((left, right) => {
+      if (left.sortOrder !== right.sortOrder) {
+        return left.sortOrder - right.sortOrder
+      }
+
+      return left.name.localeCompare(right.name, "zh-Hans-CN")
+    })
+
+  const products = shopConfig.products
+    .filter((product) => visibleCategoryIds.has(product.category_id))
+    .map((product) => {
+      const itemId = normalizeItemId(product.item_id)
+      const disabledReason = resolveShopProductDisabledReason(bundle, snapshot, product)
+      const giftCooldownHours = Math.max(0, clampInteger(product.gift_cooldown_hours, 0))
+
+      return {
+        id: product.id,
+        categoryId: product.category_id,
+        itemId,
+        itemName: itemNameMap.get(itemId) ?? itemId,
+        price: Math.max(0, product.price),
+        quantity: Math.max(1, clampInteger(product.quantity, 1)),
+        sortOrder: product.sort_order,
+        allowGift: Boolean(product.allow_gift),
+        giftFavorDelta: clampInteger(product.gift_favor_delta, 0),
+        purchaseCooldownHours: Math.max(0, clampInteger(product.purchase_cooldown_hours, 0)),
+        purchaseCooldownLeftHours: getShopPurchaseCooldownLeftHours(snapshot, product.id),
+        giftCooldownHours,
+        ownedQuantity: findBagEntry(snapshot, "player", itemId)?.quantity ?? 0,
+        disabled: Boolean(disabledReason),
+        disabledReason,
+        unavailableReason: product.unavailable_reason || null
+      } satisfies RuntimeShopProductView
+    })
+    .filter((product) => product.id && product.categoryId && product.itemId)
+    .sort((left, right) => {
+      if (left.categoryId !== right.categoryId) {
+        return left.categoryId.localeCompare(right.categoryId)
+      }
+
+      if (left.disabled !== right.disabled) {
+        return left.disabled ? 1 : -1
+      }
+
+      if (left.sortOrder !== right.sortOrder) {
+        return left.sortOrder - right.sortOrder
+      }
+
+      return left.itemName.localeCompare(right.itemName, "zh-Hans-CN")
+    })
+
+  return {
+    currencyValueKey: shopConfig.currency_value_key,
+    categories,
+    products
+  }
+}
+
 export function buildRuntimePhoneContacts(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot
@@ -6419,6 +7073,7 @@ function buildViewModel(
 
   const bagSummary = buildRuntimeBagSummary(bundle, runtimeState.snapshot)
   const doing = buildRuntimeDoingView(bundle, runtimeState.snapshot)
+  const shop = buildRuntimeShopView(bundle, runtimeState.snapshot)
 
   const availableBranches = (currentEventState?.availableActions ?? []).flatMap((actionState) => {
     const actionNode = getBundleGraphNode(bundle, actionState.nodeId)
@@ -6454,6 +7109,7 @@ function buildViewModel(
     branchContextSummary,
     bagSummary,
     doing,
+    shop,
     debugSummary: {
       globalGroupCount: runtimeState.snapshot.vals.variables.length,
       systemGroupCount: runtimeState.snapshot.system_vals.variables.length,
@@ -6493,6 +7149,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
   normalizeBagsState(runtimeState.snapshot)
   normalizePhoneState(runtimeState.snapshot)
   normalizeDoingState(runtimeState.snapshot)
+  normalizeShopState(runtimeState.snapshot)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)
 
   if (!options.saveState && options.customOverrides) {
@@ -6590,6 +7247,24 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
           notifications.push(error instanceof Error ? error.message : "发起行动失败。")
+        }
+        return
+      }
+
+      if (action.type === "shop-buy") {
+        try {
+          buyShopProduct(options.bundle, runtimeState.snapshot, notifications, action.productId)
+        } catch (error) {
+          notifications.push(error instanceof Error ? error.message : "购买商品失败。")
+        }
+        return
+      }
+
+      if (action.type === "shop-gift") {
+        try {
+          giftShopProduct(options.bundle, runtimeState.snapshot, notifications, action.productId, action.roleKey)
+        } catch (error) {
+          notifications.push(error instanceof Error ? error.message : "赠送商品失败。")
         }
         return
       }

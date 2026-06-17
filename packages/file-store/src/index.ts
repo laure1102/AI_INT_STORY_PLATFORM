@@ -18,6 +18,7 @@ import {
   storyLoopEventSchema,
   storyPhoneSchema,
   storyScheduleEventsSchema,
+  storyShopSchema,
   storyMetaSchema,
   storyNormalRolesDataFileSchema,
   storyPlayerOverrideValsSchema,
@@ -52,6 +53,7 @@ import {
   type StoryScheduleEventsFile,
   type StorySceneBackgroundVariant,
   type StorySceneFile,
+  type StoryShopFile,
   type StorySummary,
   type StoryValsFile
 } from "@story-mgr/core"
@@ -101,6 +103,7 @@ export interface StoryFileStore {
     eventLocations: StoryEventLocationFile
   ): Promise<StoryEventLocationFile>
   writeItems(storyId: string, items: StoryItemsFile): Promise<StoryItemsFile>
+  writeShop(storyId: string, shop: StoryShopFile): Promise<StoryShopFile>
   writeInitialBags(storyId: string, initialBags: StoryInitialBagsFile): Promise<StoryInitialBagsFile>
   writePhone(storyId: string, phone: StoryPhoneFile): Promise<StoryPhoneFile>
   writeDoing(storyId: string, doing: StoryDoingFile): Promise<StoryDoingFile>
@@ -299,6 +302,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
     importantRolesFile: path.join(storyDir, "import_roles.json5"),
     eventLocationFile: path.join(storyDir, "event_location.json5"),
     itemsFile: path.join(storyDir, "items.json5"),
+    shopFile: path.join(storyDir, "shop.json5"),
     initialBagsFile: path.join(storyDir, "initial_bags.json5"),
     phoneFile: path.join(storyDir, "phone.json5"),
     doingFile: path.join(storyDir, "doing.json5"),
@@ -360,6 +364,14 @@ function createDefaultInitialBags(): StoryInitialBagsFile {
     player: {
       entries: []
     }
+  }
+}
+
+function createDefaultStoryShop(): StoryShopFile {
+  return {
+    currency_value_key: "player.money",
+    categories: [],
+    products: []
   }
 }
 
@@ -983,6 +995,18 @@ async function readStoryItems(
   return storyItemsSchema.parse(items)
 }
 
+async function readStoryShop(
+  dataDir: string,
+  storyId: string
+): Promise<StoryShopFile> {
+  const paths = createStoryPaths(dataDir, storyId)
+  const shop = await readOptionalJson5File<StoryShopFile>(
+    paths.shopFile,
+    createDefaultStoryShop()
+  )
+  return storyShopSchema.parse(shop)
+}
+
 async function readStoryInitialBags(
   dataDir: string,
   storyId: string
@@ -1136,6 +1160,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       roles,
       eventLocations,
       items,
+      shop,
       initialBags,
       phone,
       doing,
@@ -1153,6 +1178,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       readStoryRoles(dataDir, storyId),
       readStoryEventLocations(dataDir, storyId),
       readStoryItems(dataDir, storyId),
+      readStoryShop(dataDir, storyId),
       readStoryInitialBags(dataDir, storyId),
       readStoryPhone(dataDir, storyId),
       readStoryDoing(dataDir, storyId),
@@ -1171,6 +1197,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       roles,
       eventLocations,
       items,
+      shop,
       initialBags,
       phone,
       doing,
@@ -1434,6 +1461,15 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     await pruneUnusedItemAssets(dataDir, storyId, parsedItems)
 
     return parsedItems
+  }
+
+  async function writeShop(storyId: string, shop: StoryShopFile): Promise<StoryShopFile> {
+    const parsedShop = storyShopSchema.parse(shop)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(paths.shopFile, parsedShop satisfies StoryShopFile)
+
+    return parsedShop
   }
 
   async function writeInitialBags(
@@ -1724,6 +1760,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     writeRoles,
     writeEventLocations,
     writeItems,
+    writeShop,
     writeInitialBags,
     writePhone,
     writeDoing,

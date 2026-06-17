@@ -13,6 +13,7 @@ import type {
   StoryCreationDraftItem,
   StoryCreationDraftLoopRule,
   StoryCreationDraftRole,
+  StoryCreationDraftShop,
   StoryCreationDraftVariable
 } from "@story-mgr/shared"
 
@@ -83,6 +84,8 @@ const selectedPhoneReplyIds = shallowRef<string[]>([])
 const selectedPhoneContactProfileKeys = shallowRef<string[]>([])
 const selectedDoingMenuIds = shallowRef<string[]>([])
 const selectedDoingIds = shallowRef<string[]>([])
+const selectedShopCategoryIds = shallowRef<string[]>([])
+const selectedShopProductIds = shallowRef<string[]>([])
 const feedbackHistory = ref<FeedbackHistoryItem[]>([])
 const editableDraft = ref<StoryCreationDraft | null>(null)
 const draftApplied = shallowRef(false)
@@ -287,6 +290,16 @@ const doingDraftCount = computed(() => {
   return doing.menus.length + doing.doings.length
 })
 
+const shopDraftCount = computed(() => {
+  const shop = draftPreview.value?.shop
+
+  if (!shop) {
+    return 0
+  }
+
+  return shop.categories.length + shop.products.length
+})
+
 const selectedApplyCount = computed(() => {
   return selectedEventKeys.value.length
     + selectedLocationIds.value.length
@@ -300,6 +313,8 @@ const selectedApplyCount = computed(() => {
     + selectedPhoneContactProfileKeys.value.length
     + selectedDoingMenuIds.value.length
     + selectedDoingIds.value.length
+    + selectedShopCategoryIds.value.length
+    + selectedShopProductIds.value.length
 })
 
 const canApplyDraft = computed(() => {
@@ -373,6 +388,14 @@ const existingDoingIds = computed(() => {
   return new Set(props.story.doing.doings.map((doing) => doing.id))
 })
 
+const existingShopCategoryIds = computed(() => {
+  return new Set(props.story.shop.categories.map((category) => category.id))
+})
+
+const existingShopProductIds = computed(() => {
+  return new Set(props.story.shop.products.map((product) => product.id))
+})
+
 const existingChainIds = computed(() => {
   return new Set(props.story.chainEvents.map((event) => event.id))
 })
@@ -420,6 +443,20 @@ const availableDoingMenuIdsForApply = computed(() => {
   return new Set([
     ...Array.from(existingDoingMenuIds.value),
     ...selectedDoingMenuIds.value
+  ])
+})
+
+const availableItemIdsForApply = computed(() => {
+  return new Set([
+    ...Array.from(existingItemIds.value),
+    ...selectedItemIds.value
+  ])
+})
+
+const availableShopCategoryIdsForApply = computed(() => {
+  return new Set([
+    ...Array.from(existingShopCategoryIds.value),
+    ...selectedShopCategoryIds.value
   ])
 })
 
@@ -511,6 +548,18 @@ const selectedImpactSummary = computed(() => {
     }
   }
 
+  for (const category of draft.shop?.categories ?? []) {
+    if (selectedShopCategoryIds.value.includes(category.id)) {
+      addImpact(getShopCategoryImpact(category))
+    }
+  }
+
+  for (const product of draft.shop?.products ?? []) {
+    if (selectedShopProductIds.value.includes(product.id)) {
+      addImpact(getShopProductImpact(product))
+    }
+  }
+
   return summary
 })
 
@@ -526,7 +575,7 @@ const applyPreviewMessage = computed(() => {
   ].filter(Boolean)
 
   if (parts.length === 0) {
-    return "确认后会写入所选地点、角色、物品、变量、事件、手机联系人资产和行动资产。"
+    return "确认后会写入所选地点、角色、物品、变量、事件、手机联系人资产、行动资产和商城资产。"
   }
 
   return `确认后将${parts.join("、")}。`
@@ -750,6 +799,10 @@ function cloneCreationDraft(draft: StoryCreationDraft): StoryCreationDraft {
     menus: cloned.doing?.menus ?? [],
     doings: cloned.doing?.doings ?? []
   }
+  cloned.shop = {
+    categories: cloned.shop?.categories ?? [],
+    products: cloned.shop?.products ?? []
+  }
   return cloned
 }
 
@@ -776,6 +829,8 @@ function syncApplySelection(draft: StoryCreationDraft | null) {
   selectedPhoneContactProfileKeys.value = draft?.phone?.contact_profiles.map((profile) => profile.role_key) ?? []
   selectedDoingMenuIds.value = draft?.doing?.menus.map((menu) => menu.id) ?? []
   selectedDoingIds.value = draft?.doing?.doings.map((doing) => doing.id) ?? []
+  selectedShopCategoryIds.value = draft?.shop?.categories.map((category) => category.id) ?? []
+  selectedShopProductIds.value = draft?.shop?.products.map((product) => product.id) ?? []
 }
 
 function toggleStringSelection(source: string[], value: string, checked: boolean) {
@@ -848,6 +903,14 @@ function setDoingSelected(doingId: string, checked: boolean) {
   selectedDoingIds.value = toggleStringSelection(selectedDoingIds.value, doingId, checked)
 }
 
+function setShopCategorySelected(categoryId: string, checked: boolean) {
+  selectedShopCategoryIds.value = toggleStringSelection(selectedShopCategoryIds.value, categoryId, checked)
+}
+
+function setShopProductSelected(productId: string, checked: boolean) {
+  selectedShopProductIds.value = toggleStringSelection(selectedShopProductIds.value, productId, checked)
+}
+
 function getCheckboxChecked(event: Event) {
   return event.target instanceof HTMLInputElement && event.target.checked
 }
@@ -900,6 +963,14 @@ function handleDoingSelectionChange(doingId: string, event: Event) {
   setDoingSelected(doingId, getCheckboxChecked(event))
 }
 
+function handleShopCategorySelectionChange(categoryId: string, event: Event) {
+  setShopCategorySelected(categoryId, getCheckboxChecked(event))
+}
+
+function handleShopProductSelectionChange(productId: string, event: Event) {
+  setShopProductSelected(productId, getCheckboxChecked(event))
+}
+
 function applyDraft() {
   if (!editableDraft.value || props.applying || selectedApplyCount.value === 0) {
     return
@@ -917,7 +988,9 @@ function applyDraft() {
     phoneReplyIds: selectedPhoneReplyIds.value,
     phoneContactProfileKeys: selectedPhoneContactProfileKeys.value,
     doingMenuIds: selectedDoingMenuIds.value,
-    doingIds: selectedDoingIds.value
+    doingIds: selectedDoingIds.value,
+    shopCategoryIds: selectedShopCategoryIds.value,
+    shopProductIds: selectedShopProductIds.value
   })
 }
 
@@ -1059,6 +1132,26 @@ function getDoingImpact(doing: StoryCreationDraftDoing["doings"][number]): Draft
     : createImpact("create", "新增", "应用后会写入 doing.json5。")
 }
 
+function getShopCategoryImpact(category: StoryCreationDraftShop["categories"][number]): DraftImpact {
+  return existingShopCategoryIds.value.has(category.id)
+    ? createImpact("update", "覆盖", "同 id 商城分类已存在，应用后会更新分类信息。")
+    : createImpact("create", "新增", "应用后会写入 shop.json5 的商城分类。")
+}
+
+function getShopProductImpact(product: StoryCreationDraftShop["products"][number]): DraftImpact {
+  if (!availableShopCategoryIdsForApply.value.has(product.category_id)) {
+    return createImpact("skip", "跳过", "所属商城分类未选中且不存在，应用时不会写入该商品。")
+  }
+
+  if (!availableItemIdsForApply.value.has(product.item_id)) {
+    return createImpact("skip", "跳过", "商品引用的物品未选中且不存在，应用时不会写入该商品。")
+  }
+
+  return existingShopProductIds.value.has(product.id)
+    ? createImpact("update", "覆盖", "同 id 商城商品已存在，应用后会替换货架配置。")
+    : createImpact("create", "新增", "应用后会写入 shop.json5 的商品货架。")
+}
+
 function getDraftPresentationDialogues(event: StoryCreationDraftEvent) {
   return event.presentation.type === "dialogue" ? event.presentation.dialogues : []
 }
@@ -1082,6 +1175,18 @@ function getImpactClass(impact: DraftImpact) {
 function getItemCategoryName(categoryId: string) {
   const category = props.story.items.categories.find((item) => item.id === categoryId)
   return category?.name || categoryId
+}
+
+function getDraftOrExistingItemName(itemId: string) {
+  const draftItem = draftPreview.value?.items.find((item) => item.id === itemId)
+  const existingItem = props.story.items.items.find((item) => item.id === itemId)
+  return draftItem?.name || existingItem?.name || itemId
+}
+
+function getDraftOrExistingShopCategoryName(categoryId: string) {
+  const draftCategory = draftPreview.value?.shop?.categories.find((category) => category.id === categoryId)
+  const existingCategory = props.story.shop.categories.find((category) => category.id === categoryId)
+  return draftCategory?.name || existingCategory?.name || categoryId
 }
 
 function getItemTagsText(item: StoryCreationDraftItem) {
@@ -1530,6 +1635,7 @@ watch(
               <span>定时 {{ eventTypeSummary.schedule }}</span>
               <span v-if="phoneDraftCount">手机 {{ phoneDraftCount }}</span>
               <span v-if="doingDraftCount">行动 {{ doingDraftCount }}</span>
+              <span v-if="shopDraftCount">商城 {{ shopDraftCount }}</span>
             </div>
           </div>
 
@@ -2143,6 +2249,123 @@ watch(
               </template>
 
               <p v-else class="creation-result__muted">未生成行动资产。</p>
+            </section>
+
+            <section class="creation-result__section">
+              <h4 class="creation-result__section-title">商城资产</h4>
+
+              <template v-if="draftPreview.shop && shopDraftCount > 0">
+                <div v-if="draftPreview.shop.categories.length" class="creation-draft-subgroup">
+                  <strong class="creation-draft-subgroup__title">商城分类</strong>
+                  <ul class="creation-chip-list">
+                    <li
+                      v-for="category in draftPreview.shop.categories"
+                      :key="category.id"
+                      class="creation-chip-list__item"
+                    >
+                      <label class="creation-select">
+                        <input
+                          type="checkbox"
+                          :checked="selectedShopCategoryIds.includes(category.id)"
+                          @change="handleShopCategorySelectionChange(category.id, $event)"
+                        >
+                      </label>
+                      <strong>{{ category.id }} · {{ category.name }}</strong>
+                      <span
+                        class="creation-impact"
+                        :class="getImpactClass(getShopCategoryImpact(category))"
+                        :title="getShopCategoryImpact(category).detail"
+                      >
+                        {{ getShopCategoryImpact(category).label }}
+                      </span>
+                      <label class="creation-edit-field">
+                        <span>名称</span>
+                        <input v-model="category.name" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>显示条件</span>
+                        <input v-model="category.visible_expr" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>说明</span>
+                        <textarea v-model="category.descr" class="creation-edit-textarea" rows="2" />
+                      </label>
+                    </li>
+                  </ul>
+                </div>
+
+                <div v-if="draftPreview.shop.products.length" class="creation-draft-subgroup">
+                  <strong class="creation-draft-subgroup__title">商城商品</strong>
+                  <ul class="creation-chip-list">
+                    <li
+                      v-for="product in draftPreview.shop.products"
+                      :key="product.id"
+                      class="creation-chip-list__item"
+                    >
+                      <label class="creation-select">
+                        <input
+                          type="checkbox"
+                          :checked="selectedShopProductIds.includes(product.id)"
+                          @change="handleShopProductSelectionChange(product.id, $event)"
+                        >
+                      </label>
+                      <strong>{{ product.id }}</strong>
+                      <span
+                        class="creation-impact"
+                        :class="getImpactClass(getShopProductImpact(product))"
+                        :title="getShopProductImpact(product).detail"
+                      >
+                        {{ getShopProductImpact(product).label }}
+                      </span>
+                      <label class="creation-edit-field">
+                        <span>商城分类</span>
+                        <input v-model="product.category_id" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>物品 id</span>
+                        <input v-model="product.item_id" class="creation-edit-input">
+                      </label>
+                      <div class="creation-event-edit-grid">
+                        <label class="creation-edit-field">
+                          <span>价格</span>
+                          <input v-model.number="product.price" class="creation-edit-input" min="0" type="number">
+                        </label>
+                        <label class="creation-edit-field">
+                          <span>数量</span>
+                          <input v-model.number="product.quantity" class="creation-edit-input" min="1" type="number">
+                        </label>
+                        <label class="creation-edit-field">
+                          <span>送礼好感</span>
+                          <input v-model.number="product.gift_favor_delta" class="creation-edit-input" min="-100" max="100" type="number">
+                        </label>
+                      </div>
+                      <label class="creation-edit-field">
+                        <span>购买条件</span>
+                        <input v-model="product.available_expr" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>不可购买原因</span>
+                        <input v-model="product.unavailable_reason" class="creation-edit-input">
+                      </label>
+                      <div class="creation-item-flags">
+                        <label class="creation-item-flags__check">
+                          <input v-model="product.enabled" type="checkbox">
+                          启用
+                        </label>
+                        <label class="creation-item-flags__check">
+                          <input v-model="product.allow_gift" type="checkbox">
+                          可送礼
+                        </label>
+                      </div>
+                      <small class="creation-result__muted">
+                        {{ getDraftOrExistingShopCategoryName(product.category_id) }} / {{ getDraftOrExistingItemName(product.item_id) }} / 冷却 {{ product.purchase_cooldown_hours }}h / 送礼 {{ product.gift_cooldown_hours }}h
+                      </small>
+                    </li>
+                  </ul>
+                </div>
+              </template>
+
+              <p v-else class="creation-result__muted">未生成商城资产。</p>
             </section>
           </div>
 

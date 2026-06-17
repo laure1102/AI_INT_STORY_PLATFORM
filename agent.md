@@ -67,6 +67,7 @@ Core files:
 - `items.json5`
 - `initial_bags.json5`
 - `doing.json5` // player-initiated action menu/event pool
+- `shop.json5` // in-game shop shelves existing item assets
 
 Event files:
 
@@ -83,6 +84,7 @@ Notes:
 - `items.json5` is the story-level item asset library; it is separate from event/location/role assets and includes editable item categories.
 - `initial_bags.json5` is only a new-save initialization template; live inventory is stored in the runtime session snapshot as `bags`.
 - `doing.json5` is the story-level player-initiated action config. It contains menu tree data plus doings that reuse flat-event presentation/script semantics.
+- `shop.json5` is the story-level shop shelf config. It must only reference existing `items.json5` item ids; it owns price, display/purchase conditions, gift favor delta, and cooldowns.
 - `events/events.json5`, `events/once_events.json5`, and `events/loop_events.json5` are legacy fallback file names only.
 
 ## 4. Current story data contracts
@@ -511,6 +513,31 @@ Implementation notes:
 - StoryScript exposes `doing_has`, `doing_used_count`, `doing_cooldown_left`, `doing_unlock`, `doing_lock`, and `doing_set_cooldown`.
 - backend AI creation Agent reads existing doing menus/actions and can output `draft.doing.menus` / `draft.doing.doings`; selected draft entries are applied to `doing.json5`.
 
+### Shop: `shop.json5`
+
+The `shop` module is the player-facing in-game shop.
+
+Boundary:
+
+- `items.json5` owns item assets: name, description, tags, rarity, image prompt, original image, and compressed images.
+- `shop.json5` does not create item assets. It only shelves existing item ids and configures price, visibility/purchase conditions, gift favor delta, and cooldowns.
+- live purchase/gift progress belongs to runtime session snapshots, not story config files.
+
+Implementation notes:
+
+- `packages/core`, `packages/file-store`, and `packages/compiler` read, write, validate, and compile `shop.json5`.
+- `shop.categories[].visible_expr` controls whether a category is shown.
+- `shop.products[].available_expr` controls whether a product is purchasable; unavailable products remain visible but greyed out and sorted after available products.
+- `shop.currency_value_key` points to a writable value variable, defaulting to `player.money`.
+- runtime session snapshots store `shop.purchases` and `shop.gifts` with counts, last game minute, and cooldown end game minute.
+- buying a product deducts `currency_value_key` and adds the referenced item to the player bag.
+- gifting a product removes the referenced item from the player bag, ensures the target phone contact exists, and applies `gift_favor_delta`.
+- HTML client footer exposes `M 商城` left of `N 下一天`; clicking or pressing `M` opens the shop popup.
+- StoryScript exposes `shop_can_buy`, `shop_purchase_cooldown_left`, `shop_gift_cooldown_left`, `shop_buy`, and `shop_gift`.
+- backend AI creation Agent reads existing shop categories/products and can output `draft.shop.categories` / `draft.shop.products`; selected draft entries are applied to `shop.json5`.
+- Agent-generated shop products must reference existing item ids or item ids from selected `draft.items`; the shop module never creates item assets directly.
+- Development plan and progress live in `shop.md`.
+
 ### Trigger modes and invocation
 
 - chain events, pool events, and schedule events all support `trigger_mode: "default" | "condition" | "invoke"`.
@@ -582,6 +609,9 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - event/action scripts can use `bag_add("player", "item_id", 1)` and `bag_remove("player", "item_id", 1)` to mutate runtime inventory
 - scripts and conditions can use `bag_count("player", "item_id")` and `bag_has("player", "item_id", 1)` to inspect runtime inventory
 - literal `item_id` arguments are validated against `items.json5`; dynamic ids are checked at runtime
+- scripts and conditions can use shop read helpers: `shop_can_buy`, `shop_purchase_cooldown_left`, and `shop_gift_cooldown_left`
+- event/action scripts can use `shop_buy(productId)` and `shop_gift(productId, roleKey)` to buy existing shop products or gift owned items to phone contacts
+- literal shop product ids are validated against `shop.json5`; dynamic ids are checked at runtime
 - runtime text substitution for dialogue/template content is implemented in `packages/runtime`
 - editor `?` help popovers for condition/script/dialogue fields should eventually be sourced from `StoryScript.md`
 - StoryScript validation lives in shared runtime/core paths and should be covered by future shared regression tests.

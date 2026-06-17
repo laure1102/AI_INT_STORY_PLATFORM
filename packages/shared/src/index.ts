@@ -8,15 +8,16 @@ import type {
   StoryEventCollectionType,
   StoryEventFile,
   StoryEventLocationFile,
-  StoryPhoneFile,
   StoryLoopEventFile,
   StoryItemsFile,
   StoryOnceDialogueDefinition,
   StoryOnceEventFile,
+  StoryPhoneFile,
   StoryPlayerOverrideValsFile,
   StoryRolesFile,
   StorySceneBackgroundVariant,
   StorySceneFile,
+  StoryShopFile,
   StoryValsFile,
   StorySummary,
   ValidationResult
@@ -169,6 +170,11 @@ export interface StoryCreationDraftDoing {
   doings: StoryDoingFile["doings"]
 }
 
+export interface StoryCreationDraftShop {
+  categories: StoryShopFile["categories"]
+  products: StoryShopFile["products"]
+}
+
 export interface StoryCreationDraftEvent {
   collectionType: "chain" | "pool" | "schedule"
   id: string
@@ -197,6 +203,7 @@ export interface StoryCreationDraft {
   variables: StoryCreationDraftVariable[]
   phone?: StoryCreationDraftPhone
   doing?: StoryCreationDraftDoing
+  shop?: StoryCreationDraftShop
   notes: string[]
   warnings: string[]
 }
@@ -276,6 +283,8 @@ export interface ApplyStoryCreationDraftSelection {
   phoneContactProfileKeys?: string[]
   doingMenuIds?: string[]
   doingIds?: string[]
+  shopCategoryIds?: string[]
+  shopProductIds?: string[]
   /** @deprecated 请改用 roleKeys，格式为 normal:<id> 或 important:<id> */
   roleIds?: string[]
   variableKeys?: string[]
@@ -304,6 +313,8 @@ export interface ApplyStoryCreationDraftResponse {
     phoneContactProfiles: number
     doingMenus: number
     doings: number
+    shopCategories: number
+    shopProducts: number
   }
   warnings: string[]
 }
@@ -375,6 +386,14 @@ export interface StoryItemsResponse {
 
 export interface SaveStoryItemsRequest {
   items: StoryItemsFile
+}
+
+export interface StoryShopResponse {
+  shop: StoryShopFile
+}
+
+export interface SaveStoryShopRequest {
+  shop: StoryShopFile
 }
 
 export interface StoryPhoneResponse {

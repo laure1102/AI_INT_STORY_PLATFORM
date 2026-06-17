@@ -30,6 +30,7 @@ import {
   type StoryPhonePersonalityDefinition,
   type StoryPhoneReplyLibraryEntry,
   type StoryPhoneTalkLibraryEntry,
+  type StoryShopProduct,
   type StoryScriptValidationIssue,
   type StoryOnceDialogueDefinition,
   type StoryOnceEventFile,
@@ -54,6 +55,7 @@ import type {
   StoryCreationDraftPhone,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
+  StoryCreationDraftShop,
   StoryCreationDraftVariable
 } from "@story-mgr/shared"
 import { z } from "zod"
@@ -416,6 +418,40 @@ const draftDoingSchema = z.object({
   doings: z.array(draftDoingDefinitionSchema).default([])
 }).default(emptyDraftDoing)
 
+const draftShopCategorySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  sort_order: z.number().int().default(100),
+  visible_expr: z.string().default(""),
+  descr: z.string().default("")
+})
+
+const draftShopProductSchema = z.object({
+  id: z.string().min(1),
+  category_id: z.string().min(1),
+  item_id: z.string().min(1),
+  price: z.number().min(0).default(0),
+  quantity: z.number().int().min(1).default(1),
+  sort_order: z.number().int().default(100),
+  enabled: z.boolean().default(true),
+  available_expr: z.string().default(""),
+  unavailable_reason: z.string().default(""),
+  allow_gift: z.boolean().default(true),
+  gift_favor_delta: z.number().int().min(-100).max(100).default(0),
+  purchase_cooldown_hours: z.number().int().min(0).default(0),
+  gift_cooldown_hours: z.number().int().min(0).default(0)
+})
+
+const emptyDraftShop = {
+  categories: [],
+  products: []
+}
+
+const draftShopSchema = z.object({
+  categories: z.array(draftShopCategorySchema).default([]),
+  products: z.array(draftShopProductSchema).default([])
+}).default(emptyDraftShop)
+
 const draftSchema = z.object({
   title: z.string().min(1).describe("这批生成内容的标题。"),
   summary: z.string().describe("这批内容如何服务可玩网文体验。"),
@@ -427,6 +463,7 @@ const draftSchema = z.object({
   variables: z.array(draftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
   phone: draftPhoneSchema,
   doing: draftDoingSchema,
+  shop: draftShopSchema,
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),
   warnings: z.array(z.string()).describe("风险、待人工确认点和不确定项。")
 })
@@ -611,6 +648,35 @@ const structuredDoingDraftSchema = z.object({
   doings: z.array(structuredDoingDefinitionSchema).describe("建议新增或覆盖的行动事件；没有填空数组。")
 })
 
+const structuredShopCategorySchema = z.object({
+  id: z.string().min(1).describe("商城分类 id。"),
+  name: z.string().min(1).describe("商城分类显示名。"),
+  sort_order: z.number().int().describe("排序值，越小越靠前。"),
+  visible_expr: z.string().describe("分类显示条件 StoryScript；默认显示填空字符串。"),
+  descr: z.string().describe("分类说明。")
+})
+
+const structuredShopProductSchema = z.object({
+  id: z.string().min(1).describe("商城商品 id。"),
+  category_id: z.string().min(1).describe("所属商城分类 id，必须引用现有或本次 shop.categories。"),
+  item_id: z.string().min(1).describe("售卖的物品 id，必须引用现有物品或本次 draft.items 中的物品。"),
+  price: z.number().min(0).describe("商品价格。"),
+  quantity: z.number().int().min(1).describe("每次购买加入背包的数量。"),
+  sort_order: z.number().int().describe("排序值，越小越靠前。"),
+  enabled: z.boolean().describe("是否启用商品。"),
+  available_expr: z.string().describe("购买条件 StoryScript；条件不满足时商品灰色显示，默认可买填空字符串。"),
+  unavailable_reason: z.string().describe("不可购买时显示原因；没有填空字符串。"),
+  allow_gift: z.boolean().describe("是否允许从背包送给手机联系人。"),
+  gift_favor_delta: z.number().int().min(-100).max(100).describe("送礼给联系人时增加的好感度。"),
+  purchase_cooldown_hours: z.number().int().min(0).describe("购买冷却小时数；没有冷却填 0。"),
+  gift_cooldown_hours: z.number().int().min(0).describe("送礼冷却小时数；没有冷却填 0。")
+})
+
+const structuredShopDraftSchema = z.object({
+  categories: z.array(structuredShopCategorySchema).describe("建议新增或覆盖的商城分类；没有填空数组。"),
+  products: z.array(structuredShopProductSchema).describe("建议新增或覆盖的商城商品；没有填空数组。")
+})
+
 const structuredDraftEventSchema = z.object({
   collectionType: z.enum(["chain", "pool", "schedule"]).describe("目标事件集合。"),
   id: z.string().min(1).describe("ASCII 风格事件 id。"),
@@ -641,6 +707,7 @@ const structuredDraftSchema = z.object({
   variables: z.array(structuredDraftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
   phone: structuredPhoneDraftSchema.describe("建议新增或覆盖的手机联系人资产；没有时所有数组填空。"),
   doing: structuredDoingDraftSchema.describe("建议新增或覆盖的玩家主动行动资产；没有时所有数组填空。"),
+  shop: structuredShopDraftSchema.describe("建议新增或覆盖的商城资产；没有时所有数组填空。"),
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),
   warnings: z.array(z.string()).describe("风险、待人工确认点和不确定项。")
 })
@@ -650,6 +717,7 @@ type StructuredCreationDraftLoopRule = z.infer<typeof structuredDraftLoopRuleSch
 type StructuredCreationDraftPresentation = z.infer<typeof structuredDraftPresentationSchema>
 type StructuredCreationPhoneDraft = z.infer<typeof structuredPhoneDraftSchema>
 type StructuredCreationDoingDraft = z.infer<typeof structuredDoingDraftSchema>
+type StructuredCreationShopDraft = z.infer<typeof structuredShopDraftSchema>
 
 const generatedDialogueSchema = z.object({
   summary: z.string().describe("对白生成简述。"),
@@ -1443,6 +1511,26 @@ function formatExistingPhoneAndDoing(story: StoryDocument) {
         once: doing.once,
         location: doing.location
       }))
+    },
+    shop: {
+      currency_value_key: story.shop.currency_value_key,
+      categories: story.shop.categories.map((category) => ({
+        id: category.id,
+        name: category.name,
+        sort_order: category.sort_order,
+        visible_expr: category.visible_expr
+      })),
+      products: story.shop.products.map((product) => ({
+        id: product.id,
+        category_id: product.category_id,
+        item_id: product.item_id,
+        price: product.price,
+        quantity: product.quantity,
+        enabled: product.enabled,
+        available_expr: product.available_expr,
+        allow_gift: product.allow_gift,
+        gift_favor_delta: product.gift_favor_delta
+      }))
     }
   }, 16000)
 }
@@ -1466,7 +1554,7 @@ function buildStoryContext(
     "【现有地点/角色/场景/物品】",
     formatExistingAssets(story, instruction, baseDraft),
     "",
-    "【现有手机联系人/行动资产】",
+    "【现有手机联系人/行动/商城资产】",
     formatExistingPhoneAndDoing(story),
     "",
     "【现有事件简表】",
@@ -1500,6 +1588,9 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "背包函数里的 item_id 必须来自现有物品或本次 items 草稿；如果新增物品，事件脚本必须引用该新增物品 id。",
     "手机联系人资产写入 phone 草稿：新增/调整联系人短句、动作、回复、联系人特配、主动消息规则时输出 phone，不要只在 notes 里描述。事件脚本只用于运行时行为，例如 phone_add_contact、phone_send_from_contact、phone_add_favor。",
     "行动资产写入 doing 草稿：玩家可主动选择的玩法入口必须输出 doing 菜单/行动。doing 行动不配置 trigger_mode、trigger_expr、invoke_params；显示条件写 visible_expr，触发只来自菜单选择。",
+    "商城资产写入 shop 草稿：新增或调整商城分类、商品货架时输出 shop.categories/shop.products，不要只在 notes 里描述。商城不能创建物品资产，只能引用现有 item id 或本次 draft.items 里同时生成的 item id。",
+    "商城商品的 category_id 必须引用现有 shop 分类或本次 shop.categories；item_id 必须引用现有物品或本次 draft.items。商品购买条件写 available_expr，分类显示条件写 visible_expr。",
+    "商城相关脚本可使用 shop_can_buy、shop_purchase_cooldown_left、shop_gift_cooldown_left、shop_buy、shop_gift；商品 id 必须来自现有 shop.products 或本次 draft.shop.products。",
     "如果手机消息或剧情会临时开放一个玩家主动入口，应同时生成 doing 草稿，并在事件脚本或手机相关事件中使用 doing_unlock(\"doing_id\")。",
     "schedule 事件的 loop 必须包含 at、priority、after、before：at 用 HH:mm；同一时间点内 priority 数字越小越先执行；如果事件依赖另一个定时事件结果，必须把前置事件 id 写入 after。",
     "schedule priority 建议：结算/统计类 10-49，发放/奖励类 50-99，展示/日报/提示类 100+。例如每日发钱依赖每日人口结算时，发钱事件 after 应包含人口结算事件 id。",
@@ -1894,6 +1985,33 @@ function normalizeStructuredDoingDraft(doing: StructuredCreationDoingDraft): Sto
   }
 }
 
+function normalizeStructuredShopDraft(shop: StructuredCreationShopDraft): StoryCreationDraftShop {
+  return {
+    categories: shop.categories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      sort_order: category.sort_order,
+      visible_expr: category.visible_expr,
+      descr: category.descr
+    })),
+    products: shop.products.map((product) => ({
+      id: product.id,
+      category_id: product.category_id,
+      item_id: product.item_id,
+      price: product.price,
+      quantity: product.quantity,
+      sort_order: product.sort_order,
+      enabled: product.enabled,
+      available_expr: product.available_expr,
+      unavailable_reason: product.unavailable_reason,
+      allow_gift: product.allow_gift,
+      gift_favor_delta: product.gift_favor_delta,
+      purchase_cooldown_hours: product.purchase_cooldown_hours,
+      gift_cooldown_hours: product.gift_cooldown_hours
+    }))
+  }
+}
+
 function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryCreationDraft {
   return {
     title: draft.title,
@@ -1954,6 +2072,7 @@ function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryCreation
     })),
     phone: normalizeStructuredPhoneDraft(draft.phone),
     doing: normalizeStructuredDoingDraft(draft.doing),
+    shop: normalizeStructuredShopDraft(draft.shop),
     notes: draft.notes,
     warnings: draft.warnings
   }
@@ -2121,6 +2240,29 @@ function collectDraftValidationDoingIds(story: StoryDocument, draft: StoryCreati
   return Array.from(doingIds)
 }
 
+function collectDraftValidationShopProductIds(story: StoryDocument, draft: StoryCreationDraft) {
+  const productIds = new Set<string>()
+
+  for (const product of story.shop.products) {
+    const productId = product.id.trim()
+    if (productId) {
+      productIds.add(productId)
+    }
+  }
+
+  for (const product of draft.shop?.products ?? []) {
+    const productId = product.id.trim()
+    if (!productId) {
+      continue
+    }
+
+    productIds.add(productId)
+    productIds.add(makeLooseId(productId))
+  }
+
+  return Array.from(productIds)
+}
+
 function formatStoryScriptIssue(issue: StoryScriptValidationIssue) {
   return issue.lineNumber > 0
     ? `第 ${issue.lineNumber} 行: ${issue.message}`
@@ -2158,6 +2300,7 @@ function createDraftEventValidationContext(
     itemIds: string[]
     roleKeys: string[]
     doingIds: string[]
+    shopProductIds: string[]
   },
   mode: "read" | "write"
 ) {
@@ -2167,9 +2310,11 @@ function createDraftEventValidationContext(
     itemIds: context.itemIds,
     roleKeys: context.roleKeys,
     doingIds: context.doingIds,
+    shopProductIds: context.shopProductIds,
     bagMode: mode,
     phoneMode: mode,
-    doingMode: mode
+    doingMode: mode,
+    shopMode: mode
   })
 }
 
@@ -2178,6 +2323,7 @@ function createDraftGlobalValidationContext(
     itemIds: string[]
     roleKeys: string[]
     doingIds: string[]
+    shopProductIds: string[]
   },
   mode: "read" | "write"
 ) {
@@ -2185,9 +2331,11 @@ function createDraftGlobalValidationContext(
     itemIds: context.itemIds,
     roleKeys: context.roleKeys,
     doingIds: context.doingIds,
+    shopProductIds: context.shopProductIds,
     bagMode: mode,
     phoneMode: mode,
-    doingMode: mode
+    doingMode: mode,
+    shopMode: mode
   })
 }
 
@@ -2228,7 +2376,8 @@ function collectDraftStoryScriptValidationIssues(
   const validationContext = {
     itemIds: collectDraftValidationItemIds(story, draft),
     roleKeys: collectDraftValidationRoleKeys(story, draft),
-    doingIds: collectDraftValidationDoingIds(story, draft)
+    doingIds: collectDraftValidationDoingIds(story, draft),
+    shopProductIds: collectDraftValidationShopProductIds(story, draft)
   }
   const issues: DraftStoryScriptValidationIssue[] = []
 
@@ -2374,6 +2523,50 @@ function collectDraftStoryScriptValidationIssues(
         )
       )
     }
+  }
+
+  for (const category of draft.shop?.categories ?? []) {
+    if (!category.visible_expr.trim()) {
+      continue
+    }
+
+    pushDraftScriptValidationIssues(
+      issues,
+      {
+        collectionType: "pool",
+        id: `shop.category:${category.id}`
+      },
+      "visible_expr",
+      validateStoryScriptContent(
+        vals,
+        category.visible_expr,
+        "predicate",
+        undefined,
+        createDraftGlobalValidationContext(validationContext, "read")
+      )
+    )
+  }
+
+  for (const product of draft.shop?.products ?? []) {
+    if (!product.available_expr.trim()) {
+      continue
+    }
+
+    pushDraftScriptValidationIssues(
+      issues,
+      {
+        collectionType: "pool",
+        id: `shop.product:${product.id}`
+      },
+      "available_expr",
+      validateStoryScriptContent(
+        vals,
+        product.available_expr,
+        "predicate",
+        undefined,
+        createDraftGlobalValidationContext(validationContext, "read")
+      )
+    )
   }
 
   return issues
@@ -2759,10 +2952,67 @@ function normalizeDraftDoing(
   }
 }
 
+function normalizeDraftShop(
+  shop: StoryCreationDraft["shop"],
+  itemIdMap: Map<string, string>
+): StoryCreationDraftShop {
+  const usedCategoryIds = new Set<string>()
+  const usedProductIds = new Set<string>()
+  const categoryIdMap = new Map<string, string>()
+
+  const categories = (shop?.categories ?? []).map((category, index) => {
+    const id = makeUniqueId(category.id, `shop-category-${index + 1}`, usedCategoryIds)
+    categoryIdMap.set(category.id, id)
+    categoryIdMap.set(makeLooseId(category.id), id)
+
+    return {
+      id,
+      name: category.name?.trim() || id,
+      sort_order: Number.isFinite(category.sort_order) ? Math.trunc(category.sort_order) : 100,
+      visible_expr: category.visible_expr ?? "",
+      descr: category.descr ?? ""
+    }
+  })
+
+  const products = (shop?.products ?? []).map((product, index) => {
+    const id = makeUniqueId(product.id, `shop-product-${index + 1}`, usedProductIds)
+    const categoryId =
+      categoryIdMap.get(product.category_id) ??
+      categoryIdMap.get(makeLooseId(product.category_id)) ??
+      makeLooseId(product.category_id)
+    const itemId =
+      itemIdMap.get(product.item_id) ??
+      itemIdMap.get(makeLooseId(product.item_id)) ??
+      makeLooseId(product.item_id)
+
+    return {
+      id,
+      category_id: categoryId,
+      item_id: itemId,
+      price: Math.max(0, Number.isFinite(product.price) ? product.price : 0),
+      quantity: Math.max(1, Math.trunc(product.quantity ?? 1)),
+      sort_order: Number.isFinite(product.sort_order) ? Math.trunc(product.sort_order) : 100,
+      enabled: product.enabled ?? true,
+      available_expr: product.available_expr ?? "",
+      unavailable_reason: product.unavailable_reason ?? "",
+      allow_gift: product.allow_gift ?? true,
+      gift_favor_delta: Math.max(-100, Math.min(100, Math.trunc(product.gift_favor_delta ?? 0))),
+      purchase_cooldown_hours: Math.max(0, Math.trunc(product.purchase_cooldown_hours ?? 0)),
+      gift_cooldown_hours: Math.max(0, Math.trunc(product.gift_cooldown_hours ?? 0))
+    }
+  })
+
+  return {
+    categories,
+    products
+  }
+}
+
 function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
   const locationIdMap = new Map<string, string>()
   const roleIdMap = new Map<string, string>()
   const eventIdMap = new Map<string, string>()
+  const itemIdMap = new Map<string, string>()
   const usedLocationIds = new Set<string>()
   const usedItemIds = new Set<string>()
   const usedVariableKeys = new Set<string>()
@@ -2800,6 +3050,8 @@ function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
 
   const items = (draft.items ?? []).map((item, index) => {
     const id = makeUniqueId(item.id, `item-${index + 1}`, usedItemIds)
+    itemIdMap.set(item.id, id)
+    itemIdMap.set(makeLooseId(item.id), id)
     const maxStack = Number.isInteger(item.max_stack) && item.max_stack > 0
       ? item.max_stack
       : 1
@@ -2882,7 +3134,8 @@ function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
     events,
     variables,
     phone: normalizeDraftPhone(draft.phone, roleIdMap),
-    doing: normalizeDraftDoing(draft.doing, roleIdMap, locationIdMap)
+    doing: normalizeDraftDoing(draft.doing, roleIdMap, locationIdMap),
+    shop: normalizeDraftShop(draft.shop, itemIdMap)
   }
 }
 
@@ -3215,6 +3468,27 @@ function normalizeDoingMenuForApply(
     ...menu,
     parent_id: ""
   }
+}
+
+function normalizeShopProductForApply(
+  product: StoryShopProduct,
+  options: {
+    availableItemIds: Set<string>
+    availableShopCategoryIds: Set<string>
+    warnings: string[]
+  }
+): StoryShopProduct | null {
+  if (!options.availableShopCategoryIds.has(product.category_id)) {
+    options.warnings.push(`商城商品 ${product.id} 引用了不存在或未应用的商城分类 ${product.category_id}，未写入 shop.json5。`)
+    return null
+  }
+
+  if (!options.availableItemIds.has(product.item_id)) {
+    options.warnings.push(`商城商品 ${product.id} 引用了不存在或未应用的物品 ${product.item_id}，未写入 shop.json5。`)
+    return null
+  }
+
+  return product
 }
 
 function draftVariableKey(variable: StoryCreationDraftVariable) {
@@ -3599,6 +3873,8 @@ export async function applyStoryCreationDraft(
   const selectedPhoneContactProfileKeys = toSelectionSet(request.selection.phoneContactProfileKeys ?? [])
   const selectedDoingMenuIds = toSelectionSet(request.selection.doingMenuIds ?? [])
   const selectedDoingIds = toSelectionSet(request.selection.doingIds ?? [])
+  const selectedShopCategoryIds = toSelectionSet(request.selection.shopCategoryIds ?? [])
+  const selectedShopProductIds = toSelectionSet(request.selection.shopProductIds ?? [])
   const selectedEventKeys = toSelectionSet(request.selection.eventKeys)
   const selectedVariableKeys = toSelectionSet([
     ...(request.selection.variableKeys ?? []),
@@ -3617,6 +3893,8 @@ export async function applyStoryCreationDraft(
   let appliedPhoneContactProfiles = 0
   let appliedDoingMenus = 0
   let appliedDoings = 0
+  let appliedShopCategories = 0
+  let appliedShopProducts = 0
 
   const nextEventLocations: StoryEventLocationFile = {
     ...story.eventLocations,
@@ -3887,6 +4165,41 @@ export async function applyStoryCreationDraft(
     appliedDoings += 1
   }
 
+  const nextShop = {
+    ...story.shop,
+    categories: story.shop.categories,
+    products: story.shop.products
+  }
+
+  for (const category of draft.shop?.categories ?? []) {
+    if (!selectedShopCategoryIds.has(category.id)) {
+      continue
+    }
+
+    nextShop.categories = upsertById(nextShop.categories, category)
+    appliedShopCategories += 1
+  }
+
+  const availableShopCategoryIds = new Set(nextShop.categories.map((category) => category.id))
+  for (const product of draft.shop?.products ?? []) {
+    if (!selectedShopProductIds.has(product.id)) {
+      continue
+    }
+
+    const nextProduct = normalizeShopProductForApply(product, {
+      availableItemIds,
+      availableShopCategoryIds,
+      warnings
+    })
+
+    if (!nextProduct) {
+      continue
+    }
+
+    nextShop.products = upsertById(nextShop.products, nextProduct)
+    appliedShopProducts += 1
+  }
+
   if (appliedLocations > 0) {
     await store.writeEventLocations(storyId, nextEventLocations)
   }
@@ -3915,6 +4228,10 @@ export async function applyStoryCreationDraft(
 
   if (appliedDoingMenus > 0 || appliedDoings > 0) {
     await store.writeDoing(storyId, nextDoing)
+  }
+
+  if (appliedShopCategories > 0 || appliedShopProducts > 0) {
+    await store.writeShop(storyId, nextShop)
   }
 
   if (selectedVariableKeys.size > 0) {
@@ -3952,7 +4269,9 @@ export async function applyStoryCreationDraft(
       phoneReplies: appliedPhoneReplies,
       phoneContactProfiles: appliedPhoneContactProfiles,
       doingMenus: appliedDoingMenus,
-      doings: appliedDoings
+      doings: appliedDoings,
+      shopCategories: appliedShopCategories,
+      shopProducts: appliedShopProducts
     },
     warnings
   }
@@ -4191,7 +4510,8 @@ export async function runStoryCreationAgents(
         "如剧情涉及玩家获得、消耗或检查物品，在 init_script/end_script/操作脚本中使用 bag_add、bag_remove、bag_count、bag_has；不要在事件 JSON 中新增奖励或消耗字段。",
         "如果本次内容涉及手机联系人关系、短句、联系人动作、NPC 回复、主动消息或联系人特配，必须写入 draft.phone 对应数组；不要只在 notes 中描述。",
         "如果本次内容涉及玩家主动可选入口，例如去县长办公室、KTV、会所、购物送礼、约会地点等，必须写入 draft.doing.menus 和 draft.doing.doings；doing 事件内容复用平面事件结构，但没有 trigger_mode、trigger_expr、invoke_params。",
-        "draft.phone 和 draft.doing 是结构化输出的一部分；没有新增内容时也要保留空数组。不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议、手机联系人资产、行动资产和风险说明。"
+        "如果本次内容涉及商城上架、购买、送礼商品、购物入口或商品展示条件，必须写入 draft.shop.categories 和 draft.shop.products；商城商品只能引用已有或本次新增物品，不能在 shop 里直接创建物品资产。",
+        "draft.phone、draft.doing 和 draft.shop 是结构化输出的一部分；没有新增内容时也要保留空数组。不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议、手机联系人资产、行动资产、商城资产和风险说明。"
       ].join("\n\n"),
       signal
     )
@@ -4244,8 +4564,8 @@ export async function runStoryCreationAgents(
             "必须按照每条确定性校验错误修改；不要用删除事件、删除变量、清空所有脚本来逃避问题。",
             "如果当前待优化草稿里同一事件已有非空 init_script 或 end_script，而用户没有明确要求删除，你必须保留或修正它，不能把它清空。",
             "如果脚本写入 calc、system.* 或 call.*，改成写普通 value 变量；如果引用不存在的物品 id，优先改为现有物品或本次 items 草稿里的合法 id。",
-            "如果 phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script 不符合 StoryScript.md，也要一并修复。",
-            "修复脚本时必须保留 draft.phone 和 draft.doing 的结构化资产；除非用户明确要求删除，不要把手机短句、联系人动作、行动菜单或行动事件清空。",
+            "如果 phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script、shop visible_expr/available_expr 不符合 StoryScript.md，也要一并修复。",
+            "修复脚本时必须保留 draft.phone、draft.doing 和 draft.shop 的结构化资产；除非用户明确要求删除，不要把手机短句、联系人动作、行动菜单、行动事件、商城分类或商城商品清空。",
             "非空过程脚本必须保留中文注释，解释变量来源、计算规则和写回目标。"
           ].join("\n\n"),
           signal
@@ -4297,9 +4617,9 @@ export async function runStoryCreationAgents(
           "脚本可读性审校重点：非空过程脚本必须保留或补充中文注释，说明规则意图、变量来源、计算依据和写回结果；不要删除有用注释。",
           "不要因为脚本涉及持久化变量写入就清空脚本；只有无法确定具体 value 写入目标时才允许对全新脚本留空并说明需要新增变量。",
           "如果当前待优化草稿里同一事件已有非空 init_script 或 end_script，而用户没有明确要求删除，你必须保留或修正它，不能清空。",
-          "phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script 也属于脚本审校范围。",
+          "phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script、shop visible_expr/available_expr 也属于脚本审校范围。",
           "脚本是否支持，必须以 StoryScript.md 和确定性静态校验为准；不要自行声称“规范未说明”来回避修复。",
-          "输出完整 draft 时必须保留 phone 和 doing 字段。没有相关内容时填空数组；有相关内容时不要把结构化资产降级成 notes。"
+          "输出完整 draft 时必须保留 phone、doing 和 shop 字段。没有相关内容时填空数组；有相关内容时不要把结构化资产降级成 notes。"
         ].join("\n\n"),
         signal
       )
@@ -4337,10 +4657,12 @@ export async function runStoryCreationAgents(
       [
         buildBasePrompt("一致性检查", state),
         `待检查草稿:\n${formatJson(state.draft, 16000)}`,
-        "你的任务：检查角色引用、地点引用、物品分类、事件 next、触发方式、手机联系人资产、行动菜单/行动事件和玩家自由度是否一致。",
+        "你的任务：检查角色引用、地点引用、物品分类、事件 next、触发方式、手机联系人资产、行动菜单/行动事件、商城分类/商品和玩家自由度是否一致。",
         "手机联系人检查重点：contact_profiles.role_key 必须是现有或本次生成 NPC 角色；短句/动作/回复的 scope 不要引用不存在的性格或角色；invoke 目标必须是现有或本次生成事件。",
         "行动检查重点：doing.doings[].menu_id 必须引用现有或本次生成菜单；visible_expr 用 StoryScript 条件表达式；行动没有 trigger_mode、trigger_expr、invoke_params。",
+        "商城检查重点：shop.products[].category_id 必须引用现有或本次生成商城分类；item_id 必须引用现有物品或本次生成物品；available_expr/visible_expr 用 StoryScript 条件表达式。",
         "如果剧情或手机消息承诺玩家可以主动去某处做某事，应确认草稿里有对应 doing 入口，或在 warnings 中说明为什么本次不生成。",
+        "如果剧情、行动或手机联系人承诺玩家能购买/送礼某件商品，应确认草稿里有对应 shop 商品，或在 warnings 中说明为什么只复用现有商品。",
         "保留草稿预览性质，不要声称已经写入数据文件。"
       ].join("\n\n"),
       signal

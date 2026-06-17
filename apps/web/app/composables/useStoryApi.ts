@@ -11,6 +11,7 @@ import type {
   StoryPlayerOverrideValsFile,
   StoryRolesFile,
   StorySceneFile,
+  StoryShopFile,
   StoryValsFile
 } from "@story-mgr/core"
 import type {
@@ -46,6 +47,7 @@ import type {
   SaveEventLocationsRequest,
   SaveStoryItemsRequest,
   SaveStoryPhoneRequest,
+  SaveStoryShopRequest,
   SavePlayerOverrideValsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
@@ -66,6 +68,7 @@ import type {
   StoryPlayerOverrideValsResponse,
   StoryRolesResponse,
   StoryListResponse,
+  StoryShopResponse,
   StoryAssetResponse,
   StoryBibleResponse,
   StoryScenesResponse,
@@ -325,6 +328,17 @@ export function useStoryApi() {
     return response.items
   }
 
+  async function saveShop(storyId: string, shop: StoryShopFile): Promise<StoryShopFile> {
+    const response = await $fetch<StoryShopResponse>(`${apiBase}/stories/${storyId}/shop`, {
+      method: "PUT",
+      body: {
+        shop
+      } satisfies SaveStoryShopRequest
+    })
+
+    return response.shop
+  }
+
   async function savePhone(storyId: string, phone: StoryPhoneFile): Promise<StoryPhoneFile> {
     const response = await $fetch<StoryPhoneResponse>(`${apiBase}/stories/${storyId}/phone`, {
       method: "PUT",
@@ -575,6 +589,7 @@ export function useStoryApi() {
     saveEventLocations,
     saveStoryCreationHistorySession,
     saveItems,
+    saveShop,
     savePhone,
     savePlayerOverrideVals,
     saveRoles,

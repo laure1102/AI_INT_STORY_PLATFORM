@@ -84,8 +84,16 @@ function collectValidationItemIds(document: StoryDocument) {
   return document.items.items.map((item) => item.id)
 }
 
+function collectItemIds(document: StoryDocument) {
+  return new Set(collectValidationItemIds(document))
+}
+
 function collectValidationDoingIds(document: StoryDocument) {
   return document.doing.doings.map((doing) => doing.id)
+}
+
+function collectValidationShopProductIds(document: StoryDocument) {
+  return document.shop.products.map((product) => product.id)
 }
 
 function buildValidationScriptContext(
@@ -105,9 +113,11 @@ function buildValidationScriptContext(
     itemIds: collectValidationItemIds(document),
     roleKeys: collectValidationRoleKeys(document),
     doingIds: collectValidationDoingIds(document),
+    shopProductIds: collectValidationShopProductIds(document),
     bagMode: "write",
     phoneMode: "write",
-    doingMode: "write"
+    doingMode: "write",
+    shopMode: "write"
   })
 }
 
@@ -116,9 +126,11 @@ function buildValidationReadableContext(document: StoryDocument): StoryScriptExe
     itemIds: collectValidationItemIds(document),
     roleKeys: collectValidationRoleKeys(document),
     doingIds: collectValidationDoingIds(document),
+    shopProductIds: collectValidationShopProductIds(document),
     bagMode: "read",
     phoneMode: "read",
-    doingMode: "read"
+    doingMode: "read",
+    shopMode: "read"
   })
 }
 
@@ -127,6 +139,7 @@ export type StoryScriptValidationMode = "predicate" | "procedure" | "template"
 export type StoryScriptValidationBagMode = "read" | "write"
 export type StoryScriptValidationPhoneMode = "read" | "write"
 export type StoryScriptValidationDoingMode = "read" | "write"
+export type StoryScriptValidationShopMode = "read" | "write"
 
 export interface StoryScriptValidationContextOptions {
   values?: Record<string, unknown>
@@ -135,9 +148,11 @@ export interface StoryScriptValidationContextOptions {
   itemIds?: Iterable<string>
   roleKeys?: Iterable<string>
   doingIds?: Iterable<string>
+  shopProductIds?: Iterable<string>
   bagMode?: StoryScriptValidationBagMode
   phoneMode?: StoryScriptValidationPhoneMode
   doingMode?: StoryScriptValidationDoingMode
+  shopMode?: StoryScriptValidationShopMode
 }
 
 function buildValidationBagReadableFunctionsFromIds(itemIds: Iterable<string>) {
@@ -353,12 +368,77 @@ function buildValidationDoingScriptFunctionsFromIds(
   }
 }
 
+function buildValidationShopReadableFunctionsFromIds(productIds: Iterable<string>) {
+  const productIdSet = new Set(
+    Array.from(productIds, (productId) => normalizeStoryScriptText(productId).trim()).filter(Boolean)
+  )
+
+  const assertProductId = (productId: unknown) => {
+    if (typeof productId !== "string") {
+      throw new Error("shop product id is required.")
+    }
+
+    const normalizedProductId = productId.trim()
+    if (!normalizedProductId) {
+      throw new Error("shop product id is required.")
+    }
+
+    if (!productIdSet.has(normalizedProductId)) {
+      throw new Error(`shop product "${normalizedProductId}" does not exist in shop library.`)
+    }
+
+    return normalizedProductId
+  }
+
+  return {
+    shop_can_buy(productId: unknown) {
+      assertProductId(productId)
+      return false
+    },
+    shop_purchase_cooldown_left(productId: unknown) {
+      assertProductId(productId)
+      return 0
+    },
+    shop_gift_cooldown_left(productId: unknown, roleKey: unknown) {
+      assertProductId(productId)
+      if (typeof roleKey !== "string" || !roleKey.trim()) {
+        throw new Error("shop gift role key is required.")
+      }
+      return 0
+    }
+  }
+}
+
+function buildValidationShopScriptFunctionsFromIds(
+  productIds: Iterable<string>,
+  shopMode: StoryScriptValidationShopMode
+) {
+  const readableFunctions = buildValidationShopReadableFunctionsFromIds(productIds)
+
+  if (shopMode === "read") {
+    return readableFunctions
+  }
+
+  return {
+    shop_buy(productId: unknown) {
+      readableFunctions.shop_can_buy(productId)
+      return false
+    },
+    shop_gift(productId: unknown, roleKey: unknown) {
+      readableFunctions.shop_gift_cooldown_left(productId, roleKey)
+      return false
+    },
+    ...readableFunctions
+  }
+}
+
 export function createStoryScriptValidationContext(
   options: StoryScriptValidationContextOptions = {}
 ): StoryScriptExecutionContext {
   const bagMode = options.bagMode ?? "write"
   const phoneMode = options.phoneMode ?? "write"
   const doingMode = options.doingMode ?? "write"
+  const shopMode = options.shopMode ?? "write"
 
   return {
     values: {
@@ -371,6 +451,7 @@ export function createStoryScriptValidationContext(
       ...buildValidationBagScriptFunctionsFromIds(options.itemIds ?? [], bagMode),
       ...buildValidationPhoneScriptFunctionsFromRoleKeys(options.roleKeys ?? [], phoneMode),
       ...buildValidationDoingScriptFunctionsFromIds(options.doingIds ?? [], doingMode),
+      ...buildValidationShopScriptFunctionsFromIds(options.shopProductIds ?? [], shopMode),
       ...(options.functions ?? {})
     }
   }
@@ -527,6 +608,110 @@ function collectGlobalValKeys(document: StoryDocument) {
   }
 
   return keys
+}
+
+function collectWritableGlobalValKeys(document: StoryDocument) {
+  const keys = new Set<string>()
+
+  for (const group of document.vals.variables) {
+    const groupName = group.name.trim()
+
+    for (const row of group.vals) {
+      const rowName = row.name.trim()
+
+      if (!groupName || !rowName || row.value_type !== "value") {
+        continue
+      }
+
+      keys.add(`${groupName}.${rowName}`)
+    }
+  }
+
+  return keys
+}
+
+function validateShopConfig(document: StoryDocument, issues: ValidationIssue[]) {
+  const itemIds = collectItemIds(document)
+  const valsFile = buildCombinedStoryScriptVals(document)
+  const readableContext = buildValidationReadableContext(document)
+  const writableValKeys = collectWritableGlobalValKeys(document)
+  const currencyKey = document.shop.currency_value_key.trim()
+
+  if (!/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(currencyKey)) {
+    pushIssue(
+      issues,
+      "error",
+      "shop.currency-key-invalid",
+      `Shop currency_value_key "${currencyKey}" must use group.name format.`,
+      ["shop", "currency_value_key"]
+    )
+  } else if (!writableValKeys.has(currencyKey)) {
+    pushIssue(
+      issues,
+      "error",
+      "shop.currency-key-missing",
+      `Shop currency_value_key "${currencyKey}" must reference an existing writable value variable in vals.json5.`,
+      ["shop", "currency_value_key"]
+    )
+  }
+
+  for (const [categoryIndex, category] of document.shop.categories.entries()) {
+    if (!category.visible_expr.trim()) {
+      continue
+    }
+
+    const visibleIssues = validateStoryScriptContent(
+      valsFile,
+      category.visible_expr,
+      "predicate",
+      DEFAULT_MAX_CALC_NESTING_DEPTH,
+      readableContext
+    )
+
+    for (const issue of visibleIssues) {
+      pushIssue(
+        issues,
+        "error",
+        "shop.category.visible-invalid",
+        `Shop category "${category.id}" visible_expr is invalid at line ${issue.lineNumber}: ${issue.message}`,
+        ["shop", "categories", String(categoryIndex), "visible_expr"]
+      )
+    }
+  }
+
+  for (const [productIndex, product] of document.shop.products.entries()) {
+    if (!itemIds.has(product.item_id)) {
+      pushIssue(
+        issues,
+        "error",
+        "shop.product.missing-item",
+        `Shop product "${product.id}" references missing item "${product.item_id}".`,
+        ["shop", "products", String(productIndex), "item_id"]
+      )
+    }
+
+    if (!product.available_expr.trim()) {
+      continue
+    }
+
+    const availableIssues = validateStoryScriptContent(
+      valsFile,
+      product.available_expr,
+      "predicate",
+      DEFAULT_MAX_CALC_NESTING_DEPTH,
+      readableContext
+    )
+
+    for (const issue of availableIssues) {
+      pushIssue(
+        issues,
+        "error",
+        "shop.product.available-invalid",
+        `Shop product "${product.id}" available_expr is invalid at line ${issue.lineNumber}: ${issue.message}`,
+        ["shop", "products", String(productIndex), "available_expr"]
+      )
+    }
+  }
 }
 
 function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[]) {
@@ -1463,6 +1648,7 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
 
   validatePhoneConfig(document, issues)
   validateDoingConfig(document, issues)
+  validateShopConfig(document, issues)
 
   for (const calcIssue of validateStoryValsCalcRules(document.vals)) {
     pushIssue(

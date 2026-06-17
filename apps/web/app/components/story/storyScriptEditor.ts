@@ -104,11 +104,16 @@ const STORY_SCRIPT_BUILTIN_AUTOCOMPLETE_ITEMS: StoryScriptAutocompleteItem[] = [
   { name: "doing_cooldown_left", description: "读取指定行动剩余冷却小时数。" },
   { name: "doing_unlock", description: "解锁 doing.json5 中已预设的行动。" },
   { name: "doing_lock", description: "锁定 doing.json5 中已预设的行动。" },
-  { name: "doing_set_cooldown", description: "为指定行动设置游戏小时冷却。" }
+  { name: "doing_set_cooldown", description: "为指定行动设置游戏小时冷却。" },
+  { name: "shop_can_buy", description: "检查指定商城商品当前是否可购买。" },
+  { name: "shop_buy", description: "购买指定商城商品，扣钱并加入玩家背包。" },
+  { name: "shop_purchase_cooldown_left", description: "读取指定商品购买剩余冷却小时数。" },
+  { name: "shop_gift", description: "把背包中的指定商城商品送给联系人并增加好感度。" },
+  { name: "shop_gift_cooldown_left", description: "读取指定商品送给指定联系人的剩余冷却小时数。" }
 ]
 
 const STORY_SCRIPT_HIGHLIGHT_PATTERN =
-  /\b(let|if|else|switch|case|default|for|while|break|continue|return|invoke_once|true|false|null)\b|\b(?:Math|Number|String|Boolean|parseInt|parseFloat|isNaN|isFinite|trim|includes|startsWith|endsWith|slice|toLowerCase|toUpperCase|toFixed|formatWan|bag_count|bag_has|bag_add|bag_remove|doing_has|doing_used_count|doing_cooldown_left|doing_unlock|doing_lock|doing_set_cooldown)\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|random|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
+  /\b(let|if|else|switch|case|default|for|while|break|continue|return|invoke_once|true|false|null)\b|\b(?:Math|Number|String|Boolean|parseInt|parseFloat|isNaN|isFinite|trim|includes|startsWith|endsWith|slice|toLowerCase|toUpperCase|toFixed|formatWan|bag_count|bag_has|bag_add|bag_remove|doing_has|doing_used_count|doing_cooldown_left|doing_unlock|doing_lock|doing_set_cooldown|shop_can_buy|shop_buy|shop_purchase_cooldown_left|shop_gift|shop_gift_cooldown_left)\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|random|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
 
 export const STORY_SCRIPT_TEMPLATE_PLACEHOLDER =
   "例如：今天是第 ${system.now_day} 天，账上还有 ${player.money}。"

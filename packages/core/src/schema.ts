@@ -401,6 +401,95 @@ export const storyItemsSchema = z.object({
   }
 })
 
+export const storyShopCategorySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().default(""),
+  sort_order: z.number().int().default(0),
+  visible_expr: z.string().default(""),
+  descr: z.string().default("")
+}).transform((category) => ({
+  id: category.id.trim(),
+  name: category.name.trim(),
+  sort_order: category.sort_order,
+  visible_expr: category.visible_expr.trim(),
+  descr: category.descr
+}))
+
+export const storyShopProductSchema = z.object({
+  id: z.string().min(1),
+  category_id: z.string().min(1),
+  item_id: z.string().min(1),
+  price: z.number().min(0).default(0),
+  quantity: z.number().int().min(1).default(1),
+  sort_order: z.number().int().default(0),
+  enabled: z.boolean().default(true),
+  available_expr: z.string().default(""),
+  unavailable_reason: z.string().default(""),
+  allow_gift: z.boolean().default(true),
+  gift_favor_delta: z.number().int().min(-100).max(100).default(0),
+  purchase_cooldown_hours: z.number().int().min(0).default(0),
+  gift_cooldown_hours: z.number().int().min(0).default(0)
+}).transform((product) => ({
+  id: product.id.trim(),
+  category_id: product.category_id.trim(),
+  item_id: product.item_id.trim(),
+  price: product.price,
+  quantity: product.quantity,
+  sort_order: product.sort_order,
+  enabled: product.enabled,
+  available_expr: product.available_expr.trim(),
+  unavailable_reason: product.unavailable_reason.trim(),
+  allow_gift: product.allow_gift,
+  gift_favor_delta: product.gift_favor_delta,
+  purchase_cooldown_hours: product.purchase_cooldown_hours,
+  gift_cooldown_hours: product.gift_cooldown_hours
+}))
+
+export const storyShopSchema = z.object({
+  currency_value_key: z.string().default("player.money"),
+  categories: z.array(storyShopCategorySchema).default([]),
+  products: z.array(storyShopProductSchema).default([])
+}).superRefine((shopFile, context) => {
+  const categoryIds = new Set<string>()
+  const productIds = new Set<string>()
+
+  for (const [categoryIndex, category] of shopFile.categories.entries()) {
+    if (categoryIds.has(category.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate shop category id "${category.id}".`,
+        path: ["categories", categoryIndex, "id"]
+      })
+    }
+
+    categoryIds.add(category.id)
+  }
+
+  for (const [productIndex, product] of shopFile.products.entries()) {
+    if (productIds.has(product.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate shop product id "${product.id}".`,
+        path: ["products", productIndex, "id"]
+      })
+    }
+
+    productIds.add(product.id)
+
+    if (!categoryIds.has(product.category_id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Shop product "${product.id}" references missing category "${product.category_id}".`,
+        path: ["products", productIndex, "category_id"]
+      })
+    }
+  }
+}).transform((shopFile) => ({
+  currency_value_key: shopFile.currency_value_key.trim() || "player.money",
+  categories: shopFile.categories,
+  products: shopFile.products
+}))
+
 export const storyInitialBagEntrySchema = z.object({
   item_id: z.string().min(1),
   quantity: z.number().int().min(1).default(1),
@@ -1243,6 +1332,7 @@ export const storyDocumentSchema = z.object({
   roles: storyRolesSchema,
   eventLocations: storyEventLocationSchema,
   items: storyItemsSchema.default({}),
+  shop: storyShopSchema.default({}),
   initialBags: storyInitialBagsSchema,
   phone: storyPhoneSchema.default({}),
   doing: storyDoingSchema.default({}),

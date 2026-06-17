@@ -19,6 +19,8 @@ StoryScript 适用于以下字段：
 - `trigger_expr`
 - `doing.menus[].visible_expr`
 - `doing.doings[].visible_expr`
+- `shop.categories[].visible_expr`
+- `shop.products[].available_expr`
 - `init_script`
 - `end_script`
 - `action.exec_script`
@@ -35,6 +37,8 @@ StoryScript 适用于以下字段：
 - `trigger_expr`
 - `doing.menus[].visible_expr`
 - `doing.doings[].visible_expr`
+- `shop.categories[].visible_expr`
+- `shop.products[].available_expr`
 
 规则：
 
@@ -44,6 +48,7 @@ StoryScript 适用于以下字段：
 - 最终结果必须为 `boolean`
 - `trigger_mode: "default"` 的事件不执行 `trigger_expr`
 - doing 的 `visible_expr` 也是条件脚本，但允许为空；空字符串表示默认显示
+- shop 的 `visible_expr` / `available_expr` 也是条件脚本，但允许为空；空字符串表示默认显示/可购买
 
 允许两种写法：
 
@@ -292,12 +297,14 @@ ${player.money} += 100 // 行尾注释
 - 最终结果必须为 `boolean`
 - `trigger_expr` 必须为非空字符串
 - doing 的 `visible_expr` 可以为空，空字符串按显示处理
+- shop 的 `visible_expr` / `available_expr` 可以为空，空字符串按显示/可购买处理
 - 若使用完整写法，应保证所有执行路径满足布尔语义
 - 条件脚本只读，不允许修改全局变量、系统变量、分支变量、调用参数
 - 条件脚本不允许使用 `invoke_once`
 - 条件脚本只开放只读背包函数：`bag_count`、`bag_has`
 - 条件脚本只开放只读手机函数：`phone_has_contact`、`phone_favor`、`phone_unread_count`
 - 条件脚本只开放只读行动函数：`doing_has`、`doing_used_count`、`doing_cooldown_left`
+- 条件脚本只开放只读商城函数：`shop_can_buy`、`shop_purchase_cooldown_left`、`shop_gift_cooldown_left`
 
 ### 6.2 过程脚本规则
 
@@ -479,6 +486,37 @@ doing_set_cooldown("go_ktv", 24)
 - 静态校验会检查字面量 `doing_id` 是否存在；动态 `doing_id` 在运行时检查
 - 第一阶段只支持解锁/锁定 `doing.json5` 中已经预设的行动，不支持脚本动态创建全新行动
 
+### 6.8 商城 shop 函数
+
+运行时商城是故事配置和玩家存档数据的组合。商品 id 必须来自故事的 `shop.json5`，商品引用的物品 id 必须来自 `items.json5`。
+
+只读函数：
+
+```ts
+shop_can_buy("shop_local_specialty_gift_box")
+shop_purchase_cooldown_left("shop_local_specialty_gift_box")
+shop_gift_cooldown_left("shop_local_specialty_gift_box", "important:zhuli")
+```
+
+可写函数：
+
+```ts
+shop_buy("shop_local_specialty_gift_box")
+shop_gift("shop_local_specialty_gift_box", "important:zhuli")
+```
+
+规则：
+
+- `shop_can_buy` 返回商品当前是否可购买
+- `shop_purchase_cooldown_left` 返回商品购买剩余冷却小时数；无冷却或冷却已结束时返回 `0`
+- `shop_gift_cooldown_left` 返回商品送给指定联系人的剩余冷却小时数；无冷却或冷却已结束时返回 `0`
+- `shop_buy` 会按 `shop.json5.currency_value_key` 扣钱，并把商品对应物品加入玩家背包
+- `shop_gift` 会从玩家背包扣除商品对应物品，并给指定联系人增加好感度
+- `trigger_expr`、doing 可见条件、shop 分类/商品条件只允许使用三个只读商城函数
+- `init_script`、`end_script`、`action.exec_script` 可以使用全部商城函数
+- 静态校验会检查字面量 `shop product id` 是否存在；动态商品 id 在运行时检查
+- `shop_gift` 的角色 key 使用手机联系人相同格式：`important:role_id` 或 `normal:role_id`
+
 ---
 
 ## 7. 示例
@@ -624,6 +662,26 @@ doing_set_cooldown("go_ktv", 12)
 doing_has("visit_mayor_office") && doing_cooldown_left("visit_mayor_office") <= 0
 ```
 
+### 7.9 商城 shop
+
+`shop.json5` 只负责上架已有 `items.json5` 物品资产。分类使用 `visible_expr` 控制是否显示，商品使用 `available_expr` 控制是否可购买；商品不可购买时客户端仍可灰显展示。
+
+```ts
+if (shop_can_buy("shop_local_specialty_gift_box")) {
+  shop_buy("shop_local_specialty_gift_box")
+}
+
+if (bag_has("player", "local_specialty_gift_box", 1)) {
+  shop_gift("shop_local_specialty_gift_box", "important:zhuli")
+}
+```
+
+`shop.json5` 中的可购买条件示例：
+
+```ts
+${county.level} >= 2 && shop_purchase_cooldown_left("shop_business_sedan") <= 0
+```
+
 ---
 
 ## 8. 编译与运行时约束
@@ -646,6 +704,7 @@ doing_has("visit_mayor_office") && doing_cooldown_left("visit_mayor_office") <= 
 - 所有循环必须受最大迭代数限制
 - `trigger_expr` 运行时按只读条件脚本执行
 - doing 的 `visible_expr` 运行时按只读条件脚本执行
+- shop 的 `visible_expr` / `available_expr` 运行时按只读条件脚本执行
 
 ---
 
@@ -655,6 +714,7 @@ doing_has("visit_mayor_office") && doing_cooldown_left("visit_mayor_office") <= 
 
 - `trigger_expr` 的 `?` 帮助
 - doing 菜单/行动 `visible_expr` 的校验按钮
+- shop 分类 `visible_expr` 与商品 `available_expr` 的校验按钮
 - `init_script` 的 `?` 帮助
 - `end_script` 的 `?` 帮助
 - `action.exec_script` 的 `?` 帮助
@@ -703,5 +763,10 @@ doing_has("visit_mayor_office") && doing_cooldown_left("visit_mayor_office") <= 
 - `doing_unlock`
 - `doing_lock`
 - `doing_set_cooldown`
+- `shop_can_buy`
+- `shop_buy`
+- `shop_purchase_cooldown_left`
+- `shop_gift`
+- `shop_gift_cooldown_left`
 
 ---

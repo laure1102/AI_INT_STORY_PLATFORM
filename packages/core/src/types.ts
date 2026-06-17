@@ -190,6 +190,36 @@ export interface StoryItemsFile {
   items: StoryItemDefinition[]
 }
 
+export interface StoryShopCategory {
+  id: string
+  name: string
+  sort_order: number
+  visible_expr: string
+  descr: string
+}
+
+export interface StoryShopProduct {
+  id: string
+  category_id: string
+  item_id: string
+  price: number
+  quantity: number
+  sort_order: number
+  enabled: boolean
+  available_expr: string
+  unavailable_reason: string
+  allow_gift: boolean
+  gift_favor_delta: number
+  purchase_cooldown_hours: number
+  gift_cooldown_hours: number
+}
+
+export interface StoryShopFile {
+  currency_value_key: string
+  categories: StoryShopCategory[]
+  products: StoryShopProduct[]
+}
+
 export interface StoryInitialBagEntry {
   item_id: string
   quantity: number
@@ -553,6 +583,7 @@ export interface StoryDocument {
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
   items: StoryItemsFile
+  shop: StoryShopFile
   initialBags: StoryInitialBagsFile
   phone: StoryPhoneFile
   doing: StoryDoingFile
@@ -624,6 +655,7 @@ export interface CompiledStory {
   roles: StoryRolesFile
   eventLocations: StoryEventLocationFile
   items: StoryItemsFile
+  shop: StoryShopFile
   initialBags: StoryInitialBagsFile
   phone: StoryPhoneFile
   doing: StoryDoingFile

@@ -37,6 +37,7 @@ import type {
   SaveStoryDoingRequest,
   SaveStoryItemsRequest,
   SaveStoryPhoneRequest,
+  SaveStoryShopRequest,
   SavePlayerOverrideValsRequest,
   SaveRolesRequest,
   SaveScenesRequest,
@@ -50,6 +51,7 @@ import type {
   StoryRolesResponse,
   StoryItemsResponse,
   StoryPhoneResponse,
+  StoryShopResponse,
   SaveValsRequest,
   StorySystemValsResponse,
   StoryAssetResponse
@@ -334,6 +336,15 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       items: await store.writeItems(storyId, body.items)
     } satisfies StoryItemsResponse
+  })
+
+  router.put("/stories/:storyId/shop", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as SaveStoryShopRequest
+
+    context.body = {
+      shop: await store.writeShop(storyId, body.shop)
+    } satisfies StoryShopResponse
   })
 
   router.put("/stories/:storyId/phone", async (context) => {

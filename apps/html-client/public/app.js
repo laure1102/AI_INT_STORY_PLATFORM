@@ -15,6 +15,7 @@ const ui = {
   screen: "auto",
   menuPanel: null,
   selectedDoingMenuId: null,
+  selectedShopCategoryId: null,
   menuPanelScrollTops: {},
   phoneThreadScrollTops: {},
   phoneOptionsScrollTops: {},
@@ -247,6 +248,10 @@ function getDoingView() {
   return ui.data?.view?.doing ?? { menus: [], doings: [] }
 }
 
+function getShopView() {
+  return ui.data?.view?.shop ?? { currencyValueKey: "player.money", categories: [], products: [] }
+}
+
 function getSelectedDoingMenu(menus) {
   if (menus.some((menu) => menu.id === ui.selectedDoingMenuId)) {
     return ui.selectedDoingMenuId
@@ -255,6 +260,16 @@ function getSelectedDoingMenu(menus) {
   const firstMenuId = menus[0]?.id ?? null
   ui.selectedDoingMenuId = firstMenuId
   return firstMenuId
+}
+
+function getSelectedShopCategory(categories) {
+  if (categories.some((category) => category.id === ui.selectedShopCategoryId)) {
+    return ui.selectedShopCategoryId
+  }
+
+  const firstCategoryId = categories[0]?.id ?? null
+  ui.selectedShopCategoryId = firstCategoryId
+  return firstCategoryId
 }
 
 function returnToMainView() {
@@ -677,6 +692,67 @@ function renderMenuPanelBody(panelId) {
         </div>
       </div>
     `
+  } else if (panelId === "shop") {
+    const shop = getShopView()
+    const categories = Array.isArray(shop?.categories) ? shop.categories : []
+    const products = Array.isArray(shop?.products) ? shop.products : []
+    const selectedCategoryId = getSelectedShopCategory(categories)
+    const selectedProducts = selectedCategoryId
+      ? products.filter((product) => product.categoryId === selectedCategoryId)
+      : []
+    const contacts = ui.data?.phoneContacts ?? []
+
+    body = `
+      <div class="shop-panel">
+        <div class="shop-category-list">
+          ${categories.length === 0 ? `<div class="empty">暂无商城分类。</div>` : categories.map((category) => `
+            <button class="list-item ${category.id === selectedCategoryId ? "active" : ""}" data-shop-category="${h(category.id)}">
+              <span class="item-title">${h(category.name ?? category.id)}</span>
+              <span class="item-meta">${h(category.descr ?? "")}</span>
+            </button>
+          `).join("")}
+        </div>
+        <div class="shop-product-list">
+          <div class="shop-currency">扣款变量：${h(shop.currencyValueKey ?? "player.money")}</div>
+          ${categories.length === 0 ? `<div class="empty">请先在故事编辑器配置 shop.json5。</div>` : ""}
+          ${categories.length > 0 && selectedProducts.length === 0 ? `<div class="empty">当前分类下暂无商品。</div>` : ""}
+          ${selectedProducts.map((product) => {
+            const buyMeta = [
+              `价格 ${product.price}`,
+              `数量 x${product.quantity}`,
+              product.ownedQuantity > 0 ? `背包 ${product.ownedQuantity}` : "",
+              product.purchaseCooldownHours > 0 ? `购买冷却 ${product.purchaseCooldownHours}小时` : "",
+              product.disabledReason
+            ].filter(Boolean).join(" · ")
+            const giftMeta = [
+              product.allowGift ? `送礼好感 ${product.giftFavorDelta >= 0 ? "+" : ""}${product.giftFavorDelta}` : "不可送礼",
+              product.giftCooldownHours > 0 ? `送礼冷却 ${product.giftCooldownHours}小时` : ""
+            ].filter(Boolean).join(" · ")
+            const giftTargets = product.allowGift && product.ownedQuantity >= product.quantity
+              ? contacts.map((contact) => `
+                <button class="tiny-command" data-shop-gift="${h(product.id)}" data-shop-gift-role="${h(contact.roleKey)}">
+                  送 ${h(contact.label)}
+                </button>
+              `).join("")
+              : ""
+
+            return `
+              <article class="shop-product ${product.disabled ? "disabled" : ""}">
+                <div class="shop-product-main">
+                  <div>
+                    <div class="item-title">${h(product.itemName ?? product.itemId)}</div>
+                    <div class="item-meta">${h(product.itemId)} · ${h(buyMeta)}</div>
+                    <div class="item-meta">${h(giftMeta)}</div>
+                  </div>
+                  <button class="footer-command" ${product.disabled ? "disabled" : ""} data-shop-buy="${h(product.id)}">购买</button>
+                </div>
+                ${giftTargets ? `<div class="shop-gift-row">${giftTargets}</div>` : ""}
+              </article>
+            `
+          }).join("")}
+        </div>
+      </div>
+    `
   } else if (panelId === "save") {
     body = `
       <div class="panel-menu-actions">
@@ -704,6 +780,7 @@ function renderMenuPanel() {
     scheduler: "调度",
     bag: "背包",
     doing: "行动",
+    shop: "商城",
     save: "存档",
     debug: "调试"
   }
@@ -747,6 +824,7 @@ function renderGameFooter(summary, data) {
         </div>
         <div class="footer-status-right">
           <button class="footer-command" data-menu-panel="doing">D 行动</button>
+          <button class="footer-command" data-menu-panel="shop">M 商城</button>
           <button class="footer-command footer-next-day" data-action="advance-day">N 下一天</button>
         </div>
       </div>
@@ -1068,6 +1146,29 @@ function bindEvents() {
     })
   })
 
+  dom.app.querySelectorAll("[data-shop-category]").forEach((button) => {
+    button.addEventListener("click", () => {
+      ui.selectedShopCategoryId = button.dataset.shopCategory
+      render()
+    })
+  })
+
+  dom.app.querySelectorAll("[data-shop-buy]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await dispatchRuntimeAction({ type: "shop-buy", productId: button.dataset.shopBuy })
+    })
+  })
+
+  dom.app.querySelectorAll("[data-shop-gift]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await dispatchRuntimeAction({
+        type: "shop-gift",
+        productId: button.dataset.shopGift,
+        roleKey: button.dataset.shopGiftRole
+      })
+    })
+  })
+
   dom.app.querySelectorAll("[data-select-profile]").forEach((button) => {
     button.addEventListener("click", async () => {
       await runTask("角色已载入", async () => api("/api/profiles/select", { body: { profileId: button.dataset.selectProfile } }))
@@ -1188,6 +1289,8 @@ document.addEventListener("keydown", async (event) => {
     await advanceDay()
   } else if (key === "d") {
     openMenuPanel("doing")
+  } else if (key === "m") {
+    openMenuPanel("shop")
   } else if (key === "l") {
     openMenuPanel("notifications")
   } else if (key === "i") {
