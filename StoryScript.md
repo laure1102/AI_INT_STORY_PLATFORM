@@ -358,11 +358,13 @@ invoke_once chain anniversary_event delay_years=1
 规则：
 
 - `invoke_once` 为保留语句
+- `invoke_once` 不是函数调用，禁止写成 `invoke_once("chain", "event_id", { delay_days: 1 })`
 - 用于把 `invoke` 型事件推入调度队列
 - 第一个参数为目标事件类型：`chain`、`pool`、`schedule`
 - 兼容旧写法：`graph`、`once`、`loop`
 - 第二个参数为目标事件 `id`
 - 后续参数使用 `name=expression`
+- 后续参数不能使用对象字面量、冒号参数或逗号分隔；延迟 1 天应写 `delay_days=1`，不是 `delay_days: 1`
 - 不同步执行
 - 后续参数分为两类：
   - 调用参数：会传入目标事件，目标事件内可通过 `${call.xxx}` 读取

@@ -32,6 +32,7 @@ import type {
   RunStoryCreationAgentRequest,
   RunStoryCreationAgentResponse,
   SaveAppSettingsRequest,
+  DeleteStoryCreationHistorySessionResponse,
   SaveStoryCreationHistorySessionRequest,
   SaveStoryCreationHistorySessionResponse,
   SaveEventRequest,
@@ -70,6 +71,7 @@ import {
   generateRolePrompt
 } from "../services/ai"
 import {
+  deleteStoryCreationHistorySession,
   readStoryCreationHistory,
   upsertStoryCreationHistorySession
 } from "../services/creation-history"
@@ -260,6 +262,17 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     const result = await upsertStoryCreationHistorySession(config.dataDir, storyId, body.session)
 
     context.body = result satisfies SaveStoryCreationHistorySessionResponse
+  })
+
+  router.delete("/stories/:storyId/creation-history/:sessionId", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const sessionId = requireParam(context.params.sessionId, "sessionId")
+
+    context.body = await deleteStoryCreationHistorySession(
+      config.dataDir,
+      storyId,
+      sessionId
+    ) satisfies DeleteStoryCreationHistorySessionResponse
   })
 
   router.get("/stories/:storyId/events/:eventId", async (context) => {

@@ -79,6 +79,7 @@ const {
   getStoryCreationHistory,
   getStory,
   runStoryCreationAgent,
+  deleteStoryCreationHistorySession,
   saveAppSettings,
   saveEvent,
   saveEventLocations,
@@ -954,6 +955,34 @@ function handleRestoreCreationHistorySession(session: StoryCreationHistorySessio
   creationApplyWarnings.value = session.applied?.warnings ?? []
   creationAgentError.value = null
   errorMessage.value = null
+}
+
+async function handleDeleteCreationHistorySession(session: StoryCreationHistorySession) {
+  if (isAgentRunning.value && activeCreationHistorySessionId.value === session.id) {
+    errorMessage.value = "当前创作任务还在运行中，请先中止后再删除记录。"
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    const response = await deleteStoryCreationHistorySession(props.storyId, session.id)
+    creationHistory.value = response.history
+
+    if (activeCreationHistorySessionId.value === session.id) {
+      activeCreationHistorySessionId.value = null
+      creationAgentResult.value = null
+      creationAgentRunMode.value = null
+      creationAgentError.value = null
+      creationApplyMessage.value = null
+      creationApplyWarnings.value = []
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "删除创作记录失败。"
+  } finally {
+    isSaving.value = false
+  }
 }
 
 async function loadStory() {
@@ -2056,6 +2085,7 @@ watch(
       :story="storyDocument"
       @apply-draft="handleApplyCreationDraft"
       @abort-agent="handleAbortCreationAgent"
+      @delete-history-session="handleDeleteCreationHistorySession"
       @restore-history-session="handleRestoreCreationHistorySession"
       @run-agent="handleRunCreationAgent"
       @save-story-bible="handleSaveStoryBible"

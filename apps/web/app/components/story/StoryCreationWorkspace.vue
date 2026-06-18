@@ -60,6 +60,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   applyDraft: [draft: StoryCreationDraft, selection: ApplyStoryCreationDraftSelection]
   abortAgent: []
+  deleteHistorySession: [session: StoryCreationHistorySession]
   restoreHistorySession: [session: StoryCreationHistorySession]
   runAgent: [instruction: string, baseDraft?: StoryCreationDraft]
   saveStoryBible: [storyBible: StoryBibleFile]
@@ -773,6 +774,16 @@ function restoreHistorySession(session: StoryCreationHistorySession) {
   creationHistoryExpanded.value = false
 }
 
+function deleteHistorySession(session: StoryCreationHistorySession) {
+  if (
+    !window.confirm(`删除创作记录「${session.title || "未命名创作"}」？`)
+  ) {
+    return
+  }
+
+  emit("deleteHistorySession", session)
+}
+
 function getEventKey(event: StoryCreationDraftEvent) {
   return `${event.collectionType}:${event.id}`
 }
@@ -1369,10 +1380,6 @@ function getEventApplyWarnings(event: StoryCreationDraftEvent) {
     warnings.push("条件触发缺少表达式，应用时会降级为默认触发。")
   }
 
-  if (event.trigger_mode === "invoke" && (event.invoke_params?.length ?? 0) === 0) {
-    warnings.push("调用触发缺少参数，应用时会降级为默认触发。")
-  }
-
   if (event.collectionType === "schedule" && !event.loop) {
     warnings.push("定时事件缺少 loop，应用时会使用 daily。")
   }
@@ -1545,6 +1552,14 @@ watch(
               <span class="creation-history__meta">
                 {{ formatHistoryTime(session.updatedAt) }} · {{ session.turns.length }} 轮
               </span>
+            </button>
+            <button
+              type="button"
+              class="creation-history__delete"
+              :disabled="saving || (agentRunning && activeHistorySessionId === session.id)"
+              @click="deleteHistorySession(session)"
+            >
+              删除
             </button>
           </li>
         </ul>
@@ -2928,6 +2943,10 @@ watch(
 }
 
 .creation-history__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -2950,6 +2969,27 @@ watch(
 .creation-history__item--active .creation-history__button {
   border-color: rgba(124, 227, 195, 0.35);
   background: rgba(124, 227, 195, 0.08);
+}
+
+.creation-history__delete {
+  min-width: 52px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 139, 123, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 139, 123, 0.08);
+  color: #ff9c90;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.creation-history__delete:hover:not(:disabled) {
+  border-color: rgba(255, 139, 123, 0.52);
+  background: rgba(255, 139, 123, 0.14);
+}
+
+.creation-history__delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .creation-history__status {

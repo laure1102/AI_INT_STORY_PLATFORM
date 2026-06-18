@@ -25,6 +25,7 @@ import type {
   CompressSceneBackgroundRequest,
   CreateStoryRequest,
   CreateStoryResponse,
+  DeleteStoryCreationHistorySessionResponse,
   ExportResponse,
   GenerateItemImageRequest,
   GenerateItemImageResponse,
@@ -188,6 +189,18 @@ export function useStoryApi() {
         body: {
           session
         } satisfies SaveStoryCreationHistorySessionRequest
+      }
+    )
+  }
+
+  async function deleteStoryCreationHistorySession(
+    storyId: string,
+    sessionId: string
+  ): Promise<DeleteStoryCreationHistorySessionResponse> {
+    return $fetch<DeleteStoryCreationHistorySessionResponse>(
+      `${apiBase}/stories/${storyId}/creation-history/${sessionId}`,
+      {
+        method: "DELETE"
       }
     )
   }
@@ -606,6 +619,7 @@ export function useStoryApi() {
     getStory,
     listStories,
     runStoryCreationAgent,
+    deleteStoryCreationHistorySession,
     deleteEvent,
     saveAppSettings,
     saveDoing,

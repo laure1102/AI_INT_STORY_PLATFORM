@@ -1,4 +1,761 @@
 {
+  action_library: [
+    {
+      base_favor_delta: 2,
+      cooldown_hours: 24,
+      cost_items: [],
+      cost_money: 200,
+      id: 'action_send_red_packet_small',
+      label: '发个红包',
+      scope: {
+        contact_tracks: [
+          'official',
+          'romance',
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 30,
+        personality_ids: [],
+        role_keys: [],
+      },
+      tags: [
+        'gift_basic',
+        'money',
+      ],
+      text: '给你发个小红包。',
+    },
+    {
+      base_favor_delta: 3,
+      cooldown_hours: 72,
+      cost_items: [],
+      cost_money: 800,
+      id: 'action_buy_gift',
+      label: '买份礼物',
+      scope: {
+        contact_tracks: [
+          'romance',
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 40,
+        personality_ids: [],
+        role_keys: [],
+      },
+      tags: [
+        'gift_basic',
+      ],
+      text: '改天给你带份礼物。',
+    },
+    {
+      base_favor_delta: 4,
+      cooldown_hours: 72,
+      cost_items: [],
+      cost_money: 1200,
+      id: 'action_date_request',
+      invoke: {
+        delay: {
+          unit: 'hours',
+          value: 5,
+        },
+        event_id: 'phone_chulian_evening_walk',
+        target_type: 'pool',
+      },
+      label: '约出去坐坐',
+      scope: {
+        contact_tracks: [
+          'romance',
+        ],
+        max_favor: 100,
+        min_favor: 60,
+        personality_ids: [],
+        role_keys: [
+          'important:chulian',
+        ],
+      },
+      tags: [
+        'date',
+      ],
+      text: '晚上一起出去坐坐？',
+    },
+    {
+      base_favor_delta: 3,
+      cooldown_hours: 120,
+      cost_items: [],
+      cost_money: 1500,
+      id: 'action_private_dinner',
+      invoke: {
+        delay: {
+          unit: 'days',
+          value: 1,
+        },
+        event_id: 'phone_xianzhang_private_dinner',
+        target_type: 'pool',
+      },
+      label: '私下请吃饭',
+      scope: {
+        contact_tracks: [
+          'official',
+        ],
+        max_favor: 100,
+        min_favor: 60,
+        personality_ids: [],
+        role_keys: [
+          'important:xianzhang',
+        ],
+      },
+      tags: [
+        'private_dinner',
+      ],
+      text: '改天我单独请你吃个饭，当面聊。',
+    },
+    {
+      base_favor_delta: 3,
+      cooldown_hours: 48,
+      cost_items: [],
+      cost_money: 260,
+      id: 'action_zhuli_afterwork_meal',
+      invoke: {
+        delay: {
+          unit: 'hours',
+          value: 3,
+        },
+        event_id: 'phone_zhuli_night_snack',
+        target_type: 'pool',
+      },
+      label: '约夜宵复盘',
+      scope: {
+        contact_tracks: [
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 40,
+        personality_ids: [],
+        role_keys: [
+          'important:zhuli',
+        ],
+      },
+      tags: [
+        'gift_basic',
+        'work',
+      ],
+      text: '晚上一起吃点东西，顺便把今天的情况复盘一下。',
+    },
+    {
+      base_favor_delta: 2,
+      cooldown_hours: 72,
+      cost_items: [],
+      cost_money: 300,
+      id: 'action_xianzhang_office_visit',
+      invoke: {
+        delay: {
+          unit: 'hours',
+          value: 12,
+        },
+        event_id: 'phone_xianzhang_office_visit',
+        target_type: 'pool',
+      },
+      label: '去县里拜访',
+      scope: {
+        contact_tracks: [
+          'official',
+        ],
+        max_favor: 100,
+        min_favor: 20,
+        personality_ids: [],
+        role_keys: [
+          'important:xianzhang',
+        ],
+      },
+      tags: [
+        'formal_visit',
+      ],
+      text: '我明天去县里，当面向您汇报。',
+    },
+    {
+      base_favor_delta: 2,
+      cooldown_hours: 36,
+      cost_items: [],
+      cost_money: 188,
+      id: 'action_suanming_paid_consult',
+      invoke: {
+        delay: {
+          unit: 'hours',
+          value: 1,
+        },
+        event_id: 'phone_suanming_paid_consult',
+        target_type: 'pool',
+      },
+      label: '付费问一卦',
+      scope: {
+        contact_tracks: [
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 40,
+        personality_ids: [],
+        role_keys: [
+          'normal:start_suanming',
+        ],
+      },
+      tags: [
+        'gift_basic',
+        'fortune',
+      ],
+      text: '我出个红包，你给我仔细算一卦。',
+    },
+    {
+      base_favor_delta: 2,
+      cooldown_hours: 48,
+      cost_items: [],
+      cost_money: 666,
+      id: 'action_yule_dama_book_room',
+      invoke: {
+        delay: {
+          unit: 'hours',
+          value: 2,
+        },
+        event_id: 'phone_yule_dama_book_room',
+        target_type: 'pool',
+      },
+      label: '让她留个包厢',
+      scope: {
+        contact_tracks: [
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 40,
+        personality_ids: [],
+        role_keys: [
+          'normal:yule_dama',
+        ],
+      },
+      tags: [
+        'gift_basic',
+        'invite',
+      ],
+      text: '今晚给我留个安静点的包厢，我晚点过去。',
+    },
+  ],
+  contact_profiles: [
+    {
+      auto_add: true,
+      enabled: true,
+      initial_favor: 28,
+      preferred_tags: [
+        'daily',
+        'work',
+        'care',
+      ],
+      proactive_messages: [
+        {
+          cooldown_hours: 24,
+          enabled: true,
+          favor_delta: 0,
+          id: 'daytime_checkin',
+          messages: [
+            '老板，今天的行程我已经帮您排好了。',
+            '老板，县里的材料我先替您盯着，有变动我再跟您说。',
+          ],
+          reply_quick_message_ids: [
+            'talk_zhuli_schedule_check',
+            'talk_work_ping',
+            'talk_care_generic',
+            'zhuli_follow_plan',
+            'zhuli_take_action',
+            'thanks',
+          ],
+          trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && phone_favor("important:zhuli") >= 20',
+        },
+      ],
+      reply_by_tag: {
+        care: [
+          '还不错，你呢？',
+          '今天还行，忙但是能撑住。',
+        ],
+        daily: [
+          '在呀，老板。',
+          '我刚忙完，您说。',
+        ],
+        gratitude: [
+          '这是我该做的。',
+          '您太客气了。',
+        ],
+        invite: [
+          '好呀，那我来安排。',
+          '可以，我晚上有空。',
+        ],
+        work: [
+          '有空，我现在就看。',
+          '可以，我这边马上接。',
+        ],
+      },
+      role_key: 'important:zhuli',
+    },
+    {
+      auto_add: true,
+      enabled: true,
+      initial_favor: 22,
+      preferred_tags: [
+        'work',
+        'care',
+      ],
+      proactive_messages: [
+        {
+          cooldown_hours: 48,
+          enabled: true,
+          favor_delta: 0,
+          id: 'policy_ping',
+          messages: [
+            '有空的时候来县里坐坐，我们把几个想法再细聊一下。',
+            '你上次提的那个思路，我让人先整理了一版材料。',
+          ],
+          reply_quick_message_ids: [
+            'talk_xianzhang_county_update',
+            'talk_official_progress_sync',
+            'talk_work_ping',
+            'xianzhang_schedule_meet',
+            'xianzhang_send_notes',
+          ],
+          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 10 && ${system.now_hour} <= 20 && phone_favor("important:xianzhang") >= 20',
+        },
+      ],
+      reply_by_tag: {
+        care: [
+          '我这边一切正常。',
+          '还行，最近事情比较多。',
+        ],
+        invite: [
+          '改天吧，最近行程有点满。',
+        ],
+        work: [
+          '说吧，我在听。',
+          '你这个事，我可以先了解一下。',
+        ],
+      },
+      role_key: 'important:xianzhang',
+    },
+    {
+      auto_add: true,
+      enabled: true,
+      initial_favor: 35,
+      preferred_tags: [
+        'care',
+        'daily',
+        'invite',
+      ],
+      proactive_messages: [
+        {
+          cooldown_hours: 72,
+          enabled: true,
+          favor_delta: 0,
+          id: 'night_thought',
+          messages: [
+            '刚刚路过以前那条街，突然想起你了。',
+            '今天有点累，就忽然想找个人说句话。',
+          ],
+          reply_quick_message_ids: [
+            'talk_chulian_soft_memory',
+            'talk_romance_warm_care',
+            'talk_greet_generic',
+            'care',
+            'meetup',
+          ],
+          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 19 && ${system.now_hour} <= 23 && phone_favor("important:chulian") >= 35',
+        },
+      ],
+      reply_by_tag: {
+        care: [
+          '还好。你最近呢？',
+          '就那样，慢慢过着。',
+        ],
+        daily: [
+          '嗯，在呢。',
+          '刚看到，你怎么突然找我。',
+        ],
+        gratitude: [
+          '不用这么郑重。',
+          '你突然这么客气，我有点不习惯。',
+        ],
+        invite: [
+          '看情况吧。',
+          '如果不忙的话，可以。',
+        ],
+      },
+      role_key: 'important:chulian',
+    },
+    {
+      auto_add: true,
+      enabled: true,
+      initial_favor: 18,
+      preferred_tags: [
+        'daily',
+        'care',
+      ],
+      proactive_messages: [
+        {
+          cooldown_hours: 24,
+          enabled: true,
+          favor_delta: 0,
+          id: 'fortune_hint',
+          messages: [
+            '小友，今日东南方位的气运略有波动，行事可多留个心眼。',
+            '老夫掐指一算，你这两天恐怕要遇上点有意思的人。',
+          ],
+          reply_quick_message_ids: [
+            'talk_suanming_fortune_ask',
+            'talk_suanming_destiny_hint',
+            'greet',
+            'thanks',
+          ],
+          trigger_expr: '${system.now_hour} >= 8 && ${system.now_hour} <= 20 && phone_favor("normal:start_suanming") >= 15',
+        },
+      ],
+      reply_by_tag: {
+        care: [
+          '命还硬着呢。',
+          '老骨头还能撑。',
+        ],
+        daily: [
+          '小友今日气运平稳。',
+          '老夫在。',
+        ],
+        work: [
+          '你先说来听听。',
+        ],
+      },
+      role_key: 'normal:start_suanming',
+    },
+    {
+      auto_add: true,
+      enabled: true,
+      initial_favor: 16,
+      preferred_tags: [
+        'daily',
+        'invite',
+      ],
+      proactive_messages: [
+        {
+          cooldown_hours: 24,
+          enabled: true,
+          favor_delta: 0,
+          id: 'night_offer',
+          messages: [
+            '今晚场子挺热闹，要不要我给你留个位置？',
+            '有几个新来的客人，话题倒是挺有意思，你要不要来坐坐？',
+          ],
+          reply_quick_message_ids: [
+            'talk_yule_dama_scene_ask',
+            'talk_yule_dama_vip_whisper',
+            'meetup',
+            'greet',
+          ],
+          trigger_expr: '${system.now_hour} >= 20 && ${system.now_hour} <= 23 && phone_favor("normal:yule_dama") >= 15',
+        },
+      ],
+      reply_by_tag: {
+        daily: [
+          '在呢老板。',
+          '哎，在的。',
+        ],
+        invite: [
+          '今晚有包厢，要不要给你留？',
+          '来呗，给你安排。',
+        ],
+        work: [
+          '你要问哪个场子的事？',
+        ],
+      },
+      role_key: 'normal:yule_dama',
+    },
+    {
+      auto_add: false,
+      enabled: false,
+      initial_favor: 0,
+      preferred_tags: [],
+      proactive_messages: [],
+      reply_by_tag: {},
+      role_key: 'normal:xitong',
+    },
+    {
+      auto_add: true,
+      enabled: true,
+      initial_favor: 15,
+      preferred_tags: [
+        'debt',
+        'appointment',
+      ],
+      proactive_messages: [
+        {
+          cooldown_hours: 9999,
+          enabled: true,
+          favor_delta: 0,
+          id: 'debt_first_pressure',
+          messages: [
+            '欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。',
+          ],
+          reply_quick_message_ids: [],
+          trigger_expr: '${player.debt_huadu_active} && !${player.debt_huadu_msg_sent} && !${player.debt_huadu_cleared}',
+        },
+      ],
+      reply_by_tag: {
+        appointment: [
+          '你定地方可以，但别再放我鸽子。',
+          '行，地点你说了，别到时候人又没影。',
+        ],
+        debt: [
+          '少来虚的，我只看你什么时候把钱还上。',
+          '你人在哪不重要，钱什么时候到才重要。',
+        ],
+      },
+      role_key: 'normal:debt_collector',
+    },
+  ],
+  fallback_replies: {
+    care: [
+      '还行，你呢？',
+    ],
+    daily: [
+      '在呢。',
+      '看到了。',
+    ],
+    default: [
+      '嗯，收到。',
+    ],
+    gratitude: [
+      '没事。',
+    ],
+    invite: [
+      '到时候再说。',
+    ],
+    work: [
+      '你说，我在听。',
+    ],
+  },
+  personality_library: [
+    {
+      descr: '说话外放，反馈快，情绪表达直接。',
+      id: 'lively',
+      name: '活泼开朗',
+      style_tags: [
+        '热情',
+        '直接',
+      ],
+    },
+    {
+      descr: '说话轻柔，会照顾对方感受。',
+      id: 'gentle',
+      name: '温柔体贴',
+      style_tags: [
+        '柔和',
+        '安抚',
+      ],
+    },
+    {
+      descr: '情绪表达克制，要熟了才会主动。',
+      id: 'reserved',
+      name: '慢热内敛',
+      style_tags: [
+        '克制',
+        '慢热',
+      ],
+    },
+    {
+      descr: '表达简洁，重逻辑与效率。',
+      id: 'rational',
+      name: '冷静理性',
+      style_tags: [
+        '理性',
+        '简洁',
+      ],
+    },
+    {
+      descr: '嘴上不饶人，情绪反差大。',
+      id: 'tsundere',
+      name: '傲娇嘴硬',
+      style_tags: [
+        '嘴硬',
+        '反差',
+      ],
+    },
+    {
+      descr: '说话正式，有原则感。',
+      id: 'serious',
+      name: '正直严肃',
+      style_tags: [
+        '正式',
+        '原则',
+      ],
+    },
+    {
+      descr: '会拿捏分寸，懂人情世故。',
+      id: 'worldly',
+      name: '世故圆滑',
+      style_tags: [
+        '圆融',
+        '试探',
+      ],
+    },
+    {
+      descr: '气场强，喜欢掌控节奏。',
+      id: 'dominant',
+      name: '强势掌控',
+      style_tags: [
+        '压迫感',
+        '掌控',
+      ],
+    },
+    {
+      descr: '容易多想，防备心偏重。',
+      id: 'sensitive',
+      name: '敏感多疑',
+      style_tags: [
+        '谨慎',
+        '防备',
+      ],
+    },
+    {
+      descr: '喜欢用玩笑缓冲气氛。',
+      id: 'humorous',
+      name: '幽默贫嘴',
+      style_tags: [
+        '逗趣',
+        '插科打诨',
+      ],
+    },
+    {
+      descr: '重现实收益，关注成本和结果。',
+      id: 'pragmatic',
+      name: '务实功利',
+      style_tags: [
+        '现实',
+        '结果导向',
+      ],
+    },
+    {
+      descr: '擅长观察人心和局势变化。',
+      id: 'perceptive',
+      name: '洞察人心',
+      style_tags: [
+        '观察',
+        '看透',
+      ],
+    },
+  ],
+  player_quick_messages: [
+    {
+      available_role_keys: [],
+      base_favor_delta: 1,
+      cooldown_hours: 6,
+      id: 'greet',
+      tags: [
+        'daily',
+      ],
+      text: '在吗？',
+      visibility: 'always',
+    },
+    {
+      available_role_keys: [],
+      base_favor_delta: 2,
+      cooldown_hours: 12,
+      id: 'care',
+      tags: [
+        'care',
+      ],
+      text: '今天怎么样？',
+      visibility: 'always',
+    },
+    {
+      available_role_keys: [],
+      base_favor_delta: 1,
+      cooldown_hours: 8,
+      id: 'work_ping',
+      tags: [
+        'work',
+      ],
+      text: '有空聊下正事吗？',
+      visibility: 'always',
+    },
+    {
+      available_role_keys: [],
+      base_favor_delta: 2,
+      cooldown_hours: 24,
+      id: 'meetup',
+      tags: [
+        'invite',
+        'care',
+      ],
+      text: '晚上一起吃个饭？',
+      visibility: 'always',
+    },
+    {
+      available_role_keys: [],
+      base_favor_delta: 2,
+      cooldown_hours: 10,
+      id: 'thanks',
+      tags: [
+        'care',
+        'gratitude',
+      ],
+      text: '辛苦了，谢谢你。',
+      visibility: 'always',
+    },
+    {
+      available_role_keys: [
+        'important:zhuli',
+      ],
+      base_favor_delta: 2,
+      cooldown_hours: 4,
+      id: 'zhuli_follow_plan',
+      tags: [
+        'work',
+        'followup',
+      ],
+      text: '收到，你先把重点整理成一页给我。',
+      visibility: 'suggested-only',
+    },
+    {
+      available_role_keys: [
+        'important:zhuli',
+      ],
+      base_favor_delta: 2,
+      cooldown_hours: 4,
+      id: 'zhuli_take_action',
+      tags: [
+        'work',
+        'decision',
+      ],
+      text: '就按这个方案推进，有问题第一时间告诉我。',
+      visibility: 'suggested-only',
+    },
+    {
+      available_role_keys: [
+        'important:xianzhang',
+      ],
+      base_favor_delta: 2,
+      cooldown_hours: 8,
+      id: 'xianzhang_schedule_meet',
+      tags: [
+        'work',
+        'meeting',
+      ],
+      text: '好，明天我去县里，当面聊。',
+      visibility: 'suggested-only',
+    },
+    {
+      available_role_keys: [
+        'important:xianzhang',
+      ],
+      base_favor_delta: 1,
+      cooldown_hours: 8,
+      id: 'xianzhang_send_notes',
+      tags: [
+        'work',
+        'review',
+      ],
+      text: '你先把材料发我，我今晚看完。',
+      visibility: 'suggested-only',
+    },
+  ],
   relationship_tracks: [
     {
       descr: '可发展恋爱关系的联系人轨道。低于 10 视为彻底冷掉，不再开放主动联系。',
@@ -43,7 +800,9 @@
           max_favor: 59,
           min_favor: 40,
           name: '熟悉',
-          unlock_action_tags: ['gift_basic'],
+          unlock_action_tags: [
+            'gift_basic',
+          ],
         },
         {
           allow_contact: true,
@@ -53,7 +812,10 @@
           max_favor: 89,
           min_favor: 60,
           name: '暧昧',
-          unlock_action_tags: ['gift_basic', 'date'],
+          unlock_action_tags: [
+            'gift_basic',
+            'date',
+          ],
         },
         {
           allow_contact: true,
@@ -63,7 +825,11 @@
           max_favor: 100,
           min_favor: 90,
           name: '情人',
-          unlock_action_tags: ['gift_basic', 'date', 'hotel'],
+          unlock_action_tags: [
+            'gift_basic',
+            'date',
+            'hotel',
+          ],
         },
       ],
     },
@@ -90,7 +856,9 @@
           max_favor: 39,
           min_favor: 20,
           name: '普通接触',
-          unlock_action_tags: ['formal_visit'],
+          unlock_action_tags: [
+            'formal_visit',
+          ],
         },
         {
           allow_contact: true,
@@ -100,7 +868,10 @@
           max_favor: 59,
           min_favor: 40,
           name: '认可',
-          unlock_action_tags: ['formal_visit', 'gift_basic'],
+          unlock_action_tags: [
+            'formal_visit',
+            'gift_basic',
+          ],
         },
         {
           allow_contact: true,
@@ -110,7 +881,11 @@
           max_favor: 79,
           min_favor: 60,
           name: '支持',
-          unlock_action_tags: ['formal_visit', 'gift_basic', 'private_dinner'],
+          unlock_action_tags: [
+            'formal_visit',
+            'gift_basic',
+            'private_dinner',
+          ],
         },
         {
           allow_contact: true,
@@ -120,7 +895,11 @@
           max_favor: 100,
           min_favor: 80,
           name: '全力支持者',
-          unlock_action_tags: ['formal_visit', 'gift_basic', 'private_dinner'],
+          unlock_action_tags: [
+            'formal_visit',
+            'gift_basic',
+            'private_dinner',
+          ],
         },
       ],
     },
@@ -167,7 +946,9 @@
           max_favor: 59,
           min_favor: 40,
           name: '熟人',
-          unlock_action_tags: ['gift_basic'],
+          unlock_action_tags: [
+            'gift_basic',
+          ],
         },
         {
           allow_contact: true,
@@ -177,7 +958,10 @@
           max_favor: 79,
           min_favor: 60,
           name: '朋友',
-          unlock_action_tags: ['gift_basic', 'date'],
+          unlock_action_tags: [
+            'gift_basic',
+            'date',
+          ],
         },
         {
           allow_contact: true,
@@ -187,24 +971,325 @@
           max_favor: 100,
           min_favor: 80,
           name: '挚友',
-          unlock_action_tags: ['gift_basic', 'date'],
+          unlock_action_tags: [
+            'gift_basic',
+            'date',
+          ],
         },
       ],
     },
   ],
-  personality_library: [
-    { descr: '说话外放，反馈快，情绪表达直接。', id: 'lively', name: '活泼开朗', style_tags: ['热情', '直接'] },
-    { descr: '说话轻柔，会照顾对方感受。', id: 'gentle', name: '温柔体贴', style_tags: ['柔和', '安抚'] },
-    { descr: '情绪表达克制，要熟了才会主动。', id: 'reserved', name: '慢热内敛', style_tags: ['克制', '慢热'] },
-    { descr: '表达简洁，重逻辑与效率。', id: 'rational', name: '冷静理性', style_tags: ['理性', '简洁'] },
-    { descr: '嘴上不饶人，情绪反差大。', id: 'tsundere', name: '傲娇嘴硬', style_tags: ['嘴硬', '反差'] },
-    { descr: '说话正式，有原则感。', id: 'serious', name: '正直严肃', style_tags: ['正式', '原则'] },
-    { descr: '会拿捏分寸，懂人情世故。', id: 'worldly', name: '世故圆滑', style_tags: ['圆融', '试探'] },
-    { descr: '气场强，喜欢掌控节奏。', id: 'dominant', name: '强势掌控', style_tags: ['压迫感', '掌控'] },
-    { descr: '容易多想，防备心偏重。', id: 'sensitive', name: '敏感多疑', style_tags: ['谨慎', '防备'] },
-    { descr: '喜欢用玩笑缓冲气氛。', id: 'humorous', name: '幽默贫嘴', style_tags: ['逗趣', '插科打诨'] },
-    { descr: '重现实收益，关注成本和结果。', id: 'pragmatic', name: '务实功利', style_tags: ['现实', '结果导向'] },
-    { descr: '擅长观察人心和局势变化。', id: 'perceptive', name: '洞察人心', style_tags: ['观察', '看透'] },
+  reply_library: [
+    {
+      id: 'reply_social_lively_daily',
+      replies: [
+        '在呢老板。',
+        '看到了，你说吧。',
+      ],
+      scope: {
+        contact_tracks: [
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 20,
+        personality_ids: [
+          'lively',
+          'worldly',
+        ],
+        role_keys: [],
+      },
+      tags: [
+        'daily',
+      ],
+    },
+    {
+      id: 'reply_official_work_serious',
+      replies: [
+        '你说，我先听听。',
+        '可以，先把情况讲清楚。',
+      ],
+      scope: {
+        contact_tracks: [
+          'official',
+        ],
+        max_favor: 100,
+        min_favor: 20,
+        personality_ids: [
+          'serious',
+          'perceptive',
+        ],
+        role_keys: [],
+      },
+      tags: [
+        'work',
+      ],
+    },
+    {
+      id: 'reply_romance_reserved_care',
+      replies: [
+        '还好。你怎么突然问这个？',
+        '今天有点累，不过还行。',
+      ],
+      scope: {
+        contact_tracks: [
+          'romance',
+        ],
+        max_favor: 100,
+        min_favor: 20,
+        personality_ids: [
+          'reserved',
+          'gentle',
+        ],
+        role_keys: [],
+      },
+      tags: [
+        'care',
+      ],
+    },
+    {
+      id: 'reply_social_gift_basic',
+      replies: [
+        '你这出手是真阔。',
+        '行，这份心意我记下了。',
+      ],
+      scope: {
+        contact_tracks: [
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 40,
+        personality_ids: [
+          'lively',
+          'worldly',
+          'humorous',
+        ],
+        role_keys: [],
+      },
+      tags: [
+        'gift_basic',
+        'money',
+      ],
+    },
+    {
+      id: 'reply_official_formal_visit',
+      replies: [
+        '可以，你来之前提前给我发个时间。',
+        '到县里后先给我电话，我让人安排。',
+      ],
+      scope: {
+        contact_tracks: [
+          'official',
+        ],
+        max_favor: 100,
+        min_favor: 20,
+        personality_ids: [
+          'serious',
+          'perceptive',
+          'pragmatic',
+        ],
+        role_keys: [],
+      },
+      tags: [
+        'formal_visit',
+      ],
+    },
+    {
+      id: 'reply_official_private_dinner',
+      replies: [
+        '那就私下聊，场面不要太大。',
+        '行，找个安静地方，当面把细节掰开说。',
+      ],
+      scope: {
+        contact_tracks: [
+          'official',
+        ],
+        max_favor: 100,
+        min_favor: 60,
+        personality_ids: [
+          'perceptive',
+          'worldly',
+          'pragmatic',
+        ],
+        role_keys: [],
+      },
+      tags: [
+        'private_dinner',
+      ],
+    },
+    {
+      id: 'reply_romance_date_invite',
+      replies: [
+        '好啊，那你定地方。',
+        '如果只有我们两个，我可以。',
+      ],
+      scope: {
+        contact_tracks: [
+          'romance',
+        ],
+        max_favor: 100,
+        min_favor: 60,
+        personality_ids: [
+          'gentle',
+          'reserved',
+          'lively',
+        ],
+        role_keys: [],
+      },
+      tags: [
+        'date',
+        'invite',
+        'flirt',
+      ],
+    },
+    {
+      id: 'reply_romance_gift_basic',
+      replies: [
+        '你别总这样，我会当真的。',
+        '又乱花钱。可我还是有点开心。',
+      ],
+      scope: {
+        contact_tracks: [
+          'romance',
+        ],
+        max_favor: 100,
+        min_favor: 40,
+        personality_ids: [
+          'gentle',
+          'reserved',
+          'tsundere',
+        ],
+        role_keys: [],
+      },
+      tags: [
+        'gift_basic',
+      ],
+    },
+    {
+      id: 'reply_zhuli_support_care',
+      replies: [
+        '我没事，您别操心我，正事我会盯住。',
+        '好，我先把手头这摊收完，晚上见面说。',
+      ],
+      scope: {
+        contact_tracks: [
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 30,
+        personality_ids: [
+          'lively',
+          'perceptive',
+        ],
+        role_keys: [
+          'important:zhuli',
+        ],
+      },
+      tags: [
+        'support',
+        'care',
+        'work',
+      ],
+    },
+    {
+      id: 'reply_xianzhang_county',
+      replies: [
+        '县里的事，不怕慢，就怕乱。',
+        '方向可以谈，前提是你真有耐心做下去。',
+      ],
+      scope: {
+        contact_tracks: [
+          'official',
+        ],
+        max_favor: 100,
+        min_favor: 30,
+        personality_ids: [
+          'perceptive',
+          'serious',
+        ],
+        role_keys: [
+          'important:xianzhang',
+        ],
+      },
+      tags: [
+        'county',
+        'work',
+        'progress',
+      ],
+    },
+    {
+      id: 'reply_chulian_memory',
+      replies: [
+        '你总这样，隔一阵又让我想起以前。',
+        '我也不是没想过那段日子。',
+      ],
+      scope: {
+        contact_tracks: [
+          'romance',
+        ],
+        max_favor: 100,
+        min_favor: 35,
+        personality_ids: [
+          'reserved',
+          'gentle',
+        ],
+        role_keys: [
+          'important:chulian',
+        ],
+      },
+      tags: [
+        'memory',
+        'care',
+      ],
+    },
+    {
+      id: 'reply_suanming_fortune',
+      replies: [
+        '可以，红包先发，卦我慢慢给你看。',
+        '你这卦不急，先把来龙去脉说清楚。',
+      ],
+      scope: {
+        contact_tracks: [
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 20,
+        personality_ids: [
+          'perceptive',
+          'worldly',
+        ],
+        role_keys: [
+          'normal:start_suanming',
+        ],
+      },
+      tags: [
+        'fortune',
+      ],
+    },
+    {
+      id: 'reply_yule_dama_gossip',
+      replies: [
+        '你要打听的我懂，来了再细说。',
+        '能说的我先替你留着，今晚你人来就行。',
+      ],
+      scope: {
+        contact_tracks: [
+          'social',
+        ],
+        max_favor: 100,
+        min_favor: 20,
+        personality_ids: [
+          'worldly',
+          'humorous',
+        ],
+        role_keys: [
+          'normal:yule_dama',
+        ],
+      },
+      tags: [
+        'gossip',
+        'invite',
+      ],
+    },
   ],
   talk_library: [
     {
@@ -212,13 +1297,19 @@
       cooldown_hours: 6,
       id: 'talk_greet_generic',
       scope: {
-        contact_tracks: ['romance', 'official', 'social'],
+        contact_tracks: [
+          'romance',
+          'official',
+          'social',
+        ],
         max_favor: 100,
         min_favor: 10,
         personality_ids: [],
         role_keys: [],
       },
-      tags: ['daily'],
+      tags: [
+        'daily',
+      ],
       text: '在吗？',
     },
     {
@@ -226,13 +1317,19 @@
       cooldown_hours: 12,
       id: 'talk_care_generic',
       scope: {
-        contact_tracks: ['romance', 'official', 'social'],
+        contact_tracks: [
+          'romance',
+          'official',
+          'social',
+        ],
         max_favor: 100,
         min_favor: 20,
         personality_ids: [],
         role_keys: [],
       },
-      tags: ['care'],
+      tags: [
+        'care',
+      ],
       text: '今天怎么样？',
     },
     {
@@ -240,13 +1337,20 @@
       cooldown_hours: 8,
       id: 'talk_social_low_probe',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 19,
         min_favor: 10,
-        personality_ids: ['reserved', 'sensitive'],
+        personality_ids: [
+          'reserved',
+          'sensitive',
+        ],
         role_keys: [],
       },
-      tags: ['daily'],
+      tags: [
+        'daily',
+      ],
       text: '这会儿方便说两句吗？',
     },
     {
@@ -254,13 +1358,17 @@
       cooldown_hours: 10,
       id: 'talk_social_stranger_open',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 39,
         min_favor: 20,
         personality_ids: [],
         role_keys: [],
       },
-      tags: ['daily'],
+      tags: [
+        'daily',
+      ],
       text: '最近还顺利吗？',
     },
     {
@@ -268,13 +1376,21 @@
       cooldown_hours: 10,
       id: 'talk_social_lively_joke',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 59,
         min_favor: 20,
-        personality_ids: ['lively', 'humorous'],
+        personality_ids: [
+          'lively',
+          'humorous',
+        ],
         role_keys: [],
       },
-      tags: ['daily', 'joke'],
+      tags: [
+        'daily',
+        'joke',
+      ],
       text: '今天有没有遇到什么好笑的事？',
     },
     {
@@ -282,13 +1398,21 @@
       cooldown_hours: 16,
       id: 'talk_social_worldly_gossip',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 59,
         min_favor: 20,
-        personality_ids: ['worldly', 'perceptive'],
+        personality_ids: [
+          'worldly',
+          'perceptive',
+        ],
         role_keys: [],
       },
-      tags: ['daily', 'gossip'],
+      tags: [
+        'daily',
+        'gossip',
+      ],
       text: '最近有没有什么新风声？',
     },
     {
@@ -296,13 +1420,21 @@
       cooldown_hours: 14,
       id: 'talk_social_reserved_care',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 59,
         min_favor: 20,
-        personality_ids: ['reserved', 'gentle', 'sensitive'],
+        personality_ids: [
+          'reserved',
+          'gentle',
+          'sensitive',
+        ],
         role_keys: [],
       },
-      tags: ['care'],
+      tags: [
+        'care',
+      ],
       text: '这两天是不是有点累？别硬扛。',
     },
     {
@@ -310,13 +1442,18 @@
       cooldown_hours: 24,
       id: 'talk_social_friend_meetup',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 79,
         min_favor: 60,
         personality_ids: [],
         role_keys: [],
       },
-      tags: ['invite', 'care'],
+      tags: [
+        'invite',
+        'care',
+      ],
       text: '忙完出来坐坐？我请你喝点东西。',
     },
     {
@@ -324,13 +1461,22 @@
       cooldown_hours: 30,
       id: 'talk_social_bestfriend_support',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 100,
         min_favor: 80,
-        personality_ids: ['gentle', 'lively', 'humorous'],
+        personality_ids: [
+          'gentle',
+          'lively',
+          'humorous',
+        ],
         role_keys: [],
       },
-      tags: ['support', 'care'],
+      tags: [
+        'support',
+        'care',
+      ],
       text: '真有事你直接开口，我会站你这边。',
     },
     {
@@ -338,13 +1484,21 @@
       cooldown_hours: 18,
       id: 'talk_romance_cold_reconnect',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 19,
         min_favor: 10,
-        personality_ids: ['gentle', 'reserved', 'sensitive'],
+        personality_ids: [
+          'gentle',
+          'reserved',
+          'sensitive',
+        ],
         role_keys: [],
       },
-      tags: ['care'],
+      tags: [
+        'care',
+      ],
       text: '我没有别的意思，就是想问问你最近还好吗。',
     },
     {
@@ -352,13 +1506,21 @@
       cooldown_hours: 20,
       id: 'talk_romance_stranger_memory',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 39,
         min_favor: 20,
-        personality_ids: ['reserved', 'gentle'],
+        personality_ids: [
+          'reserved',
+          'gentle',
+        ],
         role_keys: [],
       },
-      tags: ['memory', 'care'],
+      tags: [
+        'memory',
+        'care',
+      ],
       text: '前两天看到个很像你的背影。',
     },
     {
@@ -366,13 +1528,24 @@
       cooldown_hours: 8,
       id: 'talk_work_ping',
       scope: {
-        contact_tracks: ['official', 'social'],
+        contact_tracks: [
+          'official',
+          'social',
+        ],
         max_favor: 100,
         min_favor: 20,
-        personality_ids: ['perceptive', 'serious'],
-        role_keys: ['important:zhuli', 'important:xianzhang'],
+        personality_ids: [
+          'perceptive',
+          'serious',
+        ],
+        role_keys: [
+          'important:zhuli',
+          'important:xianzhang',
+        ],
       },
-      tags: ['work'],
+      tags: [
+        'work',
+      ],
       text: '有空聊下正事吗？',
     },
     {
@@ -380,13 +1553,20 @@
       cooldown_hours: 16,
       id: 'talk_romance_warm_care',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 59,
         min_favor: 40,
-        personality_ids: ['gentle', 'reserved'],
+        personality_ids: [
+          'gentle',
+          'reserved',
+        ],
         role_keys: [],
       },
-      tags: ['care'],
+      tags: [
+        'care',
+      ],
       text: '降温了，晚上记得多穿点。',
     },
     {
@@ -394,13 +1574,21 @@
       cooldown_hours: 18,
       id: 'talk_romance_tsundere_tease',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 69,
         min_favor: 40,
-        personality_ids: ['tsundere', 'lively'],
+        personality_ids: [
+          'tsundere',
+          'lively',
+        ],
         role_keys: [],
       },
-      tags: ['tease', 'daily'],
+      tags: [
+        'tease',
+        'daily',
+      ],
       text: '别误会，我就是顺手问你一句。',
     },
     {
@@ -408,13 +1596,22 @@
       cooldown_hours: 30,
       id: 'talk_romance_flirt_dateable',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 79,
         min_favor: 60,
-        personality_ids: ['gentle', 'lively', 'tsundere'],
+        personality_ids: [
+          'gentle',
+          'lively',
+          'tsundere',
+        ],
         role_keys: [],
       },
-      tags: ['flirt', 'invite'],
+      tags: [
+        'flirt',
+        'invite',
+      ],
       text: '这周哪天有空？我想单独见你。',
     },
     {
@@ -422,13 +1619,22 @@
       cooldown_hours: 36,
       id: 'talk_romance_intimate_night',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 100,
         min_favor: 80,
-        personality_ids: ['gentle', 'reserved', 'sensitive'],
+        personality_ids: [
+          'gentle',
+          'reserved',
+          'sensitive',
+        ],
         role_keys: [],
       },
-      tags: ['care', 'intimate'],
+      tags: [
+        'care',
+        'intimate',
+      ],
       text: '睡前想听听你的声音。',
     },
     {
@@ -436,13 +1642,21 @@
       cooldown_hours: 24,
       id: 'talk_old_memory',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 100,
         min_favor: 40,
-        personality_ids: ['reserved', 'gentle'],
+        personality_ids: [
+          'reserved',
+          'gentle',
+        ],
         role_keys: [],
       },
-      tags: ['memory', 'care'],
+      tags: [
+        'memory',
+        'care',
+      ],
       text: '刚路过以前那条街，忽然想起你了。',
     },
     {
@@ -450,13 +1664,20 @@
       cooldown_hours: 12,
       id: 'talk_official_formal_ping',
       scope: {
-        contact_tracks: ['official'],
+        contact_tracks: [
+          'official',
+        ],
         max_favor: 39,
         min_favor: 20,
-        personality_ids: ['serious', 'pragmatic'],
+        personality_ids: [
+          'serious',
+          'pragmatic',
+        ],
         role_keys: [],
       },
-      tags: ['work'],
+      tags: [
+        'work',
+      ],
       text: '有个情况想向你请教一下。',
     },
     {
@@ -464,13 +1685,21 @@
       cooldown_hours: 14,
       id: 'talk_official_material_follow',
       scope: {
-        contact_tracks: ['official'],
+        contact_tracks: [
+          'official',
+        ],
         max_favor: 59,
         min_favor: 40,
-        personality_ids: ['serious', 'perceptive'],
+        personality_ids: [
+          'serious',
+          'perceptive',
+        ],
         role_keys: [],
       },
-      tags: ['work', 'followup'],
+      tags: [
+        'work',
+        'followup',
+      ],
       text: '上次说的材料，我已经整理出重点了。',
     },
     {
@@ -478,13 +1707,22 @@
       cooldown_hours: 18,
       id: 'talk_official_progress_sync',
       scope: {
-        contact_tracks: ['official'],
+        contact_tracks: [
+          'official',
+        ],
         max_favor: 79,
         min_favor: 60,
-        personality_ids: ['perceptive', 'pragmatic', 'worldly'],
+        personality_ids: [
+          'perceptive',
+          'pragmatic',
+          'worldly',
+        ],
         role_keys: [],
       },
-      tags: ['work', 'progress'],
+      tags: [
+        'work',
+        'progress',
+      ],
       text: '那件事我这边推进了一步，先跟你同步。',
     },
     {
@@ -492,13 +1730,22 @@
       cooldown_hours: 24,
       id: 'talk_official_trust_consult',
       scope: {
-        contact_tracks: ['official'],
+        contact_tracks: [
+          'official',
+        ],
         max_favor: 100,
         min_favor: 80,
-        personality_ids: ['perceptive', 'serious', 'worldly'],
+        personality_ids: [
+          'perceptive',
+          'serious',
+          'worldly',
+        ],
         role_keys: [],
       },
-      tags: ['work', 'consult'],
+      tags: [
+        'work',
+        'consult',
+      ],
       text: '这事我只想先听听你的判断。',
     },
     {
@@ -506,13 +1753,23 @@
       cooldown_hours: 20,
       id: 'talk_zhuli_schedule_check',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 100,
         min_favor: 20,
-        personality_ids: ['lively', 'perceptive'],
-        role_keys: ['important:zhuli'],
+        personality_ids: [
+          'lively',
+          'perceptive',
+        ],
+        role_keys: [
+          'important:zhuli',
+        ],
       },
-      tags: ['work', 'care'],
+      tags: [
+        'work',
+        'care',
+      ],
       text: '今天行程压得紧吗？需要我给你腾时间吗？',
     },
     {
@@ -520,13 +1777,23 @@
       cooldown_hours: 24,
       id: 'talk_xianzhang_county_update',
       scope: {
-        contact_tracks: ['official'],
+        contact_tracks: [
+          'official',
+        ],
         max_favor: 100,
         min_favor: 30,
-        personality_ids: ['perceptive', 'serious'],
-        role_keys: ['important:xianzhang'],
+        personality_ids: [
+          'perceptive',
+          'serious',
+        ],
+        role_keys: [
+          'important:xianzhang',
+        ],
       },
-      tags: ['work', 'county'],
+      tags: [
+        'work',
+        'county',
+      ],
       text: '县里这两天的风向，有没有什么新变化？',
     },
     {
@@ -534,13 +1801,23 @@
       cooldown_hours: 30,
       id: 'talk_chulian_soft_memory',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 100,
         min_favor: 35,
-        personality_ids: ['reserved', 'gentle'],
-        role_keys: ['important:chulian'],
+        personality_ids: [
+          'reserved',
+          'gentle',
+        ],
+        role_keys: [
+          'important:chulian',
+        ],
       },
-      tags: ['memory', 'care'],
+      tags: [
+        'memory',
+        'care',
+      ],
       text: '今天路过那家店，又想起以前了。',
     },
     {
@@ -548,13 +1825,23 @@
       cooldown_hours: 16,
       id: 'talk_suanming_fortune_ask',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 100,
         min_favor: 15,
-        personality_ids: ['perceptive', 'worldly'],
-        role_keys: ['normal:start_suanming'],
+        personality_ids: [
+          'perceptive',
+          'worldly',
+        ],
+        role_keys: [
+          'normal:start_suanming',
+        ],
       },
-      tags: ['daily', 'fortune'],
+      tags: [
+        'daily',
+        'fortune',
+      ],
       text: '老哥，你看我今天适不适合出门谈事？',
     },
     {
@@ -562,13 +1849,23 @@
       cooldown_hours: 16,
       id: 'talk_yule_dama_scene_ask',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 100,
         min_favor: 15,
-        personality_ids: ['worldly', 'humorous'],
-        role_keys: ['normal:yule_dama'],
+        personality_ids: [
+          'worldly',
+          'humorous',
+        ],
+        role_keys: [
+          'normal:yule_dama',
+        ],
       },
-      tags: ['invite', 'daily'],
+      tags: [
+        'invite',
+        'daily',
+      ],
       text: '今晚哪边热闹？你给我指条路。',
     },
     {
@@ -576,13 +1873,23 @@
       cooldown_hours: 18,
       id: 'talk_zhuli_afterhours_meal',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 85,
         min_favor: 30,
-        personality_ids: ['lively', 'perceptive'],
-        role_keys: ['important:zhuli'],
+        personality_ids: [
+          'lively',
+          'perceptive',
+        ],
+        role_keys: [
+          'important:zhuli',
+        ],
       },
-      tags: ['invite', 'work'],
+      tags: [
+        'invite',
+        'work',
+      ],
       text: '忙完一起吃口饭？顺便把今天的情况跟我说说。',
     },
     {
@@ -590,13 +1897,24 @@
       cooldown_hours: 24,
       id: 'talk_zhuli_soft_support',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 100,
         min_favor: 60,
-        personality_ids: ['lively', 'gentle', 'perceptive'],
-        role_keys: ['important:zhuli'],
+        personality_ids: [
+          'lively',
+          'gentle',
+          'perceptive',
+        ],
+        role_keys: [
+          'important:zhuli',
+        ],
       },
-      tags: ['support', 'care'],
+      tags: [
+        'support',
+        'care',
+      ],
       text: '今天你跑了一天，辛苦了。别什么都一个人扛。',
     },
     {
@@ -604,13 +1922,23 @@
       cooldown_hours: 22,
       id: 'talk_xianzhang_policy_probe',
       scope: {
-        contact_tracks: ['official'],
+        contact_tracks: [
+          'official',
+        ],
         max_favor: 100,
         min_favor: 40,
-        personality_ids: ['perceptive', 'serious'],
-        role_keys: ['important:xianzhang'],
+        personality_ids: [
+          'perceptive',
+          'serious',
+        ],
+        role_keys: [
+          'important:xianzhang',
+        ],
       },
-      tags: ['county', 'work'],
+      tags: [
+        'county',
+        'work',
+      ],
       text: '旧城改造那块，如果真动起来，县里最担心的点是什么？',
     },
     {
@@ -618,13 +1946,23 @@
       cooldown_hours: 24,
       id: 'talk_chulian_late_night_check',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 100,
         min_favor: 40,
-        personality_ids: ['reserved', 'gentle'],
-        role_keys: ['important:chulian'],
+        personality_ids: [
+          'reserved',
+          'gentle',
+        ],
+        role_keys: [
+          'important:chulian',
+        ],
       },
-      tags: ['care', 'memory'],
+      tags: [
+        'care',
+        'memory',
+      ],
       text: '这么晚了还没睡？我突然有点想和你说说话。',
     },
     {
@@ -632,13 +1970,23 @@
       cooldown_hours: 36,
       id: 'talk_chulian_direct_invite',
       scope: {
-        contact_tracks: ['romance'],
+        contact_tracks: [
+          'romance',
+        ],
         max_favor: 100,
         min_favor: 60,
-        personality_ids: ['reserved', 'gentle'],
-        role_keys: ['important:chulian'],
+        personality_ids: [
+          'reserved',
+          'gentle',
+        ],
+        role_keys: [
+          'important:chulian',
+        ],
       },
-      tags: ['invite', 'flirt'],
+      tags: [
+        'invite',
+        'flirt',
+      ],
       text: '周末一起走走吧，就我们两个。',
     },
     {
@@ -646,13 +1994,23 @@
       cooldown_hours: 20,
       id: 'talk_suanming_destiny_hint',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 100,
         min_favor: 20,
-        personality_ids: ['perceptive', 'worldly'],
-        role_keys: ['normal:start_suanming'],
+        personality_ids: [
+          'perceptive',
+          'worldly',
+        ],
+        role_keys: [
+          'normal:start_suanming',
+        ],
       },
-      tags: ['fortune', 'daily'],
+      tags: [
+        'fortune',
+        'daily',
+      ],
       text: '你上次说的那道坎，我这两天一直记着。',
     },
     {
@@ -660,593 +2018,24 @@
       cooldown_hours: 18,
       id: 'talk_yule_dama_vip_whisper',
       scope: {
-        contact_tracks: ['social'],
+        contact_tracks: [
+          'social',
+        ],
         max_favor: 100,
         min_favor: 20,
-        personality_ids: ['worldly', 'humorous'],
-        role_keys: ['normal:yule_dama'],
+        personality_ids: [
+          'worldly',
+          'humorous',
+        ],
+        role_keys: [
+          'normal:yule_dama',
+        ],
       },
-      tags: ['gossip', 'invite'],
+      tags: [
+        'gossip',
+        'invite',
+      ],
       text: '今晚哪桌坐的都是什么人，你先给我透个底。',
     },
   ],
-  action_library: [
-    {
-      base_favor_delta: 2,
-      cooldown_hours: 24,
-      cost_items: [],
-      cost_money: 200,
-      id: 'action_send_red_packet_small',
-      label: '发个红包',
-      scope: {
-        contact_tracks: ['official', 'romance', 'social'],
-        max_favor: 100,
-        min_favor: 30,
-        personality_ids: [],
-        role_keys: [],
-      },
-      tags: ['gift_basic', 'money'],
-      text: '给你发个小红包。',
-    },
-    {
-      base_favor_delta: 3,
-      cooldown_hours: 72,
-      cost_items: [],
-      cost_money: 800,
-      id: 'action_buy_gift',
-      label: '买份礼物',
-      scope: {
-        contact_tracks: ['romance', 'social'],
-        max_favor: 100,
-        min_favor: 40,
-        personality_ids: [],
-        role_keys: [],
-      },
-      tags: ['gift_basic'],
-      text: '改天给你带份礼物。',
-    },
-    {
-      base_favor_delta: 4,
-      cooldown_hours: 72,
-      cost_items: [],
-      cost_money: 1200,
-      id: 'action_date_request',
-      invoke: {
-        delay: {
-          unit: 'hours',
-          value: 5,
-        },
-        event_id: 'phone_chulian_evening_walk',
-        target_type: 'pool',
-      },
-      label: '约出去坐坐',
-      scope: {
-        contact_tracks: ['romance'],
-        max_favor: 100,
-        min_favor: 60,
-        personality_ids: [],
-        role_keys: ['important:chulian'],
-      },
-      tags: ['date'],
-      text: '晚上一起出去坐坐？',
-    },
-    {
-      base_favor_delta: 3,
-      cooldown_hours: 120,
-      cost_items: [],
-      cost_money: 1500,
-      id: 'action_private_dinner',
-      invoke: {
-        delay: {
-          unit: 'days',
-          value: 1,
-        },
-        event_id: 'phone_xianzhang_private_dinner',
-        target_type: 'pool',
-      },
-      label: '私下请吃饭',
-      scope: {
-        contact_tracks: ['official'],
-        max_favor: 100,
-        min_favor: 60,
-        personality_ids: [],
-        role_keys: ['important:xianzhang'],
-      },
-      tags: ['private_dinner'],
-      text: '改天我单独请你吃个饭，当面聊。',
-    },
-    {
-      base_favor_delta: 3,
-      cooldown_hours: 48,
-      cost_items: [],
-      cost_money: 260,
-      id: 'action_zhuli_afterwork_meal',
-      invoke: {
-        delay: {
-          unit: 'hours',
-          value: 3,
-        },
-        event_id: 'phone_zhuli_night_snack',
-        target_type: 'pool',
-      },
-      label: '约夜宵复盘',
-      scope: {
-        contact_tracks: ['social'],
-        max_favor: 100,
-        min_favor: 40,
-        personality_ids: [],
-        role_keys: ['important:zhuli'],
-      },
-      tags: ['gift_basic', 'work'],
-      text: '晚上一起吃点东西，顺便把今天的情况复盘一下。',
-    },
-    {
-      base_favor_delta: 2,
-      cooldown_hours: 72,
-      cost_items: [],
-      cost_money: 300,
-      id: 'action_xianzhang_office_visit',
-      invoke: {
-        delay: {
-          unit: 'hours',
-          value: 12,
-        },
-        event_id: 'phone_xianzhang_office_visit',
-        target_type: 'pool',
-      },
-      label: '去县里拜访',
-      scope: {
-        contact_tracks: ['official'],
-        max_favor: 100,
-        min_favor: 20,
-        personality_ids: [],
-        role_keys: ['important:xianzhang'],
-      },
-      tags: ['formal_visit'],
-      text: '我明天去县里，当面向您汇报。',
-    },
-    {
-      base_favor_delta: 2,
-      cooldown_hours: 36,
-      cost_items: [],
-      cost_money: 188,
-      id: 'action_suanming_paid_consult',
-      invoke: {
-        delay: {
-          unit: 'hours',
-          value: 1,
-        },
-        event_id: 'phone_suanming_paid_consult',
-        target_type: 'pool',
-      },
-      label: '付费问一卦',
-      scope: {
-        contact_tracks: ['social'],
-        max_favor: 100,
-        min_favor: 40,
-        personality_ids: [],
-        role_keys: ['normal:start_suanming'],
-      },
-      tags: ['gift_basic', 'fortune'],
-      text: '我出个红包，你给我仔细算一卦。',
-    },
-    {
-      base_favor_delta: 2,
-      cooldown_hours: 48,
-      cost_items: [],
-      cost_money: 666,
-      id: 'action_yule_dama_book_room',
-      invoke: {
-        delay: {
-          unit: 'hours',
-          value: 2,
-        },
-        event_id: 'phone_yule_dama_book_room',
-        target_type: 'pool',
-      },
-      label: '让她留个包厢',
-      scope: {
-        contact_tracks: ['social'],
-        max_favor: 100,
-        min_favor: 40,
-        personality_ids: [],
-        role_keys: ['normal:yule_dama'],
-      },
-      tags: ['gift_basic', 'invite'],
-      text: '今晚给我留个安静点的包厢，我晚点过去。',
-    },
-  ],
-  reply_library: [
-    {
-      id: 'reply_social_lively_daily',
-      replies: ['在呢老板。', '看到了，你说吧。'],
-      scope: {
-        contact_tracks: ['social'],
-        max_favor: 100,
-        min_favor: 20,
-        personality_ids: ['lively', 'worldly'],
-        role_keys: [],
-      },
-      tags: ['daily'],
-    },
-    {
-      id: 'reply_official_work_serious',
-      replies: ['你说，我先听听。', '可以，先把情况讲清楚。'],
-      scope: {
-        contact_tracks: ['official'],
-        max_favor: 100,
-        min_favor: 20,
-        personality_ids: ['serious', 'perceptive'],
-        role_keys: [],
-      },
-      tags: ['work'],
-    },
-    {
-      id: 'reply_romance_reserved_care',
-      replies: ['还好。你怎么突然问这个？', '今天有点累，不过还行。'],
-      scope: {
-        contact_tracks: ['romance'],
-        max_favor: 100,
-        min_favor: 20,
-        personality_ids: ['reserved', 'gentle'],
-        role_keys: [],
-      },
-      tags: ['care'],
-    },
-    {
-      id: 'reply_social_gift_basic',
-      replies: ['你这出手是真阔。', '行，这份心意我记下了。'],
-      scope: {
-        contact_tracks: ['social'],
-        max_favor: 100,
-        min_favor: 40,
-        personality_ids: ['lively', 'worldly', 'humorous'],
-        role_keys: [],
-      },
-      tags: ['gift_basic', 'money'],
-    },
-    {
-      id: 'reply_official_formal_visit',
-      replies: ['可以，你来之前提前给我发个时间。', '到县里后先给我电话，我让人安排。'],
-      scope: {
-        contact_tracks: ['official'],
-        max_favor: 100,
-        min_favor: 20,
-        personality_ids: ['serious', 'perceptive', 'pragmatic'],
-        role_keys: [],
-      },
-      tags: ['formal_visit'],
-    },
-    {
-      id: 'reply_official_private_dinner',
-      replies: ['那就私下聊，场面不要太大。', '行，找个安静地方，当面把细节掰开说。'],
-      scope: {
-        contact_tracks: ['official'],
-        max_favor: 100,
-        min_favor: 60,
-        personality_ids: ['perceptive', 'worldly', 'pragmatic'],
-        role_keys: [],
-      },
-      tags: ['private_dinner'],
-    },
-    {
-      id: 'reply_romance_date_invite',
-      replies: ['好啊，那你定地方。', '如果只有我们两个，我可以。'],
-      scope: {
-        contact_tracks: ['romance'],
-        max_favor: 100,
-        min_favor: 60,
-        personality_ids: ['gentle', 'reserved', 'lively'],
-        role_keys: [],
-      },
-      tags: ['date', 'invite', 'flirt'],
-    },
-    {
-      id: 'reply_romance_gift_basic',
-      replies: ['你别总这样，我会当真的。', '又乱花钱。可我还是有点开心。'],
-      scope: {
-        contact_tracks: ['romance'],
-        max_favor: 100,
-        min_favor: 40,
-        personality_ids: ['gentle', 'reserved', 'tsundere'],
-        role_keys: [],
-      },
-      tags: ['gift_basic'],
-    },
-    {
-      id: 'reply_zhuli_support_care',
-      replies: ['我没事，您别操心我，正事我会盯住。', '好，我先把手头这摊收完，晚上见面说。'],
-      scope: {
-        contact_tracks: ['social'],
-        max_favor: 100,
-        min_favor: 30,
-        personality_ids: ['lively', 'perceptive'],
-        role_keys: ['important:zhuli'],
-      },
-      tags: ['support', 'care', 'work'],
-    },
-    {
-      id: 'reply_xianzhang_county',
-      replies: ['县里的事，不怕慢，就怕乱。', '方向可以谈，前提是你真有耐心做下去。'],
-      scope: {
-        contact_tracks: ['official'],
-        max_favor: 100,
-        min_favor: 30,
-        personality_ids: ['perceptive', 'serious'],
-        role_keys: ['important:xianzhang'],
-      },
-      tags: ['county', 'work', 'progress'],
-    },
-    {
-      id: 'reply_chulian_memory',
-      replies: ['你总这样，隔一阵又让我想起以前。', '我也不是没想过那段日子。'],
-      scope: {
-        contact_tracks: ['romance'],
-        max_favor: 100,
-        min_favor: 35,
-        personality_ids: ['reserved', 'gentle'],
-        role_keys: ['important:chulian'],
-      },
-      tags: ['memory', 'care'],
-    },
-    {
-      id: 'reply_suanming_fortune',
-      replies: ['可以，红包先发，卦我慢慢给你看。', '你这卦不急，先把来龙去脉说清楚。'],
-      scope: {
-        contact_tracks: ['social'],
-        max_favor: 100,
-        min_favor: 20,
-        personality_ids: ['perceptive', 'worldly'],
-        role_keys: ['normal:start_suanming'],
-      },
-      tags: ['fortune'],
-    },
-    {
-      id: 'reply_yule_dama_gossip',
-      replies: ['你要打听的我懂，来了再细说。', '能说的我先替你留着，今晚你人来就行。'],
-      scope: {
-        contact_tracks: ['social'],
-        max_favor: 100,
-        min_favor: 20,
-        personality_ids: ['worldly', 'humorous'],
-        role_keys: ['normal:yule_dama'],
-      },
-      tags: ['gossip', 'invite'],
-    },
-  ],
-  player_quick_messages: [
-    {
-      id: "greet",
-      text: "在吗？",
-      tags: ["daily"],
-      base_favor_delta: 1,
-      cooldown_hours: 6,
-      visibility: "always",
-      available_role_keys: [],
-    },
-    {
-      id: "care",
-      text: "今天怎么样？",
-      tags: ["care"],
-      base_favor_delta: 2,
-      cooldown_hours: 12,
-      visibility: "always",
-      available_role_keys: [],
-    },
-    {
-      id: "work_ping",
-      text: "有空聊下正事吗？",
-      tags: ["work"],
-      base_favor_delta: 1,
-      cooldown_hours: 8,
-      visibility: "always",
-      available_role_keys: [],
-    },
-    {
-      id: "meetup",
-      text: "晚上一起吃个饭？",
-      tags: ["invite", "care"],
-      base_favor_delta: 2,
-      cooldown_hours: 24,
-      visibility: "always",
-      available_role_keys: [],
-    },
-    {
-      id: "thanks",
-      text: "辛苦了，谢谢你。",
-      tags: ["care", "gratitude"],
-      base_favor_delta: 2,
-      cooldown_hours: 10,
-      visibility: "always",
-      available_role_keys: [],
-    },
-    {
-      id: "zhuli_follow_plan",
-      text: "收到，你先把重点整理成一页给我。",
-      tags: ["work", "followup"],
-      base_favor_delta: 2,
-      cooldown_hours: 4,
-      visibility: "suggested-only",
-      available_role_keys: ["important:zhuli"],
-    },
-    {
-      id: "zhuli_take_action",
-      text: "就按这个方案推进，有问题第一时间告诉我。",
-      tags: ["work", "decision"],
-      base_favor_delta: 2,
-      cooldown_hours: 4,
-      visibility: "suggested-only",
-      available_role_keys: ["important:zhuli"],
-    },
-    {
-      id: "xianzhang_schedule_meet",
-      text: "好，明天我去县里，当面聊。",
-      tags: ["work", "meeting"],
-      base_favor_delta: 2,
-      cooldown_hours: 8,
-      visibility: "suggested-only",
-      available_role_keys: ["important:xianzhang"],
-    },
-    {
-      id: "xianzhang_send_notes",
-      text: "你先把材料发我，我今晚看完。",
-      tags: ["work", "review"],
-      base_favor_delta: 1,
-      cooldown_hours: 8,
-      visibility: "suggested-only",
-      available_role_keys: ["important:xianzhang"],
-    },
-  ],
-  contact_profiles: [
-    {
-      role_key: "important:zhuli",
-      enabled: true,
-      auto_add: true,
-      initial_favor: 28,
-      preferred_tags: ["daily", "work", "care"],
-      reply_by_tag: {
-        daily: ["在呀，老板。", "我刚忙完，您说。"],
-        work: ["有空，我现在就看。", "可以，我这边马上接。"],
-        care: ["还不错，你呢？", "今天还行，忙但是能撑住。"],
-        gratitude: ["这是我该做的。", "您太客气了。"],
-        invite: ["好呀，那我来安排。", "可以，我晚上有空。"],
-      },
-      proactive_messages: [
-        {
-          id: "daytime_checkin",
-          enabled: true,
-          trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && phone_favor("important:zhuli") >= 20',
-          cooldown_hours: 24,
-          favor_delta: 0,
-          messages: [
-            "老板，今天的行程我已经帮您排好了。",
-            "老板，县里的材料我先替您盯着，有变动我再跟您说。",
-          ],
-          reply_quick_message_ids: ["talk_zhuli_schedule_check", "talk_work_ping", "talk_care_generic", "zhuli_follow_plan", "zhuli_take_action", "thanks"],
-        },
-      ],
-    },
-    {
-      role_key: "important:xianzhang",
-      enabled: true,
-      auto_add: true,
-      initial_favor: 22,
-      preferred_tags: ["work", "care"],
-      reply_by_tag: {
-        work: ["说吧，我在听。", "你这个事，我可以先了解一下。"],
-        care: ["我这边一切正常。", "还行，最近事情比较多。"],
-        invite: ["改天吧，最近行程有点满。"],
-      },
-      proactive_messages: [
-        {
-          id: "policy_ping",
-          enabled: true,
-          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 10 && ${system.now_hour} <= 20 && phone_favor("important:xianzhang") >= 20',
-          cooldown_hours: 48,
-          favor_delta: 0,
-          messages: [
-            "有空的时候来县里坐坐，我们把几个想法再细聊一下。",
-            "你上次提的那个思路，我让人先整理了一版材料。",
-          ],
-          reply_quick_message_ids: ["talk_xianzhang_county_update", "talk_official_progress_sync", "talk_work_ping", "xianzhang_schedule_meet", "xianzhang_send_notes"],
-        },
-      ],
-    },
-    {
-      role_key: "important:chulian",
-      enabled: true,
-      auto_add: true,
-      initial_favor: 35,
-      preferred_tags: ["care", "daily", "invite"],
-      reply_by_tag: {
-        daily: ["嗯，在呢。", "刚看到，你怎么突然找我。"],
-        care: ["还好。你最近呢？", "就那样，慢慢过着。"],
-        invite: ["看情况吧。", "如果不忙的话，可以。"],
-        gratitude: ["不用这么郑重。", "你突然这么客气，我有点不习惯。"],
-      },
-      proactive_messages: [
-        {
-          id: "night_thought",
-          enabled: true,
-          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 19 && ${system.now_hour} <= 23 && phone_favor("important:chulian") >= 35',
-          cooldown_hours: 72,
-          favor_delta: 0,
-          messages: [
-            "刚刚路过以前那条街，突然想起你了。",
-            "今天有点累，就忽然想找个人说句话。",
-          ],
-          reply_quick_message_ids: ["talk_chulian_soft_memory", "talk_romance_warm_care", "talk_greet_generic", "care", "meetup"],
-        },
-      ],
-    },
-    {
-      role_key: "normal:start_suanming",
-      enabled: true,
-      auto_add: true,
-      initial_favor: 18,
-      preferred_tags: ["daily", "care"],
-      reply_by_tag: {
-        daily: ["小友今日气运平稳。", "老夫在。"],
-        care: ["命还硬着呢。", "老骨头还能撑。"],
-        work: ["你先说来听听。"],
-      },
-      proactive_messages: [
-        {
-          id: "fortune_hint",
-          enabled: true,
-          trigger_expr: '${system.now_hour} >= 8 && ${system.now_hour} <= 20 && phone_favor("normal:start_suanming") >= 15',
-          cooldown_hours: 24,
-          favor_delta: 0,
-          messages: [
-            "小友，今日东南方位的气运略有波动，行事可多留个心眼。",
-            "老夫掐指一算，你这两天恐怕要遇上点有意思的人。",
-          ],
-          reply_quick_message_ids: ["talk_suanming_fortune_ask", "talk_suanming_destiny_hint", "greet", "thanks"],
-        },
-      ],
-    },
-    {
-      role_key: "normal:yule_dama",
-      enabled: true,
-      auto_add: true,
-      initial_favor: 16,
-      preferred_tags: ["daily", "invite"],
-      reply_by_tag: {
-        daily: ["在呢老板。", "哎，在的。"],
-        invite: ["今晚有包厢，要不要给你留？", "来呗，给你安排。"],
-        work: ["你要问哪个场子的事？"],
-      },
-      proactive_messages: [
-        {
-          id: "night_offer",
-          enabled: true,
-          trigger_expr: '${system.now_hour} >= 20 && ${system.now_hour} <= 23 && phone_favor("normal:yule_dama") >= 15',
-          cooldown_hours: 24,
-          favor_delta: 0,
-          messages: [
-            "今晚场子挺热闹，要不要我给你留个位置？",
-            "有几个新来的客人，话题倒是挺有意思，你要不要来坐坐？",
-          ],
-          reply_quick_message_ids: ["talk_yule_dama_scene_ask", "talk_yule_dama_vip_whisper", "meetup", "greet"],
-        },
-      ],
-    },
-    {
-      role_key: "normal:xitong",
-      enabled: false,
-      auto_add: false,
-      initial_favor: 0,
-      preferred_tags: [],
-      reply_by_tag: {},
-      proactive_messages: [],
-    },
-  ],
-  fallback_replies: {
-    default: ["嗯，收到。"],
-    daily: ["在呢。", "看到了。"],
-    care: ["还行，你呢？"],
-    work: ["你说，我在听。"],
-    invite: ["到时候再说。"],
-    gratitude: ["没事。"],
-  },
 }

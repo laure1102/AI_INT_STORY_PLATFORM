@@ -105,6 +105,7 @@ const RELEVANT_VARIABLE_DETAIL_LIMIT = 40
 const MAX_ITEM_SEARCH_TERMS = 180
 const MAX_VARIABLE_SEARCH_TERMS = 180
 const SCRIPT_VALIDATION_REPAIR_ATTEMPTS = 2
+const STRUCTURED_OUTPUT_PARSE_RETRY_ATTEMPTS = 2
 const STORYSCRIPT_PROMPT_SECTION_MAX_CHARS = 14000
 const STORYSCRIPT_DOC_PATH = resolve(process.cwd(), "StoryScript.md")
 const SCRIPT_REMOVAL_INTENT_PATTERNS = [
@@ -113,6 +114,14 @@ const SCRIPT_REMOVAL_INTENT_PATTERNS = [
   /\b(remove|delete|clear|disable)\b.{0,12}\b(script|init_script|end_script|trigger_expr)\b/i,
   /\b(script|init_script|end_script|trigger_expr)\b.{0,12}\b(remove|delete|clear|disable)\b/i
 ] as const
+
+const STRUCTURED_OUTPUT_PARSE_RETRY_PROMPT = [
+  "【结构化输出格式修正】",
+  "上一次回复没有通过结构化解析。请只重新输出符合当前 response schema 的结果。",
+  "不要输出 Markdown、解释文字、代码块或额外字段。",
+  "所有数组字段没有内容时填空数组；所有字符串字段没有内容时填空字符串；nullable 字段没有内容时填 null。",
+  "phone.contact_profiles[].reply_by_tag 在 Agent 结构化输出里必须是数组，格式为 [{\"tag\":\"pressure\",\"replies\":[\"...\"]}]；不要输出对象映射。"
+].join("\n")
 
 let cachedStoryScriptPromptSection: string | null | undefined
 
@@ -570,6 +579,11 @@ const structuredPhoneActionCostItemSchema = z.object({
   quantity: z.number().int().min(1).describe("消耗数量。")
 })
 
+const structuredPhoneReplyByTagEntrySchema = z.object({
+  tag: z.string().min(1).describe("回复标签 key。"),
+  replies: z.array(z.string()).describe("该标签下的回复短句。")
+})
+
 const structuredPhoneActionSchema = z.object({
   id: z.string().min(1).describe("动作 id。"),
   label: z.string().describe("动作按钮名称。"),
@@ -606,7 +620,7 @@ const structuredPhoneContactProfileSchema = z.object({
   auto_add: z.boolean().describe("是否交互后自动加入联系人。"),
   initial_favor: z.number().int().min(0).max(100).describe("初始好感度。"),
   preferred_tags: z.array(z.string()).describe("该联系人偏好的短句/动作标签。"),
-  reply_by_tag: z.record(z.array(z.string())).describe("按标签定制 NPC 回复；没有填空对象。"),
+  reply_by_tag: z.array(structuredPhoneReplyByTagEntrySchema).describe("按标签定制 NPC 回复；没有时填空数组。"),
   proactive_messages: z.array(structuredPhoneProactiveMessageSchema).describe("主动消息规则；没有填空数组。")
 })
 
@@ -867,6 +881,54 @@ function formatJson(value: unknown, maxChars: number) {
   return truncateText(JSON.stringify(value, null, 2), maxChars)
 }
 
+function getErrorDetail(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function isStructuredOutputParsingError(error: unknown) {
+  const detail = getErrorDetail(error)
+
+  if (/Invalid schema|response_format|Zod field|required is required|MODEL_RATE_LIMIT|429|401|403/i.test(detail)) {
+    return false
+  }
+
+  return /OUTPUT_PARSING_FAILURE|OutputParserException|Failed to parse|Could not parse|parse/i.test(detail)
+}
+
+function toAgentVisiblePhoneDraft(phone: StoryCreationDraftPhone | undefined) {
+  const nextPhone = phone ?? emptyDraftPhone
+
+  return {
+    ...nextPhone,
+    contact_profiles: nextPhone.contact_profiles.map((profile) => ({
+      ...profile,
+      reply_by_tag: Object.entries(profile.reply_by_tag ?? {})
+        .map(([tag, replies]) => ({
+          tag,
+          replies
+        }))
+        .filter((entry) => entry.tag.trim() && entry.replies.length > 0)
+    }))
+  }
+}
+
+function toAgentVisibleDraft(draft: StoryCreationDraft) {
+  return {
+    ...draft,
+    roles: draft.roles.map((role) => ({
+      ...role,
+      xingge: role.xingge ?? null
+    })),
+    phone: toAgentVisiblePhoneDraft(draft.phone),
+    doing: draft.doing ?? emptyDraftDoing,
+    shop: draft.shop ?? emptyDraftShop
+  }
+}
+
+function formatDraftForAgent(draft: StoryCreationDraft, maxChars: number) {
+  return formatJson(toAgentVisibleDraft(draft), maxChars)
+}
+
 function formatStoryBible(story: StoryDocument) {
   const bible = story.storyBible
   return [
@@ -1006,7 +1068,7 @@ function buildVariableSearchCorpus(
     bible.gameplay_design,
     bible.style_guide,
     bible.constraints,
-    baseDraft ? formatJson(baseDraft, 8000) : ""
+    baseDraft ? formatDraftForAgent(baseDraft, 8000) : ""
   ].join("\n")
 }
 
@@ -1235,7 +1297,7 @@ function buildItemSearchCorpus(
     bible.gameplay_design,
     bible.style_guide,
     bible.constraints,
-    baseDraft ? formatJson(baseDraft, 8000) : ""
+    baseDraft ? formatDraftForAgent(baseDraft, 8000) : ""
   ].join("\n")
 }
 
@@ -1594,6 +1656,8 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "不要声称脚本接口缺少安全写回能力；当前引擎支持在 init_script、end_script、action.exec_script 中写普通 value 变量。",
     "StoryScript 过程脚本必须严格遵循 StoryScript.md 的当前规范；语句、变量权限、注释、invoke_once、背包函数都以 StoryScript.md 为唯一来源。不要使用文档未定义的语法；如果需要新能力，先升级规范文档和运行时，再生成脚本。",
     "invoke_once 已支持 delay_hours、delay_days、delay_months、delay_years 这 4 个延迟调度元参数；它们只影响调度，不会进入目标事件的 ${call.xxx} 参数空间，也不能和多个 delay 字段混用。",
+    "invoke_once 是 StoryScript 保留语句，不是 JS/TS 函数调用；只能写 `invoke_once chain event_id delay_days=1 param=${group.name}`，禁止写 `invoke_once(\"chain\", \"event_id\", { delay_days: 1 })` 或 `delay_days: 1`。",
+    "trigger_mode=invoke 的目标事件可以没有 invoke_params；当目标事件不需要 ${call.xxx} 参数时，invoke_params 必须填空数组，不要改成 default，也不要虚构无用参数。",
     "生成非空 StoryScript 过程脚本时必须写清楚中文注释：说明读取了哪些变量、计算规则为什么这样设计、最终写回哪些 value 变量。复杂脚本要分段注释，避免只有公式没有解释。",
     "物品必须优先复用现有物品 id；确需新增时输出 items 草稿，category_id 必须来自现有物品分类。",
     "判断物品是否已存在时必须先查 itemIndexAll 全量轻量索引；relevantItemDetails 只提供本次更相关物品的详细字段，不代表完整物品库。",
@@ -1601,6 +1665,7 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "背包函数：bag_add(\"player\", \"item_id\", 1) 添加物品；bag_remove(\"player\", \"item_id\", 1) 扣除物品并返回 boolean；bag_count(\"player\", \"item_id\") 返回数量；bag_has(\"player\", \"item_id\", 1) 检查数量。",
     "背包函数里的 item_id 必须来自现有物品或本次 items 草稿；如果新增物品，事件脚本必须引用该新增物品 id。",
     "手机联系人资产写入 phone 草稿：新增/调整联系人短句、动作、回复、联系人特配、主动消息规则时输出 phone，不要只在 notes 里描述。事件脚本只用于运行时行为，例如 phone_add_contact、phone_send_from_contact、phone_add_favor。",
+    "phone.talk_library/action_library 的 invoke 只会在玩家通过手机 UI 选择对应短句或动作时触发；StoryScript 里的 phone_send_to_contact/phone_send_from_contact 只是直接写入消息，不会自动匹配短句库并触发 invoke。剧情脚本需要延迟调度事件时，直接使用 invoke_once 保留语句。",
     "行动资产写入 doing 草稿：玩家可主动选择的玩法入口必须输出 doing 菜单/行动。doing 行动不配置 trigger_mode、trigger_expr、invoke_params；显示条件写 visible_expr，触发只来自菜单选择。",
     "商城资产写入 shop 草稿：新增或调整商城分类、商品货架时输出 shop.categories/shop.products，不要只在 notes 里描述。商城不能创建物品资产，只能引用现有 item id 或本次 draft.items 里同时生成的 item id。",
     "商城商品的 category_id 必须引用现有 shop 分类或本次 shop.categories；item_id 必须引用现有物品或本次 draft.items。商品购买条件写 available_expr，分类显示条件写 visible_expr。",
@@ -1620,7 +1685,7 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     lines.push(
       "",
       "【当前待优化草稿】",
-      formatJson(state.baseDraft, 18000),
+      formatDraftForAgent(state.baseDraft, 18000),
       "",
       "当前任务是基于用户反馈修订这份草稿。输出必须是完整修订版，不是增量补丁。除非反馈要求重做，否则尽量保留已有 id、变量 key、角色 key、事件引用，以及已有非空脚本。不要因为保守或不确定就把脚本清空。"
     )
@@ -1760,24 +1825,53 @@ async function invokeStructured<T extends Record<string, unknown>>(
     name: `${role}Output`
   })
 
-  try {
-    return await structuredLlm.invoke(prompt, signal ? { signal } : undefined)
-  } catch (error) {
-    if (isAbortError(error)) {
+  let parseFailureDetail = ""
+
+  for (let attempt = 1; attempt <= STRUCTURED_OUTPUT_PARSE_RETRY_ATTEMPTS; attempt += 1) {
+    const nextPrompt = attempt === 1
+      ? prompt
+      : [
+          prompt,
+          "",
+          STRUCTURED_OUTPUT_PARSE_RETRY_PROMPT,
+          parseFailureDetail ? `上一次解析错误:\n${parseFailureDetail}` : ""
+        ].filter(Boolean).join("\n\n")
+
+    try {
+      return await structuredLlm.invoke(nextPrompt, signal ? { signal } : undefined)
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new FileStoreError(
+          `${ROLE_TITLES[role]} Agent 已中止。`,
+          499,
+          `${ROLE_ERROR_CODES[role]}-aborted`
+        )
+      }
+
+      const detail = getErrorDetail(error)
+
+      if (isStructuredOutputParsingError(error) && attempt < STRUCTURED_OUTPUT_PARSE_RETRY_ATTEMPTS) {
+        parseFailureDetail = detail
+        continue
+      }
+
+      const retryDetail = parseFailureDetail
+        ? `Structured output parsing failed after retry. First error: ${parseFailureDetail}\nLast error: ${detail}`
+        : detail
+
       throw new FileStoreError(
-        `${ROLE_TITLES[role]} Agent 已中止。`,
-        499,
-        `${ROLE_ERROR_CODES[role]}-aborted`
+        `${ROLE_TITLES[role]} Agent failed: ${retryDetail}`,
+        502,
+        ROLE_ERROR_CODES[role]
       )
     }
-
-    const detail = error instanceof Error ? error.message : String(error)
-    throw new FileStoreError(
-      `${ROLE_TITLES[role]} Agent failed: ${detail}`,
-      502,
-      ROLE_ERROR_CODES[role]
-    )
   }
+
+  throw new FileStoreError(
+    `${ROLE_TITLES[role]} Agent failed: Structured output parsing failed.`,
+    502,
+    ROLE_ERROR_CODES[role]
+  )
 }
 
 function createLog(role: StoryCreationAgentRole, summary: string): StoryCreationAgentLog {
@@ -1965,7 +2059,18 @@ function normalizeStructuredPhoneDraft(phone: StructuredCreationPhoneDraft): Sto
       auto_add: profile.auto_add,
       initial_favor: profile.initial_favor,
       preferred_tags: profile.preferred_tags,
-      reply_by_tag: profile.reply_by_tag,
+      reply_by_tag: Object.fromEntries(
+        profile.reply_by_tag
+          .map((entry) => {
+            const tag = entry.tag.trim()
+            const replies = Array.from(
+              new Set((entry.replies ?? []).map((reply) => reply.trim()).filter(Boolean))
+            )
+
+            return [tag, replies] as const
+          })
+          .filter(([tag, replies]) => tag && replies.length > 0)
+      ),
       proactive_messages: profile.proactive_messages
     }))
   }
@@ -3683,11 +3788,6 @@ function normalizeTriggerMode(
     return "default"
   }
 
-  if (event.trigger_mode === "invoke" && invokeParams.length === 0) {
-    warnings.push(`事件 ${event.id} 缺少调用参数，已按默认触发应用。`)
-    return "default"
-  }
-
   return event.trigger_mode
 }
 
@@ -4611,11 +4711,13 @@ export async function runStoryCreationAgents(
             buildStoryScriptPromptSection(),
             `触发原因: ${reason}`,
             `确定性 StoryScript 校验错误:\n${formattedIssues}`,
-            `待修复草稿:\n${formatJson(currentDraft, 18000)}`,
+            `待修复草稿:\n${formatDraftForAgent(currentDraft, 18000)}`,
             "你的任务：只修复脚本、触发条件和文本占位符相关问题，输出完整 draft。",
             "必须按照每条确定性校验错误修改；不要用删除事件、删除变量、清空所有脚本来逃避问题。",
             "如果当前待优化草稿里同一事件已有非空 init_script 或 end_script，而用户没有明确要求删除，你必须保留或修正它，不能把它清空。",
             "如果脚本写入 calc、system.* 或 call.*，改成写普通 value 变量；如果引用不存在的物品 id，优先改为现有物品或本次 items 草稿里的合法 id。",
+            "invoke_once 必须按 StoryScript 保留语句修复，例如 `invoke_once chain event_id delay_days=1`；不要修成 JS 函数调用，不要使用括号、逗号、对象字面量或冒号参数。",
+            "trigger_mode=invoke 允许 invoke_params 为空；如果目标事件不需要调用参数，保留 invoke 触发和空数组，不要降级为 default。",
             "如果 phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script、shop visible_expr/available_expr 不符合 StoryScript.md，也要一并修复。",
             "修复脚本时必须保留 draft.phone、draft.doing 和 draft.shop 的结构化资产；除非用户明确要求删除，不要把手机短句、联系人动作、行动菜单、行动事件、商城分类或商城商品清空。",
             "非空过程脚本必须保留中文注释，解释变量来源、计算规则和写回目标。"
@@ -4663,7 +4765,7 @@ export async function runStoryCreationAgents(
         [
           buildBasePrompt("脚本审校", state),
           buildStoryScriptPromptSection(),
-          `待审校草稿:\n${formatJson(state.draft, 16000)}`,
+          `待审校草稿:\n${formatDraftForAgent(state.draft, 16000)}`,
           "你的任务：检查 init_script、end_script、trigger_expr、dialogue 占位符是否保守可用。",
           "脚本权限审校重点：普通全局 value 变量可写；calc、system.*、call.* 不可写。发现写 calc 汇总时，改为写其 calc_rule 依赖的普通 value 分项。",
           "脚本可读性审校重点：非空过程脚本必须保留或补充中文注释，说明规则意图、变量来源、计算依据和写回结果；不要删除有用注释。",
@@ -4671,6 +4773,8 @@ export async function runStoryCreationAgents(
           "如果当前待优化草稿里同一事件已有非空 init_script 或 end_script，而用户没有明确要求删除，你必须保留或修正它，不能清空。",
           "phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script、shop visible_expr/available_expr 也属于脚本审校范围。",
           "脚本是否支持，必须以 StoryScript.md 和确定性静态校验为准；不要自行声称“规范未说明”来回避修复。",
+          "invoke_once 是 StoryScript 保留语句，合法格式是 `invoke_once chain event_id delay_days=1 param=${group.name}`；禁止写成 `invoke_once(\"chain\", \"event_id\", { delay_days: 1 })`。",
+          "trigger_mode=invoke 的事件可以没有 invoke_params；无参数调用事件仍然必须保持 invoke，不能因为参数为空改成 default。",
           "输出完整 draft 时必须保留 phone、doing 和 shop 字段。没有相关内容时填空数组；有相关内容时不要把结构化资产降级成 notes。"
         ].join("\n\n"),
         signal
@@ -4708,7 +4812,7 @@ export async function runStoryCreationAgents(
       consistencyCheckerOutputSchema,
       [
         buildBasePrompt("一致性检查", state),
-        `待检查草稿:\n${formatJson(state.draft, 16000)}`,
+        `待检查草稿:\n${formatDraftForAgent(state.draft, 16000)}`,
         "你的任务：检查角色引用、地点引用、物品分类、事件 next、触发方式、手机联系人资产、行动菜单/行动事件、商城分类/商品和玩家自由度是否一致。",
         "手机联系人检查重点：contact_profiles.role_key 必须是现有或本次生成 NPC 角色；短句/动作/回复的 scope 不要引用不存在的性格或角色；invoke 目标必须是现有或本次生成事件。",
         "行动检查重点：doing.doings[].menu_id 必须引用现有或本次生成菜单；visible_expr 用 StoryScript 条件表达式；行动没有 trigger_mode、trigger_expr、invoke_params。",

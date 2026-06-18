@@ -90,3 +90,34 @@ export async function upsertStoryCreationHistorySession(
     session
   }
 }
+
+export async function deleteStoryCreationHistorySession(
+  dataDir: string,
+  storyId: string,
+  sessionId: string
+) {
+  const normalizedSessionId = sessionId.trim()
+
+  if (!normalizedSessionId) {
+    throw new FileStoreError("Creation history session id is required.", 400, "creation-history.session-id-required")
+  }
+
+  const filePath = resolveHistoryFile(dataDir, storyId)
+  const history = await readStoryCreationHistory(dataDir, storyId)
+  const nextSessions = history.sessions.filter((item) => item.id !== normalizedSessionId)
+
+  if (nextSessions.length === history.sessions.length) {
+    throw new FileStoreError("Creation history session was not found.", 404, "creation-history.session-not-found")
+  }
+
+  const nextHistory: StoryCreationHistoryFile = {
+    sessions: nextSessions
+  }
+
+  await writeJson5File(filePath, nextHistory)
+
+  return {
+    deletedId: normalizedSessionId,
+    history: nextHistory
+  }
+}

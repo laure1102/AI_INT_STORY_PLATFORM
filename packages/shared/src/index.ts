@@ -284,6 +284,11 @@ export interface SaveStoryCreationHistorySessionResponse {
   history: StoryCreationHistoryFile
 }
 
+export interface DeleteStoryCreationHistorySessionResponse {
+  deletedId: string
+  history: StoryCreationHistoryFile
+}
+
 export interface ApplyStoryCreationDraftSelection {
   eventKeys: string[]
   locationIds: string[]
