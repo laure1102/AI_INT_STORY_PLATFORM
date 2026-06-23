@@ -7,7 +7,15 @@ import type {
 } from "@story-mgr/core"
 import { useStoryPhoneDraft } from "./useStoryPhoneDraft"
 
-type PhoneTab = "tracks" | "personalities" | "talks" | "actions" | "replies"
+type PhoneTab =
+  | "tracks"
+  | "personalities"
+  | "talks"
+  | "actions"
+  | "replies"
+  | "contacts"
+  | "quickMessages"
+  | "fallbackReplies"
 type InvokeTargetType = "chain" | "pool" | "schedule"
 
 interface InvokeEventOption {
@@ -33,7 +41,10 @@ const emit = defineEmits<{
 const activeTab = shallowRef<PhoneTab>("tracks")
 const sectionSearch = reactive<Record<PhoneTab, string>>({
   actions: "",
+  contacts: "",
+  fallbackReplies: "",
   personalities: "",
+  quickMessages: "",
   replies: "",
   talks: "",
   tracks: ""
@@ -44,7 +55,10 @@ const tabOptions: Array<{ key: PhoneTab; label: string }> = [
   { key: "personalities", label: "性格库" },
   { key: "talks", label: "闲聊短句" },
   { key: "actions", label: "动作库" },
-  { key: "replies", label: "回复库" }
+  { key: "replies", label: "回复库" },
+  { key: "contacts", label: "联系人特配" },
+  { key: "quickMessages", label: "玩家快捷消息" },
+  { key: "fallbackReplies", label: "兜底回复" }
 ]
 
 const contactTrackOptions: Array<{ value: StoryPhoneContactTrackId; label: string }> = [
@@ -55,7 +69,12 @@ const contactTrackOptions: Array<{ value: StoryPhoneContactTrackId; label: strin
 
 const {
   addAction,
+  addContactProfile,
+  addContactReply,
+  addFallbackReply,
   addPersonality,
+  addProactiveMessage,
+  addQuickMessage,
   addReply,
   addTalk,
   addTrack,
@@ -63,7 +82,12 @@ const {
   buildPhoneFile,
   draft,
   removeAction,
+  removeContactProfile,
+  removeContactReply,
+  removeFallbackReply,
   removePersonality,
+  removeProactiveMessage,
+  removeQuickMessage,
   removeReply,
   removeTalk,
   removeTrack,
@@ -82,11 +106,24 @@ const roleKeyOptions = computed(() => [
   }))
 ])
 
+const roleLabelByKey = computed(() =>
+  Object.fromEntries(roleKeyOptions.value.map((option) => [option.value, option.label]))
+)
+
 const personalityIdOptions = computed(() =>
   draft.personalities
     .map((personality) => ({
       label: personality.name.trim() || personality.id.trim() || "未命名性格",
       value: personality.id.trim()
+    }))
+    .filter((option) => option.value)
+)
+
+const quickMessageIdOptions = computed(() =>
+  draft.quickMessages
+    .map((message) => ({
+      label: `${message.id.trim() || "未命名快捷消息"} · ${message.text.trim() || "未填写文本"}`,
+      value: message.id.trim()
     }))
     .filter((option) => option.value)
 )
@@ -134,6 +171,14 @@ function appendCsvToken(currentText: string, token: string) {
 
 function appendRoleKeyToScope(scope: { roleKeysText: string }, roleKey: string) {
   scope.roleKeysText = appendCsvToken(scope.roleKeysText, roleKey)
+}
+
+function getRoleLabel(roleKey: string) {
+  return roleLabelByKey.value[roleKey] ?? roleKey
+}
+
+function addContactProfileFromRole(roleKey: string) {
+  addContactProfile(roleKey)
 }
 
 const filteredTracks = computed(() =>
@@ -208,6 +253,49 @@ const filteredReplies = computed(() =>
         entry.repliesText,
         entry.scope.roleKeysText,
         entry.scope.personalityIds.join(", ")
+      ])
+    )
+)
+
+const filteredContactProfiles = computed(() =>
+  draft.contactProfiles
+    .map((profile, index) => ({ index, profile }))
+    .filter(({ profile }) =>
+      matchesSearch(sectionSearch.contacts, [
+        profile.roleKey,
+        getRoleLabel(profile.roleKey),
+        profile.preferredTagsText,
+        ...profile.proactiveMessages.flatMap((rule) => [
+          rule.id,
+          rule.triggerExpr,
+          rule.messagesText,
+          rule.replyQuickMessageIds.join(", ")
+        ]),
+        ...profile.replyByTag.flatMap((entry) => [entry.tag, entry.repliesText])
+      ])
+    )
+)
+
+const filteredQuickMessages = computed(() =>
+  draft.quickMessages
+    .map((message, index) => ({ index, message }))
+    .filter(({ message }) =>
+      matchesSearch(sectionSearch.quickMessages, [
+        message.id,
+        message.text,
+        message.tagsText,
+        message.availableRoleKeysText
+      ])
+    )
+)
+
+const filteredFallbackReplies = computed(() =>
+  draft.fallbackReplies
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) =>
+      matchesSearch(sectionSearch.fallbackReplies, [
+        entry.tag,
+        entry.repliesText
       ])
     )
 )
@@ -856,7 +944,7 @@ watch(
           </div>
         </div>
 
-        <div v-else class="phone-dialog__section">
+        <div v-else-if="activeTab === 'replies'" class="phone-dialog__section">
           <div class="phone-dialog__section-head">
             <div>
               <h3 class="phone-dialog__section-title">回复库</h3>
@@ -981,6 +1069,377 @@ watch(
 
           <div v-else-if="activeTab === 'replies'" class="phone-dialog__empty">
             {{ draft.replies.length ? "当前搜索没有命中回复条目。" : "还没有回复库条目，先加一组。" }}
+          </div>
+        </div>
+
+        <div v-else-if="activeTab === 'contacts'" class="phone-dialog__section">
+          <div class="phone-dialog__section-head">
+            <div>
+              <h3 class="phone-dialog__section-title">联系人特配</h3>
+              <p class="phone-dialog__section-note">维护每个具体 NPC 的主动消息、按标签回复、偏好标签和初始好感。</p>
+            </div>
+            <div class="phone-dialog__section-tools">
+              <input
+                v-model="sectionSearch.contacts"
+                class="text-input phone-dialog__search"
+                type="text"
+                placeholder="搜索角色 / 消息 / 标签回复"
+              />
+              <span class="phone-dialog__result-count">
+                {{ filteredContactProfiles.length }} / {{ draft.contactProfiles.length }}
+              </span>
+              <button class="btn-secondary phone-dialog__action" type="button" @click="addContactProfile()">
+                新增联系人特配
+              </button>
+            </div>
+          </div>
+
+          <details v-if="roleKeyOptions.length" class="phone-dialog__helper-block">
+            <summary class="phone-dialog__helper-summary">从角色快速新增联系人特配</summary>
+            <div class="phone-dialog__chip-list">
+              <button
+                v-for="option in roleKeyOptions"
+                :key="option.value"
+                class="phone-dialog__chip"
+                type="button"
+                @click="addContactProfileFromRole(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </details>
+
+          <div v-if="filteredContactProfiles.length" class="phone-dialog__stack">
+            <article
+              v-for="{ profile, index } in filteredContactProfiles"
+              :key="profile.draftKey"
+              class="phone-dialog__card"
+            >
+              <div class="phone-dialog__card-head">
+                <div class="phone-dialog__card-title-wrap">
+                  <strong class="phone-dialog__card-title">{{ getRoleLabel(profile.roleKey) || `contact_${index + 1}` }}</strong>
+                  <span class="phone-dialog__card-note">
+                    主动消息 {{ profile.proactiveMessages.length }} 条 · 标签回复 {{ profile.replyByTag.length }} 组
+                  </span>
+                </div>
+                <button class="btn-secondary phone-dialog__card-remove" type="button" @click="removeContactProfile(index)">
+                  删除特配
+                </button>
+              </div>
+
+              <div class="phone-dialog__grid">
+                <label class="phone-dialog__field phone-dialog__field--wide">
+                  <span class="phone-dialog__label">联系人角色</span>
+                  <select v-model="profile.roleKey" class="text-input phone-dialog__select">
+                    <option value="">请选择角色</option>
+                    <option v-for="option in roleKeyOptions" :key="option.value" :value="option.value">
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+                <label class="phone-dialog__field">
+                  <span class="phone-dialog__label">初始好感</span>
+                  <input v-model="profile.initialFavorText" class="text-input" type="number" min="0" max="100" step="1" />
+                </label>
+                <label class="phone-dialog__field">
+                  <span class="phone-dialog__label">偏好标签</span>
+                  <input v-model="profile.preferredTagsText" class="text-input" type="text" placeholder="daily, work, care" />
+                </label>
+                <label class="phone-dialog__inline-check">
+                  <input v-model="profile.enabled" type="checkbox" />
+                  <span>启用联系人配置</span>
+                </label>
+                <label class="phone-dialog__inline-check">
+                  <input v-model="profile.autoAdd" type="checkbox" />
+                  <span>交互后自动加入联系人</span>
+                </label>
+              </div>
+
+              <div class="phone-dialog__section-head phone-dialog__section-head--nested">
+                <div>
+                  <h4 class="phone-dialog__section-title phone-dialog__section-title--small">主动消息</h4>
+                  <p class="phone-dialog__section-note">满足条件后 NPC 主动发来的消息，可推荐玩家快捷回复。</p>
+                </div>
+                <button class="btn-secondary phone-dialog__action" type="button" @click="addProactiveMessage(profile)">
+                  新增主动消息
+                </button>
+              </div>
+
+              <div v-if="profile.proactiveMessages.length" class="phone-dialog__stack phone-dialog__stack--compact">
+                <article
+                  v-for="(rule, ruleIndex) in profile.proactiveMessages"
+                  :key="rule.draftKey"
+                  class="phone-dialog__nested-card"
+                >
+                  <div class="phone-dialog__card-head">
+                    <div class="phone-dialog__card-title-wrap">
+                      <strong class="phone-dialog__card-title">{{ rule.id || `proactive_${ruleIndex + 1}` }}</strong>
+                      <span class="phone-dialog__card-note">主动消息规则</span>
+                    </div>
+                    <button class="btn-secondary phone-dialog__card-remove" type="button" @click="removeProactiveMessage(profile, ruleIndex)">
+                      删除
+                    </button>
+                  </div>
+
+                  <div class="phone-dialog__grid">
+                    <label class="phone-dialog__field">
+                      <span class="phone-dialog__label">ID</span>
+                      <input v-model="rule.id" class="text-input" type="text" placeholder="daytime_checkin" />
+                    </label>
+                    <label class="phone-dialog__field">
+                      <span class="phone-dialog__label">冷却小时</span>
+                      <input v-model="rule.cooldownHoursText" class="text-input" type="number" min="1" step="1" />
+                    </label>
+                    <label class="phone-dialog__field">
+                      <span class="phone-dialog__label">好感变化</span>
+                      <input v-model="rule.favorDeltaText" class="text-input" type="number" min="-100" max="100" step="1" />
+                    </label>
+                    <label class="phone-dialog__inline-check">
+                      <input v-model="rule.enabled" type="checkbox" />
+                      <span>启用</span>
+                    </label>
+                    <label class="phone-dialog__field phone-dialog__field--wide">
+                      <span class="phone-dialog__label">触发条件</span>
+                      <textarea
+                        v-model="rule.triggerExpr"
+                        class="text-input phone-dialog__textarea"
+                        rows="2"
+                        placeholder="${system.now_hour} >= 8"
+                      />
+                    </label>
+                    <label class="phone-dialog__field phone-dialog__field--wide">
+                      <span class="phone-dialog__label">消息列表</span>
+                      <textarea
+                        v-model="rule.messagesText"
+                        class="text-input phone-dialog__textarea"
+                        rows="4"
+                        placeholder="一行一条 NPC 主动消息"
+                      />
+                    </label>
+                  </div>
+
+                  <div class="phone-dialog__subsection">
+                    <span class="phone-dialog__label">推荐玩家快捷回复</span>
+                    <div v-if="quickMessageIdOptions.length" class="phone-dialog__scope-checks">
+                      <label
+                        v-for="option in quickMessageIdOptions"
+                        :key="option.value"
+                        class="phone-dialog__chip-check"
+                        :class="{ 'phone-dialog__chip-check--active': rule.replyQuickMessageIds.includes(option.value) }"
+                      >
+                        <input v-model="rule.replyQuickMessageIds" type="checkbox" :value="option.value" />
+                        <span>{{ option.label }}</span>
+                      </label>
+                    </div>
+                    <span v-else class="phone-dialog__hint">还没有玩家快捷消息，可以先到“玩家快捷消息”里新增。</span>
+                  </div>
+                </article>
+              </div>
+              <div v-else class="phone-dialog__empty phone-dialog__empty--compact">
+                这个联系人还没有主动消息。
+              </div>
+
+              <div class="phone-dialog__section-head phone-dialog__section-head--nested">
+                <div>
+                  <h4 class="phone-dialog__section-title phone-dialog__section-title--small">按标签回复</h4>
+                  <p class="phone-dialog__section-note">当玩家短句或动作带有对应 tag 时，优先使用这里的定制回复。</p>
+                </div>
+                <button class="btn-secondary phone-dialog__action" type="button" @click="addContactReply(profile)">
+                  新增标签回复
+                </button>
+              </div>
+
+              <div class="phone-dialog__table-wrap">
+                <table class="phone-dialog__table phone-dialog__table--compact">
+                  <thead>
+                    <tr>
+                      <th>标签</th>
+                      <th>回复列表</th>
+                      <th class="phone-dialog__actions-col">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody v-if="profile.replyByTag.length">
+                    <tr v-for="(entry, replyIndex) in profile.replyByTag" :key="entry.draftKey">
+                      <td>
+                        <input v-model="entry.tag" class="text-input phone-dialog__cell-input" type="text" placeholder="pressure" />
+                      </td>
+                      <td>
+                        <textarea
+                          v-model="entry.repliesText"
+                          class="text-input phone-dialog__textarea phone-dialog__textarea--cell"
+                          rows="3"
+                          placeholder="一行一条回复"
+                        />
+                      </td>
+                      <td class="phone-dialog__actions-col">
+                        <button class="btn-secondary phone-dialog__card-remove" type="button" @click="removeContactReply(profile, replyIndex)">
+                          删除
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div v-if="!profile.replyByTag.length" class="phone-dialog__empty">
+                  还没有标签回复。
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div v-else class="phone-dialog__empty">
+            {{ draft.contactProfiles.length ? "当前搜索没有命中联系人特配。" : "还没有联系人特配，先新增一条。" }}
+          </div>
+        </div>
+
+        <div v-else-if="activeTab === 'quickMessages'" class="phone-dialog__section">
+          <div class="phone-dialog__section-head">
+            <div>
+              <h3 class="phone-dialog__section-title">玩家快捷消息</h3>
+              <p class="phone-dialog__section-note">联系人主动发消息后，可推荐玩家选择这些预制回复。</p>
+            </div>
+            <div class="phone-dialog__section-tools">
+              <input
+                v-model="sectionSearch.quickMessages"
+                class="text-input phone-dialog__search"
+                type="text"
+                placeholder="搜索 ID / 文本 / 标签 / 角色"
+              />
+              <span class="phone-dialog__result-count">
+                {{ filteredQuickMessages.length }} / {{ draft.quickMessages.length }}
+              </span>
+              <button class="btn-secondary phone-dialog__action" type="button" @click="addQuickMessage">
+                新增快捷消息
+              </button>
+            </div>
+          </div>
+
+          <div class="phone-dialog__table-wrap">
+            <table class="phone-dialog__table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>文本</th>
+                  <th>标签</th>
+                  <th>好感</th>
+                  <th>冷却</th>
+                  <th>可见性</th>
+                  <th>可用角色</th>
+                  <th class="phone-dialog__actions-col">操作</th>
+                </tr>
+              </thead>
+              <tbody v-if="filteredQuickMessages.length">
+                <tr v-for="{ message, index } in filteredQuickMessages" :key="message.draftKey">
+                  <td>
+                    <input v-model="message.id" class="text-input phone-dialog__cell-input" type="text" placeholder="talk_reply_ok" />
+                  </td>
+                  <td>
+                    <textarea
+                      v-model="message.text"
+                      class="text-input phone-dialog__textarea phone-dialog__textarea--cell"
+                      rows="2"
+                      placeholder="好的，我知道了。"
+                    />
+                  </td>
+                  <td>
+                    <textarea
+                      v-model="message.tagsText"
+                      class="text-input phone-dialog__textarea phone-dialog__textarea--cell"
+                      rows="2"
+                      placeholder="daily, work"
+                    />
+                  </td>
+                  <td>
+                    <input v-model="message.baseFavorDeltaText" class="text-input phone-dialog__mini-input" type="number" min="0" max="100" step="1" />
+                  </td>
+                  <td>
+                    <input v-model="message.cooldownHoursText" class="text-input phone-dialog__mini-input" type="number" min="0" step="1" />
+                  </td>
+                  <td>
+                    <select v-model="message.visibility" class="text-input phone-dialog__select">
+                      <option value="always">总是显示</option>
+                      <option value="suggested-only">仅被推荐</option>
+                    </select>
+                  </td>
+                  <td>
+                    <textarea
+                      v-model="message.availableRoleKeysText"
+                      class="text-input phone-dialog__textarea phone-dialog__textarea--cell"
+                      rows="2"
+                      placeholder="important:zhuli, normal:start_suanming"
+                    />
+                  </td>
+                  <td class="phone-dialog__actions-col">
+                    <button class="btn-secondary phone-dialog__card-remove" type="button" @click="removeQuickMessage(index)">
+                      删除
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div v-if="!filteredQuickMessages.length" class="phone-dialog__empty">
+              {{ draft.quickMessages.length ? "当前搜索没有命中快捷消息。" : "还没有玩家快捷消息，先加一条。" }}
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="phone-dialog__section">
+          <div class="phone-dialog__section-head">
+            <div>
+              <h3 class="phone-dialog__section-title">兜底回复</h3>
+              <p class="phone-dialog__section-note">没有命中联系人特配或回复库时，按标签使用这里的兜底回复。</p>
+            </div>
+            <div class="phone-dialog__section-tools">
+              <input
+                v-model="sectionSearch.fallbackReplies"
+                class="text-input phone-dialog__search"
+                type="text"
+                placeholder="搜索标签 / 回复"
+              />
+              <span class="phone-dialog__result-count">
+                {{ filteredFallbackReplies.length }} / {{ draft.fallbackReplies.length }}
+              </span>
+              <button class="btn-secondary phone-dialog__action" type="button" @click="addFallbackReply">
+                新增兜底回复
+              </button>
+            </div>
+          </div>
+
+          <div class="phone-dialog__table-wrap">
+            <table class="phone-dialog__table phone-dialog__table--compact">
+              <thead>
+                <tr>
+                  <th>标签</th>
+                  <th>回复列表</th>
+                  <th class="phone-dialog__actions-col">操作</th>
+                </tr>
+              </thead>
+              <tbody v-if="filteredFallbackReplies.length">
+                <tr v-for="{ entry, index } in filteredFallbackReplies" :key="entry.draftKey">
+                  <td>
+                    <input v-model="entry.tag" class="text-input phone-dialog__cell-input" type="text" placeholder="daily" />
+                  </td>
+                  <td>
+                    <textarea
+                      v-model="entry.repliesText"
+                      class="text-input phone-dialog__textarea phone-dialog__textarea--cell"
+                      rows="4"
+                      placeholder="一行一条回复"
+                    />
+                  </td>
+                  <td class="phone-dialog__actions-col">
+                    <button class="btn-secondary phone-dialog__card-remove" type="button" @click="removeFallbackReply(index)">
+                      删除
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div v-if="!filteredFallbackReplies.length" class="phone-dialog__empty">
+              {{ draft.fallbackReplies.length ? "当前搜索没有命中兜底回复。" : "还没有兜底回复，先加一组。" }}
+            </div>
           </div>
         </div>
       </section>
@@ -1110,17 +1569,28 @@ watch(
   gap: 14px;
 }
 
+.phone-dialog__stack--compact {
+  gap: 10px;
+}
+
 .phone-dialog__card,
+.phone-dialog__nested-card,
 .phone-dialog__table-wrap {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.03);
 }
 
-.phone-dialog__card {
+.phone-dialog__card,
+.phone-dialog__nested-card {
   display: grid;
   gap: 14px;
   padding: 16px;
+}
+
+.phone-dialog__nested-card {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .phone-dialog__grid {
@@ -1270,6 +1740,10 @@ watch(
   border-collapse: collapse;
 }
 
+.phone-dialog__table--compact {
+  min-width: 720px;
+}
+
 .phone-dialog__table th,
 .phone-dialog__table td {
   padding: 10px 8px;
@@ -1315,6 +1789,10 @@ watch(
   padding: 16px;
   color: var(--text-muted);
   font-size: 0.84rem;
+}
+
+.phone-dialog__empty--compact {
+  padding: 10px 0;
 }
 
 @media (max-width: 1080px) {

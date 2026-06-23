@@ -1,8 +1,11 @@
 import { reactive } from "vue"
 import type {
   StoryPhoneActionLibraryEntry,
+  StoryPhoneContactProfile,
   StoryPhoneContactTrackId,
   StoryPhoneFile,
+  StoryPhoneProactiveMessageRule,
+  StoryPhoneQuickMessage,
   StoryPhoneReplyLibraryEntry,
   StoryPhoneRelationshipStage,
   StoryPhoneRelationshipTrack,
@@ -90,18 +93,54 @@ export interface PhoneReplyDraft {
   tagsText: string
 }
 
+export interface PhoneQuickMessageDraft {
+  availableRoleKeysText: string
+  baseFavorDeltaText: string
+  cooldownHoursText: string
+  draftKey: string
+  id: string
+  tagsText: string
+  text: string
+  visibility: "always" | "suggested-only"
+}
+
+export interface PhoneTagRepliesDraft {
+  draftKey: string
+  repliesText: string
+  tag: string
+}
+
+export interface PhoneProactiveMessageDraft {
+  cooldownHoursText: string
+  draftKey: string
+  enabled: boolean
+  favorDeltaText: string
+  id: string
+  messagesText: string
+  replyQuickMessageIds: string[]
+  triggerExpr: string
+}
+
+export interface PhoneContactProfileDraft {
+  autoAdd: boolean
+  draftKey: string
+  enabled: boolean
+  initialFavorText: string
+  preferredTagsText: string
+  proactiveMessages: PhoneProactiveMessageDraft[]
+  replyByTag: PhoneTagRepliesDraft[]
+  roleKey: string
+}
+
 interface PhoneDraftState {
   actions: PhoneActionDraft[]
+  contactProfiles: PhoneContactProfileDraft[]
+  fallbackReplies: PhoneTagRepliesDraft[]
   personalities: PhonePersonalityDraft[]
+  quickMessages: PhoneQuickMessageDraft[]
   replies: PhoneReplyDraft[]
   talks: PhoneTalkDraft[]
   tracks: PhoneTrackDraft[]
-}
-
-interface PhoneLegacySections {
-  contact_profiles: StoryPhoneFile["contact_profiles"]
-  fallback_replies: StoryPhoneFile["fallback_replies"]
-  player_quick_messages: StoryPhoneFile["player_quick_messages"]
 }
 
 const AVAILABLE_CONTACT_TRACK_IDS: StoryPhoneContactTrackId[] = ["romance", "official", "social"]
@@ -114,6 +153,13 @@ function splitCsvText(value: string) {
   return value
     .split(/[,\n，、]/g)
     .map((part) => part.trim())
+    .filter(Boolean)
+}
+
+function splitLinesText(value: string) {
+  return value
+    .split(/\n+/g)
+    .map((line) => line.trim())
     .filter(Boolean)
 }
 
@@ -213,6 +259,61 @@ function createReplyDraft(entry?: Partial<StoryPhoneReplyLibraryEntry>): PhoneRe
   }
 }
 
+function createQuickMessageDraft(entry?: Partial<StoryPhoneQuickMessage>): PhoneQuickMessageDraft {
+  return {
+    availableRoleKeysText: Array.isArray(entry?.available_role_keys) ? entry.available_role_keys.join(", ") : "",
+    baseFavorDeltaText: String(entry?.base_favor_delta ?? 1),
+    cooldownHoursText: String(entry?.cooldown_hours ?? 0),
+    draftKey: createDraftKey("quick-message"),
+    id: entry?.id?.trim() ?? "",
+    tagsText: Array.isArray(entry?.tags) ? entry.tags.join(", ") : "",
+    text: entry?.text?.trim() ?? "",
+    visibility: entry?.visibility ?? "always"
+  }
+}
+
+function createTagRepliesDraft(tag = "", replies: string[] = []): PhoneTagRepliesDraft {
+  return {
+    draftKey: createDraftKey("tag-replies"),
+    repliesText: replies.join("\n"),
+    tag: tag.trim()
+  }
+}
+
+function createTagRepliesDrafts(replyMap?: Record<string, string[]>): PhoneTagRepliesDraft[] {
+  return Object.entries(replyMap ?? {}).map(([tag, replies]) => createTagRepliesDraft(tag, replies))
+}
+
+function createProactiveMessageDraft(
+  entry?: Partial<StoryPhoneProactiveMessageRule>
+): PhoneProactiveMessageDraft {
+  return {
+    cooldownHoursText: String(entry?.cooldown_hours ?? 24),
+    draftKey: createDraftKey("proactive-message"),
+    enabled: entry?.enabled ?? true,
+    favorDeltaText: String(entry?.favor_delta ?? 0),
+    id: entry?.id?.trim() ?? "",
+    messagesText: Array.isArray(entry?.messages) ? entry.messages.join("\n") : "",
+    replyQuickMessageIds: Array.isArray(entry?.reply_quick_message_ids)
+      ? [...entry.reply_quick_message_ids]
+      : [],
+    triggerExpr: entry?.trigger_expr?.trim() ?? ""
+  }
+}
+
+function createContactProfileDraft(entry?: Partial<StoryPhoneContactProfile>): PhoneContactProfileDraft {
+  return {
+    autoAdd: entry?.auto_add ?? true,
+    draftKey: createDraftKey("contact-profile"),
+    enabled: entry?.enabled ?? true,
+    initialFavorText: String(entry?.initial_favor ?? 20),
+    preferredTagsText: Array.isArray(entry?.preferred_tags) ? entry.preferred_tags.join(", ") : "",
+    proactiveMessages: (entry?.proactive_messages ?? []).map((rule) => createProactiveMessageDraft(rule)),
+    replyByTag: createTagRepliesDrafts(entry?.reply_by_tag),
+    roleKey: entry?.role_key?.trim() ?? ""
+  }
+}
+
 let draftKeySeed = 0
 
 function createDraftKey(prefix: string) {
@@ -223,7 +324,10 @@ function createDraftKey(prefix: string) {
 function createEmptyDraftState(): PhoneDraftState {
   return {
     actions: [],
+    contactProfiles: [],
+    fallbackReplies: [],
     personalities: [],
+    quickMessages: [],
     replies: [],
     talks: [],
     tracks: []
@@ -333,30 +437,68 @@ function buildActionPayload(entry: PhoneActionDraft): StoryPhoneActionLibraryEnt
 function buildReplyPayload(entry: PhoneReplyDraft): StoryPhoneReplyLibraryEntry {
   return {
     id: entry.id.trim(),
-    replies: entry.repliesText
-      .split(/\n+/g)
-      .map((line) => line.trim())
-      .filter(Boolean),
+    replies: splitLinesText(entry.repliesText),
     scope: buildScopePayload(entry.scope),
     tags: Array.from(new Set(splitCsvText(entry.tagsText)))
   }
 }
 
-export function useStoryPhoneDraft(source: StoryPhoneFile) {
-  const draft = reactive(createEmptyDraftState())
-  let legacySections: PhoneLegacySections = {
-    contact_profiles: [],
-    fallback_replies: {},
-    player_quick_messages: []
+function buildQuickMessagePayload(entry: PhoneQuickMessageDraft): StoryPhoneQuickMessage {
+  return {
+    available_role_keys: Array.from(new Set(splitCsvText(entry.availableRoleKeysText))),
+    base_favor_delta: clampFavor(parseIntegerText(entry.baseFavorDeltaText, 1)),
+    cooldown_hours: Math.max(0, parseIntegerText(entry.cooldownHoursText, 0)),
+    id: entry.id.trim(),
+    tags: Array.from(new Set(splitCsvText(entry.tagsText))),
+    text: entry.text.trim(),
+    visibility: entry.visibility
   }
+}
 
-  function syncFromPhone(phone: StoryPhoneFile) {
-    legacySections = {
-      contact_profiles: clonePlain(phone.contact_profiles ?? []),
-      fallback_replies: clonePlain(phone.fallback_replies ?? {}),
-      player_quick_messages: clonePlain(phone.player_quick_messages ?? [])
+function buildRepliesRecordPayload(entries: PhoneTagRepliesDraft[]) {
+  const replyMap: Record<string, string[]> = {}
+
+  for (const entry of entries) {
+    const tag = entry.tag.trim()
+    const replies = splitLinesText(entry.repliesText)
+    if (!tag || replies.length === 0) {
+      continue
     }
 
+    replyMap[tag] = replies
+  }
+
+  return replyMap
+}
+
+function buildProactiveMessagePayload(entry: PhoneProactiveMessageDraft): StoryPhoneProactiveMessageRule {
+  return {
+    cooldown_hours: Math.max(1, parseIntegerText(entry.cooldownHoursText, 24)),
+    enabled: entry.enabled,
+    favor_delta: Math.max(-100, Math.min(100, parseIntegerText(entry.favorDeltaText, 0))),
+    id: entry.id.trim(),
+    messages: splitLinesText(entry.messagesText),
+    reply_quick_message_ids: Array.from(new Set(entry.replyQuickMessageIds.map((id) => id.trim()).filter(Boolean))),
+    trigger_expr: entry.triggerExpr.trim()
+  }
+}
+
+function buildContactProfilePayload(entry: PhoneContactProfileDraft): StoryPhoneContactProfile {
+  return {
+    auto_add: entry.autoAdd,
+    enabled: entry.enabled,
+    initial_favor: clampFavor(parseIntegerText(entry.initialFavorText, 20)),
+    preferred_tags: Array.from(new Set(splitCsvText(entry.preferredTagsText))),
+    proactive_messages: entry.proactiveMessages.map((rule) => buildProactiveMessagePayload(rule)),
+    reply_by_tag: buildRepliesRecordPayload(entry.replyByTag),
+    role_key: entry.roleKey.trim()
+  }
+}
+
+export function useStoryPhoneDraft(source: StoryPhoneFile) {
+  const draft = reactive(createEmptyDraftState())
+
+  function syncFromPhone(phone: StoryPhoneFile) {
     draft.tracks = (phone.relationship_tracks ?? []).map((track) => ({
       descr: track.descr,
       draftKey: createDraftKey("track"),
@@ -376,20 +518,23 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
     draft.talks = (phone.talk_library ?? []).map((entry) => createTalkDraft(entry))
     draft.actions = (phone.action_library ?? []).map((entry) => createActionDraft(entry))
     draft.replies = (phone.reply_library ?? []).map((entry) => createReplyDraft(entry))
+    draft.quickMessages = (phone.player_quick_messages ?? []).map((entry) => createQuickMessageDraft(entry))
+    draft.contactProfiles = (phone.contact_profiles ?? []).map((entry) => createContactProfileDraft(entry))
+    draft.fallbackReplies = createTagRepliesDrafts(phone.fallback_replies)
   }
 
   function buildPhoneFile(): StoryPhoneFile {
     return {
       action_library: draft.actions.map((entry) => buildActionPayload(entry)),
-      contact_profiles: clonePlain(legacySections.contact_profiles),
-      fallback_replies: clonePlain(legacySections.fallback_replies),
+      contact_profiles: draft.contactProfiles.map((entry) => buildContactProfilePayload(entry)),
+      fallback_replies: buildRepliesRecordPayload(draft.fallbackReplies),
       personality_library: draft.personalities.map((personality) => ({
         descr: personality.descr.trim(),
         id: personality.id.trim(),
         name: personality.name.trim(),
         style_tags: Array.from(new Set(splitCsvText(personality.styleTagsText)))
       })),
-      player_quick_messages: clonePlain(legacySections.player_quick_messages),
+      player_quick_messages: draft.quickMessages.map((entry) => buildQuickMessagePayload(entry)),
       relationship_tracks: draft.tracks.map((track) => buildTrackPayload(track)),
       reply_library: draft.replies.map((entry) => buildReplyPayload(entry)),
       talk_library: draft.talks.map((entry) => buildTalkPayload(entry))
@@ -456,11 +601,56 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
     draft.replies.splice(index, 1)
   }
 
+  function addQuickMessage() {
+    draft.quickMessages.push(createQuickMessageDraft())
+  }
+
+  function removeQuickMessage(index: number) {
+    draft.quickMessages.splice(index, 1)
+  }
+
+  function addContactProfile(roleKey = "") {
+    draft.contactProfiles.push(createContactProfileDraft({ role_key: roleKey }))
+  }
+
+  function removeContactProfile(index: number) {
+    draft.contactProfiles.splice(index, 1)
+  }
+
+  function addContactReply(profile: PhoneContactProfileDraft) {
+    profile.replyByTag.push(createTagRepliesDraft())
+  }
+
+  function removeContactReply(profile: PhoneContactProfileDraft, index: number) {
+    profile.replyByTag.splice(index, 1)
+  }
+
+  function addProactiveMessage(profile: PhoneContactProfileDraft) {
+    profile.proactiveMessages.push(createProactiveMessageDraft())
+  }
+
+  function removeProactiveMessage(profile: PhoneContactProfileDraft, index: number) {
+    profile.proactiveMessages.splice(index, 1)
+  }
+
+  function addFallbackReply() {
+    draft.fallbackReplies.push(createTagRepliesDraft())
+  }
+
+  function removeFallbackReply(index: number) {
+    draft.fallbackReplies.splice(index, 1)
+  }
+
   syncFromPhone(source)
 
   return {
     addAction,
+    addContactProfile,
+    addContactReply,
+    addFallbackReply,
     addPersonality,
+    addProactiveMessage,
+    addQuickMessage,
     addReply,
     addTalk,
     addTrack,
@@ -468,7 +658,12 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
     buildPhoneFile,
     draft,
     removeAction,
+    removeContactProfile,
+    removeContactReply,
+    removeFallbackReply,
     removePersonality,
+    removeProactiveMessage,
+    removeQuickMessage,
     removeReply,
     removeTalk,
     removeTrack,
