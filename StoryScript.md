@@ -87,6 +87,8 @@ return false
 适用字段：
 
 - 对白内容
+- 消息提示内容
+- 手机联系人短句、动作文本、主动消息、特配回复、兜底回复
 - 其他文本模板字段
 
 规则：
@@ -125,6 +127,12 @@ ${term.player.respect}
 
 ```txt
 县城等级已经达到 ${county.level} 级。
+```
+
+过程脚本中的字符串字面量也支持 `${...}` 插值，适合传给手机消息、提示消息等文本函数。
+
+```ts
+phone_send_from_contact("important:zhuli", "${player.name_xing}${player.name_ming}，今天的材料我已经整理好了。")
 ```
 
 ## 4. 变量空间与权限
@@ -476,6 +484,7 @@ phone_mark_read("important:zhuli")
 - `phone.json5` 中每个联系人还可以配置 `proactive_messages`
 - `proactive_messages[].trigger_expr` 使用与事件 `trigger_expr` 相同的条件脚本规则
 - 当 `trigger_expr` 为 `true` 且冷却时间满足时，运行时会自动让该联系人发送一条预设消息
+- `phone.json5` 里的短句、动作文本、主动消息、特配回复、兜底回复都按模板文本渲染，可以使用 `${player.xxx}`、`${term.xxx}` 等变量
 - `proactive_messages[].reply_quick_message_ids` 可指定这条来信优先展示的短句回复
 - `player_quick_messages` 可通过 `visibility: "suggested-only"` 配置为“仅在被建议时出现”的专用回复
 

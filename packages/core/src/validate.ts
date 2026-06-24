@@ -596,6 +596,24 @@ function pushIssue(
   issues.push({ level, code, message, path })
 }
 
+function validateTextTemplateField(
+  issues: ValidationIssue[],
+  code: string,
+  label: string,
+  value: string,
+  path: string[]
+) {
+  for (const issue of validateStoryTextTemplate(value)) {
+    pushIssue(
+      issues,
+      "error",
+      code,
+      `${label} template is invalid at line ${issue.lineNumber}: ${issue.message}`,
+      path
+    )
+  }
+}
+
 function isChainActionNode(event: StoryChainNodeFile): event is StoryActionFile {
   return "exec_script" in event
 }
@@ -865,6 +883,14 @@ function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[])
   }
 
   for (const [messageIndex, message] of document.phone.player_quick_messages.entries()) {
+    validateTextTemplateField(
+      issues,
+      "phone.quick-message.template-invalid",
+      `Phone quick message "${message.id}" text`,
+      message.text,
+      ["phone", "player_quick_messages", String(messageIndex), "text"]
+    )
+
     for (const [roleKeyIndex, roleKey] of message.available_role_keys.entries()) {
       if (!roleKeys.has(roleKey)) {
         pushIssue(
@@ -879,6 +905,14 @@ function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[])
   }
 
   for (const [entryIndex, entry] of document.phone.talk_library.entries()) {
+    validateTextTemplateField(
+      issues,
+      "phone.talk.template-invalid",
+      `Phone talk "${entry.id}" text`,
+      entry.text,
+      ["phone", "talk_library", String(entryIndex), "text"]
+    )
+
     validatePhoneScope(
       entry.scope,
       ["phone", "talk_library", String(entryIndex), "scope"],
@@ -892,6 +926,21 @@ function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[])
   }
 
   for (const [entryIndex, entry] of document.phone.action_library.entries()) {
+    validateTextTemplateField(
+      issues,
+      "phone.action.label-template-invalid",
+      `Phone action "${entry.id}" label`,
+      entry.label,
+      ["phone", "action_library", String(entryIndex), "label"]
+    )
+    validateTextTemplateField(
+      issues,
+      "phone.action.text-template-invalid",
+      `Phone action "${entry.id}" text`,
+      entry.text,
+      ["phone", "action_library", String(entryIndex), "text"]
+    )
+
     validatePhoneScope(
       entry.scope,
       ["phone", "action_library", String(entryIndex), "scope"],
@@ -917,6 +966,16 @@ function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[])
   }
 
   for (const [entryIndex, entry] of document.phone.reply_library.entries()) {
+    for (const [replyIndex, reply] of entry.replies.entries()) {
+      validateTextTemplateField(
+        issues,
+        "phone.reply.template-invalid",
+        `Phone reply "${entry.id}" reply`,
+        reply,
+        ["phone", "reply_library", String(entryIndex), "replies", String(replyIndex)]
+      )
+    }
+
     validatePhoneScope(
       entry.scope,
       ["phone", "reply_library", String(entryIndex), "scope"],
@@ -935,7 +994,44 @@ function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[])
       )
     }
 
+    for (const [tag, replies] of Object.entries(profile.reply_by_tag)) {
+      for (const [replyIndex, reply] of replies.entries()) {
+        validateTextTemplateField(
+          issues,
+          "phone.contact-profile.reply-template-invalid",
+          `Phone contact profile "${profile.role_key}" reply "${tag}"`,
+          reply,
+          [
+            "phone",
+            "contact_profiles",
+            String(profileIndex),
+            "reply_by_tag",
+            tag,
+            String(replyIndex)
+          ]
+        )
+      }
+    }
+
     for (const [ruleIndex, rule] of profile.proactive_messages.entries()) {
+      for (const [messageIndex, message] of rule.messages.entries()) {
+        validateTextTemplateField(
+          issues,
+          "phone.proactive-rule.message-template-invalid",
+          `Phone proactive rule "${profile.role_key}/${rule.id}" message`,
+          message,
+          [
+            "phone",
+            "contact_profiles",
+            String(profileIndex),
+            "proactive_messages",
+            String(ruleIndex),
+            "messages",
+            String(messageIndex)
+          ]
+        )
+      }
+
       const triggerIssues = validateStoryScriptContent(
         valsFile,
         rule.trigger_expr,
@@ -980,6 +1076,18 @@ function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[])
           )
         }
       }
+    }
+  }
+
+  for (const [tag, replies] of Object.entries(document.phone.fallback_replies)) {
+    for (const [replyIndex, reply] of replies.entries()) {
+      validateTextTemplateField(
+        issues,
+        "phone.fallback-reply.template-invalid",
+        `Phone fallback reply "${tag}"`,
+        reply,
+        ["phone", "fallback_replies", tag, String(replyIndex)]
+      )
     }
   }
 }

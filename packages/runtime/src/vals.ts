@@ -1493,6 +1493,24 @@ function resolveStoryScriptPlaceholderValue(
   )
 }
 
+function renderStoryScriptStringLiteralValue(
+  text: string,
+  state: StoryScriptRuntimeState,
+  node: ts.Node
+) {
+  if (!text.includes("__story_ref_")) {
+    return text
+  }
+
+  return text.replace(/__story_ref_\d+/g, (identifier) => {
+    if (!state.placeholderMap.has(identifier)) {
+      return identifier
+    }
+
+    return formatTemplateValue(resolveStoryScriptPlaceholderValue(state, identifier, node))
+  })
+}
+
 function getStoryScriptSafeIdentifierValue(identifier: string) {
   if (Object.prototype.hasOwnProperty.call(STORY_SCRIPT_SAFE_GLOBALS, identifier)) {
     return STORY_SCRIPT_SAFE_GLOBALS[identifier as keyof typeof STORY_SCRIPT_SAFE_GLOBALS]
@@ -2034,7 +2052,7 @@ function evaluateStoryScriptAstExpression(
   }
 
   if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
-    return expression.text
+    return renderStoryScriptStringLiteralValue(expression.text, state, expression)
   }
 
   if (expression.kind === ts.SyntaxKind.TrueKeyword) {
