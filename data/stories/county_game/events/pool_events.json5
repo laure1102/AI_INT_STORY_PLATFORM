@@ -113,40 +113,6 @@
   },
   {
     bgm: '',
-    end_script: '// 【联系人接入】\n// 老算命属于县城的风向标型角色，先接入手机联系人，方便后续做玄学提示线。\nphone_add_contact("normal:start_suanming")\nphone_set_favor("normal:start_suanming", 18)\n\n// 【首条消息】\n// 主动留号，强化“联系人都是剧情关系延伸”的体验。\nphone_send_from_contact("normal:start_suanming", "小友，若哪天心里拿不准，就给老夫发个消息。县里这地方，风比人先动。")',
-    id: 'suanming_exchange_contact',
-    init_script: '',
-    invoke_params: [],
-    location: 'jiedao_renshao',
-    object_keys: [
-      'normal:start_suanming',
-    ],
-    presentation: {
-      dialogues: [
-        {
-          content: '小友脚步急，心火旺，兜里倒是有了新财气。',
-          speaker_key: 'normal:start_suanming',
-          speaker_type: 'object',
-        },
-        {
-          content: '你这开场白，听着像冲着我来的。',
-          speaker_key: 'player',
-          speaker_type: 'player',
-        },
-        {
-          content: '县里这地方，风刚起的时候，最先乱的是人心。要是以后拿不准，给老夫发个消息。',
-          speaker_key: 'normal:start_suanming',
-          speaker_type: 'object',
-        },
-      ],
-      type: 'dialogue',
-    },
-    title: '老算命递来号码',
-    trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && !phone_has_contact("normal:start_suanming")',
-    trigger_mode: 'condition',
-  },
-  {
-    bgm: '',
     end_script: '// 【联系人接入】\n// 娱乐场的大妈偏信息贩子和门路角色，适合提供夜生活、人脉和八卦线。\nphone_add_contact("normal:yule_dama")\nphone_set_favor("normal:yule_dama", 16)\n\n// 【首条消息】\nphone_send_from_contact("normal:yule_dama", "老板，这是我号码。你以后想找热闹、找人、找包厢，都可以先问我。")',
     id: 'yule_dama_drop_contact',
     init_script: '',
@@ -309,40 +275,6 @@
   },
   {
     bgm: '',
-    end_script: '// 【关系推进】\nphone_add_favor("normal:start_suanming", 1)\n\n// 【事件余波】\nphone_send_from_contact("normal:start_suanming", "小友，老夫不常提醒人第二遍。真要去南边，先给我发消息。")',
-    id: 'phone_suanming_paid_consult',
-    init_script: '',
-    invoke_params: [],
-    location: 'jiedao_renshao',
-    object_keys: [
-      'normal:start_suanming',
-    ],
-    presentation: {
-      dialogues: [
-        {
-          content: '红包老夫收了。你这卦，问的不是运，是人。',
-          speaker_key: 'normal:start_suanming',
-          speaker_type: 'object',
-        },
-        {
-          content: '人和运，本来就分不开。',
-          speaker_key: 'player',
-          speaker_type: 'player',
-        },
-        {
-          content: '那就记住一句。三天内，少碰南边来的热闹局，热闹里藏着口舌。 ',
-          speaker_key: 'normal:start_suanming',
-          speaker_type: 'object',
-        },
-      ],
-      type: 'dialogue',
-    },
-    title: '向老算命付费问卦',
-    trigger_expr: '',
-    trigger_mode: 'invoke',
-  },
-  {
-    bgm: '',
     end_script: '// 【关系推进】\nphone_add_favor("normal:yule_dama", 2)\n\n// 【事件余波】\nphone_send_from_contact("normal:yule_dama", "老板，今晚该避的人我都替你挡开了。你要再来，提前吱我一声。")',
     id: 'phone_yule_dama_book_room',
     init_script: '',
@@ -364,7 +296,7 @@
   },
   {
     bgm: '',
-    end_script: 'let name = "normal:debt_collector"\n// 【联系人接入】\nphone_add_contact(name )\nphone_set_favor(name , 10)\n\n\n// 【首条消息】\nphone_send_from_contact(name , "${player.name_xing}${player.name_ming}，你欠的10万块是不是该换了？")',
+    end_script: 'let name = "normal:debt_collector"\n// 【联系人接入】\nphone_add_contact(name )\nphone_set_favor(name , 10)',
     id: 'shouzhai-start',
     init_script: '',
     invoke_params: [],

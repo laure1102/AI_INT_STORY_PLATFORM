@@ -147,10 +147,6 @@
       cost_money: 300,
       id: 'action_xianzhang_office_visit',
       invoke: {
-        delay: {
-          unit: 'hours',
-          value: 12,
-        },
         event_id: 'phone_xianzhang_office_visit',
         target_type: 'pool',
       },
@@ -170,38 +166,6 @@
         'formal_visit',
       ],
       text: '我明天去县里，当面向您汇报。',
-    },
-    {
-      base_favor_delta: 2,
-      cooldown_hours: 36,
-      cost_items: [],
-      cost_money: 188,
-      id: 'action_suanming_paid_consult',
-      invoke: {
-        delay: {
-          unit: 'hours',
-          value: 1,
-        },
-        event_id: 'phone_suanming_paid_consult',
-        target_type: 'pool',
-      },
-      label: '付费问一卦',
-      scope: {
-        contact_tracks: [
-          'social',
-        ],
-        max_favor: 100,
-        min_favor: 40,
-        personality_ids: [],
-        role_keys: [
-          'normal:start_suanming',
-        ],
-      },
-      tags: [
-        'gift_basic',
-        'fortune',
-      ],
-      text: '我出个红包，你给我仔细算一卦。',
     },
     {
       base_favor_delta: 2,
@@ -386,48 +350,6 @@
     {
       auto_add: true,
       enabled: true,
-      initial_favor: 18,
-      preferred_tags: [
-        'daily',
-        'care',
-      ],
-      proactive_messages: [
-        {
-          cooldown_hours: 24,
-          enabled: true,
-          favor_delta: 0,
-          id: 'fortune_hint',
-          messages: [
-            '小友，今日东南方位的气运略有波动，行事可多留个心眼。',
-            '老夫掐指一算，你这两天恐怕要遇上点有意思的人。',
-          ],
-          reply_quick_message_ids: [
-            'talk_suanming_fortune_ask',
-            'talk_suanming_destiny_hint',
-            'greet',
-            'thanks',
-          ],
-          trigger_expr: '${system.now_hour} >= 8 && ${system.now_hour} <= 20 && phone_favor("normal:start_suanming") >= 15',
-        },
-      ],
-      reply_by_tag: {
-        care: [
-          '命还硬着呢。',
-          '老骨头还能撑。',
-        ],
-        daily: [
-          '小友今日气运平稳。',
-          '老夫在。',
-        ],
-        work: [
-          '你先说来听听。',
-        ],
-      },
-      role_key: 'normal:start_suanming',
-    },
-    {
-      auto_add: true,
-      enabled: true,
       initial_favor: 16,
       preferred_tags: [
         'daily',
@@ -491,7 +413,7 @@
           favor_delta: 0,
           id: 'debt_first_pressure',
           messages: [
-            '欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。',
+            '${player.name_xing}${player.name_ming}！ 欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。',
           ],
           reply_quick_message_ids: [],
           trigger_expr: '${player.debt_huadu_active} && !${player.debt_huadu_msg_sent} && !${player.debt_huadu_cleared}',

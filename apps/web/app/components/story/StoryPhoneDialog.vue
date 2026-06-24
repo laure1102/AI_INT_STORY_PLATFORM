@@ -345,6 +345,7 @@ watch(
           </div>
         </div>
 
+        <div class="phone-dialog__body">
         <div class="phone-dialog__tabs">
           <button
             v-for="tab in tabOptions"
@@ -1453,6 +1454,16 @@ watch(
             </div>
           </div>
         </div>
+
+        <div class="phone-dialog__footer">
+          <button class="btn-secondary phone-dialog__action" type="button" @click="emit('close')">
+            关闭
+          </button>
+          <button class="btn-primary phone-dialog__action" type="button" :disabled="saving" @click="submitDraft">
+            {{ saving ? "保存中..." : "保存手机配置" }}
+          </button>
+        </div>
+        </div>
       </section>
     </div>
   </Teleport>
@@ -1470,11 +1481,22 @@ watch(
 }
 
 .phone-dialog__panel {
+  display: flex;
+  flex-direction: column;
   width: min(1420px, calc(100vw - 36px));
   max-height: calc(100vh - 36px);
   padding: 18px;
-  overflow: auto;
+  overflow: hidden;
   border-radius: 24px;
+}
+
+.phone-dialog__body {
+  display: grid;
+  gap: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .phone-dialog__header,
@@ -1546,6 +1568,15 @@ watch(
 
 .phone-dialog__tabs {
   margin-top: 18px;
+}
+
+.phone-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid rgba(186, 220, 255, 0.12);
 }
 
 .phone-dialog__tab,
