@@ -2828,11 +2828,9 @@ function getLatestPhoneSuggestedOptionIds(
   roleKey: string,
   snapshot?: RuntimeStorySessionSnapshot
 ) {
-  const latestSuggestedMessage = snapshot
-    ? getPhoneThread(snapshot, roleKey)?.messages
-      .slice()
-      .reverse()
-      .find((message) => message.sender === "contact" && message.source_rule_id)
+  const latestMessage = snapshot ? getPhoneThread(snapshot, roleKey)?.messages.at(-1) : null
+  const latestSuggestedMessage = latestMessage?.sender === "contact" && latestMessage.source_rule_id
+    ? latestMessage
     : null
   const suggestedRule = latestSuggestedMessage?.source_rule_id
     ? getPhoneProactiveRulesForContact(bundle, roleKey).find(
@@ -4481,7 +4479,14 @@ function resolvePhoneTalkOptionsForContact(
 
   const suggestedIds = getLatestPhoneSuggestedOptionIds(bundle, normalizedRoleKey, snapshot)
   const talkLibraryOptions = getBundlePhoneConfig(bundle).talk_library
-    .filter((entry) => normalizeText(entry.text) && matchesPhoneLibraryScope(entry.scope, meta))
+    .filter((entry) => {
+      const entryId = normalizeText(entry.id)
+      if (!normalizeText(entry.text) || !matchesPhoneLibraryScope(entry.scope, meta)) {
+        return false
+      }
+
+      return suggestedIds.size === 0 || suggestedIds.has(entryId)
+    })
     .map((entry) => {
       const tags = Array.from(new Set((entry.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
       return {
@@ -4512,7 +4517,7 @@ function resolvePhoneTalkOptionsForContact(
         return false
       }
 
-      return message.visibility !== "suggested-only" || suggestedIds.has(normalizeText(message.id))
+      return suggestedIds.has(normalizeText(message.id))
     })
     .map((message) => {
       const tags = Array.from(new Set((message.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
@@ -4531,7 +4536,7 @@ function resolvePhoneTalkOptionsForContact(
     })
     .filter((entry) => entry.id && entry.text)
 
-  return [...talkLibraryOptions, ...legacyQuickMessages]
+  const sortedOptions = [...talkLibraryOptions, ...legacyQuickMessages]
     .sort((left, right) => {
       if (left.suggested !== right.suggested) {
         return left.suggested ? -1 : 1
@@ -4547,6 +4552,17 @@ function resolvePhoneTalkOptionsForContact(
 
       return left.id.localeCompare(right.id, "zh-Hans-CN")
     })
+  const seenTexts = new Set<string>()
+
+  return sortedOptions.filter((option) => {
+    const textKey = normalizeText(option.text)
+    if (!textKey || seenTexts.has(textKey)) {
+      return false
+    }
+
+    seenTexts.add(textKey)
+    return true
+  })
 }
 
 function getPhoneProactiveRulesForContact(

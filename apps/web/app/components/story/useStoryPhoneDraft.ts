@@ -268,7 +268,7 @@ function createQuickMessageDraft(entry?: Partial<StoryPhoneQuickMessage>): Phone
     id: entry?.id?.trim() ?? "",
     tagsText: Array.isArray(entry?.tags) ? entry.tags.join(", ") : "",
     text: entry?.text?.trim() ?? "",
-    visibility: entry?.visibility ?? "always"
+    visibility: entry?.visibility ?? "suggested-only"
   }
 }
 

@@ -710,7 +710,7 @@ export const storyPhoneQuickMessageSchema = z.object({
   tags: z.array(z.string()).default([]),
   base_favor_delta: z.number().int().min(0).max(100).default(1),
   cooldown_hours: z.number().int().min(0).default(0),
-  visibility: z.enum(["always", "suggested-only"]).default("always"),
+  visibility: z.enum(["always", "suggested-only"]).default("suggested-only"),
   available_role_keys: z.array(z.string()).default([])
 }).transform((message) => ({
   id: message.id.trim(),

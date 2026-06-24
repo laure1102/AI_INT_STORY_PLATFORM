@@ -486,7 +486,10 @@ phone_mark_read("important:zhuli")
 - 当 `trigger_expr` 为 `true` 且冷却时间满足时，运行时会自动让该联系人发送一条预设消息
 - `phone.json5` 里的短句、动作文本、主动消息、特配回复、兜底回复都按模板文本渲染，可以使用 `${player.xxx}`、`${term.xxx}` 等变量
 - `proactive_messages[].reply_quick_message_ids` 可指定这条来信优先展示的短句回复
-- `player_quick_messages` 可通过 `visibility: "suggested-only"` 配置为“仅在被建议时出现”的专用回复
+- 普通主动闲聊短句使用 `talk_library`；运行时会按联系人关系轨道、性格、好感度、角色范围筛选
+- `player_quick_messages` 只作为 NPC 主动消息的推荐回复库使用，必须由 `proactive_messages[].reply_quick_message_ids` 显式引用才会显示
+- `player_quick_messages.visibility` 保留旧数据兼容；新内容统一使用 `suggested-only`，不要用它做全局常驻闲聊短句
+- 最终显示给玩家的说话短句会按渲染后的文本去重，优先保留推荐、偏好和好感收益更高的项
 
 ### 6.7 行动 doing 函数
 

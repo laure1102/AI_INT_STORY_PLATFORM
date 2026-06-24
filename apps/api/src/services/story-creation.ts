@@ -1665,6 +1665,8 @@ function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "背包函数：bag_add(\"player\", \"item_id\", 1) 添加物品；bag_remove(\"player\", \"item_id\", 1) 扣除物品并返回 boolean；bag_count(\"player\", \"item_id\") 返回数量；bag_has(\"player\", \"item_id\", 1) 检查数量。",
     "背包函数里的 item_id 必须来自现有物品或本次 items 草稿；如果新增物品，事件脚本必须引用该新增物品 id。",
     "手机联系人资产写入 phone 草稿：新增/调整联系人短句、动作、回复、联系人特配、主动消息规则时输出 phone，不要只在 notes 里描述。事件脚本只用于运行时行为，例如 phone_add_contact、phone_send_from_contact、phone_add_favor。",
+    "手机联系人普通“说话/闲聊”必须写入 phone.talk_library；player_quick_messages 只作为 NPC 主动消息的推荐回复库使用，不要把泛用闲聊短句当成全局快捷消息。",
+    "proactive_messages[].reply_quick_message_ids 可以引用 phone.talk_library 的短句 id，也可以引用已有 player_quick_messages 的专用回复 id；主动消息涉及具体剧情时，必须推荐语境匹配的回复，不要推荐无关泛用社交短句。",
     "phone.talk_library/action_library 的 invoke 只会在玩家通过手机 UI 选择对应短句或动作时触发；StoryScript 里的 phone_send_to_contact/phone_send_from_contact 只是直接写入消息，不会自动匹配短句库并触发 invoke。剧情脚本需要延迟调度事件时，直接使用 invoke_once 保留语句。",
     "行动资产写入 doing 草稿：玩家可主动选择的玩法入口必须输出 doing 菜单/行动。doing 行动不配置 trigger_mode、trigger_expr、invoke_params；显示条件写 visible_expr，触发只来自菜单选择。",
     "商城资产写入 shop 草稿：新增或调整商城分类、商品货架时输出 shop.categories/shop.products，不要只在 notes 里描述。商城不能创建物品资产，只能引用现有 item id 或本次 draft.items 里同时生成的 item id。",

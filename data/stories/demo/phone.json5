@@ -1021,7 +1021,7 @@
       tags: ["daily"],
       base_favor_delta: 1,
       cooldown_hours: 6,
-      visibility: "always",
+      visibility: "suggested-only",
       available_role_keys: [],
     },
     {
@@ -1030,7 +1030,7 @@
       tags: ["care"],
       base_favor_delta: 2,
       cooldown_hours: 12,
-      visibility: "always",
+      visibility: "suggested-only",
       available_role_keys: [],
     },
     {
@@ -1039,7 +1039,7 @@
       tags: ["work"],
       base_favor_delta: 1,
       cooldown_hours: 8,
-      visibility: "always",
+      visibility: "suggested-only",
       available_role_keys: [],
     },
     {
@@ -1048,7 +1048,7 @@
       tags: ["invite", "care"],
       base_favor_delta: 2,
       cooldown_hours: 24,
-      visibility: "always",
+      visibility: "suggested-only",
       available_role_keys: [],
     },
     {
@@ -1057,7 +1057,7 @@
       tags: ["care", "gratitude"],
       base_favor_delta: 2,
       cooldown_hours: 10,
-      visibility: "always",
+      visibility: "suggested-only",
       available_role_keys: [],
     },
     {

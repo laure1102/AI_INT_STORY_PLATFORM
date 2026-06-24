@@ -1308,7 +1308,7 @@ watch(
           <div class="phone-dialog__section-head">
             <div>
               <h3 class="phone-dialog__section-title">玩家快捷消息</h3>
-              <p class="phone-dialog__section-note">联系人主动发消息后，可推荐玩家选择这些预制回复。</p>
+              <p class="phone-dialog__section-note">联系人主动发消息后，可通过推荐 ID 展示这些预制回复；普通闲聊请维护“闲聊短句库”。</p>
             </div>
             <div class="phone-dialog__section-tools">
               <input
@@ -1335,7 +1335,7 @@ watch(
                   <th>标签</th>
                   <th>好感</th>
                   <th>冷却</th>
-                  <th>可见性</th>
+                  <th>推荐方式</th>
                   <th>可用角色</th>
                   <th class="phone-dialog__actions-col">操作</th>
                 </tr>
@@ -1369,8 +1369,8 @@ watch(
                   </td>
                   <td>
                     <select v-model="message.visibility" class="text-input phone-dialog__select">
-                      <option value="always">总是显示</option>
                       <option value="suggested-only">仅被推荐</option>
+                      <option value="always">兼容旧值</option>
                     </select>
                   </td>
                   <td>
