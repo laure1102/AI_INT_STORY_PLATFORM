@@ -2326,6 +2326,8 @@ watch(
       :roles="storyDocument.roles"
       :save-success-message="phoneSaveSuccessMessage"
       :saving="isSaving"
+      :story="storyDocument"
+      :vals="storyScriptVals"
       @close="closePhoneDialog"
       @save="handleSavePhone"
     />

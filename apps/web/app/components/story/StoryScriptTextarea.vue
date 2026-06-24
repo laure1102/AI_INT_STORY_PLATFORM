@@ -20,7 +20,7 @@ import {
 const props = withDefaults(defineProps<{
   highlight?: boolean
   minHeight?: string
-  mode: "predicate" | "procedure"
+  mode: "predicate" | "procedure" | "template"
   placeholder?: string
   story?: StoryDocument | null
   vals: StoryValsFile
@@ -47,11 +47,16 @@ const autocompleteState = reactive({
 })
 
 const autocompleteCandidates = computed(() =>
-  mergeStoryScriptAutocompleteItems(
-    buildStoryScriptBuiltinAutocompleteItems(),
-    buildStoryScriptValAutocompleteItems(props.vals),
-    buildStoryReferAutocompleteItems(props.story)
-  )
+  props.mode === "template"
+    ? mergeStoryScriptAutocompleteItems(
+        buildStoryScriptValAutocompleteItems(props.vals),
+        buildStoryReferAutocompleteItems(props.story)
+      )
+    : mergeStoryScriptAutocompleteItems(
+        buildStoryScriptBuiltinAutocompleteItems(),
+        buildStoryScriptValAutocompleteItems(props.vals),
+        buildStoryReferAutocompleteItems(props.story)
+      )
 )
 
 const invokeAutocompleteContext = computed(() =>

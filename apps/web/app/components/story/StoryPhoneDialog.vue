@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, reactive, shallowRef, watch } from "vue"
 import type {
+  StoryDocument,
   StoryPhoneContactTrackId,
   StoryPhoneFile,
-  StoryRolesFile
+  StoryRolesFile,
+  StoryValsFile
 } from "@story-mgr/core"
+import StoryScriptTextarea from "./StoryScriptTextarea.vue"
 import { useStoryPhoneDraft } from "./useStoryPhoneDraft"
 
 type PhoneTab =
@@ -31,6 +34,8 @@ const props = defineProps<{
   roles: StoryRolesFile
   saveSuccessMessage?: string | null
   saving: boolean
+  story: StoryDocument
+  vals: StoryValsFile
 }>()
 
 const emit = defineEmits<{
@@ -1209,11 +1214,14 @@ watch(
                     </label>
                     <label class="phone-dialog__field phone-dialog__field--wide">
                       <span class="phone-dialog__label">消息列表</span>
-                      <textarea
+                      <StoryScriptTextarea
                         v-model="rule.messagesText"
-                        class="text-input phone-dialog__textarea"
-                        rows="4"
+                        class="phone-dialog__script-textarea"
+                        min-height="104px"
+                        mode="template"
                         placeholder="一行一条 NPC 主动消息"
+                        :story="props.story"
+                        :vals="props.vals"
                       />
                     </label>
                   </div>
@@ -1264,11 +1272,14 @@ watch(
                         <input v-model="entry.tag" class="text-input phone-dialog__cell-input" type="text" placeholder="pressure" />
                       </td>
                       <td>
-                        <textarea
+                        <StoryScriptTextarea
                           v-model="entry.repliesText"
-                          class="text-input phone-dialog__textarea phone-dialog__textarea--cell"
-                          rows="3"
+                          class="phone-dialog__script-textarea phone-dialog__script-textarea--cell"
+                          min-height="90px"
+                          mode="template"
                           placeholder="一行一条回复"
+                          :story="props.story"
+                          :vals="props.vals"
                         />
                       </td>
                       <td class="phone-dialog__actions-col">
