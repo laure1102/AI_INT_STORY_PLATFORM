@@ -194,6 +194,11 @@ interface RuntimeStoryPhoneConversationMessage {
   content: string
 }
 
+interface RuntimeStoryPhoneConversationReminder {
+  enabled: boolean
+  interval_minutes: number
+}
+
 interface RuntimeStoryPhoneConversationOption {
   id: string
   text: string
@@ -206,6 +211,7 @@ interface RuntimeStoryPhoneConversationNode {
   id: string
   contact_messages: RuntimeStoryPhoneConversationMessage[]
   player_options: RuntimeStoryPhoneConversationOption[]
+  reminder?: RuntimeStoryPhoneConversationReminder
   end: boolean
   end_script: string
   invoke?: RuntimeStoryPhoneEventInvocation
@@ -232,6 +238,7 @@ interface RuntimeStoryPhoneConversationRuntimeState {
   role_key: string
   node_id: string
   option_id?: string | null
+  last_reminder_game_minute?: number | null
   finished: boolean
 }
 
@@ -353,6 +360,9 @@ export interface RuntimePhoneMessageState {
   option_kind?: "talk" | "action"
   quick_message_id?: string
   source_rule_id?: string
+  phone_conversation_id?: string
+  phone_conversation_node_id?: string
+  phone_conversation_reminder?: boolean
   tags?: string[]
 }
 
@@ -1487,6 +1497,9 @@ function normalizePhoneConversationState(
     role_key: roleKey,
     node_id: nodeId,
     option_id: normalizeOptionalText(state.option_id) ?? null,
+    last_reminder_game_minute: state.last_reminder_game_minute === null || state.last_reminder_game_minute === undefined
+      ? null
+      : Math.max(0, clampInteger(state.last_reminder_game_minute, 0)),
     finished: Boolean(state.finished)
   }
 }
@@ -1668,6 +1681,11 @@ function normalizePhoneMessages(messages: RuntimePhoneMessageState[] | undefined
         option_kind: optionKind,
         quick_message_id: normalizeOptionalText(message.quick_message_id),
         source_rule_id: normalizeOptionalText(message.source_rule_id),
+        phone_conversation_id: normalizeOptionalText(message.phone_conversation_id),
+        phone_conversation_node_id: normalizeOptionalText(message.phone_conversation_node_id),
+        phone_conversation_reminder: message.phone_conversation_reminder === undefined
+          ? undefined
+          : Boolean(message.phone_conversation_reminder),
         tags: Array.isArray(message.tags)
           ? Array.from(new Set(message.tags.map((tag) => normalizeText(tag)).filter(Boolean)))
           : undefined
@@ -4385,6 +4403,7 @@ function reconcileScheduler(
   scanDirectorEntryEvents(bundle, runtimeState, runtimeState.storyDirector)
   ensureLoopSchedules(bundle, runtimeState)
   if (options.runPhoneAutoMessages) {
+    reconcileActivePhoneConversationReminder(bundle, runtimeState, notifications)
     reconcilePhoneAutoMessages(bundle, runtimeState, notifications)
   }
   startNextReadyEventIfIdle(bundle, runtimeState, notifications)
@@ -4605,6 +4624,9 @@ function appendPhoneMessage(
     optionKind?: "talk" | "action"
     quickMessageId?: string
     sourceRuleId?: string
+    phoneConversationId?: string
+    phoneConversationNodeId?: string
+    phoneConversationReminder?: boolean
     tags?: string[]
   } = {}
 ) {
@@ -4627,6 +4649,9 @@ function appendPhoneMessage(
     ...(options.optionKind ? { option_kind: options.optionKind } : {}),
     ...(options.quickMessageId ? { quick_message_id: options.quickMessageId } : {}),
     ...(options.sourceRuleId ? { source_rule_id: options.sourceRuleId } : {}),
+    ...(options.phoneConversationId ? { phone_conversation_id: normalizeText(options.phoneConversationId) } : {}),
+    ...(options.phoneConversationNodeId ? { phone_conversation_node_id: normalizeText(options.phoneConversationNodeId) } : {}),
+    ...(options.phoneConversationReminder ? { phone_conversation_reminder: true } : {}),
     ...(options.tags && options.tags.length > 0
       ? { tags: Array.from(new Set(options.tags.map((tag) => normalizeText(tag)).filter(Boolean))) }
       : {})
@@ -5139,8 +5164,110 @@ function appendPhoneConversationContactMessages(
       continue
     }
 
-    sendPhoneMessageFromContact(bundle, runtimeState.snapshot, notifications, roleKey, content)
+    sendPhoneMessageFromContact(bundle, runtimeState.snapshot, notifications, roleKey, content, {
+      phoneConversationId: conversation.id,
+      phoneConversationNodeId: node.id
+    })
   }
+
+  const activeState = syncActivePhoneConversationState(runtimeState)
+  if (
+    activeState
+    && activeState.conversation_id === conversation.id
+    && activeState.node_id === node.id
+  ) {
+    activeState.last_reminder_game_minute = (
+      getPhoneConversationReminderIntervalMinutes(node) > 0
+      && getPhoneConversationReminderContent(node)
+    )
+      ? getCurrentGameMinute(runtimeState.snapshot)
+      : null
+    runtimeState.snapshot.phone_conversation = activeState
+    runtimeState.activePhoneConversation = activeState
+  }
+}
+
+function getPhoneConversationReminderIntervalMinutes(node: RuntimeStoryPhoneConversationNode) {
+  if (!node.reminder?.enabled) {
+    return 0
+  }
+
+  return Math.max(1, clampInteger(node.reminder.interval_minutes, 60))
+}
+
+function getPhoneConversationReminderContent(node: RuntimeStoryPhoneConversationNode) {
+  for (const message of node.contact_messages.slice().reverse()) {
+    const content = normalizeText(message.content)
+    if (content) {
+      return content
+    }
+  }
+
+  return ""
+}
+
+function reconcileActivePhoneConversationReminder(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[]
+) {
+  const activeState = syncActivePhoneConversationState(runtimeState)
+  if (!activeState) {
+    return false
+  }
+
+  const conversation = findBundlePhoneConversation(bundle, activeState.conversation_id)
+  const node = findPhoneConversationNode(conversation, activeState.node_id)
+  if (!conversation || !node || node.end || node.player_options.length === 0) {
+    return false
+  }
+
+  const hasVisibleReply = node.player_options.some((option) =>
+    isPhoneConversationOptionVisible(bundle, runtimeState.snapshot, option)
+  )
+  if (!hasVisibleReply) {
+    return false
+  }
+
+  const intervalMinutes = getPhoneConversationReminderIntervalMinutes(node)
+  const content = getPhoneConversationReminderContent(node)
+  if (intervalMinutes <= 0 || !content) {
+    return false
+  }
+
+  const nowGameMinute = getCurrentGameMinute(runtimeState.snapshot)
+  if (activeState.last_reminder_game_minute === null || activeState.last_reminder_game_minute === undefined) {
+    activeState.last_reminder_game_minute = nowGameMinute
+    runtimeState.snapshot.phone_conversation = activeState
+    runtimeState.activePhoneConversation = activeState
+    return false
+  }
+
+  const minuteGap = Math.max(0, nowGameMinute - activeState.last_reminder_game_minute)
+  if (minuteGap < intervalMinutes) {
+    return false
+  }
+
+  const message = sendPhoneMessageFromContact(
+    bundle,
+    runtimeState.snapshot,
+    notifications,
+    conversation.role_key,
+    content,
+    {
+      phoneConversationId: conversation.id,
+      phoneConversationNodeId: node.id,
+      phoneConversationReminder: true
+    }
+  )
+  if (!message) {
+    return false
+  }
+
+  activeState.last_reminder_game_minute = nowGameMinute
+  runtimeState.snapshot.phone_conversation = activeState
+  runtimeState.activePhoneConversation = activeState
+  return true
 }
 
 function completePhoneConversation(
@@ -5469,6 +5596,9 @@ function sendPhoneMessageFromContact(
   content: string,
   options: {
     sourceRuleId?: string
+    phoneConversationId?: string
+    phoneConversationNodeId?: string
+    phoneConversationReminder?: boolean
   } = {}
 ) {
   const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
@@ -5476,7 +5606,10 @@ function sendPhoneMessageFromContact(
   ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
   const message = appendPhoneMessage(snapshot, normalizedRoleKey, "contact", renderedContent, {
     read: false,
-    sourceRuleId: options.sourceRuleId
+    sourceRuleId: options.sourceRuleId,
+    phoneConversationId: options.phoneConversationId,
+    phoneConversationNodeId: options.phoneConversationNodeId,
+    phoneConversationReminder: options.phoneConversationReminder
   })
   if (!message) {
     return null

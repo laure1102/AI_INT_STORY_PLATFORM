@@ -386,6 +386,11 @@ export interface StoryPhoneConversationMessage {
   content: string
 }
 
+export interface StoryPhoneConversationReminder {
+  enabled: boolean
+  interval_minutes: number
+}
+
 export interface StoryPhoneConversationOption {
   id: string
   text: string
@@ -398,6 +403,7 @@ export interface StoryPhoneConversationNode {
   id: string
   contact_messages: StoryPhoneConversationMessage[]
   player_options: StoryPhoneConversationOption[]
+  reminder: StoryPhoneConversationReminder
   end: boolean
   end_script: string
   invoke?: StoryPhoneEventInvocation
@@ -439,10 +445,16 @@ export interface StoryPhoneConversationMessageInput {
   content: string
 }
 
+export interface StoryPhoneConversationReminderInput {
+  enabled: boolean
+  interval_minutes: number
+}
+
 export interface StoryPhoneConversationNodeInput {
   id: string
   contact_messages: StoryPhoneConversationMessageInput[]
   player_options: StoryPhoneConversationOptionInput[]
+  reminder: StoryPhoneConversationReminderInput
   end: boolean
   end_script: string
   invoke?: StoryPhoneEventInvocation

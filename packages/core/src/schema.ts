@@ -1029,12 +1029,24 @@ export const storyPhoneConversationOptionSchema = z.object({
   next_node_id: option.next_node_id.trim()
 }))
 
+export const storyPhoneConversationReminderSchema = z.object({
+  enabled: z.boolean().default(false),
+  interval_minutes: z.number().int().min(1).default(60)
+}).default({
+  enabled: false,
+  interval_minutes: 60
+}).transform((reminder) => ({
+  enabled: reminder.enabled,
+  interval_minutes: Math.max(1, Math.trunc(reminder.interval_minutes))
+}))
+
 export const storyPhoneConversationNodeSchema = z.object({
   id: z.string().min(1),
   contact_messages: z.array(z.object({
     content: z.string().default("")
   })).default([]),
   player_options: z.array(storyPhoneConversationOptionSchema).default([]),
+  reminder: storyPhoneConversationReminderSchema,
   end: z.boolean().default(false),
   end_script: z.string().default(""),
   invoke: storyPhoneEventInvocationSchema.optional()
@@ -1052,6 +1064,7 @@ export const storyPhoneConversationNodeSchema = z.object({
     .map((message) => ({ content: message.content.trim() }))
     .filter((message) => message.content.length > 0),
   player_options: node.player_options,
+  reminder: node.reminder,
   end: node.end,
   end_script: node.end_script,
   ...(node.invoke ? { invoke: node.invoke } : {})

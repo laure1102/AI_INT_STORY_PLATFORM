@@ -77,6 +77,14 @@ const invokeTargetLabels: Record<InvokeTargetType, string> = {
   schedule: "定时规则事件"
 }
 
+const reminderIntervalOptions = [
+  { label: "10 分钟", value: "10" },
+  { label: "30 分钟", value: "30" },
+  { label: "1 小时", value: "60" },
+  { label: "2 小时", value: "120" },
+  { label: "6 小时", value: "360" }
+]
+
 const filteredConversations = computed(() => {
   const query = searchText.value.trim().toLowerCase()
   return draft.conversations
@@ -508,12 +516,31 @@ watch(
                     <input v-model="activeNode.end" type="checkbox" />
                     <span>结束节点</span>
                   </label>
+                  <label class="phone-conversations-dialog__check">
+                    <input v-model="activeNode.reminder.enabled" type="checkbox" />
+                    <span>未回复重复提醒</span>
+                  </label>
+                  <label class="phone-conversations-dialog__field" :class="{ 'phone-conversations-dialog__field--disabled': !activeNode.reminder.enabled }">
+                    <span class="phone-conversations-dialog__label">提醒间隔</span>
+                    <select v-model="activeNode.reminder.intervalMinutesText" class="text-input" :disabled="!activeNode.reminder.enabled">
+                      <option
+                        v-for="option in reminderIntervalOptions"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </select>
+                  </label>
                   <div class="phone-conversations-dialog__row-actions">
                     <span class="phone-conversations-dialog__count">节点 {{ activeNodeIndex + 1 }} / {{ activeConversation.nodes.length }}</span>
                     <button class="btn-secondary phone-conversations-dialog__button" type="button" @click="handleRemoveNode(activeConversation, activeNodeIndex)">
                       删除节点
                     </button>
                   </div>
+                  <p class="phone-conversations-dialog__hint phone-conversations-dialog__field--wide">
+                    开启后，如果玩家停留在当前节点没有回复，系统会按间隔重复发送该节点最后一条 NPC 消息。
+                  </p>
                 </div>
 
                 <div class="phone-conversations-dialog__subsection">
@@ -1079,6 +1106,10 @@ watch(
   min-width: 0;
 }
 
+.phone-conversations-dialog__field--disabled {
+  opacity: 0.58;
+}
+
 .phone-conversations-dialog__field--wide {
   grid-column: span 3;
 }
@@ -1086,6 +1117,13 @@ watch(
 .phone-conversations-dialog__label {
   color: var(--text-muted);
   font-size: 0.78rem;
+}
+
+.phone-conversations-dialog__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 
 .phone-conversations-dialog__check {

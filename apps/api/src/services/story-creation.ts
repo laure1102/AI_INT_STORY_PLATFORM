@@ -390,10 +390,19 @@ const draftPhoneConversationOptionSchema = z.object({
   next_node_id: z.string().default("")
 })
 
+const draftPhoneConversationReminderSchema = z.object({
+  enabled: z.boolean().default(false),
+  interval_minutes: z.number().int().min(1).default(60)
+}).default({
+  enabled: false,
+  interval_minutes: 60
+})
+
 const draftPhoneConversationNodeSchema = z.object({
   id: z.string().min(1),
   contact_messages: z.array(draftPhoneConversationMessageSchema).default([]),
   player_options: z.array(draftPhoneConversationOptionSchema).default([]),
+  reminder: draftPhoneConversationReminderSchema,
   end: z.boolean().default(false),
   end_script: z.string().default(""),
   invoke: draftPhoneInvocationSchema.optional()
@@ -689,10 +698,16 @@ const structuredPhoneConversationOptionSchema = z.object({
   next_node_id: z.string().describe("回复后进入的下一节点 id；结束节点或无下一步时填空字符串。")
 })
 
+const structuredPhoneConversationReminderSchema = z.object({
+  enabled: z.boolean().describe("玩家未回复时是否重复发送该节点最后一条 NPC 消息。"),
+  interval_minutes: z.number().int().min(1).describe("重复提醒间隔，单位为游戏内分钟，例如 10、30、60。")
+})
+
 const structuredPhoneConversationNodeSchema = z.object({
   id: z.string().min(1).describe("剧情手机对话节点 id。"),
   contact_messages: z.array(structuredPhoneConversationMessageSchema).describe("进入该节点时 NPC 连续发出的消息；没有时填空数组。"),
   player_options: z.array(structuredPhoneConversationOptionSchema).describe("该节点可选的玩家回复；结束节点填空数组。"),
+  reminder: structuredPhoneConversationReminderSchema.describe("未回复重复提醒设置；不需要提醒时填 {enabled:false, interval_minutes:60}。"),
   end: z.boolean().describe("是否为结束节点。"),
   end_script: z.string().describe("进入结束节点后执行的 StoryScript；没有填空字符串。非空脚本必须写中文注释。"),
   invoke: structuredPhoneInvocationSchema.nullable().describe("结束节点可静默调用后续事件；不调用事件时填 null。")
@@ -2198,6 +2213,10 @@ function normalizeStructuredPhoneConversationsDraft(
           script: option.script,
           next_node_id: option.next_node_id
         })),
+        reminder: {
+          enabled: node.reminder.enabled,
+          interval_minutes: Math.max(1, Math.trunc(node.reminder.interval_minutes))
+        },
         end: node.end,
         end_script: node.end_script,
         ...(node.invoke ? { invoke: toStructuredPhoneInvocation(node.invoke) } : {})
@@ -3385,6 +3404,10 @@ function normalizeDraftPhoneConversations(
             next_node_id: nextNodeId
           }
         }),
+        reminder: {
+          enabled: source.reminder?.enabled ?? false,
+          interval_minutes: Math.max(1, Math.trunc(source.reminder?.interval_minutes ?? 60))
+        },
         end,
         end_script: source.end_script ?? "",
         ...(invoke ? { invoke } : {})

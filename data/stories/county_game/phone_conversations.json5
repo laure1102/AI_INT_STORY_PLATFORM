@@ -24,6 +24,10 @@
               visible_expr: '',
             },
           ],
+          reminder: {
+            enabled: true,
+            interval_minutes: 10,
+          },
         },
         {
           contact_messages: [
@@ -43,6 +47,10 @@
               visible_expr: '',
             },
           ],
+          reminder: {
+            enabled: false,
+            interval_minutes: 60,
+          },
         },
         {
           contact_messages: [],
@@ -58,6 +66,10 @@
             target_type: 'pool',
           },
           player_options: [],
+          reminder: {
+            enabled: false,
+            interval_minutes: 60,
+          },
         },
       ],
       once: true,

@@ -4,6 +4,7 @@ import type {
   StoryPhoneConversationMessage,
   StoryPhoneConversationNode,
   StoryPhoneConversationOption,
+  StoryPhoneConversationReminder,
   StoryPhoneConversationsFile,
   StoryPhoneEventInvocation
 } from "@story-mgr/core"
@@ -42,6 +43,10 @@ export interface PhoneConversationNodeDraft {
   id: string
   invoke: PhoneConversationInvokeDraft
   playerOptions: PhoneConversationOptionDraft[]
+  reminder: {
+    enabled: boolean
+    intervalMinutesText: string
+  }
 }
 
 export interface PhoneConversationDraft {
@@ -122,6 +127,13 @@ function createOptionDraft(option?: Partial<StoryPhoneConversationOption>): Phon
   }
 }
 
+function createReminderDraft(reminder?: Partial<StoryPhoneConversationReminder>) {
+  return {
+    enabled: reminder?.enabled ?? false,
+    intervalMinutesText: String(Math.max(1, parseIntegerText(String(reminder?.interval_minutes ?? "60"), 60)))
+  }
+}
+
 function createNodeDraft(node?: Partial<StoryPhoneConversationNode>): PhoneConversationNodeDraft {
   return {
     contactMessages: (node?.contact_messages ?? []).map((message) => createMessageDraft(message)),
@@ -130,7 +142,8 @@ function createNodeDraft(node?: Partial<StoryPhoneConversationNode>): PhoneConve
     endScript: node?.end_script ?? "",
     id: node?.id?.trim() ?? "",
     invoke: createInvokeDraft(node?.invoke),
-    playerOptions: (node?.player_options ?? []).map((option) => createOptionDraft(option))
+    playerOptions: (node?.player_options ?? []).map((option) => createOptionDraft(option)),
+    reminder: createReminderDraft(node?.reminder)
   }
 }
 
@@ -184,6 +197,10 @@ function buildNodePayload(node: PhoneConversationNodeDraft): StoryPhoneConversat
     end_script: node.endScript,
     id: node.id.trim(),
     ...(invoke ? { invoke } : {}),
+    reminder: {
+      enabled: node.reminder.enabled,
+      interval_minutes: Math.max(1, parseIntegerText(node.reminder.intervalMinutesText, 60))
+    },
     player_options: node.playerOptions.map((option) => buildOptionPayload(option))
   }
 }
@@ -238,7 +255,11 @@ export function useStoryPhoneConversationsDraft(source: StoryPhoneConversationsF
         end: false,
         end_script: "",
         id: "start",
-        player_options: []
+        player_options: [],
+        reminder: {
+          enabled: false,
+          interval_minutes: 60
+        }
       }]
     })
     draft.conversations.push(conversation)
