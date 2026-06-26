@@ -14,6 +14,7 @@ import type {
   StoryEventTriggerMode,
   StoryItemsFile,
   StoryLoopEventFile,
+  StoryMetaFile,
   StoryOnceEventFile,
   StoryPlayerOverrideValsFile,
   StoryPhoneConversationsFile,
@@ -41,6 +42,7 @@ import LoopEventDetailPanel from "./LoopEventDetailPanel.vue"
 import OnceEventDetailPanel from "./OnceEventDetailPanel.vue"
 import StoryCreationWorkspace from "./StoryCreationWorkspace.vue"
 import StoryDoingDialog from "./StoryDoingDialog.vue"
+import StoryGameSettingsDialog from "./StoryGameSettingsDialog.vue"
 import StoryGraphCanvas from "./StoryGraphCanvas.vue"
 import StoryItemsDialog from "./StoryItemsDialog.vue"
 import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
@@ -86,6 +88,7 @@ const {
   saveEvent,
   saveEventLocations,
   saveDoing,
+  saveStoryMeta,
   saveStoryCreationHistorySession,
   saveItems,
   savePhone,
@@ -133,6 +136,7 @@ const isPhoneDialogOpen = shallowRef(false)
 const isReferDialogOpen = shallowRef(false)
 const isRolesDialogOpen = shallowRef(false)
 const isSettingsDialogOpen = shallowRef(false)
+const isGameSettingsDialogOpen = shallowRef(false)
 const scenesSaveSuccessMessage = shallowRef<string | null>(null)
 const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const itemsSaveSuccessMessage = shallowRef<string | null>(null)
@@ -884,6 +888,18 @@ function openSettingsDialog() {
 
 function closeSettingsDialog() {
   isSettingsDialogOpen.value = false
+}
+
+function openGameSettingsDialog() {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isGameSettingsDialogOpen.value = true
+}
+
+function closeGameSettingsDialog() {
+  isGameSettingsDialogOpen.value = false
 }
 
 function createHistoryId(prefix: string) {
@@ -1876,6 +1892,27 @@ async function handleSaveAppSettings(settings: AppSettingsFile) {
   }
 }
 
+async function handleSaveStoryMeta(story: StoryMetaFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+
+  try {
+    storyDocument.value = {
+      ...storyDocument.value,
+      story: await saveStoryMeta(props.storyId, story)
+    }
+    isGameSettingsDialogOpen.value = false
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存游戏设置失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
 async function handleToggleLink(payload: {
   sourceEventId: string
   targetEventId: string
@@ -2023,6 +2060,9 @@ watch(
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openSettingsDialog">
             设置
+          </button>
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openGameSettingsDialog">
+            游戏设置
           </button>
         </div>
       </div>
@@ -2403,6 +2443,14 @@ watch(
       :settings="appSettings"
       @close="closeSettingsDialog"
       @save="handleSaveAppSettings"
+    />
+
+    <StoryGameSettingsDialog
+      v-if="storyDocument && isGameSettingsDialogOpen"
+      :saving="isSaving"
+      :story="storyDocument.story"
+      @close="closeGameSettingsDialog"
+      @save="handleSaveStoryMeta"
     />
   </main>
 </template>

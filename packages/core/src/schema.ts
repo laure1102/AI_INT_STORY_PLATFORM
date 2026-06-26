@@ -2,11 +2,22 @@ import { z } from "zod"
 
 const looseMetaSchema = z.record(z.unknown())
 
+const storyTimeOfDaySchema = z.string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+  .default("00:00")
+
+export const storyGameSettingsSchema = z.object({
+  start_time: storyTimeOfDaySchema
+}).default({
+  start_time: "00:00"
+})
+
 export const storyMetaSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   description: z.string().optional(),
-  tags: z.array(z.string()).optional()
+  tags: z.array(z.string()).optional(),
+  game_settings: storyGameSettingsSchema
 })
 
 const storyValValueTypeSchema = z.enum(["value", "calc"])

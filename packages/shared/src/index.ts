@@ -10,6 +10,7 @@ import type {
   StoryEventLocationFile,
   StoryLoopEventFile,
   StoryItemsFile,
+  StoryMetaFile,
   StoryOnceDialogueDefinition,
   StoryOnceEventFile,
   StoryPhoneFile,
@@ -52,6 +53,14 @@ export interface CreateStoryResponse {
 
 export interface StoryDocumentResponse {
   story: StoryDocument
+}
+
+export interface StoryMetaResponse {
+  story: StoryMetaFile
+}
+
+export interface SaveStoryMetaRequest {
+  story: StoryMetaFile
 }
 
 export interface StoryBibleResponse {

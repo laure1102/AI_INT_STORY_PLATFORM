@@ -7,6 +7,7 @@ import type {
   StoryDocument,
   StoryEventLocationFile,
   StoryItemsFile,
+  StoryMetaFile,
   StoryPhoneConversationsFile,
   StoryPhoneFile,
   StoryPlayerOverrideValsFile,
@@ -51,6 +52,7 @@ import type {
   SaveEventRequest,
   SaveEventLocationsRequest,
   SaveStoryItemsRequest,
+  SaveStoryMetaRequest,
   SaveStoryPhoneConversationsRequest,
   SaveStoryPhoneRequest,
   SaveStoryReferRequest,
@@ -71,6 +73,7 @@ import type {
   StoryEventResponse,
   StoryEventLocationsResponse,
   StoryItemsResponse,
+  StoryMetaResponse,
   StoryPhoneResponse,
   StoryPhoneConversationsResponse,
   StoryPlayerOverrideValsResponse,
@@ -104,6 +107,20 @@ export function useStoryApi() {
 
   async function getStory(storyId: string): Promise<StoryDocument> {
     const response = await $fetch<StoryDocumentResponse>(`${apiBase}/stories/${storyId}`)
+    return response.story
+  }
+
+  async function saveStoryMeta(storyId: string, story: StoryMetaFile): Promise<StoryMetaFile> {
+    const response = await $fetch<StoryMetaResponse>(
+      `${apiBase}/stories/${storyId}/story`,
+      {
+        method: "PUT",
+        body: {
+          story
+        } satisfies SaveStoryMetaRequest
+      }
+    )
+
     return response.story
   }
 
@@ -642,6 +659,7 @@ export function useStoryApi() {
     deleteStoryCreationHistorySession,
     deleteEvent,
     saveAppSettings,
+    saveStoryMeta,
     saveDoing,
     saveEvent,
     saveEventLocations,

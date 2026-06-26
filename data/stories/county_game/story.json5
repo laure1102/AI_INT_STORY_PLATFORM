@@ -5,4 +5,7 @@
     '县城、经营、神豪',
   ],
   title: '人在县里，1天1个亿',
+  game_settings: {
+    start_time: '08:30',
+  },
 }

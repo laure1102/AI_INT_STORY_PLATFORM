@@ -39,6 +39,7 @@ import type {
   SaveEventLocationsRequest,
   SaveStoryDoingRequest,
   SaveStoryItemsRequest,
+  SaveStoryMetaRequest,
   SaveStoryPhoneRequest,
   SaveStoryPhoneConversationsRequest,
   SaveStoryReferRequest,
@@ -55,6 +56,7 @@ import type {
   StoryPlayerOverrideValsResponse,
   StoryRolesResponse,
   StoryItemsResponse,
+  StoryMetaResponse,
   StoryPhoneResponse,
   StoryPhoneConversationsResponse,
   StoryReferResponse,
@@ -170,6 +172,15 @@ export function createStoriesRouter(store: StoryFileStore, config: ApiConfig) {
     context.body = {
       story: await store.readStoryDocument(storyId)
     }
+  })
+
+  router.put("/stories/:storyId/story", async (context) => {
+    const storyId = requireParam(context.params.storyId, "storyId")
+    const body = context.request.body as SaveStoryMetaRequest
+
+    context.body = {
+      story: await store.writeStoryMeta(storyId, body.story)
+    } satisfies StoryMetaResponse
   })
 
   router.get("/stories/:storyId/story-bible", async (context) => {

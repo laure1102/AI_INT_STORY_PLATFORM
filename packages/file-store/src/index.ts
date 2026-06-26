@@ -85,6 +85,7 @@ export interface StoryFileStore {
   readStoryDocument(storyId: string): Promise<StoryDocument>
   readStoryBible(storyId: string): Promise<StoryBibleFile>
   readPhoneConversations(storyId: string): Promise<StoryPhoneConversationsFile>
+  writeStoryMeta(storyId: string, story: StoryMetaFile): Promise<StoryMetaFile>
   readEvent(
     storyId: string,
     eventId: string,
@@ -1641,6 +1642,25 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return parsedSettings
   }
 
+  async function writeStoryMeta(storyId: string, story: StoryMetaFile): Promise<StoryMetaFile> {
+    await ensureStoryExists(dataDir, storyId)
+
+    if (story.id !== storyId) {
+      throw new FileStoreError(
+        "Story id in path and payload must match.",
+        400,
+        "story.id-mismatch"
+      )
+    }
+
+    const parsedStory = storyMetaSchema.parse(story)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(paths.metaFile, parsedStory satisfies StoryMetaFile)
+
+    return parsedStory
+  }
+
   async function writeStoryBible(
     storyId: string,
     storyBible: StoryBibleFile
@@ -2053,6 +2073,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     readPhoneConversations: (storyId: string) => readStoryPhoneConversations(dataDir, storyId),
     readEvent,
     writeAppSettings,
+    writeStoryMeta,
     writeStoryBible,
     writeEvent,
     deleteEvent,

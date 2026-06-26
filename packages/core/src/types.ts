@@ -1,8 +1,13 @@
+export interface StoryGameSettings {
+  start_time: string
+}
+
 export interface StoryMetaFile {
   id: string
   title: string
   description?: string
   tags?: string[]
+  game_settings: StoryGameSettings
 }
 
 export type StoryValValueType = "value" | "calc"
@@ -755,6 +760,7 @@ export interface CompiledStory {
   storyId: string
   title: string
   generatedAt: string
+  gameSettings: StoryGameSettings
   vals: StoryValsFile
   playerOverrideVals: StoryPlayerOverrideValsFile
   systemVals: StoryValsFile

@@ -629,6 +629,9 @@ export interface RuntimeStoryBundle {
   storyId: string
   title: string
   generatedAt: string
+  gameSettings?: {
+    start_time?: string
+  }
   vals: StoryValsFile
   playerOverrideVals: StoryPlayerOverrideValsFile
   systemVals: StoryValsFile
@@ -1798,12 +1801,35 @@ function normalizeShopState(snapshot: RuntimeStorySessionSnapshot) {
   }
 }
 
-function createDefaultClockState(systemVals: StoryValsFile): RuntimeClockState {
+function parseStoryStartTime(value: unknown) {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value)
+  if (!match) {
+    return null
+  }
+
+  return {
+    hour: Number(match[1]),
+    minute: Number(match[2])
+  }
+}
+
+function createDefaultClockState(systemVals: StoryValsFile, startTime?: unknown): RuntimeClockState {
   const nowDate = readSystemString(systemVals, "system.now_date", "1990-1-1")
   const parsedNowDate = parseStoryDate(nowDate) ?? { year: 1990, month: 1, day: 1 }
-  const nowDay = Math.max(1, clampInteger(readSystemNumber(systemVals, "system.now_day", 1), 1))
-  const nowHour = Math.max(0, Math.min(23, clampInteger(readSystemNumber(systemVals, "system.now_hour", 0), 0)))
-  const rawMinute = clampInteger(readSystemNumber(systemVals, "system.now_minute", 0), 0)
+  const parsedStartTime = parseStoryStartTime(startTime)
+  const nowDay = parsedStartTime
+    ? 1
+    : Math.max(1, clampInteger(readSystemNumber(systemVals, "system.now_day", 1), 1))
+  const nowHour = parsedStartTime
+    ? parsedStartTime.hour
+    : Math.max(0, Math.min(23, clampInteger(readSystemNumber(systemVals, "system.now_hour", 0), 0)))
+  const rawMinute = parsedStartTime
+    ? parsedStartTime.minute
+    : clampInteger(readSystemNumber(systemVals, "system.now_minute", 0), 0)
   const snappedMinute = snapMinuteToStep(rawMinute, DEFAULT_CLOCK_STEP_MINUTES)
 
   return {
@@ -3190,7 +3216,7 @@ function createInitialBagsState(bundle: RuntimeStoryBundle, clock: RuntimeClockS
 
 function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnapshot {
   const systemVals = cloneValsFile(bundle.systemVals)
-  const clock = createDefaultClockState(systemVals)
+  const clock = createDefaultClockState(systemVals, bundle.gameSettings?.start_time)
   const snapshot: RuntimeStorySessionSnapshot = {
     current_event_id: null,
     vals: cloneValsFile(bundle.vals),
@@ -7821,7 +7847,10 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
   }
 
   if (!runtimeState.snapshot.clock) {
-    runtimeState.snapshot.clock = createDefaultClockState(runtimeState.snapshot.system_vals)
+    runtimeState.snapshot.clock = createDefaultClockState(
+      runtimeState.snapshot.system_vals,
+      options.bundle.gameSettings?.start_time
+    )
   }
 
   if (!runtimeState.snapshot.scheduler) {
@@ -7840,7 +7869,10 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
   if (!options.saveState && options.customOverrides) {
     applyCustomValuesToValsFile(runtimeState.snapshot.vals, options.customOverrides.custom_values)
     applyCustomValuesToValsFile(runtimeState.snapshot.system_vals, options.customOverrides.custom_values)
-    runtimeState.snapshot.clock = createDefaultClockState(runtimeState.snapshot.system_vals)
+    runtimeState.snapshot.clock = createDefaultClockState(
+      runtimeState.snapshot.system_vals,
+      options.bundle.gameSettings?.start_time
+    )
     syncSystemTimeFieldsFromClock(runtimeState.snapshot)
     notifications.push(`已加载角色自定义变量：${options.customOverrides.profile_name}`)
   }
