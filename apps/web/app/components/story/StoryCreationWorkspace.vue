@@ -8,6 +8,7 @@ import type {
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
   StoryCreationDraftPhone,
+  StoryCreationDraftPhoneConversations,
   StoryCreationHistoryFile,
   StoryCreationHistorySession,
   StoryCreationDraftItem,
@@ -83,6 +84,7 @@ const selectedPhoneTalkIds = shallowRef<string[]>([])
 const selectedPhoneActionIds = shallowRef<string[]>([])
 const selectedPhoneReplyIds = shallowRef<string[]>([])
 const selectedPhoneContactProfileKeys = shallowRef<string[]>([])
+const selectedPhoneConversationIds = shallowRef<string[]>([])
 const selectedDoingMenuIds = shallowRef<string[]>([])
 const selectedDoingIds = shallowRef<string[]>([])
 const selectedShopCategoryIds = shallowRef<string[]>([])
@@ -281,6 +283,10 @@ const phoneDraftCount = computed(() => {
     + phone.contact_profiles.length
 })
 
+const phoneConversationDraftCount = computed(() => {
+  return draftPreview.value?.phoneConversations?.conversations.length ?? 0
+})
+
 const doingDraftCount = computed(() => {
   const doing = draftPreview.value?.doing
 
@@ -312,6 +318,7 @@ const selectedApplyCount = computed(() => {
     + selectedPhoneActionIds.value.length
     + selectedPhoneReplyIds.value.length
     + selectedPhoneContactProfileKeys.value.length
+    + selectedPhoneConversationIds.value.length
     + selectedDoingMenuIds.value.length
     + selectedDoingIds.value.length
     + selectedShopCategoryIds.value.length
@@ -379,6 +386,10 @@ const existingPhoneReplyIds = computed(() => {
 
 const existingPhoneContactProfileKeys = computed(() => {
   return new Set(props.story.phone.contact_profiles.map((profile) => profile.role_key))
+})
+
+const existingPhoneConversationIds = computed(() => {
+  return new Set(props.story.phoneConversations.conversations.map((conversation) => conversation.id))
 })
 
 const existingDoingMenuIds = computed(() => {
@@ -537,6 +548,12 @@ const selectedImpactSummary = computed(() => {
     }
   }
 
+  for (const conversation of draft.phoneConversations?.conversations ?? []) {
+    if (selectedPhoneConversationIds.value.includes(conversation.id)) {
+      addImpact(getPhoneConversationImpact(conversation))
+    }
+  }
+
   for (const menu of draft.doing?.menus ?? []) {
     if (selectedDoingMenuIds.value.includes(menu.id)) {
       addImpact(getDoingMenuImpact(menu))
@@ -576,7 +593,7 @@ const applyPreviewMessage = computed(() => {
   ].filter(Boolean)
 
   if (parts.length === 0) {
-    return "确认后会写入所选地点、角色、物品、变量、事件、手机联系人资产、行动资产和商城资产。"
+    return "确认后会写入所选地点、角色、物品、变量、事件、手机联系人资产、剧情手机对话、行动资产和商城资产。"
   }
 
   return `确认后将${parts.join("、")}。`
@@ -806,6 +823,9 @@ function cloneCreationDraft(draft: StoryCreationDraft): StoryCreationDraft {
     reply_library: cloned.phone?.reply_library ?? [],
     contact_profiles: cloned.phone?.contact_profiles ?? []
   }
+  cloned.phoneConversations = {
+    conversations: cloned.phoneConversations?.conversations ?? []
+  }
   cloned.doing = {
     menus: cloned.doing?.menus ?? [],
     doings: cloned.doing?.doings ?? []
@@ -838,6 +858,7 @@ function syncApplySelection(draft: StoryCreationDraft | null) {
   selectedPhoneActionIds.value = draft?.phone?.action_library.map((entry) => entry.id) ?? []
   selectedPhoneReplyIds.value = draft?.phone?.reply_library.map((entry) => entry.id) ?? []
   selectedPhoneContactProfileKeys.value = draft?.phone?.contact_profiles.map((profile) => profile.role_key) ?? []
+  selectedPhoneConversationIds.value = draft?.phoneConversations?.conversations.map((conversation) => conversation.id) ?? []
   selectedDoingMenuIds.value = draft?.doing?.menus.map((menu) => menu.id) ?? []
   selectedDoingIds.value = draft?.doing?.doings.map((doing) => doing.id) ?? []
   selectedShopCategoryIds.value = draft?.shop?.categories.map((category) => category.id) ?? []
@@ -906,6 +927,14 @@ function setPhoneContactProfileSelected(roleKey: string, checked: boolean) {
   )
 }
 
+function setPhoneConversationSelected(conversationId: string, checked: boolean) {
+  selectedPhoneConversationIds.value = toggleStringSelection(
+    selectedPhoneConversationIds.value,
+    conversationId,
+    checked
+  )
+}
+
 function setDoingMenuSelected(menuId: string, checked: boolean) {
   selectedDoingMenuIds.value = toggleStringSelection(selectedDoingMenuIds.value, menuId, checked)
 }
@@ -966,6 +995,10 @@ function handlePhoneContactProfileSelectionChange(roleKey: string, event: Event)
   setPhoneContactProfileSelected(roleKey, getCheckboxChecked(event))
 }
 
+function handlePhoneConversationSelectionChange(conversationId: string, event: Event) {
+  setPhoneConversationSelected(conversationId, getCheckboxChecked(event))
+}
+
 function handleDoingMenuSelectionChange(menuId: string, event: Event) {
   setDoingMenuSelected(menuId, getCheckboxChecked(event))
 }
@@ -998,6 +1031,7 @@ function applyDraft() {
     phoneActionIds: selectedPhoneActionIds.value,
     phoneReplyIds: selectedPhoneReplyIds.value,
     phoneContactProfileKeys: selectedPhoneContactProfileKeys.value,
+    phoneConversationIds: selectedPhoneConversationIds.value,
     doingMenuIds: selectedDoingMenuIds.value,
     doingIds: selectedDoingIds.value,
     shopCategoryIds: selectedShopCategoryIds.value,
@@ -1121,6 +1155,18 @@ function getPhoneContactProfileImpact(profile: StoryCreationDraftPhone["contact_
   return existingPhoneContactProfileKeys.value.has(profile.role_key)
     ? createImpact("update", "覆盖", "同角色联系人配置已存在，应用后会合并主动消息和偏好设置。")
     : createImpact("create", "新增", "应用后会写入 phone.json5 的联系人特配。")
+}
+
+function getPhoneConversationImpact(
+  conversation: StoryCreationDraftPhoneConversations["conversations"][number]
+): DraftImpact {
+  if (!availableRoleKeysForApply.value.has(conversation.role_key) || conversation.role_key === "player") {
+    return createImpact("skip", "跳过", "剧情手机对话必须引用已存在或本次选中的 NPC 角色。")
+  }
+
+  return existingPhoneConversationIds.value.has(conversation.id)
+    ? createImpact("update", "覆盖", "同 id 剧情手机对话已存在，应用后会替换对话节点。")
+    : createImpact("create", "新增", "应用后会写入 phone_conversations.json5。")
 }
 
 function getDoingMenuImpact(menu: StoryCreationDraftDoing["menus"][number]): DraftImpact {
@@ -2161,6 +2207,73 @@ watch(
               </template>
 
               <p v-else class="creation-result__muted">未生成手机联系人资产。</p>
+            </section>
+
+            <section class="creation-result__section">
+              <h4 class="creation-result__section-title">剧情手机对话</h4>
+
+              <template v-if="draftPreview.phoneConversations && phoneConversationDraftCount > 0">
+                <ul class="creation-chip-list">
+                  <li
+                    v-for="conversation in draftPreview.phoneConversations.conversations"
+                    :key="conversation.id"
+                    class="creation-chip-list__item"
+                  >
+                    <label class="creation-select">
+                      <input
+                        type="checkbox"
+                        :checked="selectedPhoneConversationIds.includes(conversation.id)"
+                        @change="handlePhoneConversationSelectionChange(conversation.id, $event)"
+                      >
+                    </label>
+                    <strong>{{ conversation.id }} · {{ conversation.title }}</strong>
+                    <span
+                      class="creation-impact"
+                      :class="getImpactClass(getPhoneConversationImpact(conversation))"
+                      :title="getPhoneConversationImpact(conversation).detail"
+                    >
+                      {{ getPhoneConversationImpact(conversation).label }}
+                    </span>
+                    <div class="creation-item-flags">
+                      <label class="creation-item-flags__check">
+                        <input v-model="conversation.enabled" type="checkbox">
+                        启用
+                      </label>
+                      <label class="creation-item-flags__check">
+                        <input v-model="conversation.once" type="checkbox">
+                        一次性
+                      </label>
+                      <label class="creation-item-flags__check">
+                        <input v-model="conversation.lock_normal_chat" type="checkbox">
+                        锁定闲聊
+                      </label>
+                    </div>
+                    <div class="creation-event-edit-grid">
+                      <label class="creation-edit-field">
+                        <span>标题</span>
+                        <input v-model="conversation.title" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>联系人角色</span>
+                        <input v-model="conversation.role_key" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>入口节点</span>
+                        <input v-model="conversation.entry_node_id" class="creation-edit-input">
+                      </label>
+                      <label class="creation-edit-field">
+                        <span>自动触发条件</span>
+                        <input v-model="conversation.trigger_expr" class="creation-edit-input">
+                      </label>
+                    </div>
+                    <small class="creation-result__muted">
+                      {{ conversation.nodes.length }} 个节点 / {{ conversation.nodes.reduce((sum, node) => sum + node.player_options.length, 0) }} 个回复选项
+                    </small>
+                  </li>
+                </ul>
+              </template>
+
+              <p v-else class="creation-result__muted">未生成剧情手机对话。</p>
             </section>
 
             <section class="creation-result__section">

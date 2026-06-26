@@ -26,6 +26,8 @@ import {
   type StoryNormalRoleDefinition,
   type StoryPhoneActionLibraryEntry,
   type StoryPhoneContactProfile,
+  type StoryPhoneConversationDefinition,
+  type StoryPhoneConversationsFile,
   type StoryPhoneFile,
   type StoryPhonePersonalityDefinition,
   type StoryPhoneReplyLibraryEntry,
@@ -53,6 +55,7 @@ import type {
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
   StoryCreationDraftPhone,
+  StoryCreationDraftPhoneConversations,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftShop,
@@ -375,6 +378,47 @@ const draftPhoneSchema = z.object({
   contact_profiles: z.array(draftPhoneContactProfileSchema).default([])
 }).default(emptyDraftPhone)
 
+const draftPhoneConversationMessageSchema = z.object({
+  content: z.string().default("")
+})
+
+const draftPhoneConversationOptionSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().default(""),
+  visible_expr: z.string().default(""),
+  script: z.string().default(""),
+  next_node_id: z.string().default("")
+})
+
+const draftPhoneConversationNodeSchema = z.object({
+  id: z.string().min(1),
+  contact_messages: z.array(draftPhoneConversationMessageSchema).default([]),
+  player_options: z.array(draftPhoneConversationOptionSchema).default([]),
+  end: z.boolean().default(false),
+  end_script: z.string().default(""),
+  invoke: draftPhoneInvocationSchema.optional()
+})
+
+const draftPhoneConversationDefinitionSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().default(""),
+  role_key: z.string().min(1),
+  enabled: z.boolean().default(true),
+  once: z.boolean().default(true),
+  lock_normal_chat: z.boolean().default(true),
+  trigger_expr: z.string().default(""),
+  entry_node_id: z.string().min(1),
+  nodes: z.array(draftPhoneConversationNodeSchema).default([])
+})
+
+const emptyDraftPhoneConversations = {
+  conversations: []
+}
+
+const draftPhoneConversationsSchema = z.object({
+  conversations: z.array(draftPhoneConversationDefinitionSchema).default([])
+}).default(emptyDraftPhoneConversations)
+
 const draftEventSchema = z.object({
   collectionType: z.enum(["chain", "pool", "schedule"]).describe("目标事件集合。"),
   id: z.string().min(1).describe("ASCII 风格事件 id。"),
@@ -471,6 +515,7 @@ const draftSchema = z.object({
   events: z.array(draftEventSchema).describe("建议新增的剧情事件草稿。"),
   variables: z.array(draftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
   phone: draftPhoneSchema,
+  phoneConversations: draftPhoneConversationsSchema,
   doing: draftDoingSchema,
   shop: draftShopSchema,
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),
@@ -632,6 +677,43 @@ const structuredPhoneDraftSchema = z.object({
   contact_profiles: z.array(structuredPhoneContactProfileSchema).describe("建议新增或覆盖的联系人特配；没有填空数组。")
 })
 
+const structuredPhoneConversationMessageSchema = z.object({
+  content: z.string().describe("NPC 发给玩家的消息文本，可使用 ${group.value} 或 ${term.xxx} 占位。")
+})
+
+const structuredPhoneConversationOptionSchema = z.object({
+  id: z.string().min(1).describe("玩家回复选项 id，同一个剧情手机对话内唯一。"),
+  text: z.string().describe("玩家回复文本，可使用 ${group.value} 或 ${term.xxx} 占位。"),
+  visible_expr: z.string().describe("该回复选项显示条件 StoryScript；默认显示填空字符串。"),
+  script: z.string().describe("选择该回复后执行的 StoryScript；没有填空字符串。非空脚本必须写中文注释。"),
+  next_node_id: z.string().describe("回复后进入的下一节点 id；结束节点或无下一步时填空字符串。")
+})
+
+const structuredPhoneConversationNodeSchema = z.object({
+  id: z.string().min(1).describe("剧情手机对话节点 id。"),
+  contact_messages: z.array(structuredPhoneConversationMessageSchema).describe("进入该节点时 NPC 连续发出的消息；没有时填空数组。"),
+  player_options: z.array(structuredPhoneConversationOptionSchema).describe("该节点可选的玩家回复；结束节点填空数组。"),
+  end: z.boolean().describe("是否为结束节点。"),
+  end_script: z.string().describe("进入结束节点后执行的 StoryScript；没有填空字符串。非空脚本必须写中文注释。"),
+  invoke: structuredPhoneInvocationSchema.nullable().describe("结束节点可静默调用后续事件；不调用事件时填 null。")
+})
+
+const structuredPhoneConversationDefinitionSchema = z.object({
+  id: z.string().min(1).describe("剧情手机对话 id，用于 phone_start_conversation(id)。"),
+  title: z.string().describe("剧情手机对话标题。"),
+  role_key: z.string().min(1).describe("联系人角色 key，例如 normal:debt_collector。"),
+  enabled: z.boolean().describe("是否启用。"),
+  once: z.boolean().describe("是否每个存档只允许完成一次。"),
+  lock_normal_chat: z.boolean().describe("进行该剧情对话时是否锁定普通闲聊和动作。"),
+  trigger_expr: z.string().describe("自动开始条件 StoryScript；如果只由脚本 phone_start_conversation 触发，填空字符串。"),
+  entry_node_id: z.string().min(1).describe("入口节点 id，必须引用 nodes 内的节点。"),
+  nodes: z.array(structuredPhoneConversationNodeSchema).describe("对话节点列表。")
+})
+
+const structuredPhoneConversationsDraftSchema = z.object({
+  conversations: z.array(structuredPhoneConversationDefinitionSchema).describe("建议新增或覆盖的连续剧情手机对话；没有填空数组。")
+})
+
 const structuredDoingMenuSchema = z.object({
   id: z.string().min(1).describe("行动菜单 id。"),
   title: z.string().min(1).describe("行动菜单显示名。"),
@@ -720,6 +802,7 @@ const structuredDraftSchema = z.object({
   events: z.array(structuredDraftEventSchema).describe("建议新增的剧情事件草稿。"),
   variables: z.array(structuredDraftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
   phone: structuredPhoneDraftSchema.describe("建议新增或覆盖的手机联系人资产；没有时所有数组填空。"),
+  phoneConversations: structuredPhoneConversationsDraftSchema.describe("建议新增或覆盖的连续剧情手机对话；没有时 conversations 填空数组。"),
   doing: structuredDoingDraftSchema.describe("建议新增或覆盖的玩家主动行动资产；没有时所有数组填空。"),
   shop: structuredShopDraftSchema.describe("建议新增或覆盖的商城资产；没有时所有数组填空。"),
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),
@@ -730,6 +813,7 @@ type StructuredCreationDraft = z.infer<typeof structuredDraftSchema>
 type StructuredCreationDraftLoopRule = z.infer<typeof structuredDraftLoopRuleSchema>
 type StructuredCreationDraftPresentation = z.infer<typeof structuredDraftPresentationSchema>
 type StructuredCreationPhoneDraft = z.infer<typeof structuredPhoneDraftSchema>
+type StructuredCreationPhoneConversationsDraft = z.infer<typeof structuredPhoneConversationsDraftSchema>
 type StructuredCreationDoingDraft = z.infer<typeof structuredDoingDraftSchema>
 type StructuredCreationShopDraft = z.infer<typeof structuredShopDraftSchema>
 
@@ -920,6 +1004,7 @@ function toAgentVisibleDraft(draft: StoryCreationDraft) {
       xingge: role.xingge ?? null
     })),
     phone: toAgentVisiblePhoneDraft(draft.phone),
+    phoneConversations: draft.phoneConversations ?? emptyDraftPhoneConversations,
     doing: draft.doing ?? emptyDraftDoing,
     shop: draft.shop ?? emptyDraftShop
   }
@@ -1569,6 +1654,16 @@ function formatExistingPhoneAndDoing(story: StoryDocument) {
         proactive_message_ids: profile.proactive_messages.map((rule) => rule.id)
       }))
     },
+    phoneConversations: story.phoneConversations.conversations.map((conversation) => ({
+      id: conversation.id,
+      title: conversation.title,
+      role_key: conversation.role_key,
+      enabled: conversation.enabled,
+      once: conversation.once,
+      lock_normal_chat: conversation.lock_normal_chat,
+      entry_node_id: conversation.entry_node_id,
+      node_count: conversation.nodes.length
+    })),
     doing: {
       menus: story.doing.menus.map((menu) => ({
         id: menu.id,
@@ -2078,6 +2173,39 @@ function normalizeStructuredPhoneDraft(phone: StructuredCreationPhoneDraft): Sto
   }
 }
 
+function normalizeStructuredPhoneConversationsDraft(
+  phoneConversations: StructuredCreationPhoneConversationsDraft
+): StoryCreationDraftPhoneConversations {
+  return {
+    conversations: phoneConversations.conversations.map((conversation) => ({
+      id: conversation.id,
+      title: conversation.title,
+      role_key: conversation.role_key,
+      enabled: conversation.enabled,
+      once: conversation.once,
+      lock_normal_chat: conversation.lock_normal_chat,
+      trigger_expr: conversation.trigger_expr,
+      entry_node_id: conversation.entry_node_id,
+      nodes: conversation.nodes.map((node) => ({
+        id: node.id,
+        contact_messages: node.contact_messages.map((message) => ({
+          content: message.content
+        })),
+        player_options: node.player_options.map((option) => ({
+          id: option.id,
+          text: option.text,
+          visible_expr: option.visible_expr,
+          script: option.script,
+          next_node_id: option.next_node_id
+        })),
+        end: node.end,
+        end_script: node.end_script,
+        ...(node.invoke ? { invoke: toStructuredPhoneInvocation(node.invoke) } : {})
+      }))
+    }))
+  }
+}
+
 function normalizeStructuredDoingDraft(doing: StructuredCreationDoingDraft): StoryCreationDraftDoing {
   return {
     menus: doing.menus.map((menu) => ({
@@ -2192,6 +2320,7 @@ function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryCreation
       ...(variable.value_type === "value" ? { value: variable.value } : {})
     })),
     phone: normalizeStructuredPhoneDraft(draft.phone),
+    phoneConversations: normalizeStructuredPhoneConversationsDraft(draft.phoneConversations),
     doing: normalizeStructuredDoingDraft(draft.doing),
     shop: normalizeStructuredShopDraft(draft.shop),
     notes: draft.notes,
@@ -2384,6 +2513,29 @@ function collectDraftValidationShopProductIds(story: StoryDocument, draft: Story
   return Array.from(productIds)
 }
 
+function collectDraftValidationPhoneConversationIds(story: StoryDocument, draft: StoryCreationDraft) {
+  const conversationIds = new Set<string>()
+
+  for (const conversation of story.phoneConversations.conversations) {
+    const conversationId = conversation.id.trim()
+    if (conversationId) {
+      conversationIds.add(conversationId)
+    }
+  }
+
+  for (const conversation of draft.phoneConversations?.conversations ?? []) {
+    const conversationId = conversation.id.trim()
+    if (!conversationId) {
+      continue
+    }
+
+    conversationIds.add(conversationId)
+    conversationIds.add(makeLooseId(conversationId))
+  }
+
+  return Array.from(conversationIds)
+}
+
 function formatStoryScriptIssue(issue: StoryScriptValidationIssue) {
   return issue.lineNumber > 0
     ? `第 ${issue.lineNumber} 行: ${issue.message}`
@@ -2431,6 +2583,7 @@ function createDraftEventValidationContext(
     roleKeys: string[]
     doingIds: string[]
     shopProductIds: string[]
+    phoneConversationIds: string[]
     referTokens: Record<string, null>
   },
   mode: "read" | "write"
@@ -2445,6 +2598,7 @@ function createDraftEventValidationContext(
     roleKeys: context.roleKeys,
     doingIds: context.doingIds,
     shopProductIds: context.shopProductIds,
+    phoneConversationIds: context.phoneConversationIds,
     bagMode: mode,
     phoneMode: mode,
     doingMode: mode,
@@ -2458,6 +2612,7 @@ function createDraftGlobalValidationContext(
     roleKeys: string[]
     doingIds: string[]
     shopProductIds: string[]
+    phoneConversationIds: string[]
     referTokens: Record<string, null>
   },
   mode: "read" | "write"
@@ -2468,6 +2623,7 @@ function createDraftGlobalValidationContext(
     roleKeys: context.roleKeys,
     doingIds: context.doingIds,
     shopProductIds: context.shopProductIds,
+    phoneConversationIds: context.phoneConversationIds,
     bagMode: mode,
     phoneMode: mode,
     doingMode: mode,
@@ -2484,6 +2640,7 @@ function validateDraftEventPresentationTemplates(
     roleKeys: string[]
     doingIds: string[]
     shopProductIds: string[]
+    phoneConversationIds: string[]
     referTokens: Record<string, null>
   }
 ) {
@@ -2523,6 +2680,115 @@ function validateDraftEventPresentationTemplates(
   })
 }
 
+function validateDraftPhoneConversationScripts(
+  vals: StoryValsFile,
+  draft: StoryCreationDraft,
+  issues: DraftStoryScriptValidationIssue[],
+  context: {
+    itemIds: string[]
+    roleKeys: string[]
+    doingIds: string[]
+    shopProductIds: string[]
+    phoneConversationIds: string[]
+    referTokens: Record<string, null>
+  }
+) {
+  for (const conversation of draft.phoneConversations?.conversations ?? []) {
+    const target = {
+      collectionType: "pool" as const,
+      id: `phone.conversation:${conversation.id}`
+    }
+
+    if (conversation.trigger_expr.trim()) {
+      pushDraftScriptValidationIssues(
+        issues,
+        target,
+        "trigger_expr",
+        validateStoryScriptContent(
+          vals,
+          conversation.trigger_expr,
+          "predicate",
+          undefined,
+          createDraftGlobalValidationContext(context, "read")
+        )
+      )
+    }
+
+    conversation.nodes.forEach((node, nodeIndex) => {
+      node.contact_messages.forEach((message, messageIndex) => {
+        pushDraftScriptValidationIssues(
+          issues,
+          target,
+          `nodes[${nodeIndex}].contact_messages[${messageIndex}].content`,
+          validateStoryScriptContent(
+            vals,
+            message.content,
+            "template",
+            undefined,
+            createDraftGlobalValidationContext(context, "write")
+          )
+        )
+      })
+
+      node.player_options.forEach((option, optionIndex) => {
+        pushDraftScriptValidationIssues(
+          issues,
+          target,
+          `nodes[${nodeIndex}].player_options[${optionIndex}].text`,
+          validateStoryScriptContent(
+            vals,
+            option.text,
+            "template",
+            undefined,
+            createDraftGlobalValidationContext(context, "write")
+          )
+        )
+
+        if (option.visible_expr.trim()) {
+          pushDraftScriptValidationIssues(
+            issues,
+            target,
+            `nodes[${nodeIndex}].player_options[${optionIndex}].visible_expr`,
+            validateStoryScriptContent(
+              vals,
+              option.visible_expr,
+              "predicate",
+              undefined,
+              createDraftGlobalValidationContext(context, "read")
+            )
+          )
+        }
+
+        pushDraftScriptValidationIssues(
+          issues,
+          target,
+          `nodes[${nodeIndex}].player_options[${optionIndex}].script`,
+          validateStoryScriptContent(
+            vals,
+            option.script,
+            "procedure",
+            undefined,
+            createDraftGlobalValidationContext(context, "write")
+          )
+        )
+      })
+
+      pushDraftScriptValidationIssues(
+        issues,
+        target,
+        `nodes[${nodeIndex}].end_script`,
+        validateStoryScriptContent(
+          vals,
+          node.end_script,
+          "procedure",
+          undefined,
+          createDraftGlobalValidationContext(context, "write")
+        )
+      )
+    })
+  }
+}
+
 function collectDraftStoryScriptValidationIssues(
   story: StoryDocument,
   draft: StoryCreationDraft
@@ -2533,6 +2799,7 @@ function collectDraftStoryScriptValidationIssues(
     roleKeys: collectDraftValidationRoleKeys(story, draft),
     doingIds: collectDraftValidationDoingIds(story, draft),
     shopProductIds: collectDraftValidationShopProductIds(story, draft),
+    phoneConversationIds: collectDraftValidationPhoneConversationIds(story, draft),
     referTokens: getStoryReferTokens(story)
   }
   const issues: DraftStoryScriptValidationIssue[] = []
@@ -2680,6 +2947,8 @@ function collectDraftStoryScriptValidationIssues(
       )
     }
   }
+
+  validateDraftPhoneConversationScripts(vals, draft, issues, validationContext)
 
   for (const category of draft.shop?.categories ?? []) {
     if (!category.visible_expr.trim()) {
@@ -2930,7 +3199,21 @@ function normalizePhoneScope(
   }
 }
 
-function normalizePhoneInvoke<T extends { invoke?: StoryPhoneTalkLibraryEntry["invoke"] }>(entry: T): T {
+function normalizePhoneInvokeTargetId(
+  targetType: NonNullable<StoryPhoneTalkLibraryEntry["invoke"]>["target_type"],
+  eventId: string,
+  eventIdMap?: Map<string, string>
+) {
+  const looseEventId = makeLooseId(eventId)
+  return eventIdMap?.get(`${targetType}:${eventId}`)
+    ?? eventIdMap?.get(`${targetType}:${looseEventId}`)
+    ?? looseEventId
+}
+
+function normalizePhoneInvoke<T extends { invoke?: StoryPhoneTalkLibraryEntry["invoke"] }>(
+  entry: T,
+  eventIdMap?: Map<string, string>
+): T {
   if (!entry.invoke) {
     return entry
   }
@@ -2939,14 +3222,15 @@ function normalizePhoneInvoke<T extends { invoke?: StoryPhoneTalkLibraryEntry["i
     ...entry,
     invoke: {
       ...entry.invoke,
-      event_id: makeLooseId(entry.invoke.event_id)
+      event_id: normalizePhoneInvokeTargetId(entry.invoke.target_type, entry.invoke.event_id, eventIdMap)
     }
   }
 }
 
 function normalizeDraftPhone(
   phone: StoryCreationDraft["phone"],
-  roleIdMap: Map<string, string>
+  roleIdMap: Map<string, string>,
+  eventIdMap?: Map<string, string>
 ): StoryCreationDraftPhone {
   const usedPersonalityIds = new Set<string>()
   const usedTalkIds = new Set<string>()
@@ -2969,7 +3253,7 @@ function normalizeDraftPhone(
     base_favor_delta: Math.max(-100, Math.min(100, Math.trunc(entry.base_favor_delta ?? 0))),
     cooldown_hours: Math.max(0, Math.trunc(entry.cooldown_hours ?? 0)),
     ...(entry.invoke ? { invoke: entry.invoke } : {})
-  }))
+  }, eventIdMap))
 
   const actions = (phone?.action_library ?? []).map((entry, index) => normalizePhoneInvoke({
     id: makeUniqueId(entry.id, `phone-action-${index + 1}`, usedActionIds),
@@ -2985,7 +3269,7 @@ function normalizeDraftPhone(
       quantity: Math.max(1, Math.trunc(item.quantity ?? 1))
     })).filter((item) => item.item_id),
     ...(entry.invoke ? { invoke: entry.invoke } : {})
-  }))
+  }, eventIdMap))
 
   const replies = (phone?.reply_library ?? []).map((entry, index) => ({
     id: makeUniqueId(entry.id, `phone-reply-${index + 1}`, usedReplyIds),
@@ -3035,6 +3319,97 @@ function normalizeDraftPhone(
     action_library: actions,
     reply_library: replies,
     contact_profiles: contactProfiles
+  }
+}
+
+function normalizeDraftPhoneConversations(
+  phoneConversations: StoryCreationDraft["phoneConversations"],
+  roleIdMap: Map<string, string>,
+  eventIdMap: Map<string, string>
+): StoryCreationDraftPhoneConversations {
+  const usedConversationIds = new Set<string>()
+
+  const conversations = (phoneConversations?.conversations ?? []).flatMap((conversation, conversationIndex) => {
+    const roleKey = normalizeRoleReference(conversation.role_key, roleIdMap)
+    if (!roleKey || roleKey === "player") {
+      return []
+    }
+
+    const id = makeUniqueId(
+      conversation.id,
+      `phone-conversation-${conversationIndex + 1}`,
+      usedConversationIds
+    )
+    const usedNodeIds = new Set<string>()
+    const usedOptionIds = new Set<string>()
+    const nodeIdMap = new Map<string, string>()
+
+    const nodeSeeds = (conversation.nodes ?? []).map((node, nodeIndex) => {
+      const nodeId = makeUniqueId(node.id, `node-${nodeIndex + 1}`, usedNodeIds)
+      nodeIdMap.set(node.id, nodeId)
+      nodeIdMap.set(makeLooseId(node.id), nodeId)
+      return {
+        source: node,
+        id: nodeId
+      }
+    })
+
+    if (nodeSeeds.length === 0) {
+      return []
+    }
+
+    const nodes = nodeSeeds.map(({ source, id: nodeId }) => {
+      const end = source.end ?? false
+      const invoke = end && source.invoke
+        ? normalizePhoneInvoke({ invoke: source.invoke }, eventIdMap).invoke
+        : undefined
+
+      return {
+        id: nodeId,
+        contact_messages: (source.contact_messages ?? [])
+          .map((message) => ({ content: message.content?.trim() ?? "" }))
+          .filter((message) => message.content.length > 0),
+        player_options: (source.player_options ?? []).map((option, optionIndex) => {
+          const optionId = makeUniqueId(option.id, `option-${optionIndex + 1}`, usedOptionIds)
+          const nextNodeId = option.next_node_id
+            ? nodeIdMap.get(option.next_node_id)
+              ?? nodeIdMap.get(makeLooseId(option.next_node_id))
+              ?? ""
+            : ""
+
+          return {
+            id: optionId,
+            text: option.text ?? "",
+            visible_expr: option.visible_expr ?? "",
+            script: option.script ?? "",
+            next_node_id: nextNodeId
+          }
+        }),
+        end,
+        end_script: source.end_script ?? "",
+        ...(invoke ? { invoke } : {})
+      } satisfies StoryPhoneConversationDefinition["nodes"][number]
+    })
+    const entryNodeId =
+      nodeIdMap.get(conversation.entry_node_id)
+      ?? nodeIdMap.get(makeLooseId(conversation.entry_node_id))
+      ?? nodes[0]!.id
+
+    return [{
+      id,
+      title: conversation.title?.trim() || id,
+      role_key: roleKey,
+      enabled: conversation.enabled ?? true,
+      once: conversation.once ?? true,
+      lock_normal_chat: conversation.lock_normal_chat ?? true,
+      trigger_expr: conversation.trigger_expr ?? "",
+      entry_node_id: entryNodeId,
+      nodes
+    }]
+  })
+
+  return {
+    conversations
   }
 }
 
@@ -3228,10 +3603,9 @@ function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
   })
 
   for (const [index, event] of draft.events.entries()) {
-    eventIdMap.set(
-      draftEventKey(event),
-      makeUniqueId(event.id, `event-${index + 1}`, usedEventIdsByCollection[event.collectionType])
-    )
+    const eventId = makeUniqueId(event.id, `event-${index + 1}`, usedEventIdsByCollection[event.collectionType])
+    eventIdMap.set(draftEventKey(event), eventId)
+    eventIdMap.set(`${event.collectionType}:${makeLooseId(event.id)}`, eventId)
   }
 
   const events = draft.events.map((event) => {
@@ -3289,7 +3663,8 @@ function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
     items,
     events,
     variables,
-    phone: normalizeDraftPhone(draft.phone, roleIdMap),
+    phone: normalizeDraftPhone(draft.phone, roleIdMap, eventIdMap),
+    phoneConversations: normalizeDraftPhoneConversations(draft.phoneConversations, roleIdMap, eventIdMap),
     doing: normalizeDraftDoing(draft.doing, roleIdMap, locationIdMap),
     shop: normalizeDraftShop(draft.shop, itemIdMap)
   }
@@ -3521,6 +3896,33 @@ function mergePhoneContactProfile(
       ),
       ...draftProfile.proactive_messages
     ]
+  }
+}
+
+function filterPhoneConversationInvokeForApply(
+  conversation: StoryPhoneConversationDefinition,
+  options: {
+    availableEventIdsByType: Record<"chain" | "pool" | "schedule", Set<string>>
+    warnings: string[]
+  }
+): StoryPhoneConversationDefinition {
+  return {
+    ...conversation,
+    nodes: conversation.nodes.map((node) => {
+      if (!node.invoke) {
+        return node
+      }
+
+      if (options.availableEventIdsByType[node.invoke.target_type].has(node.invoke.event_id)) {
+        return node
+      }
+
+      options.warnings.push(
+        `剧情手机对话 ${conversation.id} 的节点 ${node.id} 调用了不存在或未应用的${node.invoke.target_type}事件 ${node.invoke.event_id}，已移除该调用。`
+      )
+      const { invoke: _invoke, ...rest } = node
+      return rest
+    })
   }
 }
 
@@ -4022,6 +4424,7 @@ export async function applyStoryCreationDraft(
   const selectedPhoneActionIds = toSelectionSet(request.selection.phoneActionIds ?? [])
   const selectedPhoneReplyIds = toSelectionSet(request.selection.phoneReplyIds ?? [])
   const selectedPhoneContactProfileKeys = toSelectionSet(request.selection.phoneContactProfileKeys ?? [])
+  const selectedPhoneConversationIds = toSelectionSet(request.selection.phoneConversationIds ?? [])
   const selectedDoingMenuIds = toSelectionSet(request.selection.doingMenuIds ?? [])
   const selectedDoingIds = toSelectionSet(request.selection.doingIds ?? [])
   const selectedShopCategoryIds = toSelectionSet(request.selection.shopCategoryIds ?? [])
@@ -4042,6 +4445,7 @@ export async function applyStoryCreationDraft(
   let appliedPhoneActions = 0
   let appliedPhoneReplies = 0
   let appliedPhoneContactProfiles = 0
+  let appliedPhoneConversations = 0
   let appliedDoingMenus = 0
   let appliedDoings = 0
   let appliedShopCategories = 0
@@ -4272,6 +4676,32 @@ export async function applyStoryCreationDraft(
     appliedPhoneContactProfiles += 1
   }
 
+  const nextPhoneConversations: StoryPhoneConversationsFile = {
+    conversations: story.phoneConversations.conversations
+  }
+
+  for (const conversation of draft.phoneConversations?.conversations ?? []) {
+    if (!selectedPhoneConversationIds.has(conversation.id)) {
+      continue
+    }
+
+    if (!availableRoleKeys.has(conversation.role_key) || conversation.role_key === "player") {
+      warnings.push(`剧情手机对话 ${conversation.id} 引用了不存在或未应用的 NPC 角色 ${conversation.role_key}，未写入 phone_conversations.json5。`)
+      continue
+    }
+
+    const nextConversation = filterPhoneConversationInvokeForApply(conversation, {
+      availableEventIdsByType,
+      warnings
+    })
+
+    nextPhoneConversations.conversations = upsertById(
+      nextPhoneConversations.conversations,
+      nextConversation
+    )
+    appliedPhoneConversations += 1
+  }
+
   const nextDoing: StoryDoingFile = {
     menus: story.doing.menus,
     doings: story.doing.doings
@@ -4377,6 +4807,10 @@ export async function applyStoryCreationDraft(
     await store.writePhone(storyId, nextPhone)
   }
 
+  if (appliedPhoneConversations > 0) {
+    await store.writePhoneConversations(storyId, nextPhoneConversations)
+  }
+
   if (appliedDoingMenus > 0 || appliedDoings > 0) {
     await store.writeDoing(storyId, nextDoing)
   }
@@ -4419,6 +4853,7 @@ export async function applyStoryCreationDraft(
       phoneActions: appliedPhoneActions,
       phoneReplies: appliedPhoneReplies,
       phoneContactProfiles: appliedPhoneContactProfiles,
+      phoneConversations: appliedPhoneConversations,
       doingMenus: appliedDoingMenus,
       doings: appliedDoings,
       shopCategories: appliedShopCategories,
@@ -4662,10 +5097,11 @@ export async function runStoryCreationAgents(
         "如果用户要求改变一个 calc 汇总，例如人口总量，应写入它依赖的普通 value 分项；如现有分项不足，在 variables 中新增普通 value 变量并在脚本中引用。",
         "写 init_script/end_script 时，非空脚本必须包含中文注释。注释至少覆盖：规则目的、关键变量含义、核心公式含义、写回目标。不要只输出一串无解释的 Math 公式。",
         "如剧情涉及玩家获得、消耗或检查物品，在 init_script/end_script/操作脚本中使用 bag_add、bag_remove、bag_count、bag_has；不要在事件 JSON 中新增奖励或消耗字段。",
-        "如果本次内容涉及手机联系人关系、短句、联系人动作、NPC 回复、主动消息或联系人特配，必须写入 draft.phone 对应数组；不要只在 notes 中描述。",
+        "如果本次内容涉及普通手机联系人关系、短句、联系人动作、NPC 回复、主动消息或联系人特配，必须写入 draft.phone 对应数组；不要只在 notes 中描述。",
+        "如果本次内容涉及强连续剧情手机对话，例如 NPC 发消息、玩家固定回复、NPC 接着回复、结束后延迟调用后续事件，必须写入 draft.phoneConversations.conversations；不要用普通 proactive_messages 或普通闲聊短句模拟强连续剧情。",
         "如果本次内容涉及玩家主动可选入口，例如去县长办公室、KTV、会所、购物送礼、约会地点等，必须写入 draft.doing.menus 和 draft.doing.doings；doing 事件内容复用平面事件结构，但没有 trigger_mode、trigger_expr、invoke_params。",
         "如果本次内容涉及商城上架、购买、送礼商品、购物入口或商品展示条件，必须写入 draft.shop.categories 和 draft.shop.products；商城商品只能引用已有或本次新增物品，不能在 shop 里直接创建物品资产。",
-        "draft.phone、draft.doing 和 draft.shop 是结构化输出的一部分；没有新增内容时也要保留空数组。不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议、手机联系人资产、行动资产、商城资产和风险说明。"
+        "draft.phone、draft.phoneConversations、draft.doing 和 draft.shop 是结构化输出的一部分；没有新增内容时也要保留空数组。不要直接写入文件。输出的 draft 必须包含本次相关地点、角色、物品、事件、变量建议、手机联系人资产、剧情手机对话、行动资产、商城资产和风险说明。"
       ].join("\n\n"),
       signal
     )
@@ -4720,8 +5156,8 @@ export async function runStoryCreationAgents(
             "如果脚本写入 calc、system.* 或 call.*，改成写普通 value 变量；如果引用不存在的物品 id，优先改为现有物品或本次 items 草稿里的合法 id。",
             "invoke_once 必须按 StoryScript 保留语句修复，例如 `invoke_once chain event_id delay_days=1`；不要修成 JS 函数调用，不要使用括号、逗号、对象字面量或冒号参数。",
             "trigger_mode=invoke 允许 invoke_params 为空；如果目标事件不需要调用参数，保留 invoke 触发和空数组，不要降级为 default。",
-            "如果 phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script、shop visible_expr/available_expr 不符合 StoryScript.md，也要一并修复。",
-            "修复脚本时必须保留 draft.phone、draft.doing 和 draft.shop 的结构化资产；除非用户明确要求删除，不要把手机短句、联系人动作、行动菜单、行动事件、商城分类或商城商品清空。",
+            "如果 phone 主动消息 trigger_expr、phoneConversations trigger_expr/visible_expr/script/end_script、doing visible_expr、doing init_script/end_script、shop visible_expr/available_expr 不符合 StoryScript.md，也要一并修复。",
+            "修复脚本时必须保留 draft.phone、draft.phoneConversations、draft.doing 和 draft.shop 的结构化资产；除非用户明确要求删除，不要把手机短句、剧情手机对话、联系人动作、行动菜单、行动事件、商城分类或商城商品清空。",
             "非空过程脚本必须保留中文注释，解释变量来源、计算规则和写回目标。"
           ].join("\n\n"),
           signal
@@ -4773,11 +5209,11 @@ export async function runStoryCreationAgents(
           "脚本可读性审校重点：非空过程脚本必须保留或补充中文注释，说明规则意图、变量来源、计算依据和写回结果；不要删除有用注释。",
           "不要因为脚本涉及持久化变量写入就清空脚本；只有无法确定具体 value 写入目标时才允许对全新脚本留空并说明需要新增变量。",
           "如果当前待优化草稿里同一事件已有非空 init_script 或 end_script，而用户没有明确要求删除，你必须保留或修正它，不能清空。",
-          "phone 主动消息 trigger_expr、doing visible_expr、doing init_script/end_script、shop visible_expr/available_expr 也属于脚本审校范围。",
+          "phone 主动消息 trigger_expr、phoneConversations trigger_expr/visible_expr/script/end_script、doing visible_expr、doing init_script/end_script、shop visible_expr/available_expr 也属于脚本审校范围。",
           "脚本是否支持，必须以 StoryScript.md 和确定性静态校验为准；不要自行声称“规范未说明”来回避修复。",
           "invoke_once 是 StoryScript 保留语句，合法格式是 `invoke_once chain event_id delay_days=1 param=${group.name}`；禁止写成 `invoke_once(\"chain\", \"event_id\", { delay_days: 1 })`。",
           "trigger_mode=invoke 的事件可以没有 invoke_params；无参数调用事件仍然必须保持 invoke，不能因为参数为空改成 default。",
-          "输出完整 draft 时必须保留 phone、doing 和 shop 字段。没有相关内容时填空数组；有相关内容时不要把结构化资产降级成 notes。"
+          "输出完整 draft 时必须保留 phone、phoneConversations、doing 和 shop 字段。没有相关内容时填空数组；有相关内容时不要把结构化资产降级成 notes。"
         ].join("\n\n"),
         signal
       )
@@ -4815,8 +5251,9 @@ export async function runStoryCreationAgents(
       [
         buildBasePrompt("一致性检查", state),
         `待检查草稿:\n${formatDraftForAgent(state.draft, 16000)}`,
-        "你的任务：检查角色引用、地点引用、物品分类、事件 next、触发方式、手机联系人资产、行动菜单/行动事件、商城分类/商品和玩家自由度是否一致。",
+        "你的任务：检查角色引用、地点引用、物品分类、事件 next、触发方式、手机联系人资产、剧情手机对话、行动菜单/行动事件、商城分类/商品和玩家自由度是否一致。",
         "手机联系人检查重点：contact_profiles.role_key 必须是现有或本次生成 NPC 角色；短句/动作/回复的 scope 不要引用不存在的性格或角色；invoke 目标必须是现有或本次生成事件。",
+        "剧情手机对话检查重点：phoneConversations.conversations[].role_key 必须是现有或本次生成 NPC 角色；entry_node_id 和 next_node_id 必须引用本对话节点；结束节点 invoke 目标必须是现有或本次生成事件；强连续剧情不要降级到普通 proactive_messages。",
         "行动检查重点：doing.doings[].menu_id 必须引用现有或本次生成菜单；visible_expr 用 StoryScript 条件表达式；行动没有 trigger_mode、trigger_expr、invoke_params。",
         "商城检查重点：shop.products[].category_id 必须引用现有或本次生成商城分类；item_id 必须引用现有物品或本次生成物品；available_expr/visible_expr 用 StoryScript 条件表达式。",
         "如果剧情或手机消息承诺玩家可以主动去某处做某事，应确认草稿里有对应 doing 入口，或在 warnings 中说明为什么本次不生成。",

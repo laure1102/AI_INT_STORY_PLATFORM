@@ -13,6 +13,7 @@ import type {
   StoryOnceDialogueDefinition,
   StoryOnceEventFile,
   StoryPhoneFile,
+  StoryPhoneConversationsFile,
   StoryPlayerOverrideValsFile,
   StoryReferFile,
   StoryRolesFile,
@@ -178,6 +179,10 @@ export interface StoryCreationDraftPhone {
   contact_profiles: StoryPhoneFile["contact_profiles"]
 }
 
+export interface StoryCreationDraftPhoneConversations {
+  conversations: StoryPhoneConversationsFile["conversations"]
+}
+
 export interface StoryCreationDraftDoing {
   menus: StoryDoingFile["menus"]
   doings: StoryDoingFile["doings"]
@@ -215,6 +220,7 @@ export interface StoryCreationDraft {
   events: StoryCreationDraftEvent[]
   variables: StoryCreationDraftVariable[]
   phone?: StoryCreationDraftPhone
+  phoneConversations?: StoryCreationDraftPhoneConversations
   doing?: StoryCreationDraftDoing
   shop?: StoryCreationDraftShop
   notes: string[]
@@ -299,6 +305,7 @@ export interface ApplyStoryCreationDraftSelection {
   phoneActionIds?: string[]
   phoneReplyIds?: string[]
   phoneContactProfileKeys?: string[]
+  phoneConversationIds?: string[]
   doingMenuIds?: string[]
   doingIds?: string[]
   shopCategoryIds?: string[]
@@ -329,6 +336,7 @@ export interface ApplyStoryCreationDraftResponse {
     phoneActions: number
     phoneReplies: number
     phoneContactProfiles: number
+    phoneConversations: number
     doingMenus: number
     doings: number
     shopCategories: number
@@ -420,6 +428,14 @@ export interface StoryPhoneResponse {
 
 export interface SaveStoryPhoneRequest {
   phone: StoryPhoneFile
+}
+
+export interface StoryPhoneConversationsResponse {
+  phoneConversations: StoryPhoneConversationsFile
+}
+
+export interface SaveStoryPhoneConversationsRequest {
+  phoneConversations: StoryPhoneConversationsFile
 }
 
 export interface StoryReferResponse {

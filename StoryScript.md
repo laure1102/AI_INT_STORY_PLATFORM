@@ -21,9 +21,13 @@ StoryScript 适用于以下字段：
 - `doing.doings[].visible_expr`
 - `shop.categories[].visible_expr`
 - `shop.products[].available_expr`
+- `phone_conversations.json5.conversations[].trigger_expr`
+- `phone_conversations.json5.conversations[].nodes[].player_options[].visible_expr`
 - `init_script`
 - `end_script`
 - `action.exec_script`
+- `phone_conversations.json5.conversations[].nodes[].player_options[].script`
+- `phone_conversations.json5.conversations[].nodes[].end_script`
 - 对白与其他模板文本中的变量插值
 
 ---
@@ -89,6 +93,7 @@ return false
 - 对白内容
 - 消息提示内容
 - 手机联系人短句、动作文本、主动消息、特配回复、兜底回复
+- 手机剧情对话的 NPC 消息与玩家回复选项
 - 其他文本模板字段
 
 规则：
@@ -463,6 +468,7 @@ phone_add_favor("important:zhuli", 3)
 phone_send_from_contact("important:zhuli", "今晚有空吗？")
 phone_send_to_contact("important:zhuli", "我现在过去。")
 phone_mark_read("important:zhuli")
+phone_start_conversation("debt_collect_phone")
 ```
 
 规则：
@@ -478,9 +484,15 @@ phone_mark_read("important:zhuli")
 - `phone_send_from_contact` 用于让 NPC 主动发消息给玩家
 - `phone_send_to_contact` 用于脚本直接让主角发消息
 - `phone_mark_read` 会把该联系人的 NPC 来信标记为已读
+- `phone_start_conversation` 用于启动 `phone_conversations.json5` 中预设的一段连续剧情手机对话
 - `trigger_expr` 只允许使用三个只读手机函数
 - `init_script`、`end_script`、`action.exec_script` 可以使用全部手机函数
+- 同一时间只允许存在一段进行中的剧情手机对话
+- 剧情手机对话进行中，如果该对话开启 `lock_normal_chat`，该联系人的普通闲聊和普通动作会暂时锁定
+- `phone_conversations.json5` 的 `contact_messages[].content`、`player_options[].text` 都按模板文本渲染，可以使用 `${player.xxx}`、`${term.xxx}` 等变量
+- `phone_conversations.json5` 的结束节点可以配置 `invoke`，用于在对话结束后立即或延迟调用一个 `trigger_mode: "invoke"` 的事件
 - 静态校验会检查字面量 `role_key` 是否存在；动态 `role_key` 在运行时检查
+- 静态校验会检查字面量 `phone conversation id` 是否存在；动态 id 在运行时检查
 - `phone.json5` 中每个联系人还可以配置 `proactive_messages`
 - `proactive_messages[].trigger_expr` 使用与事件 `trigger_expr` 相同的条件脚本规则
 - 当 `trigger_expr` 为 `true` 且冷却时间满足时，运行时会自动让该联系人发送一条预设消息
@@ -672,6 +684,79 @@ phone_add_favor("important:zhuli", 2)
 phone_send_from_contact("important:zhuli", "老板，今天的材料我已经整理好了。")
 ```
 
+启动一段连续剧情手机对话：
+
+```ts
+phone_start_conversation("debt_collect_phone")
+```
+
+`phone_conversations.json5` 简化示例：
+
+```json5
+{
+  conversations: [
+    {
+      id: "debt_collect_phone",
+      title: "债主催债手机对话",
+      role_key: "important:biaoge",
+      enabled: true,
+      once: true,
+      lock_normal_chat: true,
+      trigger_expr: "",
+      entry_node_id: "start",
+      nodes: [
+        {
+          id: "start",
+          contact_messages: [
+            { content: "${player.name}，你欠的10万块是不是该还了？" }
+          ],
+          player_options: [
+            {
+              id: "reply_home",
+              text: "我人已回临河，要钱就来临河要。",
+              visible_expr: "",
+              script: "",
+              next_node_id: "arrival_notice"
+            }
+          ],
+          end: false,
+          end_script: ""
+        },
+        {
+          id: "arrival_notice",
+          contact_messages: [
+            { content: "好，你在老家等着，我明天10点到。" }
+          ],
+          player_options: [
+            {
+              id: "reply_station",
+              text: "我在汽车站等你。",
+              visible_expr: "",
+              script: "",
+              next_node_id: "end"
+            }
+          ],
+          end: false,
+          end_script: ""
+        },
+        {
+          id: "end",
+          contact_messages: [],
+          player_options: [],
+          end: true,
+          end_script: "",
+          invoke: {
+            target_type: "pool",
+            event_id: "debt_collect_station",
+            delay: { unit: "days", value: 1 }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
 `phone.json5` 里的主动消息规则示例：
 
 ```json5
@@ -803,6 +888,7 @@ ${county.level} >= 2 && shop_purchase_cooldown_left("shop_business_sedan") <= 0
 - `phone_send_from_contact`
 - `phone_send_to_contact`
 - `phone_mark_read`
+- `phone_start_conversation`
 - `doing_has`
 - `doing_used_count`
 - `doing_cooldown_left`

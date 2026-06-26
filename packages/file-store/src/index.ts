@@ -16,6 +16,7 @@ import {
   storyInitialBagsSchema,
   storyItemsSchema,
   storyLoopEventSchema,
+  storyPhoneConversationsSchema,
   storyPhoneSchema,
   storyReferSchema,
   storyScheduleEventsSchema,
@@ -48,6 +49,7 @@ import {
   type StoryOnceEventsFile,
   type StoryPoolEventsFile,
   type StoryPhoneFile,
+  type StoryPhoneConversationsFile,
   type StoryPlayerOverrideValsFile,
   type StoryReferFile,
   type StoryImportantRolesDataFile,
@@ -82,6 +84,7 @@ export interface StoryFileStore {
   createStory(request: CreateStoryInput): Promise<StoryDocument>
   readStoryDocument(storyId: string): Promise<StoryDocument>
   readStoryBible(storyId: string): Promise<StoryBibleFile>
+  readPhoneConversations(storyId: string): Promise<StoryPhoneConversationsFile>
   readEvent(
     storyId: string,
     eventId: string,
@@ -109,6 +112,7 @@ export interface StoryFileStore {
   writeShop(storyId: string, shop: StoryShopFile): Promise<StoryShopFile>
   writeInitialBags(storyId: string, initialBags: StoryInitialBagsFile): Promise<StoryInitialBagsFile>
   writePhone(storyId: string, phone: StoryPhoneFile): Promise<StoryPhoneFile>
+  writePhoneConversations(storyId: string, phoneConversations: StoryPhoneConversationsFile): Promise<StoryPhoneConversationsFile>
   writeRefer(storyId: string, refer: StoryReferFile): Promise<StoryReferFile>
   writeDoing(storyId: string, doing: StoryDoingFile): Promise<StoryDoingFile>
   writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile>
@@ -316,6 +320,7 @@ function createStoryPaths(dataDir: string, storyId: string) {
     shopFile: path.join(storyDir, "shop.json5"),
     initialBagsFile: path.join(storyDir, "initial_bags.json5"),
     phoneFile: path.join(storyDir, "phone.json5"),
+    phoneConversationsFile: path.join(storyDir, "phone_conversations.json5"),
     referFile: path.join(storyDir, "refer.json5"),
     doingFile: path.join(storyDir, "doing.json5"),
     assetsDir: path.join(storyDir, "assets"),
@@ -397,6 +402,12 @@ function createDefaultStoryPhone(): StoryPhoneFile {
     player_quick_messages: [],
     contact_profiles: [],
     fallback_replies: {}
+  }
+}
+
+function createDefaultStoryPhoneConversations(): StoryPhoneConversationsFile {
+  return {
+    conversations: []
   }
 }
 
@@ -1205,6 +1216,18 @@ async function readStoryPhone(
   return storyPhoneSchema.parse(phone)
 }
 
+async function readStoryPhoneConversations(
+  dataDir: string,
+  storyId: string
+): Promise<StoryPhoneConversationsFile> {
+  const paths = createStoryPaths(dataDir, storyId)
+  const phoneConversations = await readOptionalJson5File<StoryPhoneConversationsFile>(
+    paths.phoneConversationsFile,
+    createDefaultStoryPhoneConversations()
+  )
+  return storyPhoneConversationsSchema.parse(phoneConversations)
+}
+
 async function readStoryRefer(
   dataDir: string,
   storyId: string
@@ -1353,6 +1376,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     const shop = storyShopSchema.parse(createDefaultStoryShop())
     const initialBags = storyInitialBagsSchema.parse(createDefaultInitialBags())
     const phone = storyPhoneSchema.parse(createDefaultStoryPhone())
+    const phoneConversations = storyPhoneConversationsSchema.parse(createDefaultStoryPhoneConversations())
     const refer = storyReferSchema.parse(createDefaultStoryRefer())
     const doing = storyDoingSchema.parse(createDefaultStoryDoing())
     const chainEvents = storyChainEventsSchema.parse([])
@@ -1378,6 +1402,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       writeJson5File(paths.shopFile, shop),
       writeJson5File(paths.initialBagsFile, initialBags),
       writeJson5File(paths.phoneFile, phone),
+      writeJson5File(paths.phoneConversationsFile, phoneConversations),
       writeJson5File(paths.referFile, refer),
       writeJson5File(paths.doingFile, doing),
       writeJson5File(paths.chainEventsFile, chainEvents),
@@ -1402,6 +1427,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       shop,
       initialBags,
       phone,
+      phoneConversations,
       refer,
       doing,
       chainEvents,
@@ -1421,6 +1447,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       readStoryShop(dataDir, storyId),
       readStoryInitialBags(dataDir, storyId),
       readStoryPhone(dataDir, storyId),
+      readStoryPhoneConversations(dataDir, storyId),
       readStoryRefer(dataDir, storyId),
       readStoryDoing(dataDir, storyId),
       readStoryGraphEvents(dataDir, storyId),
@@ -1441,6 +1468,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       shop,
       initialBags,
       phone,
+      phoneConversations,
       refer,
       doing,
       chainEvents,
@@ -1738,6 +1766,21 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     return parsedPhone
   }
 
+  async function writePhoneConversations(
+    storyId: string,
+    phoneConversations: StoryPhoneConversationsFile
+  ): Promise<StoryPhoneConversationsFile> {
+    const parsedPhoneConversations = storyPhoneConversationsSchema.parse(phoneConversations)
+    const paths = createStoryPaths(dataDir, storyId)
+
+    await writeJson5File(
+      paths.phoneConversationsFile,
+      parsedPhoneConversations satisfies StoryPhoneConversationsFile
+    )
+
+    return parsedPhoneConversations
+  }
+
   async function writeRefer(
     storyId: string,
     refer: StoryReferFile
@@ -2007,6 +2050,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     createStory,
     readStoryDocument,
     readStoryBible,
+    readPhoneConversations: (storyId: string) => readStoryPhoneConversations(dataDir, storyId),
     readEvent,
     writeAppSettings,
     writeStoryBible,
@@ -2018,6 +2062,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     writeShop,
     writeInitialBags,
     writePhone,
+    writePhoneConversations,
     writeRefer,
     writeDoing,
     writeVals,

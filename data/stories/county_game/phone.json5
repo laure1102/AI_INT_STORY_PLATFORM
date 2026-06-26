@@ -398,43 +398,6 @@
       reply_by_tag: {},
       role_key: 'normal:xitong',
     },
-    {
-      auto_add: true,
-      enabled: true,
-      initial_favor: 15,
-      preferred_tags: [
-        'debt',
-        'appointment',
-      ],
-      proactive_messages: [
-        {
-          cooldown_hours: 9999,
-          enabled: true,
-          favor_delta: 0,
-          id: 'debt_first_pressure',
-          messages: [
-            '${player.name_xing}${player.name_ming}！ 欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。',
-          ],
-          reply_quick_message_ids: [
-            'debt_reply_home_wait',
-            'debt_reply_meet_tomorrow',
-            'debt_reply_stop_threat',
-          ],
-          trigger_expr: '${player.debt_huadu_active} && !${player.debt_huadu_msg_sent} && !${player.debt_huadu_cleared}',
-        },
-      ],
-      reply_by_tag: {
-        appointment: [
-          '你定地方可以，但别再放我鸽子。',
-          '行，地点你说了，别到时候人又没影。',
-        ],
-        debt: [
-          '少来虚的，我只看你什么时候把钱还上。',
-          '你人在哪不重要，钱什么时候到才重要。',
-        ],
-      },
-      role_key: 'normal:debt_collector',
-    },
   ],
   fallback_replies: {
     care: [
@@ -623,47 +586,6 @@
         'gratitude',
       ],
       text: '辛苦了，谢谢你。',
-      visibility: 'suggested-only',
-    },
-    {
-      available_role_keys: [
-        'normal:debt_collector',
-      ],
-      base_favor_delta: 0,
-      cooldown_hours: 9999,
-      id: 'debt_reply_home_wait',
-      tags: [
-        'debt',
-        'appointment',
-      ],
-      text: '我已经在老家了，你要收就来老家收。',
-      visibility: 'suggested-only',
-    },
-    {
-      available_role_keys: [
-        'normal:debt_collector',
-      ],
-      base_favor_delta: 0,
-      cooldown_hours: 9999,
-      id: 'debt_reply_meet_tomorrow',
-      tags: [
-        'debt',
-        'appointment',
-      ],
-      text: '你明天来临河，当面把这笔账说清楚。',
-      visibility: 'suggested-only',
-    },
-    {
-      available_role_keys: [
-        'normal:debt_collector',
-      ],
-      base_favor_delta: 0,
-      cooldown_hours: 9999,
-      id: 'debt_reply_stop_threat',
-      tags: [
-        'debt',
-      ],
-      text: '别在手机里吓唬我，钱的事见面谈。',
       visibility: 'suggested-only',
     },
     {

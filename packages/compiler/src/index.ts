@@ -55,6 +55,7 @@ export function compileStory(document: StoryDocument): {
       shop: document.shop,
       initialBags: document.initialBags,
       phone: document.phone,
+      phoneConversations: document.phoneConversations,
       doing: document.doing,
       chainEvents,
       poolEvents: poolEventsSource,

@@ -1,0 +1,69 @@
+{
+  conversations: [
+    {
+      enabled: true,
+      entry_node_id: 'start',
+      id: 'huadu_debt_phone',
+      lock_normal_chat: true,
+      nodes: [
+        {
+          contact_messages: [
+            {
+              content: '${player.name_xing}${player.name_ming}，你欠的10万块是不是该还了？再装没看见，我就找去你老家。',
+            },
+          ],
+          end: false,
+          end_script: '',
+          id: 'start',
+          player_options: [
+            {
+              id: 'reply_back_linh',
+              next_node_id: 'collector_arrival_time',
+              script: '// 【回应催债】\n// 玩家承认花都旧债，并把收账地点引到临河老家。\n${player.debt_huadu_active} = true\n${player.debt_huadu_amount} = 100000\n${player.debt_huadu_linh_appointment} = true\n${player.debt_huadu_msg_sent} = true\n${player.debt_huadu_tone} = 1\n${player.debt_huadu_last_pressure} = 2',
+              text: '我已经回临河了，要钱就来临河要。你来，我一定还。',
+              visible_expr: '',
+            },
+          ],
+        },
+        {
+          contact_messages: [
+            {
+              content: '行。你在老家等着，我明天十点到临河汽车站。别再躲。',
+            },
+          ],
+          end: false,
+          end_script: '',
+          id: 'collector_arrival_time',
+          player_options: [
+            {
+              id: 'reply_bus_station',
+              next_node_id: 'end',
+              script: '// 【确认见面】\n// 玩家确认次日在汽车站当面清账，后续由结束节点延迟调用见面事件。\n${player.debt_huadu_linh_appointment} = true\n${player.debt_huadu_last_pressure} = 2',
+              text: '我在汽车站等你。账当面清。',
+              visible_expr: '',
+            },
+          ],
+        },
+        {
+          contact_messages: [],
+          end: true,
+          end_script: '// 【结束催债手机对话】\n// 标记首轮催债手机对话已完成，并保留次日见面预约状态。\n${player.debt_huadu_msg_sent} = true\n${player.debt_huadu_linh_appointment} = true\n${player.debt_huadu_last_pressure} = 2',
+          id: 'end',
+          invoke: {
+            delay: {
+              unit: 'days',
+              value: 1,
+            },
+            event_id: 'debt_collector_arrives_linh_1d',
+            target_type: 'pool',
+          },
+          player_options: [],
+        },
+      ],
+      once: true,
+      role_key: 'normal:debt_collector',
+      title: '花都旧债催收手机对话',
+      trigger_expr: '',
+    },
+  ],
+}

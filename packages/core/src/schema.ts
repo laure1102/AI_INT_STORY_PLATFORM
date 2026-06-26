@@ -1004,6 +1004,141 @@ export const storyPhoneSchema = z.object({
   }
 })
 
+export const storyPhoneConversationOptionSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().default(""),
+  visible_expr: z.string().default(""),
+  script: z.string().default(""),
+  next_node_id: z.string().default("")
+}).transform((option) => ({
+  id: option.id.trim(),
+  text: option.text.trim(),
+  visible_expr: option.visible_expr.trim(),
+  script: option.script,
+  next_node_id: option.next_node_id.trim()
+}))
+
+export const storyPhoneConversationNodeSchema = z.object({
+  id: z.string().min(1),
+  contact_messages: z.array(z.object({
+    content: z.string().default("")
+  })).default([]),
+  player_options: z.array(storyPhoneConversationOptionSchema).default([]),
+  end: z.boolean().default(false),
+  end_script: z.string().default(""),
+  invoke: storyPhoneEventInvocationSchema.optional()
+}).superRefine((node, context) => {
+  if (node.id.trim().length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Conversation node id is required.",
+      path: ["id"]
+    })
+  }
+}).transform((node) => ({
+  id: node.id.trim(),
+  contact_messages: node.contact_messages
+    .map((message) => ({ content: message.content.trim() }))
+    .filter((message) => message.content.length > 0),
+  player_options: node.player_options,
+  end: node.end,
+  end_script: node.end_script,
+  ...(node.invoke ? { invoke: node.invoke } : {})
+}))
+
+export const storyPhoneConversationDefinitionSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().default(""),
+  role_key: z.string().min(1),
+  enabled: z.boolean().default(true),
+  once: z.boolean().default(true),
+  lock_normal_chat: z.boolean().default(true),
+  trigger_expr: z.string().default(""),
+  entry_node_id: z.string().min(1),
+  nodes: z.array(storyPhoneConversationNodeSchema).default([])
+}).superRefine((conversation, context) => {
+  const nodeIds = new Set<string>()
+  const optionIds = new Set<string>()
+
+  for (const [nodeIndex, node] of conversation.nodes.entries()) {
+    if (nodeIds.has(node.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate phone conversation node id "${node.id}".`,
+        path: ["nodes", nodeIndex, "id"]
+      })
+    }
+    nodeIds.add(node.id)
+
+    if (node.invoke && !node.end) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Phone conversation node "${node.id}" cannot define invoke unless it is an end node.`,
+        path: ["nodes", nodeIndex, "invoke"]
+      })
+    }
+
+    for (const [optionIndex, option] of node.player_options.entries()) {
+      if (optionIds.has(option.id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate phone conversation option id "${option.id}".`,
+          path: ["nodes", nodeIndex, "player_options", optionIndex, "id"]
+        })
+      }
+      optionIds.add(option.id)
+    }
+  }
+
+  if (!nodeIds.has(conversation.entry_node_id)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Phone conversation "${conversation.id}" entry_node_id references missing node "${conversation.entry_node_id}".`,
+      path: ["entry_node_id"]
+    })
+  }
+
+  for (const [nodeIndex, node] of conversation.nodes.entries()) {
+    for (const [optionIndex, option] of node.player_options.entries()) {
+      if (option.next_node_id && !nodeIds.has(option.next_node_id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Phone conversation option "${option.id}" references missing next node "${option.next_node_id}".`,
+          path: ["nodes", nodeIndex, "player_options", optionIndex, "next_node_id"]
+        })
+      }
+    }
+  }
+}).transform((conversation) => ({
+  id: conversation.id.trim(),
+  title: conversation.title.trim(),
+  role_key: conversation.role_key.trim(),
+  enabled: conversation.enabled,
+  once: conversation.once,
+  lock_normal_chat: conversation.lock_normal_chat,
+  trigger_expr: conversation.trigger_expr.trim(),
+  entry_node_id: conversation.entry_node_id.trim(),
+  nodes: conversation.nodes
+}))
+
+export const storyPhoneConversationsSchema = z.object({
+  conversations: z.array(storyPhoneConversationDefinitionSchema).default([])
+}).default({
+  conversations: []
+}).superRefine((file, context) => {
+  const conversationIds = new Set<string>()
+  for (const [conversationIndex, conversation] of file.conversations.entries()) {
+    if (conversationIds.has(conversation.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate phone conversation id "${conversation.id}".`,
+        path: ["conversations", conversationIndex, "id"]
+      })
+    }
+    conversationIds.add(conversation.id)
+  }
+})
+
 export const storyBibleSchema = z.object({
   background: z.string().default(""),
   golden_finger: z.string().default(""),
@@ -1392,6 +1527,7 @@ export const storyDocumentSchema = z.object({
   shop: storyShopSchema.default({}),
   initialBags: storyInitialBagsSchema,
   phone: storyPhoneSchema.default({}),
+  phoneConversations: storyPhoneConversationsSchema.default({ conversations: [] }),
   doing: storyDoingSchema.default({}),
   chainEvents: storyChainEventsSchema.default([]),
   poolEvents: storyPoolEventsSchema.default([]),

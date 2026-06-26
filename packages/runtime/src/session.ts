@@ -190,6 +190,51 @@ interface RuntimeStoryPhoneFile {
   fallback_replies: Record<string, string[]>
 }
 
+interface RuntimeStoryPhoneConversationMessage {
+  content: string
+}
+
+interface RuntimeStoryPhoneConversationOption {
+  id: string
+  text: string
+  visible_expr: string
+  script: string
+  next_node_id: string
+}
+
+interface RuntimeStoryPhoneConversationNode {
+  id: string
+  contact_messages: RuntimeStoryPhoneConversationMessage[]
+  player_options: RuntimeStoryPhoneConversationOption[]
+  end: boolean
+  end_script: string
+  invoke?: RuntimeStoryPhoneEventInvocation
+}
+
+interface RuntimeStoryPhoneConversationDefinition {
+  id: string
+  title: string
+  role_key: string
+  enabled: boolean
+  once: boolean
+  lock_normal_chat: boolean
+  trigger_expr: string
+  entry_node_id: string
+  nodes: RuntimeStoryPhoneConversationNode[]
+}
+
+interface RuntimeStoryPhoneConversationsFile {
+  conversations: RuntimeStoryPhoneConversationDefinition[]
+}
+
+interface RuntimeStoryPhoneConversationRuntimeState {
+  conversation_id: string
+  role_key: string
+  node_id: string
+  option_id?: string | null
+  finished: boolean
+}
+
 interface RuntimeStoryDoingMenu {
   id: string
   title: string
@@ -570,6 +615,8 @@ export interface RuntimeStorySessionSnapshot {
   scheduler: RuntimeSchedulerState
   bags: RuntimeBagsState
   phone: RuntimePhoneState
+  phone_conversation?: RuntimeStoryPhoneConversationRuntimeState | null
+  phone_conversations?: RuntimeStoryPhoneConversationRuntimeState[]
   doing: RuntimeDoingState
   shop: RuntimeShopState
   triggered_once_events: RuntimeTriggeredOnceState[]
@@ -591,6 +638,7 @@ export interface RuntimeStoryBundle {
   items?: RuntimeStoryItemsFile
   initialBags?: RuntimeInitialBagsFile
   phone?: RuntimeStoryPhoneFile
+  phoneConversations?: RuntimeStoryPhoneConversationsFile
   refer?: RuntimeStoryReferFile
   doing?: RuntimeStoryDoingFile
   shop?: RuntimeStoryShopFile
@@ -819,6 +867,7 @@ export interface RuntimeStoryViewModel {
   currentSceneLevel: number | null
   currentMessage: RuntimeRenderedMessage | null
   currentDialogue: RuntimeRenderedDialogue | null
+  phoneConversation: RuntimeRuntimePhoneConversationView | null
   availableBranches: RuntimeBranchOptionView[]
   branchContextSummary: Array<{
     key: string
@@ -840,6 +889,7 @@ export type RuntimeStorySessionAction =
   | { type: "select-option"; optionId: string }
   | { type: "submit-text"; field: string; value: string }
   | { type: "invoke-once"; targetType: StoryInvokeTargetType; eventId: string; args?: Record<string, unknown> }
+  | { type: "phone-select-conversation-reply"; optionId: string }
   | { type: "phone-send-talk"; roleKey: string; talkId: string }
   | { type: "phone-send-action"; roleKey: string; actionId: string }
   | { type: "phone-send-quick-message"; roleKey: string; quickMessageId: string }
@@ -881,7 +931,36 @@ interface RuntimeState {
   pendingActions: RuntimeActionState[]
   lastAction: RuntimeActionState | null
   activeStandaloneEvent: RuntimeStandaloneEvent | null
+  activePhoneConversation: RuntimeStoryPhoneConversationRuntimeState | null
   storyDirector: RuntimeStoryDirector
+}
+
+export interface RuntimeRuntimePhoneConversationReplyView {
+  id: string
+  text: string
+  visible: boolean
+}
+
+export interface RuntimeRuntimePhoneConversationNodeView {
+  id: string
+  contactMessages: string[]
+  replies: RuntimeRuntimePhoneConversationReplyView[]
+  end: boolean
+}
+
+export interface RuntimeRuntimePhoneConversationView {
+  conversationId: string
+  title: string
+  roleKey: string
+  roleLabel: string
+  nodeId: string
+  nodeTitle: string
+  nodeIndex: number
+  nodeTotal: number
+  messages: RuntimeRenderedDialogue[]
+  replies: RuntimeRuntimePhoneConversationReplyView[]
+  finished: boolean
+  lockNormalChat: boolean
 }
 
 interface RuntimeResolvedPhoneContactMeta {
@@ -1372,6 +1451,60 @@ function createDefaultPhoneState(): RuntimePhoneState {
   }
 }
 
+function createDefaultPhoneConversationState(): RuntimeStoryPhoneConversationRuntimeState | null {
+  return null
+}
+
+function createDefaultPhoneConversationHistoryState(): RuntimeStoryPhoneConversationRuntimeState[] {
+  return []
+}
+
+function createDefaultPhoneConversationsConfig(): RuntimeStoryPhoneConversationsFile {
+  return {
+    conversations: []
+  }
+}
+
+function normalizePhoneConversationState(
+  state: RuntimeStoryPhoneConversationRuntimeState | null | undefined
+): RuntimeStoryPhoneConversationRuntimeState | null {
+  if (!state) {
+    return null
+  }
+
+  const conversationId = normalizeText(state.conversation_id)
+  const roleKey = normalizePhoneRoleKey(state.role_key)
+  const nodeId = normalizeText(state.node_id)
+  if (!conversationId || !roleKey || !nodeId) {
+    return null
+  }
+
+  return {
+    conversation_id: conversationId,
+    role_key: roleKey,
+    node_id: nodeId,
+    option_id: normalizeOptionalText(state.option_id) ?? null,
+    finished: Boolean(state.finished)
+  }
+}
+
+function normalizePhoneConversationHistoryState(
+  states: RuntimeStoryPhoneConversationRuntimeState[] | undefined
+): RuntimeStoryPhoneConversationRuntimeState[] {
+  const normalizedStates = Array.isArray(states) ? states : []
+  return normalizedStates
+    .map((state) => normalizePhoneConversationState(state))
+    .filter((state): state is RuntimeStoryPhoneConversationRuntimeState => Boolean(state))
+}
+
+function syncActivePhoneConversationState(runtimeState: RuntimeState) {
+  runtimeState.snapshot.phone_conversation = normalizePhoneConversationState(
+    runtimeState.snapshot.phone_conversation ?? runtimeState.activePhoneConversation
+  )
+  runtimeState.activePhoneConversation = runtimeState.snapshot.phone_conversation ?? null
+  return runtimeState.activePhoneConversation
+}
+
 function createDefaultReferConfig(): RuntimeStoryReferFile {
   return {
     gender_value_key: "player.gender",
@@ -1560,6 +1693,17 @@ function normalizePhoneState(snapshot: RuntimeStorySessionSnapshot) {
       }))
       .filter((thread) => thread.role_key)
   }
+}
+
+function normalizeStorySnapshotState(snapshot: RuntimeStorySessionSnapshot) {
+  normalizeBagsState(snapshot)
+  normalizePhoneState(snapshot)
+  snapshot.phone_conversation = normalizePhoneConversationState(snapshot.phone_conversation)
+  snapshot.phone_conversations = normalizePhoneConversationHistoryState(snapshot.phone_conversations)
+  normalizeDoingState(snapshot)
+  normalizeShopState(snapshot)
+  normalizeClockState(snapshot)
+  normalizeSchedulerState(snapshot)
 }
 
 function normalizeDoingState(snapshot: RuntimeStorySessionSnapshot) {
@@ -2659,8 +2803,53 @@ function getBundlePhoneConfig(bundle: RuntimeStoryBundle): RuntimeStoryPhoneFile
   }
 }
 
+function getBundlePhoneConversationsConfig(bundle: RuntimeStoryBundle): RuntimeStoryPhoneConversationsFile {
+  const rawConfig = bundle.phoneConversations ?? createDefaultPhoneConversationsConfig()
+  return {
+    conversations: Array.isArray(rawConfig.conversations) ? rawConfig.conversations : []
+  }
+}
+
 function getBundlePhoneQuickMessages(bundle: RuntimeStoryBundle) {
   return getBundlePhoneConfig(bundle).player_quick_messages ?? []
+}
+
+function findBundlePhoneConversation(bundle: RuntimeStoryBundle, conversationId: string) {
+  const normalizedConversationId = normalizeText(conversationId)
+  if (!normalizedConversationId) {
+    return null
+  }
+
+  return getBundlePhoneConversationsConfig(bundle).conversations.find(
+    (conversation) => normalizeText(conversation.id) === normalizedConversationId
+  ) ?? null
+}
+
+function findPhoneConversationNode(
+  conversation: RuntimeStoryPhoneConversationDefinition | null | undefined,
+  nodeId: string
+) {
+  const normalizedNodeId = normalizeText(nodeId)
+  if (!conversation || !normalizedNodeId) {
+    return null
+  }
+
+  return conversation.nodes.find((node) => normalizeText(node.id) === normalizedNodeId) ?? null
+}
+
+function hasFinishedPhoneConversation(
+  snapshot: RuntimeStorySessionSnapshot,
+  conversationId: string
+) {
+  const normalizedConversationId = normalizeText(conversationId)
+  if (!normalizedConversationId) {
+    return false
+  }
+
+  snapshot.phone_conversations = normalizePhoneConversationHistoryState(snapshot.phone_conversations)
+  return snapshot.phone_conversations.some(
+    (state) => state.conversation_id === normalizedConversationId && state.finished
+  )
 }
 
 function getBundlePhoneContactProfile(bundle: RuntimeStoryBundle, roleKey: string) {
@@ -3010,6 +3199,7 @@ function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySessionSnap
     scheduler: createDefaultSchedulerState(),
     bags: createInitialBagsState(bundle, clock),
     phone: createDefaultPhoneState(),
+    phone_conversation: createDefaultPhoneConversationState(),
     doing: createDefaultDoingState(),
     shop: createDefaultShopState(),
     triggered_once_events: [],
@@ -4849,12 +5039,287 @@ function canFirePhoneProactiveRule(
   }
 }
 
+function getActivePhoneConversationState(snapshot: RuntimeStorySessionSnapshot) {
+  snapshot.phone_conversation = normalizePhoneConversationState(snapshot.phone_conversation)
+  return snapshot.phone_conversation && !snapshot.phone_conversation.finished
+    ? snapshot.phone_conversation
+    : null
+}
+
+function getActivePhoneConversationDefinition(bundle: RuntimeStoryBundle, snapshot: RuntimeStorySessionSnapshot) {
+  const activeState = getActivePhoneConversationState(snapshot)
+  return activeState ? findBundlePhoneConversation(bundle, activeState.conversation_id) : null
+}
+
+function isPhoneConversationNormalChatLocked(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string
+) {
+  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  const activeState = getActivePhoneConversationState(snapshot)
+  if (!activeState || activeState.role_key !== normalizedRoleKey) {
+    return false
+  }
+
+  const conversation = findBundlePhoneConversation(bundle, activeState.conversation_id)
+  return Boolean(conversation?.lock_normal_chat)
+}
+
+function evaluatePhoneConversationPredicate(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  source: string
+) {
+  const normalizedSource = normalizeText(source)
+  if (!normalizedSource) {
+    return true
+  }
+
+  const result = evaluateStoryBooleanExpression(
+    createCombinedValsFile(snapshot),
+    normalizedSource,
+    DEFAULT_MAX_CALC_NESTING_DEPTH,
+    buildRuntimeContextValues(bundle, snapshot, {})
+  )
+  return Boolean(result.result)
+}
+
+function isPhoneConversationOptionVisible(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  option: RuntimeStoryPhoneConversationOption
+) {
+  try {
+    return evaluatePhoneConversationPredicate(bundle, snapshot, option.visible_expr)
+  } catch {
+    return false
+  }
+}
+
+function appendPhoneConversationContactMessages(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[],
+  conversation: RuntimeStoryPhoneConversationDefinition,
+  node: RuntimeStoryPhoneConversationNode
+) {
+  const roleKey = assertRuntimePhoneRoleKey(bundle, conversation.role_key)
+  ensurePhoneContact(bundle, runtimeState.snapshot, roleKey)
+
+  for (const message of node.contact_messages) {
+    const content = normalizeText(message.content)
+    if (!content) {
+      continue
+    }
+
+    sendPhoneMessageFromContact(bundle, runtimeState.snapshot, notifications, roleKey, content)
+  }
+}
+
+function completePhoneConversation(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[],
+  conversation: RuntimeStoryPhoneConversationDefinition,
+  node: RuntimeStoryPhoneConversationNode
+) {
+  const activeState = syncActivePhoneConversationState(runtimeState)
+  if (!activeState) {
+    return false
+  }
+
+  activeState.finished = true
+  activeState.node_id = node.id
+  runtimeState.snapshot.phone_conversations = normalizePhoneConversationHistoryState(runtimeState.snapshot.phone_conversations)
+
+  const existingHistoryIndex = runtimeState.snapshot.phone_conversations.findIndex(
+    (state) => state.conversation_id === activeState.conversation_id
+  )
+  const historyState = cloneValue(activeState)
+  if (existingHistoryIndex >= 0) {
+    runtimeState.snapshot.phone_conversations[existingHistoryIndex] = historyState
+  } else {
+    runtimeState.snapshot.phone_conversations.push(historyState)
+  }
+
+  executeEventScript(
+    bundle,
+    runtimeState,
+    notifications,
+    node.end_script,
+    {},
+    {}
+  )
+
+  if (node.invoke) {
+    queueInvokeEvent(
+      bundle,
+      runtimeState,
+      node.invoke.target_type,
+      node.invoke.event_id,
+      {},
+      node.invoke.delay
+    )
+  }
+
+  runtimeState.snapshot.phone_conversation = null
+  runtimeState.activePhoneConversation = null
+  appendHistory(runtimeState.snapshot, {
+    type: "system",
+    id: `phone-conversation:${conversation.id}`,
+    title: conversation.title || conversation.id,
+    content: "手机剧情对话结束"
+  })
+  return true
+}
+
+function startPhoneConversation(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[],
+  conversationId: unknown
+) {
+  const normalizedConversationId = normalizeText(conversationId)
+  if (!normalizedConversationId) {
+    throw new Error("phone conversation id is required.")
+  }
+
+  const existingActiveState = syncActivePhoneConversationState(runtimeState)
+  if (existingActiveState && !existingActiveState.finished) {
+    throw new Error(`手机剧情对话 "${existingActiveState.conversation_id}" 正在进行中。`)
+  }
+
+  const conversation = findBundlePhoneConversation(bundle, normalizedConversationId)
+  if (!conversation) {
+    throw new Error(`phone conversation "${normalizedConversationId}" does not exist.`)
+  }
+
+  if (!conversation.enabled) {
+    return false
+  }
+
+  if (conversation.once && hasFinishedPhoneConversation(runtimeState.snapshot, conversation.id)) {
+    return false
+  }
+
+  const roleKey = assertRuntimePhoneRoleKey(bundle, conversation.role_key)
+  if (conversation.trigger_expr && !evaluatePhoneConversationPredicate(bundle, runtimeState.snapshot, conversation.trigger_expr)) {
+    return false
+  }
+
+  const entryNode = findPhoneConversationNode(conversation, conversation.entry_node_id)
+  if (!entryNode) {
+    throw new Error(`phone conversation "${conversation.id}" entry node "${conversation.entry_node_id}" does not exist.`)
+  }
+
+  ensurePhoneContact(bundle, runtimeState.snapshot, roleKey)
+  const nextState: RuntimeStoryPhoneConversationRuntimeState = {
+    conversation_id: conversation.id,
+    role_key: roleKey,
+    node_id: entryNode.id,
+    option_id: null,
+    finished: false
+  }
+  runtimeState.snapshot.phone_conversation = nextState
+  runtimeState.activePhoneConversation = nextState
+
+  appendPhoneConversationContactMessages(bundle, runtimeState, notifications, conversation, entryNode)
+  appendHistory(runtimeState.snapshot, {
+    type: "system",
+    id: `phone-conversation:${conversation.id}`,
+    title: conversation.title || conversation.id,
+    content: "手机剧情对话开始"
+  })
+
+  if (entryNode.end) {
+    completePhoneConversation(bundle, runtimeState, notifications, conversation, entryNode)
+  }
+
+  return true
+}
+
+function advancePhoneConversationReply(
+  bundle: RuntimeStoryBundle,
+  runtimeState: RuntimeState,
+  notifications: string[],
+  optionId: string
+) {
+  const activeState = syncActivePhoneConversationState(runtimeState)
+  if (!activeState) {
+    throw new Error("当前没有进行中的手机剧情对话。")
+  }
+
+  const conversation = findBundlePhoneConversation(bundle, activeState.conversation_id)
+  if (!conversation) {
+    throw new Error(`phone conversation "${activeState.conversation_id}" does not exist.`)
+  }
+
+  const currentNode = findPhoneConversationNode(conversation, activeState.node_id)
+  if (!currentNode) {
+    throw new Error(`phone conversation node "${activeState.node_id}" does not exist.`)
+  }
+
+  const normalizedOptionId = normalizeText(optionId)
+  const option = currentNode.player_options.find((item) => item.id === normalizedOptionId)
+  if (!option || !isPhoneConversationOptionVisible(bundle, runtimeState.snapshot, option)) {
+    throw new Error(`手机剧情回复 "${normalizedOptionId}" 当前不可用。`)
+  }
+
+  const renderedReplyText = renderDialogueContent(bundle, runtimeState.snapshot, option.text, {})
+  const playerMessage = appendPhoneMessage(runtimeState.snapshot, activeState.role_key, "player", renderedReplyText, {
+    read: true,
+    optionId: option.id,
+    optionKind: "talk",
+    tags: ["conversation", conversation.id]
+  })
+
+  if (playerMessage) {
+    appendHistory(runtimeState.snapshot, {
+      type: "system",
+      id: playerMessage.id,
+      title: `phone:${activeState.role_key}`,
+      content: `主角向 ${findRoleLabel(bundle, activeState.role_key)} 发送剧情回复：${playerMessage.content}`
+    })
+  }
+
+  executeEventScript(bundle, runtimeState, notifications, option.script, {}, {})
+
+  const nextNodeId = normalizeText(option.next_node_id)
+  if (!nextNodeId) {
+    activeState.option_id = option.id
+    activeState.finished = true
+    completePhoneConversation(bundle, runtimeState, notifications, conversation, currentNode)
+    return true
+  }
+
+  const nextNode = findPhoneConversationNode(conversation, nextNodeId)
+  if (!nextNode) {
+    throw new Error(`phone conversation next node "${nextNodeId}" does not exist.`)
+  }
+
+  activeState.node_id = nextNode.id
+  activeState.option_id = option.id
+  runtimeState.snapshot.phone_conversation = activeState
+  runtimeState.activePhoneConversation = activeState
+  appendPhoneConversationContactMessages(bundle, runtimeState, notifications, conversation, nextNode)
+
+  if (nextNode.end) {
+    completePhoneConversation(bundle, runtimeState, notifications, conversation, nextNode)
+  }
+
+  return true
+}
+
 function reconcilePhoneAutoMessages(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
   notifications: string[]
 ) {
   normalizePhoneState(runtimeState.snapshot)
+  if (getActivePhoneConversationState(runtimeState.snapshot)) {
+    return
+  }
 
   for (const contact of runtimeState.snapshot.phone.contacts) {
     const proactiveRules = getPhoneProactiveRulesForContact(bundle, contact.role_key)
@@ -5071,6 +5536,10 @@ function sendPhoneTalk(
 ) {
   const snapshot = runtimeState.snapshot
   const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  if (isPhoneConversationNormalChatLocked(bundle, snapshot, normalizedRoleKey)) {
+    throw new Error("该联系人正在进行剧情手机对话，暂时不能普通闲聊。")
+  }
+
   const talkOption = findPhoneTalkOption(bundle, normalizedRoleKey, talkId, snapshot)
 
   if (!talkOption) {
@@ -5128,6 +5597,10 @@ function sendPhoneAction(
 ) {
   const snapshot = runtimeState.snapshot
   const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  if (isPhoneConversationNormalChatLocked(bundle, snapshot, normalizedRoleKey)) {
+    throw new Error("该联系人正在进行剧情手机对话，暂时不能执行普通动作。")
+  }
+
   const actionOption = resolvePhoneActionOptionsForContact(bundle, normalizedRoleKey, snapshot).find(
     (entry) => entry.id === normalizeText(actionId)
   )
@@ -5527,9 +6000,10 @@ function createRuntimePhoneReadableFunctions(
 
 function createRuntimePhoneScriptFunctions(
   bundle: RuntimeStoryBundle,
-  snapshot: RuntimeStorySessionSnapshot,
+  runtimeState: RuntimeState,
   notifications: string[]
 ) {
+  const snapshot = runtimeState.snapshot
   const readableFunctions = createRuntimePhoneReadableFunctions(bundle, snapshot)
 
   return {
@@ -5588,6 +6062,9 @@ function createRuntimePhoneScriptFunctions(
     phone_mark_read(roleKey: unknown) {
       const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
       return markPhoneThreadRead(snapshot, normalizedRoleKey)
+    },
+    phone_start_conversation(conversationId: unknown) {
+      return startPhoneConversation(bundle, runtimeState, notifications, conversationId)
     },
     ...readableFunctions
   }
@@ -5698,11 +6175,12 @@ function createRuntimeShopScriptFunctions(
 
 function buildRuntimeScriptContext(
   bundle: RuntimeStoryBundle,
-  snapshot: RuntimeStorySessionSnapshot,
+  runtimeState: RuntimeState,
   notifications: string[],
   branchValues: Record<string, unknown>,
   callValues: Record<string, unknown> = {}
 ) {
+  const snapshot = runtimeState.snapshot
   const referValues = buildRuntimeReferContextValues(bundle, snapshot)
   const combinedValues: Record<string, unknown> = {
     ...referValues
@@ -5723,7 +6201,7 @@ function buildRuntimeScriptContext(
     assignableValues,
     functions: {
       ...createRuntimeBagScriptFunctions(bundle, snapshot),
-      ...createRuntimePhoneScriptFunctions(bundle, snapshot, notifications),
+      ...createRuntimePhoneScriptFunctions(bundle, runtimeState, notifications),
       ...createRuntimeDoingScriptFunctions(bundle, snapshot),
       ...createRuntimeShopScriptFunctions(bundle, snapshot, notifications)
     }
@@ -5770,7 +6248,7 @@ function executeEventScript(
 
   const executionContext = buildRuntimeScriptContext(
     bundle,
-    runtimeState.snapshot,
+    runtimeState,
     notifications,
     branchValues,
     callValues
@@ -6722,7 +7200,7 @@ function executeAction(
 
   const executionContext = buildRuntimeScriptContext(
     bundle,
-    runtimeState.snapshot,
+    runtimeState,
     notifications,
     targetActionState.branchValues,
     getRuntimePlayableEventCallValues(runtimeState, sourceEvent)
@@ -7159,6 +7637,58 @@ export function buildRuntimePhoneThreadView(
   }
 }
 
+function buildRuntimePhoneConversationView(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot
+): RuntimeRuntimePhoneConversationView | null {
+  const activeState = getActivePhoneConversationState(snapshot)
+  if (!activeState) {
+    return null
+  }
+
+  const conversation = findBundlePhoneConversation(bundle, activeState.conversation_id)
+  if (!conversation) {
+    return null
+  }
+
+  const node = findPhoneConversationNode(conversation, activeState.node_id)
+  if (!node) {
+    return null
+  }
+
+  const roleLabel = findRoleLabel(bundle, activeState.role_key)
+  const nodeIndex = Math.max(0, conversation.nodes.findIndex((item) => item.id === node.id))
+  const replies = node.player_options.map((option) => {
+    const visible = isPhoneConversationOptionVisible(bundle, snapshot, option)
+    return {
+      id: option.id,
+      text: renderDialogueContent(bundle, snapshot, option.text, {}),
+      visible
+    } satisfies RuntimeRuntimePhoneConversationReplyView
+  })
+
+  return {
+    conversationId: conversation.id,
+    title: conversation.title || conversation.id,
+    roleKey: activeState.role_key,
+    roleLabel,
+    nodeId: node.id,
+    nodeTitle: node.id,
+    nodeIndex: nodeIndex >= 0 ? nodeIndex + 1 : 1,
+    nodeTotal: Math.max(1, conversation.nodes.length),
+    messages: node.contact_messages.map((message, index) => ({
+      index: index + 1,
+      total: Math.max(1, node.contact_messages.length),
+      speakerLabel: roleLabel,
+      speakerKey: activeState.role_key,
+      content: renderDialogueContent(bundle, snapshot, message.content, {})
+    })),
+    replies,
+    finished: Boolean(activeState.finished),
+    lockNormalChat: Boolean(conversation.lock_normal_chat)
+  }
+}
+
 function buildViewModel(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
@@ -7223,6 +7753,7 @@ function buildViewModel(
   const bagSummary = buildRuntimeBagSummary(bundle, runtimeState.snapshot)
   const doing = buildRuntimeDoingView(bundle, runtimeState.snapshot)
   const shop = buildRuntimeShopView(bundle, runtimeState.snapshot)
+  const phoneConversation = buildRuntimePhoneConversationView(bundle, runtimeState.snapshot)
 
   const availableBranches = (currentEventState?.availableActions ?? []).flatMap((actionState) => {
     const actionNode = getBundleGraphNode(bundle, actionState.nodeId)
@@ -7254,6 +7785,7 @@ function buildViewModel(
     currentSceneLevel: null,
     currentMessage,
     currentDialogue,
+    phoneConversation,
     availableBranches,
     branchContextSummary,
     bagSummary,
@@ -7284,6 +7816,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     pendingActions: [],
     lastAction: null,
     activeStandaloneEvent: null,
+    activePhoneConversation: normalizePhoneConversationState(baseSnapshot.phone_conversation),
     storyDirector
   }
 
@@ -7297,6 +7830,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
   normalizeBagsState(runtimeState.snapshot)
   normalizePhoneState(runtimeState.snapshot)
+  runtimeState.snapshot.phone_conversation = normalizePhoneConversationState(runtimeState.snapshot.phone_conversation)
+  runtimeState.snapshot.phone_conversations = normalizePhoneConversationHistoryState(runtimeState.snapshot.phone_conversations)
+  runtimeState.activePhoneConversation = runtimeState.snapshot.phone_conversation ?? null
   normalizeDoingState(runtimeState.snapshot)
   normalizeShopState(runtimeState.snapshot)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)
@@ -7435,6 +7971,16 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           markPhoneThreadRead(runtimeState.snapshot, normalizedRoleKey)
         } catch (error) {
           notifications.push(error instanceof Error ? error.message : "标记手机消息已读失败。")
+        }
+        return
+      }
+
+      if (action.type === "phone-select-conversation-reply") {
+        try {
+          advancePhoneConversationReply(options.bundle, runtimeState, notifications, action.optionId)
+          reconcileScheduler(options.bundle, runtimeState, notifications)
+        } catch (error) {
+          notifications.push(error instanceof Error ? error.message : "发送手机剧情回复失败。")
         }
         return
       }

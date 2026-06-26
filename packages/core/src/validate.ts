@@ -96,6 +96,10 @@ function collectValidationShopProductIds(document: StoryDocument) {
   return document.shop.products.map((product) => product.id)
 }
 
+function collectValidationPhoneConversationIds(document: StoryDocument) {
+  return document.phoneConversations.conversations.map((conversation) => conversation.id)
+}
+
 function collectValidationReferValues(document: StoryDocument) {
   const values: Record<string, unknown> = {}
 
@@ -131,6 +135,7 @@ function buildValidationScriptContext(
     roleKeys: collectValidationRoleKeys(document),
     doingIds: collectValidationDoingIds(document),
     shopProductIds: collectValidationShopProductIds(document),
+    phoneConversationIds: collectValidationPhoneConversationIds(document),
     bagMode: "write",
     phoneMode: "write",
     doingMode: "write",
@@ -145,6 +150,7 @@ function buildValidationReadableContext(document: StoryDocument): StoryScriptExe
     roleKeys: collectValidationRoleKeys(document),
     doingIds: collectValidationDoingIds(document),
     shopProductIds: collectValidationShopProductIds(document),
+    phoneConversationIds: collectValidationPhoneConversationIds(document),
     bagMode: "read",
     phoneMode: "read",
     doingMode: "read",
@@ -167,6 +173,7 @@ export interface StoryScriptValidationContextOptions {
   roleKeys?: Iterable<string>
   doingIds?: Iterable<string>
   shopProductIds?: Iterable<string>
+  phoneConversationIds?: Iterable<string>
   bagMode?: StoryScriptValidationBagMode
   phoneMode?: StoryScriptValidationPhoneMode
   doingMode?: StoryScriptValidationDoingMode
@@ -268,9 +275,13 @@ function buildValidationPhoneReadableFunctionsFromRoleKeys(roleKeys: Iterable<st
 
 function buildValidationPhoneScriptFunctionsFromRoleKeys(
   roleKeys: Iterable<string>,
+  phoneConversationIds: Iterable<string>,
   phoneMode: StoryScriptValidationPhoneMode
 ) {
   const readableFunctions = buildValidationPhoneReadableFunctionsFromRoleKeys(roleKeys)
+  const phoneConversationIdSet = new Set(
+    Array.from(phoneConversationIds, (conversationId) => normalizeStoryScriptText(conversationId).trim()).filter(Boolean)
+  )
 
   if (phoneMode === "read") {
     return readableFunctions
@@ -314,6 +325,18 @@ function buildValidationPhoneScriptFunctionsFromRoleKeys(
     phone_mark_read(roleKey: unknown) {
       readableFunctions.phone_has_contact(roleKey)
       return 0
+    },
+    phone_start_conversation(conversationId: unknown) {
+      if (typeof conversationId !== "string" || !conversationId.trim()) {
+        throw new Error("phone conversation id is required.")
+      }
+
+      const normalizedConversationId = conversationId.trim()
+      if (!phoneConversationIdSet.has(normalizedConversationId)) {
+        throw new Error(`phone conversation "${normalizedConversationId}" does not exist in phone conversation library.`)
+      }
+
+      return true
     },
     ...readableFunctions
   }
@@ -467,7 +490,11 @@ export function createStoryScriptValidationContext(
     },
     functions: {
       ...buildValidationBagScriptFunctionsFromIds(options.itemIds ?? [], bagMode),
-      ...buildValidationPhoneScriptFunctionsFromRoleKeys(options.roleKeys ?? [], phoneMode),
+      ...buildValidationPhoneScriptFunctionsFromRoleKeys(
+        options.roleKeys ?? [],
+        options.phoneConversationIds ?? [],
+        phoneMode
+      ),
       ...buildValidationDoingScriptFunctionsFromIds(options.doingIds ?? [], doingMode),
       ...buildValidationShopScriptFunctionsFromIds(options.shopProductIds ?? [], shopMode),
       ...(options.functions ?? {})
@@ -1088,6 +1115,161 @@ function validatePhoneConfig(document: StoryDocument, issues: ValidationIssue[])
         reply,
         ["phone", "fallback_replies", tag, String(replyIndex)]
       )
+    }
+  }
+}
+
+function validatePhoneConversationsConfig(document: StoryDocument, issues: ValidationIssue[]) {
+  const roleKeys = collectValidationRoleKeys(document)
+  const valsFile = buildCombinedStoryScriptVals(document)
+  const readableContext = buildValidationReadableContext(document)
+  const scriptContext = buildValidationScriptContext(document)
+  const invokeTargets = buildStoryInvokeValidationTargets(document)
+  const invokeTargetKeys = new Set(
+    invokeTargets.map((target) => `${target.type}:${target.eventId}`)
+  )
+
+  for (const [conversationIndex, conversation] of document.phoneConversations.conversations.entries()) {
+    const conversationPath = ["phoneConversations", "conversations", String(conversationIndex)]
+
+    if (!roleKeys.has(conversation.role_key)) {
+      pushIssue(
+        issues,
+        "error",
+        "phone-conversation.missing-role",
+        `Phone conversation "${conversation.id}" references unknown role "${conversation.role_key}".`,
+        [...conversationPath, "role_key"]
+      )
+    }
+
+    if (conversation.trigger_expr.trim()) {
+      const triggerIssues = validateStoryScriptContent(
+        valsFile,
+        conversation.trigger_expr,
+        "predicate",
+        DEFAULT_MAX_CALC_NESTING_DEPTH,
+        readableContext
+      )
+
+      for (const issue of triggerIssues) {
+        pushIssue(
+          issues,
+          "error",
+          "phone-conversation.trigger-invalid",
+          `Phone conversation "${conversation.id}" trigger_expr is invalid at line ${issue.lineNumber}: ${issue.message}`,
+          [...conversationPath, "trigger_expr"]
+        )
+      }
+    }
+
+    for (const [nodeIndex, node] of conversation.nodes.entries()) {
+      const nodePath = [...conversationPath, "nodes", String(nodeIndex)]
+
+      for (const [messageIndex, message] of node.contact_messages.entries()) {
+        validateTextTemplateField(
+          issues,
+          "phone-conversation.message-template-invalid",
+          `Phone conversation "${conversation.id}/${node.id}" contact message`,
+          message.content,
+          [...nodePath, "contact_messages", String(messageIndex), "content"]
+        )
+      }
+
+      if (node.end_script.trim()) {
+        for (const issue of validateStoryScript(
+          valsFile,
+          node.end_script,
+          undefined,
+          scriptContext
+        )) {
+          pushIssue(
+            issues,
+            "error",
+            "phone-conversation.end-script-invalid",
+            `Phone conversation "${conversation.id}/${node.id}" end_script is invalid at line ${issue.lineNumber}: ${issue.message}`,
+            [...nodePath, "end_script"]
+          )
+        }
+
+        for (const issue of validateStoryScriptInvokeReferences(node.end_script, invokeTargets)) {
+          pushIssue(
+            issues,
+            "error",
+            "phone-conversation.end-script-invoke-invalid",
+            `Phone conversation "${conversation.id}/${node.id}" end_script invoke_once 引用无效，第 ${issue.lineNumber} 行: ${issue.message}`,
+            [...nodePath, "end_script"]
+          )
+        }
+      }
+
+      if (node.invoke && !invokeTargetKeys.has(`${node.invoke.target_type}:${node.invoke.event_id}`)) {
+        pushIssue(
+          issues,
+          "error",
+          "phone-conversation.invoke-missing-event",
+          `Phone conversation "${conversation.id}/${node.id}" references missing invoke event "${node.invoke.target_type}:${node.invoke.event_id}".`,
+          [...nodePath, "invoke", "event_id"]
+        )
+      }
+
+      for (const [optionIndex, option] of node.player_options.entries()) {
+        const optionPath = [...nodePath, "player_options", String(optionIndex)]
+
+        validateTextTemplateField(
+          issues,
+          "phone-conversation.option-template-invalid",
+          `Phone conversation "${conversation.id}/${node.id}" option "${option.id}" text`,
+          option.text,
+          [...optionPath, "text"]
+        )
+
+        if (option.visible_expr.trim()) {
+          const visibleIssues = validateStoryScriptContent(
+            valsFile,
+            option.visible_expr,
+            "predicate",
+            DEFAULT_MAX_CALC_NESTING_DEPTH,
+            readableContext
+          )
+
+          for (const issue of visibleIssues) {
+            pushIssue(
+              issues,
+              "error",
+              "phone-conversation.option-visible-invalid",
+              `Phone conversation "${conversation.id}/${node.id}" option "${option.id}" visible_expr is invalid at line ${issue.lineNumber}: ${issue.message}`,
+              [...optionPath, "visible_expr"]
+            )
+          }
+        }
+
+        if (option.script.trim()) {
+          for (const issue of validateStoryScript(
+            valsFile,
+            option.script,
+            undefined,
+            scriptContext
+          )) {
+            pushIssue(
+              issues,
+              "error",
+              "phone-conversation.option-script-invalid",
+              `Phone conversation "${conversation.id}/${node.id}" option "${option.id}" script is invalid at line ${issue.lineNumber}: ${issue.message}`,
+              [...optionPath, "script"]
+            )
+          }
+
+          for (const issue of validateStoryScriptInvokeReferences(option.script, invokeTargets)) {
+            pushIssue(
+              issues,
+              "error",
+              "phone-conversation.option-script-invoke-invalid",
+              `Phone conversation "${conversation.id}/${node.id}" option "${option.id}" script invoke_once 引用无效，第 ${issue.lineNumber} 行: ${issue.message}`,
+              [...optionPath, "script"]
+            )
+          }
+        }
+      }
     }
   }
 }
@@ -1773,6 +1955,7 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
   }
 
   validatePhoneConfig(document, issues)
+  validatePhoneConversationsConfig(document, issues)
   validateDoingConfig(document, issues)
   validateShopConfig(document, issues)
 

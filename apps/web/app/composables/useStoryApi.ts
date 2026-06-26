@@ -7,6 +7,7 @@ import type {
   StoryDocument,
   StoryEventLocationFile,
   StoryItemsFile,
+  StoryPhoneConversationsFile,
   StoryPhoneFile,
   StoryPlayerOverrideValsFile,
   StoryReferFile,
@@ -50,6 +51,7 @@ import type {
   SaveEventRequest,
   SaveEventLocationsRequest,
   SaveStoryItemsRequest,
+  SaveStoryPhoneConversationsRequest,
   SaveStoryPhoneRequest,
   SaveStoryReferRequest,
   SaveStoryShopRequest,
@@ -70,6 +72,7 @@ import type {
   StoryEventLocationsResponse,
   StoryItemsResponse,
   StoryPhoneResponse,
+  StoryPhoneConversationsResponse,
   StoryPlayerOverrideValsResponse,
   StoryReferResponse,
   StoryRolesResponse,
@@ -375,6 +378,23 @@ export function useStoryApi() {
     return response.phone
   }
 
+  async function savePhoneConversations(
+    storyId: string,
+    phoneConversations: StoryPhoneConversationsFile
+  ): Promise<StoryPhoneConversationsFile> {
+    const response = await $fetch<StoryPhoneConversationsResponse>(
+      `${apiBase}/stories/${storyId}/phone-conversations`,
+      {
+        method: "PUT",
+        body: {
+          phoneConversations
+        } satisfies SaveStoryPhoneConversationsRequest
+      }
+    )
+
+    return response.phoneConversations
+  }
+
   async function saveRefer(storyId: string, refer: StoryReferFile): Promise<StoryReferFile> {
     const response = await $fetch<StoryReferResponse>(`${apiBase}/stories/${storyId}/refer`, {
       method: "PUT",
@@ -629,6 +649,7 @@ export function useStoryApi() {
     saveItems,
     saveShop,
     savePhone,
+    savePhoneConversations,
     saveRefer,
     savePlayerOverrideVals,
     saveRoles,

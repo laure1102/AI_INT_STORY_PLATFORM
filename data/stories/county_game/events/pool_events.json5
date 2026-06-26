@@ -296,7 +296,7 @@
   },
   {
     bgm: '',
-    end_script: 'let name = "normal:debt_collector"\n// 【联系人接入】\nphone_add_contact(name )\nphone_set_favor(name , 10)',
+    end_script: 'let name = "normal:debt_collector"\n\n// 【联系人接入】\n// 将花都旧债收债人加入手机联系人，并压低初始好感。\nphone_add_contact(name)\nphone_set_favor(name, 10)\n\n// 【旧债初始化】\n// 确认花都旧债进入追讨线，后续连续手机对话会写入预约状态。\n${player.debt_huadu_active} = true\n${player.debt_huadu_amount} = 100000\n${player.debt_huadu_cleared} = false\n${player.debt_huadu_msg_sent} = true\n\n// 【剧情手机对话】\n// 启动强连续的收债手机对白，期间锁定普通闲聊和动作。\nphone_start_conversation("huadu_debt_phone")',
     id: 'shouzhai-start',
     init_script: '',
     invoke_params: [],
@@ -308,7 +308,41 @@
       type: 'silent',
     },
     title: '收债人上门事件-开始',
-    trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && !phone_has_contact("normal:debt_collector")',
+    trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && !${player.debt_huadu_msg_sent} && !${player.debt_huadu_cleared}',
     trigger_mode: 'condition',
+  },
+  {
+    bgm: '',
+    end_script: '// 【花都旧债清账】\n// 收债人在临河汽车站当面收账。余额足够则扣除旧债并结清；余额不足则记录升级压力。\nlet debt = ${player.debt_huadu_amount}\nif (debt <= 0) {\n  debt = 100000\n}\n\nif (${player.money} >= debt) {\n  ${player.money} -= debt\n  ${player.debt_huadu_amount} = 0\n  ${player.debt_huadu_active} = false\n  ${player.debt_huadu_cleared} = true\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 0\n  phone_add_favor("normal:debt_collector", 5)\n  phone_send_from_contact("normal:debt_collector", "账清了。以后花都那边没人再拿这事烦你。")\n} else {\n  ${player.debt_huadu_active} = true\n  ${player.debt_huadu_cleared} = false\n  ${player.debt_huadu_last_pressure} = 4\n  phone_add_favor("normal:debt_collector", -8)\n  phone_send_from_contact("normal:debt_collector", "你说当面清账，结果钱不够。下一次就不是这么好说话了。")\n}',
+    id: 'debt_collector_arrives_linh_1d',
+    init_script: '',
+    invoke_params: [],
+    location: 'qichezhan_lvl1',
+    object_keys: [
+      'normal:debt_collector',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '临河汽车站门口，彪哥拖着一个旧皮包下了车。他看见你，没寒暄，只把手机上的借条截图亮到你眼前。',
+          speaker_key: 'normal:debt_collector',
+          speaker_type: 'object',
+        },
+        {
+          content: '人我来了，账也带来了。十万，一分不少，今天在这儿说清楚。',
+          speaker_key: 'normal:debt_collector',
+          speaker_type: 'object',
+        },
+        {
+          content: '我既然让你来临河，就没打算躲。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '彪哥到临河收账',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
   },
 ]

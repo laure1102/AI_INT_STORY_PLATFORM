@@ -377,6 +377,92 @@ export interface StoryPhoneFile {
   fallback_replies: Record<string, string[]>
 }
 
+export interface StoryPhoneConversationMessage {
+  content: string
+}
+
+export interface StoryPhoneConversationOption {
+  id: string
+  text: string
+  visible_expr: string
+  script: string
+  next_node_id: string
+}
+
+export interface StoryPhoneConversationNode {
+  id: string
+  contact_messages: StoryPhoneConversationMessage[]
+  player_options: StoryPhoneConversationOption[]
+  end: boolean
+  end_script: string
+  invoke?: StoryPhoneEventInvocation
+}
+
+export interface StoryPhoneConversationDefinition {
+  id: string
+  title: string
+  role_key: string
+  enabled: boolean
+  once: boolean
+  lock_normal_chat: boolean
+  trigger_expr: string
+  entry_node_id: string
+  nodes: StoryPhoneConversationNode[]
+}
+
+export interface StoryPhoneConversationsFile {
+  conversations: StoryPhoneConversationDefinition[]
+}
+
+export interface StoryPhoneConversationState {
+  conversation_id: string
+  role_key: string
+  node_id: string
+  option_id?: string | null
+  finished: boolean
+}
+
+export interface StoryPhoneConversationOptionInput {
+  id: string
+  text: string
+  visible_expr: string
+  script: string
+  next_node_id: string
+}
+
+export interface StoryPhoneConversationMessageInput {
+  content: string
+}
+
+export interface StoryPhoneConversationNodeInput {
+  id: string
+  contact_messages: StoryPhoneConversationMessageInput[]
+  player_options: StoryPhoneConversationOptionInput[]
+  end: boolean
+  end_script: string
+  invoke?: StoryPhoneEventInvocation
+}
+
+export interface StoryPhoneConversationInput {
+  id: string
+  title: string
+  role_key: string
+  enabled: boolean
+  once: boolean
+  lock_normal_chat: boolean
+  trigger_expr: string
+  entry_node_id: string
+  nodes: StoryPhoneConversationNodeInput[]
+}
+
+export interface StoryPhoneConversationsResponse {
+  phoneConversations: StoryPhoneConversationsFile
+}
+
+export interface SaveStoryPhoneConversationsRequest {
+  phoneConversations: StoryPhoneConversationsFile
+}
+
 export interface StoryDoingMenu {
   id: string
   title: string
@@ -606,6 +692,7 @@ export interface StoryDocument {
   shop: StoryShopFile
   initialBags: StoryInitialBagsFile
   phone: StoryPhoneFile
+  phoneConversations: StoryPhoneConversationsFile
   doing: StoryDoingFile
   chainEvents: StoryChainEventsFile
   poolEvents: StoryPoolEventsFile
@@ -679,6 +766,7 @@ export interface CompiledStory {
   shop: StoryShopFile
   initialBags: StoryInitialBagsFile
   phone: StoryPhoneFile
+  phoneConversations: StoryPhoneConversationsFile
   doing: StoryDoingFile
   chainEvents: Record<string, CompiledEvent | CompiledAction>
   poolEvents: StoryPoolEventsFile

@@ -1,6 +1,6 @@
 ﻿# Story Manager Agent Guide
 
-Last updated: `2026-06-17`
+Last updated: `2026-06-26`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -67,6 +67,8 @@ Core files:
 - `event_location.json5`
 - `items.json5`
 - `initial_bags.json5`
+- `phone.json5` // phone relationship tracks, talk/action/reply libraries, and contact profiles
+- `phone_conversations.json5` // continuous plot phone conversations
 - `doing.json5` // player-initiated action menu/event pool
 - `shop.json5` // in-game shop shelves existing item assets
 
@@ -84,6 +86,8 @@ Notes:
 - Chain event nodes and action nodes now live together in `events/chains.json5`.
 - `items.json5` is the story-level item asset library; it is separate from event/location/role assets and includes editable item categories.
 - `initial_bags.json5` is only a new-save initialization template; live inventory is stored in the runtime session snapshot as `bags`.
+- `phone.json5` stores ordinary phone contact assets: relationship tracks, personality library, talk library, action library, reply library, contact profiles, quick messages, and proactive messages.
+- `phone_conversations.json5` stores plot-specific continuous phone dialogues. Use it when a phone exchange must proceed node by node, lock ordinary chat/actions, and optionally invoke a follow-up event when the conversation ends.
 - `refer.json5` is the story-level称谓库. It defines gender-aware text terms exposed as `${term.xxx}` in dialogue/message/phone text templates.
 - `doing.json5` is the story-level player-initiated action config. It contains menu tree data plus doings that reuse flat-event presentation/script semantics.
 - `shop.json5` is the story-level shop shelf config. It must only reference existing `items.json5` item ids; it owns price, display/purchase conditions, gift favor delta, and cooldowns.
@@ -372,7 +376,7 @@ Rules:
 
 - this file is per-story creative source material for the editor and backend generation agents
 - it should describe playable web-novel game design, not only prose-writing instructions
-- generated output must target project data files: chain events, pool events, schedule events, scenes, roles, locations, items, variables, phone contacts, and doing actions
+- generated output must target project data files: chain events, pool events, schedule events, scenes, roles, locations, items, variables, phone contacts, plot phone conversations, doing actions, and shop shelves
 - runtime ignores this file; the compiler should not include it in `CompiledStory`
 
 ## 5. Event model
@@ -721,8 +725,8 @@ Current foundation:
 - `apps/api` exposes `POST /api/stories/:storyId/creation-agent/apply`
 - `creation-agent/run` starts a new creation when called with only `instruction`; when called with `baseDraft`, the same multi-Agent workflow revises the current draft and must return a complete revised draft, not a patch
 - the LangGraph workflow returns a structured draft preview and does not directly mutate story files
-- the editor creation workspace can run the backend multi-Agent workflow and display Agent logs, draft events, locations, roles, items, variable suggestions, phone contact assets, doing assets, notes, and warnings
-- the editor creation workspace can select draft locations, roles, items, variables, events, phone contact assets, and doing assets, then explicitly apply the selected subset
+- the editor creation workspace can run the backend multi-Agent workflow and display Agent logs, draft events, locations, roles, items, variable suggestions, phone contact assets, plot phone conversations, doing assets, notes, and warnings
+- the editor creation workspace can select draft locations, roles, items, variables, events, phone contact assets, plot phone conversations, and doing assets, then explicitly apply the selected subset
 - the backend creation Agent gives item context in two layers:
   - `itemIndexAll` is the full compact item index for existence checks and reuse decisions
   - `relevantItemDetails` is a local keyword-ranked detail pool for richer item fields; it is not the full library
@@ -731,7 +735,7 @@ Current foundation:
 - after a draft exists, the new-creation command area is collapsed by default; the feedback box sends the editable current draft as `baseDraft` so the Agent can optimize the existing result instead of starting over
 - feedback optimization shows a dedicated running state and local feedback history; each submitted feedback item is marked as running, completed, or failed
 - the editor creation workspace previews apply impact before confirmation: create, overwrite, skip, and likely reference cleanups
-- draft apply can write selected data into `events/chains.json5`, `events/pool_events.json5`, `events/schedule_events.json5`, `event_location.json5`, `nomal_roles.json5`, `import_roles.json5`, `items.json5`, `vals.json5`, `phone.json5`, and `doing.json5`
+- draft apply can write selected data into `events/chains.json5`, `events/pool_events.json5`, `events/schedule_events.json5`, `event_location.json5`, `nomal_roles.json5`, `import_roles.json5`, `items.json5`, `vals.json5`, `phone.json5`, `phone_conversations.json5`, and `doing.json5`
 - draft apply returns the updated story document, validation result, applied counts, and warnings for any downgraded or skipped references
 - variable suggestions are structured draft rows and can be written to `vals.json5` after user confirmation
 
@@ -744,6 +748,7 @@ Current draft-apply rules:
 - events are selected by event keys, using `chain:<id>`, `pool:<id>`, or `schedule:<id>`
 - variables are selected by variable keys, using `group.name`; legacy string suggestions are accepted for backward compatibility
 - phone contact assets are selected by ids/role keys from `draft.phone`: personality ids, talk ids, action ids, reply ids, and contact profile role keys
+- plot phone conversations are selected by conversation id from `draft.phoneConversations.conversations` and are written to `phone_conversations.json5`
 - doing assets are selected by ids from `draft.doing`: menu ids and doing ids
 - draft object ids and variable keys are not editable in the creation workspace yet; this keeps selection state and event references stable
 - draft ids are normalized to ASCII-like ids before apply
@@ -761,6 +766,7 @@ Current draft-apply rules:
 - invalid `condition` or `invoke` trigger details are downgraded to `default` with a warning
 - schedule draft events require `loop`; missing loop rules are applied as `daily` with a warning
 - selected phone assets are written to `phone.json5`; contact profile role keys must reference existing or selected NPC roles, invoke targets must reference existing or selected events, and invalid scopes/costs are pruned with warnings
+- selected plot phone conversations are written to `phone_conversations.json5`; role keys must reference existing or selected NPC roles, node ids must be valid inside the conversation, and ending invoke targets must reference existing or selected events
 - selected doing assets are written to `doing.json5`; doing entries must reference existing or selected menus, and missing location/role references are cleared or removed with warnings
 
 Required architecture:

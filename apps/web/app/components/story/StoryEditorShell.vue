@@ -16,6 +16,7 @@ import type {
   StoryLoopEventFile,
   StoryOnceEventFile,
   StoryPlayerOverrideValsFile,
+  StoryPhoneConversationsFile,
   StoryRolesFile,
   StorySceneFile,
   StoryShopFile,
@@ -45,6 +46,7 @@ import StoryItemsDialog from "./StoryItemsDialog.vue"
 import StoryLoopEventCanvas from "./StoryLoopEventCanvas.vue"
 import StoryLocationsDialog from "./StoryLocationsDialog.vue"
 import StoryOnceCanvas from "./StoryOnceCanvas.vue"
+import StoryPhoneConversationsDialog from "./StoryPhoneConversationsDialog.vue"
 import StoryPhoneDialog from "./StoryPhoneDialog.vue"
 import StoryPlayerOverrideValsDialog from "./StoryPlayerOverrideValsDialog.vue"
 import StoryReferDialog from "./StoryReferDialog.vue"
@@ -61,7 +63,7 @@ import {
 } from "./storyScriptEditor"
 
 type EventCanvasTab = Extract<StoryEventCollectionType, "chain" | "pool" | "schedule">
-type EventWorkbenchTab = EventCanvasTab | "doing"
+type EventWorkbenchTab = EventCanvasTab | "doing" | "phone-conversations"
 type EventTriggerFilter = "all" | "normal" | "invoke"
 type StoryWorkspaceTab = "creation" | "events"
 type StoryCreationAgentRunMode = "new" | "feedback"
@@ -87,6 +89,7 @@ const {
   saveStoryCreationHistorySession,
   saveItems,
   savePhone,
+  savePhoneConversations,
   saveRefer,
   saveShop,
   savePlayerOverrideVals,
@@ -135,6 +138,7 @@ const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const itemsSaveSuccessMessage = shallowRef<string | null>(null)
 const shopSaveSuccessMessage = shallowRef<string | null>(null)
 const phoneSaveSuccessMessage = shallowRef<string | null>(null)
+const phoneConversationsSaveSuccessMessage = shallowRef<string | null>(null)
 const referSaveSuccessMessage = shallowRef<string | null>(null)
 const doingSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
@@ -151,7 +155,8 @@ const eventTabOptions: Array<{ key: EventWorkbenchTab; label: string }> = [
   { key: "chain", label: "链式剧情线" },
   { key: "pool", label: "平面事件池" },
   { key: "schedule", label: "定时规则事件" },
-  { key: "doing", label: "行动" }
+  { key: "doing", label: "行动" },
+  { key: "phone-conversations", label: "手机剧情" }
 ]
 
 const eventTriggerFilterOptions: Array<{ key: EventTriggerFilter; label: string }> = [
@@ -1228,6 +1233,7 @@ function handleSwitchEventTab(tab: EventWorkbenchTab) {
 
   closeEditor()
   doingSaveSuccessMessage.value = null
+  phoneConversationsSaveSuccessMessage.value = null
   activeEventTab.value = tab
 }
 
@@ -1532,6 +1538,30 @@ async function handleSavePhone(phone: StoryPhoneFile) {
     await refreshValidation()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "保存手机联系人配置失败。"
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function handleSavePhoneConversations(phoneConversations: StoryPhoneConversationsFile) {
+  if (!storyDocument.value) {
+    return
+  }
+
+  isSaving.value = true
+  errorMessage.value = null
+  phoneConversationsSaveSuccessMessage.value = null
+
+  try {
+    const savedPhoneConversations = await savePhoneConversations(props.storyId, phoneConversations)
+    storyDocument.value = {
+      ...storyDocument.value,
+      phoneConversations: savedPhoneConversations
+    }
+    phoneConversationsSaveSuccessMessage.value = "已保存"
+    await refreshValidation()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "保存手机剧情对话失败。"
   } finally {
     isSaving.value = false
   }
@@ -1938,6 +1968,7 @@ watch(
     itemsSaveSuccessMessage.value = null
     shopSaveSuccessMessage.value = null
     phoneSaveSuccessMessage.value = null
+    phoneConversationsSaveSuccessMessage.value = null
     referSaveSuccessMessage.value = null
     doingSaveSuccessMessage.value = null
     rolesSaveSuccessMessage.value = null
@@ -2169,6 +2200,19 @@ watch(
         @quick-create-location="handleQuickCreateLocation"
         @quick-create-role="handleQuickCreateRole"
         @save="handleSaveDoing"
+      />
+
+      <StoryPhoneConversationsDialog
+        v-else-if="activeEventTab === 'phone-conversations'"
+        embedded
+        :invoke-event-options="phoneInvokeEventOptions"
+        :phone-conversations="storyDocument.phoneConversations"
+        :roles="storyDocument.roles"
+        :save-success-message="phoneConversationsSaveSuccessMessage"
+        :saving="isSaving"
+        :story="storyDocument"
+        :vals="storyScriptVals"
+        @save="handleSavePhoneConversations"
       />
     </section>
 

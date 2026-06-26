@@ -1068,6 +1068,32 @@ code {
   overflow: auto;
 }
 
+.phone-conversation-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.phone-conversation-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid rgba(215, 183, 94, 0.42);
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: #1a180d;
+}
+
+.phone-conversation-title strong {
+  color: var(--gold);
+  font-family: var(--mono);
+}
+
+.phone-conversation-replies {
+  margin-top: 0;
+}
+
 .toast {
   position: fixed;
   left: 50%;

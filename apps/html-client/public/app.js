@@ -252,6 +252,11 @@ function getShopView() {
   return ui.data?.view?.shop ?? { currencyValueKey: "player.money", categories: [], products: [] }
 }
 
+function getActivePhoneConversation() {
+  const conversation = ui.data?.view?.phoneConversation ?? null
+  return conversation && !conversation.finished ? conversation : null
+}
+
 function getSelectedDoingMenu(menus) {
   if (menus.some((menu) => menu.id === ui.selectedDoingMenuId)) {
     return ui.selectedDoingMenuId
@@ -879,16 +884,44 @@ function formatPhoneCost(action) {
   return parts.length > 0 ? parts.join(" + ") : "无消耗"
 }
 
+function renderPhoneConversationActions(conversation) {
+  const replies = (conversation?.replies ?? []).filter((reply) => reply.visible)
+
+  return `
+    <div class="phone-conversation-panel">
+      <div class="phone-conversation-title">
+        <strong>${h(conversation.title || "剧情手机对话")}</strong>
+        <span class="item-meta">节点 ${h(conversation.nodeIndex)}/${h(conversation.nodeTotal)} · ${h(conversation.nodeTitle || conversation.nodeId)}</span>
+      </div>
+      <div class="quick-grid phone-conversation-replies" data-phone-options-scroll="${h(`${conversation.roleKey}:conversation:${conversation.nodeId}`)}">
+        ${replies.length === 0 ? `<div class="empty">当前剧情对话没有可选回复。</div>` : replies.map((reply, index) => `
+          <button class="option-button" data-phone-conversation-reply="${h(reply.id)}">
+            ${index + 1}. ${h(reply.text)}
+            <span class="item-meta">剧情回复</span>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `
+}
+
 function renderPhoneDrawer() {
   if (!ui.phoneOpen) {
     return ""
   }
 
   const contacts = ui.data?.phoneContacts ?? []
+  const activeConversation = getActivePhoneConversation()
+  if (!ui.selectedRoleKey && activeConversation?.roleKey) {
+    ui.selectedRoleKey = activeConversation.roleKey
+  }
   const selected = contacts.find((contact) => contact.roleKey === ui.selectedRoleKey) ?? null
   const thread = ui.thread
   const messages = thread?.messages ?? []
   const options = ui.phoneMode === "talk" ? (thread?.talks ?? []) : (thread?.actions ?? [])
+  const selectedConversation = selected && activeConversation?.roleKey === selected.roleKey
+    ? activeConversation
+    : null
 
   return `
     <div class="drawer-backdrop" data-action="close-phone"></div>
@@ -905,7 +938,7 @@ function renderPhoneDrawer() {
           <div class="list">
             ${contacts.length === 0 ? `<div class="empty">还没有联系人。</div>` : contacts.map((contact) => `
               <button class="list-item ${contact.roleKey === ui.selectedRoleKey ? "active" : ""}" data-phone-contact="${h(contact.roleKey)}">
-                <span class="item-title">${h(contact.label)}${contact.unreadCount > 0 ? ` · 未读 ${contact.unreadCount}` : ""}</span>
+                <span class="item-title">${h(contact.label)}${contact.unreadCount > 0 ? ` · 未读 ${contact.unreadCount}` : ""}${activeConversation?.roleKey === contact.roleKey ? " · 剧情中" : ""}</span>
                 <span class="item-meta">${h(contact.relationStageLabel)} · 好感 ${h(contact.favor)}/100 · ${h(contact.personalityLabel)}${contact.canContact ? "" : ` · ${contact.lockMessage ?? "不可联系"}`}</span>
                 ${contact.lastMessagePreview ? `<span class="item-meta">${h(contact.lastMessagePreview)}</span>` : ""}
               </button>
@@ -926,25 +959,27 @@ function renderPhoneDrawer() {
           </div>
           <div class="phone-actions">
             ${selected ? `
-              <div class="segment">
-                <button class="${ui.phoneMode === "talk" ? "active" : ""}" data-phone-mode="talk">说话</button>
-                <button class="${ui.phoneMode === "action" ? "active" : ""}" data-phone-mode="action">动作</button>
-              </div>
-              <div class="quick-grid" data-phone-options-scroll="${h(`${selected.roleKey}:${ui.phoneMode}`)}">
-                ${thread?.canContact === false ? `<div class="empty">${h(thread.lockMessage ?? "对方现在不想理我。")}</div>` : ""}
-                ${options.length === 0 ? `<div class="empty">当前没有可用${ui.phoneMode === "talk" ? "短句" : "动作"}。</div>` : options.map((option) => {
-                  const disabled = ui.phoneMode === "action" && option.disabled
-                  const meta = ui.phoneMode === "action"
-                    ? `${formatPhoneCost(option)}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.disabledReason ? ` · ${option.disabledReason}` : ""}`
-                    : `${option.tags?.slice(0, 2).join("/") || "闲聊"}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.suggested ? " · 推荐" : ""}`
-                  return `
-                    <button class="option-button" ${disabled ? "disabled" : ""} data-phone-${ui.phoneMode}="${h(option.id)}">
-                      ${h(ui.phoneMode === "action" ? option.label : option.text)}
-                      <span class="item-meta">${h(meta)}</span>
-                    </button>
-                  `
-                }).join("")}
-              </div>
+              ${selectedConversation ? renderPhoneConversationActions(selectedConversation) : `
+                <div class="segment">
+                  <button class="${ui.phoneMode === "talk" ? "active" : ""}" data-phone-mode="talk">说话</button>
+                  <button class="${ui.phoneMode === "action" ? "active" : ""}" data-phone-mode="action">动作</button>
+                </div>
+                <div class="quick-grid" data-phone-options-scroll="${h(`${selected.roleKey}:${ui.phoneMode}`)}">
+                  ${thread?.canContact === false ? `<div class="empty">${h(thread.lockMessage ?? "对方现在不想理我。")}</div>` : ""}
+                  ${options.length === 0 ? `<div class="empty">当前没有可用${ui.phoneMode === "talk" ? "短句" : "动作"}。</div>` : options.map((option) => {
+                    const disabled = ui.phoneMode === "action" && option.disabled
+                    const meta = ui.phoneMode === "action"
+                      ? `${formatPhoneCost(option)}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.disabledReason ? ` · ${option.disabledReason}` : ""}`
+                      : `${option.tags?.slice(0, 2).join("/") || "闲聊"}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.suggested ? " · 推荐" : ""}`
+                    return `
+                      <button class="option-button" ${disabled ? "disabled" : ""} data-phone-${ui.phoneMode}="${h(option.id)}">
+                        ${h(ui.phoneMode === "action" ? option.label : option.text)}
+                        <span class="item-meta">${h(meta)}</span>
+                      </button>
+                    `
+                  }).join("")}
+                </div>
+              `}
             ` : `<div class="empty">先选择联系人。</div>`}
           </div>
         </div>
@@ -1016,6 +1051,23 @@ async function openPhoneThread(roleKey) {
     ui.data = result
   })
   await loadPhoneThread(roleKey, { forceScroll: true })
+}
+
+async function openPhoneDrawer() {
+  ui.menuPanel = null
+  ui.phoneOpen = true
+  const activeConversation = getActivePhoneConversation()
+  const fallbackRoleKey = ui.selectedRoleKey
+    ?? activeConversation?.roleKey
+    ?? ui.data?.phoneContacts?.[0]?.roleKey
+    ?? null
+
+  if (fallbackRoleKey) {
+    await openPhoneThread(fallbackRoleKey)
+    return
+  }
+
+  render()
 }
 
 async function saveGame() {
@@ -1111,9 +1163,7 @@ function bindEvents() {
       } else if (action === "back-main") {
         returnToMainView()
       } else if (action === "open-phone") {
-        ui.menuPanel = null
-        ui.phoneOpen = true
-        render()
+        await openPhoneDrawer()
       } else if (action === "close-phone") {
         ui.phoneOpen = false
         ui.selectedRoleKey = null
@@ -1232,6 +1282,18 @@ function bindEvents() {
     })
   })
 
+  dom.app.querySelectorAll("[data-phone-conversation-reply]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await dispatchRuntimeAction({
+        type: "phone-select-conversation-reply",
+        optionId: button.dataset.phoneConversationReply
+      })
+      if (ui.selectedRoleKey) {
+        await dispatchRuntimeAction({ type: "phone-mark-read", roleKey: ui.selectedRoleKey })
+      }
+    })
+  })
+
   const createForm = dom.app.querySelector("#create-profile-form")
   if (createForm) {
     createForm.addEventListener("submit", async (event) => {
@@ -1279,9 +1341,14 @@ document.addEventListener("keydown", async (event) => {
   if (key === "escape") {
     returnToMainView()
   } else if (key === "p") {
-    ui.menuPanel = null
-    ui.phoneOpen = !ui.phoneOpen
-    render()
+    if (ui.phoneOpen) {
+      ui.phoneOpen = false
+      ui.selectedRoleKey = null
+      ui.thread = null
+      render()
+    } else {
+      await openPhoneDrawer()
+    }
   } else if (key === " ") {
     event.preventDefault()
     await runTask("时间状态已更新", async () => api("/api/session/time", { body: { paused: !ui.data.summary.paused } }))
