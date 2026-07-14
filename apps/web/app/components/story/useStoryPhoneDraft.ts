@@ -163,12 +163,28 @@ function splitLinesText(value: string) {
     .filter(Boolean)
 }
 
-function parseIntegerText(value: string, fallback: number) {
+function parseIntegerText(value: unknown, fallback: number) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.trunc(value) : fallback
+  }
+
+  if (typeof value !== "string") {
+    return fallback
+  }
+
   const parsed = Number.parseInt(value.trim(), 10)
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-function parseNumberText(value: string, fallback: number) {
+function parseNumberText(value: unknown, fallback: number) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : fallback
+  }
+
+  if (typeof value !== "string") {
+    return fallback
+  }
+
   const parsed = Number(value.trim())
   return Number.isFinite(parsed) ? parsed : fallback
 }

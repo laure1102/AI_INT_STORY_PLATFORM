@@ -142,6 +142,7 @@ const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const itemsSaveSuccessMessage = shallowRef<string | null>(null)
 const shopSaveSuccessMessage = shallowRef<string | null>(null)
 const phoneSaveSuccessMessage = shallowRef<string | null>(null)
+const phoneConversationsSaveErrorMessage = shallowRef<string | null>(null)
 const phoneConversationsSaveSuccessMessage = shallowRef<string | null>(null)
 const referSaveSuccessMessage = shallowRef<string | null>(null)
 const doingSaveSuccessMessage = shallowRef<string | null>(null)
@@ -1019,6 +1020,7 @@ async function loadStory() {
   activeCreationHistorySessionId.value = null
   referSaveSuccessMessage.value = null
   doingSaveSuccessMessage.value = null
+  phoneConversationsSaveErrorMessage.value = null
 
   try {
     const [story, settings, history] = await Promise.all([
@@ -1249,6 +1251,7 @@ function handleSwitchEventTab(tab: EventWorkbenchTab) {
 
   closeEditor()
   doingSaveSuccessMessage.value = null
+  phoneConversationsSaveErrorMessage.value = null
   phoneConversationsSaveSuccessMessage.value = null
   activeEventTab.value = tab
 }
@@ -1566,6 +1569,7 @@ async function handleSavePhoneConversations(phoneConversations: StoryPhoneConver
 
   isSaving.value = true
   errorMessage.value = null
+  phoneConversationsSaveErrorMessage.value = null
   phoneConversationsSaveSuccessMessage.value = null
 
   try {
@@ -1577,7 +1581,9 @@ async function handleSavePhoneConversations(phoneConversations: StoryPhoneConver
     phoneConversationsSaveSuccessMessage.value = "已保存"
     await refreshValidation()
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "保存手机剧情对话失败。"
+    const message = error instanceof Error ? error.message : "保存手机剧情对话失败。"
+    phoneConversationsSaveErrorMessage.value = message
+    errorMessage.value = message
   } finally {
     isSaving.value = false
   }
@@ -2005,6 +2011,7 @@ watch(
     itemsSaveSuccessMessage.value = null
     shopSaveSuccessMessage.value = null
     phoneSaveSuccessMessage.value = null
+    phoneConversationsSaveErrorMessage.value = null
     phoneConversationsSaveSuccessMessage.value = null
     referSaveSuccessMessage.value = null
     doingSaveSuccessMessage.value = null
@@ -2248,6 +2255,7 @@ watch(
         :invoke-event-options="phoneInvokeEventOptions"
         :phone-conversations="storyDocument.phoneConversations"
         :roles="storyDocument.roles"
+        :save-error-message="phoneConversationsSaveErrorMessage"
         :save-success-message="phoneConversationsSaveSuccessMessage"
         :saving="isSaving"
         :story="storyDocument"

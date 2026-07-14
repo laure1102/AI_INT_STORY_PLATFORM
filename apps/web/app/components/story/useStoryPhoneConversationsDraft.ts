@@ -73,7 +73,15 @@ function createDraftKey(prefix: string) {
   return `${prefix}-${draftKeySeed}`
 }
 
-function parseIntegerText(value: string, fallback: number) {
+function parseIntegerText(value: unknown, fallback: number) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.trunc(value) : fallback
+  }
+
+  if (typeof value !== "string") {
+    return fallback
+  }
+
   const parsed = Number.parseInt(value.trim(), 10)
   return Number.isFinite(parsed) ? parsed : fallback
 }
@@ -102,7 +110,7 @@ function buildInvokePayload(invoke: PhoneConversationInvokeDraft): StoryPhoneEve
   if (invoke.delayEnabled) {
     payload.delay = {
       unit: invoke.delayUnit,
-      value: Math.max(0, parseIntegerText(invoke.delayValueText, 0))
+      value: Math.max(1, parseIntegerText(invoke.delayValueText, 1))
     }
   }
 

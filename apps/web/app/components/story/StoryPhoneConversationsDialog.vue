@@ -26,6 +26,7 @@ const props = defineProps<{
   invokeEventOptions: InvokeEventOption[]
   phoneConversations: StoryPhoneConversationsFile
   roles: StoryRolesFile
+  saveErrorMessage?: string | null
   saveSuccessMessage?: string | null
   saving: boolean
   story: StoryDocument
@@ -40,6 +41,7 @@ const emit = defineEmits<{
 const searchText = shallowRef("")
 const isEditorOpen = shallowRef(false)
 const activeConversationKey = shallowRef<string | null>(null)
+const localErrorMessage = shallowRef<string | null>(null)
 const activeNodeKey = reactive<Record<string, string | null>>({})
 
 const {
@@ -199,6 +201,19 @@ function getDelayUnitLabel(unit: string) {
   return "小时"
 }
 
+function buildDraftValidationError() {
+  for (const conversation of draft.conversations) {
+    const conversationLabel = getConversationTitle(conversation)
+    for (const node of conversation.nodes) {
+      if (node.invoke.enabled && !node.end) {
+        return `手机剧情“${conversationLabel}”的节点“${node.id || "未命名节点"}”配置了结束后调用事件，但该节点未勾选“结束节点”。`
+      }
+    }
+  }
+
+  return null
+}
+
 function selectConversation(conversation: PhoneConversationDraft) {
   activeConversationKey.value = conversation.draftKey
   if (!activeNodeKey[conversation.draftKey]) {
@@ -257,7 +272,22 @@ function handleRemoveNode(conversation: PhoneConversationDraft, index: number) {
   }
 }
 
+function handleNodeEndChange(node: PhoneConversationNodeDraft) {
+  if (node.end) {
+    return
+  }
+
+  node.invoke.enabled = false
+}
+
 function submitDraft() {
+  const validationError = buildDraftValidationError()
+  if (validationError) {
+    localErrorMessage.value = validationError
+    return
+  }
+
+  localErrorMessage.value = null
   emit("save", buildPhoneConversationsFile())
 }
 
@@ -267,6 +297,7 @@ watch(
     syncFromPhoneConversations(phoneConversations)
     activeConversationKey.value = null
     isEditorOpen.value = false
+    localErrorMessage.value = null
   }
 )
 
@@ -290,6 +321,9 @@ watch(
         <h2 class="section-title">连续手机剧情对话</h2>
         <p class="phone-conversations-board__summary">
           管理像“债主催债”这样的连续手机对白：NPC 消息、玩家固定回复、节点跳转、结束脚本和结束调用事件。
+        </p>
+        <p v-if="localErrorMessage || saveErrorMessage" class="phone-conversations-board__error">
+          {{ localErrorMessage || saveErrorMessage }}
         </p>
         <p v-if="saveSuccessMessage" class="phone-conversations-board__success">{{ saveSuccessMessage }}</p>
       </div>
@@ -404,6 +438,9 @@ watch(
             <p class="phone-conversations-dialog__subtitle">
               单条手机剧情配置。保存后会写回 `phone_conversations.json5`。
             </p>
+            <p v-if="localErrorMessage || saveErrorMessage" class="phone-conversations-dialog__error">
+              {{ localErrorMessage || saveErrorMessage }}
+            </p>
             <p v-if="saveSuccessMessage" class="phone-conversations-dialog__success">{{ saveSuccessMessage }}</p>
           </div>
 
@@ -513,7 +550,7 @@ watch(
                     <input v-model="activeNode.id" class="text-input" type="text" placeholder="start" />
                   </label>
                   <label class="phone-conversations-dialog__check">
-                    <input v-model="activeNode.end" type="checkbox" />
+                    <input v-model="activeNode.end" type="checkbox" @change="handleNodeEndChange(activeNode)" />
                     <span>结束节点</span>
                   </label>
                   <label class="phone-conversations-dialog__check">
@@ -664,11 +701,14 @@ watch(
                         :vals="vals"
                       />
                     </label>
-                    <label class="phone-conversations-dialog__check">
+                    <label v-if="activeNode.end" class="phone-conversations-dialog__check">
                       <input v-model="activeNode.invoke.enabled" type="checkbox" />
                       <span>结束后调用事件</span>
                     </label>
-                    <template v-if="activeNode.invoke.enabled">
+                    <p v-else class="phone-conversations-dialog__hint phone-conversations-dialog__field--wide">
+                      只有勾选“结束节点”后，才能配置结束后调用事件。
+                    </p>
+                    <template v-if="activeNode.end && activeNode.invoke.enabled">
                       <label class="phone-conversations-dialog__field">
                         <span class="phone-conversations-dialog__label">事件集合</span>
                         <select v-model="activeNode.invoke.targetType" class="text-input">
@@ -706,7 +746,7 @@ watch(
                         </label>
                         <label class="phone-conversations-dialog__field">
                           <span class="phone-conversations-dialog__label">延迟数值</span>
-                          <input v-model="activeNode.invoke.delayValueText" class="text-input" type="number" min="0" step="1" />
+                          <input v-model="activeNode.invoke.delayValueText" class="text-input" type="number" min="1" step="1" />
                         </label>
                       </template>
                     </template>
@@ -761,12 +801,17 @@ watch(
 }
 
 .phone-conversations-board__summary,
+.phone-conversations-board__error,
 .phone-conversations-board__success,
 .phone-conversations-board__empty-copy {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.phone-conversations-board__error {
+  color: #ff8b7b;
 }
 
 .phone-conversations-board__success {
@@ -1021,12 +1066,17 @@ watch(
 
 .phone-conversations-dialog__subtitle,
 .phone-conversations-dialog__section-note,
+.phone-conversations-dialog__error,
 .phone-conversations-dialog__success,
 .phone-conversations-dialog__count {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.phone-conversations-dialog__error {
+  color: #ff8b7b;
 }
 
 .phone-conversations-dialog__success {

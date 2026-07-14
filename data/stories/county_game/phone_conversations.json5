@@ -59,8 +59,8 @@
           id: 'end',
           invoke: {
             delay: {
-              unit: 'days',
-              value: 1,
+              unit: 'hours',
+              value: 24,
             },
             event_id: 'debt_collector_arrives_linh_1d',
             target_type: 'pool',
