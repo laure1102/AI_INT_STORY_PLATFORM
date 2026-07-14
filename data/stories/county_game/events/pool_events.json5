@@ -5,7 +5,7 @@
     id: 'zhuli_offer_help',
     init_script: '',
     invoke_params: [],
-    location: 'qichezhan_lvl1',
+    location: 'jiedao_renshao',
     object_keys: [
       'important:zhuli',
     ],
@@ -44,7 +44,7 @@
       ],
       type: 'dialogue',
     },
-    title: '助理主动上门',
+    title: '招聘助理1-发布招聘需求',
     trigger_expr: '${system.now_day} >= 1 && !phone_has_contact("important:zhuli") && ${player.money} >= ${player.first_day_give_money}',
     trigger_mode: 'condition',
   },
