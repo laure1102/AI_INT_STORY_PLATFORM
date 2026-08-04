@@ -56,6 +56,7 @@ export const storyShopSchema = z.object({
 }).superRefine((shopFile, context) => {
   const categoryIds = new Set<string>()
   const productIds = new Set<string>()
+  const giftProductIdsByItemId = new Map<string, string>()
 
   for (const [categoryIndex, category] of shopFile.categories.entries()) {
     if (categoryIds.has(category.id)) {
@@ -86,6 +87,19 @@ export const storyShopSchema = z.object({
         message: `Shop product "${product.id}" references missing category "${product.category_id}".`,
         path: ["products", productIndex, "category_id"]
       })
+    }
+
+    if (product.allow_gift) {
+      const existingProductId = giftProductIdsByItemId.get(product.item_id)
+      if (existingProductId) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Shop products "${existingProductId}" and "${product.id}" both define gift behavior for item "${product.item_id}".`,
+          path: ["products", productIndex, "item_id"]
+        })
+      } else {
+        giftProductIdsByItemId.set(product.item_id, product.id)
+      }
     }
   }
 }).transform((shopFile) => ({
@@ -144,4 +158,3 @@ export const storyInitialBagsSchema = z.record(storyInitialBagSchema)
       }
     }
   })
-

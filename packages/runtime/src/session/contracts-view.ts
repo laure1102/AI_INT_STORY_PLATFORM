@@ -145,6 +145,10 @@ export interface RuntimeBagItemView {
   bound: boolean
   obtainedAtDay: number
   obtainedAtMinute: number
+  giftable: boolean
+  giftFavorDelta: number
+  giftCooldownHours: number
+  giftDisabledReason: string | null
 }
 
 export interface RuntimeBagSummary {
@@ -328,6 +332,7 @@ export type RuntimeStorySessionAction =
   | { type: "phone-send-quick-message"; roleKey: string; quickMessageId: string }
   | { type: "phone-mark-read"; roleKey: string }
   | { type: "start-doing"; doingId: string }
+  | { type: "bag-gift"; itemId: string; roleKey: string; quantity: number }
   | { type: "shop-buy"; productId: string }
   | { type: "shop-gift"; productId: string; roleKey: string }
   | { type: "open-debug" }
@@ -355,7 +360,7 @@ export interface CreateStorySessionOptions {
  * Runtime 内部对象。HTML 与未来 Cocos 客户端都依赖这一边界。
  */
 export interface RuntimeStorySession {
-  dispatch(action: RuntimeStorySessionAction): void
+  dispatch(action: RuntimeStorySessionAction): boolean | void
   invokeOnceEvent(targetType: StoryInvokeTargetType, eventId: string, args?: Record<string, unknown>): boolean
   tick(deltaMs: number): void
   setTimePause(paused: boolean): void

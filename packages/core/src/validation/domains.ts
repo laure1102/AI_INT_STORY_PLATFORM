@@ -209,6 +209,7 @@ export function validateShopConfig(
   const readableContext = indexes.readableContext
   const writableValKeys = indexes.writableGlobalValKeys
   const currencyKey = document.shop.currency_value_key.trim()
+  const giftProductIdsByItemId = new Map<string, string>()
 
   if (!/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(currencyKey)) {
     pushIssue(
@@ -261,6 +262,21 @@ export function validateShopConfig(
         `Shop product "${product.id}" references missing item "${product.item_id}".`,
         ["shop", "products", String(productIndex), "item_id"]
       )
+    }
+
+    if (product.allow_gift) {
+      const existingProductId = giftProductIdsByItemId.get(product.item_id)
+      if (existingProductId) {
+        pushIssue(
+          issues,
+          "error",
+          "shop.product.duplicate-gift-item",
+          `Shop products "${existingProductId}" and "${product.id}" both define gift behavior for item "${product.item_id}".`,
+          ["shop", "products", String(productIndex), "item_id"]
+        )
+      } else {
+        giftProductIdsByItemId.set(product.item_id, product.id)
+      }
     }
 
     if (!product.available_expr.trim()) {

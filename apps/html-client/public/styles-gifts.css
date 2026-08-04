@@ -1,0 +1,185 @@
+/* 背包与手机共用的赠礼选择器。 */
+.bag-owner,
+.bag-item-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: #0d130c;
+}
+
+.bag-owner {
+  overflow: hidden;
+}
+
+.bag-owner-header,
+.bag-item-main,
+.phone-gift-selection {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bag-owner-header {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  background: #121a11;
+}
+
+.bag-owner-header strong {
+  color: var(--gold);
+  font-family: var(--mono);
+}
+
+.bag-items {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+.bag-item-card {
+  padding: 9px;
+  background: #10170e;
+}
+
+.bag-item-card.disabled {
+  opacity: 0.72;
+}
+
+.bag-item-main .footer-command.active {
+  color: #fff;
+  border-color: var(--gold);
+  background: #25230f;
+}
+
+.bag-quantity {
+  color: var(--cyan);
+  font-family: var(--mono);
+}
+
+.bag-gift-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(92px, auto) auto;
+  align-items: end;
+  gap: 8px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.gift-field,
+.gift-quantity {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gift-combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.gift-combobox input,
+.gift-quantity input {
+  min-height: 34px;
+  padding-block: 5px;
+}
+
+.gift-quantity input {
+  width: 92px;
+}
+
+.gift-options {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  z-index: 4;
+  max-height: 210px;
+  display: none;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 5px;
+  border: 1px solid var(--cyan);
+  border-radius: 4px;
+  background: #0b100a;
+  box-shadow: var(--shadow);
+  overflow-y: auto;
+}
+
+.gift-combobox:focus-within .gift-options,
+.phone-gift-panel .gift-options {
+  display: grid;
+}
+
+.gift-option {
+  min-height: 42px;
+  display: grid;
+  justify-items: start;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.gift-option.selected {
+  border-color: var(--gold);
+  background: #25230f;
+}
+
+.gift-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.gift-option[hidden],
+.gift-empty[hidden],
+.phone-gift-selection[hidden] {
+  display: none;
+}
+
+.gift-empty,
+.gift-error {
+  padding: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.gift-error {
+  border: 1px solid rgba(232, 100, 92, 0.45);
+  border-radius: 4px;
+  color: #ffd9d6;
+  background: #261312;
+}
+
+.phone-gift-panel {
+  max-height: min(240px, 34dvh);
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+.phone-gift-panel .gift-options {
+  position: static;
+  max-height: 126px;
+  box-shadow: none;
+}
+
+.phone-gift-selection {
+  align-items: end;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: #0d130c;
+}
+
+@media (max-width: 640px) {
+  .bag-gift-form,
+  .phone-gift-selection {
+    grid-template-columns: 1fr;
+  }
+
+  .phone-gift-selection {
+    display: grid;
+  }
+}

@@ -581,7 +581,12 @@ Implementation notes:
 - runtime session snapshots store `shop.purchases` and `shop.gifts` with counts, last game minute, and cooldown end game minute.
 - buying a product deducts `currency_value_key` and adds the referenced item to the player bag.
 - gifting a product performs a direct shop purchase: it deducts `currency_value_key`, applies purchase and gift cooldown records, sends the item directly to the target phone contact, and applies `gift_favor_delta` without adding or removing player bag entries.
+- gifting an already-owned item uses `{ type: "bag-gift", itemId, roleKey, quantity }`: it removes the item from the player bag, does not deduct money or write a purchase record, and shares the matching product/contact gift cooldown with direct shop gifting.
+- bag gifting requires exactly one `allow_gift: true` shop product for the item. Shop enabled state, price, purchase condition, and purchase cooldown do not affect an already-owned item; bound items, missing/locked contacts, and plot-phone conversation locks are rejected before inventory mutation.
+- `gift_favor_delta` is applied per gifted item and final favor is clamped to `0..100`; duplicate giftable products for one item are a core validation error and remain a runtime error for legacy bundles.
 - HTML client footer exposes `M 商城` left of `N 下一天`; clicking or pressing `M` opens the shop popup.
+- the HTML bag panel renders structured owner/item cards; player items can open a searchable friend picker with quantity and explicit confirmation, while other owner bags remain read-only.
+- ordinary phone chat has `说话 / 动作 / 赠礼` tabs. The gift tab preselects the current friend and offers a searchable player-bag item picker with quantity and explicit confirmation.
 - StoryScript exposes `shop_can_buy`, `shop_purchase_cooldown_left`, `shop_gift_cooldown_left`, `shop_buy`, and `shop_gift`.
 - backend AI creation Agent reads existing shop categories/products and can output `draft.shop.categories` / `draft.shop.products`; selected draft entries are applied to `shop.json5`.
 - Agent-generated shop products must reference existing item ids or item ids from selected `draft.items`; the shop module never creates item assets directly.
@@ -1040,6 +1045,7 @@ Current HTML game-screen behavior:
 - game area: runtime content, dialogue, message prompts, branch options, or empty-state text
 - footer: left shows role, money, and phone unread status; right shows `N 下一天`
 - footer command row opens popups for actions/doing, messages, bag, variables, scheduler, saves, and phone
+- bag and phone gift forms keep browser-only drafts until `确定`; successful `bag-gift` actions refresh bag/favor/thread state and reset the draft, while handled failures preserve it and display the runtime rejection
 - `space` pauses/resumes time
 - `n` advances to the next day boundary
 - `d` opens the player action / doing popup shell

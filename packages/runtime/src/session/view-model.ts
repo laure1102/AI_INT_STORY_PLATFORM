@@ -51,6 +51,7 @@ import type {
 } from "../types"
 import type { RuntimeStorySessionSnapshot } from "./contracts-core"
 import type { RuntimeBagItemView, RuntimeBagSummary, RuntimeDoingActionView, RuntimeDoingMenuView, RuntimeDoingView, RuntimeInteraction, RuntimePhoneContactView, RuntimePhoneThreadView, RuntimeRuntimePhoneConversationReplyView, RuntimeRuntimePhoneConversationView, RuntimeShopCategoryView, RuntimeShopProductView, RuntimeShopView, RuntimeState, RuntimeStoryBundle, RuntimeStoryViewModel } from "./contracts-view"
+import { resolveBagGiftEntryState } from "./bag-gifts"
 import { buildRuntimeDoingMenuState, findDoingRecord, getBundleDoingConfig, getBundleShopConfig, getDoingCooldownLeftHours, getRuntimeShopVisibleCategoryIds, getShopPurchaseCooldownLeftHours, resolveDoingAvailability, resolveShopProductDisabledReason } from "./doing-shop"
 import { buildRuntimePhoneContactMeta, findBundlePhoneConversation, findPhoneConversationNode, getBundleItemNameMap } from "./phone-config"
 import { getActivePhoneConversationState, isPhoneConversationOptionVisible } from "./phone-conversations"
@@ -79,6 +80,7 @@ export function buildRuntimeBagSummary(
         .filter((entry) => entry.quantity > 0)
         .map((entry) => {
           const itemId = normalizeItemId(entry.item_id)
+          const giftState = resolveBagGiftEntryState(bundle, entry)
           return {
             ownerId: normalizedOwnerId,
             itemId,
@@ -86,7 +88,8 @@ export function buildRuntimeBagSummary(
             quantity: entry.quantity,
             bound: entry.bound,
             obtainedAtDay: entry.obtained_at_day,
-            obtainedAtMinute: entry.obtained_at_minute
+            obtainedAtMinute: entry.obtained_at_minute,
+            ...giftState
           } satisfies RuntimeBagItemView
         })
         .filter((entry) => entry.itemId)

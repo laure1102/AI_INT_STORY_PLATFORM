@@ -12,6 +12,7 @@ import {
   route,
   ui
 } from "./browser-state.js"
+import { renderBagGiftPanel, renderPhoneGiftPanel } from "./browser-gifts.js"
 
 /** @param profile 档案摘要。 @returns 地点、自定义变量数和创建时间组成的单行说明。 */
 function profileMeta(profile) {
@@ -337,7 +338,7 @@ function renderMenuPanelBody(panelId) {
   } else if (panelId === "scheduler") {
     body = `<pre class="pre-lines">${h((data?.schedulerLines ?? []).join("\n"))}</pre>`
   } else if (panelId === "bag") {
-    body = `<pre class="pre-lines">${h((data?.bagLines ?? []).join("\n"))}</pre>`
+    body = renderBagGiftPanel()
   } else if (panelId === "doing") {
     const doing = getDoingView()
     const menus = Array.isArray(doing?.menus) ? doing.menus : []
@@ -679,7 +680,11 @@ function renderPhoneDrawer() {
   const selected = contacts.find((contact) => contact.roleKey === ui.selectedRoleKey) ?? null
   const thread = ui.thread
   const messages = thread?.messages ?? []
-  const options = ui.phoneMode === "talk" ? (thread?.talks ?? []) : (thread?.actions ?? [])
+  const options = ui.phoneMode === "talk"
+    ? (thread?.talks ?? [])
+    : ui.phoneMode === "action"
+      ? (thread?.actions ?? [])
+      : []
   const selectedConversation = selected && activeConversation?.roleKey === selected.roleKey
     ? activeConversation
     : null
@@ -724,8 +729,9 @@ function renderPhoneDrawer() {
                 <div class="segment">
                   <button class="${ui.phoneMode === "talk" ? "active" : ""}" data-phone-mode="talk">说话</button>
                   <button class="${ui.phoneMode === "action" ? "active" : ""}" data-phone-mode="action">动作</button>
+                  <button class="${ui.phoneMode === "gift" ? "active" : ""}" data-phone-mode="gift">赠礼</button>
                 </div>
-                <div class="quick-grid" data-phone-options-scroll="${h(`${selected.roleKey}:${ui.phoneMode}`)}">
+                ${ui.phoneMode === "gift" ? renderPhoneGiftPanel(selected) : `<div class="quick-grid" data-phone-options-scroll="${h(`${selected.roleKey}:${ui.phoneMode}`)}">
                   ${thread?.canContact === false ? `<div class="empty">${h(thread.lockMessage ?? "对方现在不想理我。")}</div>` : ""}
                   ${options.length === 0 ? `<div class="empty">当前没有可用${ui.phoneMode === "talk" ? "短句" : "动作"}。</div>` : options.map((option) => {
                     const disabled = ui.phoneMode === "action" && option.disabled
@@ -739,7 +745,7 @@ function renderPhoneDrawer() {
                       </button>
                     `
                   }).join("")}
-                </div>
+                </div>`}
               `}
             ` : `<div class="empty">先选择联系人。</div>`}
           </div>

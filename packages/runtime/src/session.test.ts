@@ -4,7 +4,8 @@ import {
   type RuntimeScheduledEvent,
   type RuntimeStoryBundle,
   type RuntimeStorySaveState,
-  type RuntimeStorySession
+  type RuntimeStorySession,
+  type RuntimeStorySessionSnapshot
 } from "./session"
 
 function createBundle(options: Partial<RuntimeStoryBundle> = {}): RuntimeStoryBundle {
@@ -76,6 +77,106 @@ function createShopBundle(money: number): RuntimeStoryBundle {
       ]
     }
   })
+}
+
+/** @returns 含可赠、绑定和无配置物品，以及好友/陌生人角色的背包赠礼测试 bundle。 */
+function createBagGiftBundle(): RuntimeStoryBundle {
+  return createBundle({
+    vals: {
+      variables: [
+        {
+          name: "player",
+          vals: [
+            { name: "money", value_type: "value", value: 5000, calc_rule: "" }
+          ]
+        }
+      ]
+    },
+    roles: {
+      normal: {
+        roles: [
+          { id: "friend", name: "好友", descr: "测试好友", zhiye: "", contact_enabled: true },
+          { id: "stranger", name: "陌生人", descr: "非联系人", zhiye: "", contact_enabled: true }
+        ]
+      },
+      important: { roles: [] }
+    },
+    items: {
+      items: [
+        { id: "gift_box", name: "礼盒", stackable: true, max_stack: 99 },
+        { id: "bound_badge", name: "绑定徽章", stackable: true, max_stack: 99 },
+        { id: "plain_note", name: "普通便笺", stackable: true, max_stack: 99 }
+      ]
+    },
+    initialBags: {
+      player: {
+        entries: [
+          { item_id: "gift_box", quantity: 5 },
+          { item_id: "bound_badge", quantity: 2, bound: true },
+          { item_id: "plain_note", quantity: 2 }
+        ]
+      }
+    },
+    shop: {
+      currency_value_key: "player.money",
+      categories: [
+        { id: "gifts", name: "礼品", sort_order: 10, visible_expr: "", descr: "" }
+      ],
+      products: [
+        {
+          id: "gift_box_product",
+          category_id: "gifts",
+          item_id: "gift_box",
+          price: 199,
+          quantity: 1,
+          sort_order: 10,
+          enabled: true,
+          available_expr: "",
+          unavailable_reason: "",
+          allow_gift: true,
+          gift_favor_delta: 3,
+          purchase_cooldown_hours: 12,
+          gift_cooldown_hours: 24
+        },
+        {
+          id: "bound_badge_product",
+          category_id: "gifts",
+          item_id: "bound_badge",
+          price: 10,
+          quantity: 1,
+          sort_order: 20,
+          enabled: true,
+          available_expr: "",
+          unavailable_reason: "",
+          allow_gift: true,
+          gift_favor_delta: 1,
+          purchase_cooldown_hours: 0,
+          gift_cooldown_hours: 0
+        }
+      ]
+    }
+  })
+}
+
+/**
+ * 创建已拥有好友联系人的背包赠礼会话。
+ * @param bundle 测试 bundle。 @param updateSnapshot 可选的存档状态改写。 @returns 从测试存档恢复的会话。
+ */
+function createBagGiftSession(
+  bundle: RuntimeStoryBundle,
+  updateSnapshot?: (snapshot: RuntimeStorySessionSnapshot) => void
+) {
+  const seed = createStorySession({ bundle })
+  const snapshot = seed.getSnapshot()
+  snapshot.phone.contacts.push({
+    role_key: "normal:friend",
+    favor: 20,
+    unlocked_at_day: 1
+  })
+  updateSnapshot?.(snapshot)
+  const saveState = createSave(seed, bundle, "bag-gift")
+  saveState.session_state = snapshot
+  return createStorySession({ bundle, saveState })
 }
 
 function createSave(
@@ -256,6 +357,213 @@ describe("Runtime shop direct gifting", () => {
     expect(snapshot.shop.gifts).toEqual([])
     expect(snapshot.phone.contacts).toEqual([])
     expect(session.getViewModel().notifications).toContain("需要 199 元，当前只有 100 元。")
+  })
+})
+
+describe("Runtime player bag gifting", () => {
+  it("gifts multiple owned items, scales favor, and does not charge or record a purchase", () => {
+    const bundle = createBagGiftBundle()
+    const session = createBagGiftSession(bundle)
+
+    expect(session.dispatch({
+      type: "bag-gift",
+      itemId: "gift_box",
+      roleKey: "normal:friend",
+      quantity: 2
+    })).toBe(true)
+
+    const snapshot = session.getSnapshot()
+    expect(snapshot.bags.player.entries.find((entry) => entry.item_id === "gift_box")?.quantity).toBe(3)
+    expect(snapshot.phone.contacts[0]?.favor).toBe(26)
+    expect(snapshot.vals.variables[0]?.vals[0]?.value).toBe(5000)
+    expect(snapshot.shop.purchases).toEqual([])
+    expect(snapshot.shop.gifts).toMatchObject([{
+      product_id: "gift_box_product",
+      role_key: "normal:friend",
+      gifted_count: 1,
+      cooldown_until_game_minute: 1440
+    }])
+    expect(snapshot.phone.threads[0]?.messages.at(-1)?.content).toContain("礼盒 x2")
+    expect(snapshot.history.at(-1)?.title).toBe("bag:gift")
+
+    const giftView = session.getViewModel().bagSummary
+      .find((bag) => bag.ownerId === "player")
+      ?.entries.find((entry) => entry.itemId === "gift_box")
+    expect(giftView).toMatchObject({
+      giftable: true,
+      giftFavorDelta: 3,
+      giftCooldownHours: 24,
+      giftDisabledReason: null
+    })
+  })
+
+  it("keeps the full snapshot unchanged for inventory and gift eligibility failures", () => {
+    const cases = [
+      { itemId: "gift_box", quantity: 6, message: "背包物品数量不足" },
+      { itemId: "bound_badge", quantity: 1, message: "绑定物品不可赠送" },
+      { itemId: "plain_note", quantity: 1, message: "没有可赠商城配置" }
+    ]
+
+    for (const testCase of cases) {
+      const session = createBagGiftSession(createBagGiftBundle())
+      const before = session.getSnapshot()
+      expect(session.dispatch({
+        type: "bag-gift",
+        itemId: testCase.itemId,
+        roleKey: "normal:friend",
+        quantity: testCase.quantity
+      })).toBe(false)
+      expect(session.getSnapshot()).toEqual(before)
+      expect(session.getViewModel().notifications.at(-1)).toContain(testCase.message)
+    }
+  })
+
+  it("rejects duplicate gift mappings at runtime and marks the item unavailable", () => {
+    const bundle = createBagGiftBundle()
+    bundle.shop?.products.push({
+      ...bundle.shop.products[0]!,
+      id: "gift_box_product_legacy_duplicate"
+    })
+    const session = createBagGiftSession(bundle)
+    const before = session.getSnapshot()
+
+    expect(session.dispatch({
+      type: "bag-gift",
+      itemId: "gift_box",
+      roleKey: "normal:friend",
+      quantity: 1
+    })).toBe(false)
+    expect(session.getSnapshot()).toEqual(before)
+    const giftBoxView = session.getViewModel().bagSummary[0]?.entries
+      .find((entry) => entry.itemId === "gift_box")
+    expect(giftBoxView).toMatchObject({
+      giftable: false,
+      giftDisabledReason: "物品 \"gift_box\" 存在多个可赠商城配置。"
+    })
+  })
+
+  it("rejects non-contacts, locked contacts, and plot-locked chat without mutation", () => {
+    const nonContactSession = createBagGiftSession(createBagGiftBundle())
+    const nonContactBefore = nonContactSession.getSnapshot()
+    expect(nonContactSession.dispatch({
+      type: "bag-gift",
+      itemId: "gift_box",
+      roleKey: "normal:stranger",
+      quantity: 1
+    })).toBe(false)
+    expect(nonContactSession.getSnapshot()).toEqual(nonContactBefore)
+
+    const lockedBundle = createBagGiftBundle()
+    const roles = lockedBundle.roles as { normal: { roles: Array<{ id: string; contact_enabled?: boolean }> } }
+    const friend = roles.normal.roles.find((role) => role.id === "friend")
+    if (friend) friend.contact_enabled = false
+    const lockedSession = createBagGiftSession(lockedBundle)
+    const lockedBefore = lockedSession.getSnapshot()
+    expect(lockedSession.dispatch({
+      type: "bag-gift",
+      itemId: "gift_box",
+      roleKey: "normal:friend",
+      quantity: 1
+    })).toBe(false)
+    expect(lockedSession.getSnapshot()).toEqual(lockedBefore)
+
+    const conversationBundle = createBagGiftBundle()
+    conversationBundle.phoneConversations = {
+      conversations: [{
+        id: "locked_chat",
+        title: "锁定聊天",
+        role_key: "normal:friend",
+        enabled: true,
+        once: false,
+        lock_normal_chat: true,
+        trigger_expr: "",
+        entry_node_id: "start",
+        nodes: [{
+          id: "start",
+          contact_messages: [{ content: "剧情中" }],
+          player_options: [],
+          end: false,
+          end_script: ""
+        }]
+      }]
+    }
+    const conversationSession = createBagGiftSession(conversationBundle, (snapshot) => {
+      snapshot.phone_conversation = {
+        conversation_id: "locked_chat",
+        role_key: "normal:friend",
+        node_id: "start",
+        finished: false
+      }
+    })
+    const conversationBefore = conversationSession.getSnapshot()
+    expect(conversationSession.dispatch({
+      type: "bag-gift",
+      itemId: "gift_box",
+      roleKey: "normal:friend",
+      quantity: 1
+    })).toBe(false)
+    expect(conversationSession.getSnapshot()).toEqual(conversationBefore)
+  })
+
+  it("ignores shop purchase restrictions for already-owned items", () => {
+    const bundle = createBagGiftBundle()
+    const product = bundle.shop?.products[0]
+    if (!product) throw new Error("missing test product")
+    product.enabled = false
+    product.price = 999999
+    product.available_expr = "false"
+    const session = createBagGiftSession(bundle, (snapshot) => {
+      snapshot.shop.purchases.push({
+        product_id: product.id,
+        purchased_count: 1,
+        last_purchased_game_minute: 0,
+        cooldown_until_game_minute: 9999
+      })
+    })
+
+    expect(session.dispatch({
+      type: "bag-gift",
+      itemId: "gift_box",
+      roleKey: "normal:friend",
+      quantity: 1
+    })).toBe(true)
+    expect(session.getSnapshot().vals.variables[0]?.vals[0]?.value).toBe(5000)
+  })
+
+  it("shares gift cooldown with direct shop gifting in both directions", () => {
+    const bundle = createBagGiftBundle()
+    const shopFirst = createBagGiftSession(bundle)
+    shopFirst.dispatch({ type: "shop-gift", productId: "gift_box_product", roleKey: "normal:friend" })
+    const afterShopGift = shopFirst.getSnapshot()
+    expect(shopFirst.dispatch({
+      type: "bag-gift",
+      itemId: "gift_box",
+      roleKey: "normal:friend",
+      quantity: 1
+    })).toBe(false)
+    expect(shopFirst.getSnapshot()).toEqual(afterShopGift)
+
+    const cooldownEndedSave = createSave(shopFirst, bundle, "cooldown-ended")
+    cooldownEndedSave.session_state.clock.total_minutes = 1440
+    const afterCooldown = createStorySession({ bundle, saveState: cooldownEndedSave })
+    expect(afterCooldown.dispatch({
+      type: "bag-gift",
+      itemId: "gift_box",
+      roleKey: "normal:friend",
+      quantity: 1
+    })).toBe(true)
+
+    const bagFirst = createBagGiftSession(createBagGiftBundle())
+    expect(bagFirst.dispatch({
+      type: "bag-gift",
+      itemId: "gift_box",
+      roleKey: "normal:friend",
+      quantity: 1
+    })).toBe(true)
+    const afterBagGift = bagFirst.getSnapshot()
+    bagFirst.dispatch({ type: "shop-gift", productId: "gift_box_product", roleKey: "normal:friend" })
+    expect(bagFirst.getSnapshot()).toEqual(afterBagGift)
+    expect(bagFirst.getViewModel().notifications.at(-1)).toContain("送礼冷却中")
   })
 })
 

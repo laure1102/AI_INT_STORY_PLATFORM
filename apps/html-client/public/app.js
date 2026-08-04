@@ -7,6 +7,7 @@ import {
 } from "./browser-state.js"
 import { renderGame, renderProfiles, renderSaves } from "./browser-render.js"
 import { filterShopGiftTargetOptions } from "./browser-shop.js"
+import { bindGiftEvents } from "./browser-gifts.js"
 
 /** @param message 提示文本。 @param variant info 或 error 样式。 @returns 无返回值；显示 2.6 秒后自动隐藏的 toast。 */
 function showToast(message, variant = "info") {
@@ -367,7 +368,7 @@ function render() {
   }
 }
 
-/** @param action Runtime 交互动作。 @returns 无返回值；提交动作、刷新状态/手机线程并统一处理错误。 */
+/** @param action Runtime 交互动作。 @returns 服务端动作结果；提交后刷新状态/手机线程并统一处理错误。 */
 async function dispatchRuntimeAction(action) {
   setBusy(true)
   try {
@@ -378,6 +379,7 @@ async function dispatchRuntimeAction(action) {
     } else {
       render()
     }
+    return result
   } catch (error) {
     showToast(error instanceof Error ? error.message : String(error), "error")
     throw error
@@ -491,6 +493,8 @@ async function tick() {
  * @returns 无返回值；节点每次由 innerHTML 重建，所以监听器也在每次 render 后重新绑定。
  */
 function bindEvents() {
+  bindGiftEvents({ dispatchRuntimeAction, render, showToast })
+
   dom.app.querySelectorAll("[data-screen]").forEach((button) => {
     button.addEventListener("click", () => {
       ui.screen = button.dataset.screen

@@ -14,6 +14,7 @@ import { normalizeRuntimeRngState } from "../rng"
 import type { StoryInvokeTargetType } from "../types"
 import type { CreateStorySessionOptions, RuntimeState, RuntimeStorySession, RuntimeStoryViewModel } from "./contracts-view"
 import { createRuntimePlaybackState, toRuntimeActionState } from "./contracts-view"
+import { giftBagItem } from "./bag-gifts"
 import { buyShopProduct, giftShopProduct } from "./doing-shop"
 import { sendPhoneAction, sendPhoneQuickMessage, sendPhoneTalk } from "./phone-actions"
 import { advancePhoneConversationReply } from "./phone-conversations"
@@ -231,6 +232,22 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           notifications.push(error instanceof Error ? error.message : "购买商品失败。")
         }
         return
+      }
+
+      if (action.type === "bag-gift") {
+        try {
+          return giftBagItem(
+            options.bundle,
+            runtimeState.snapshot,
+            notifications,
+            action.itemId,
+            action.roleKey,
+            action.quantity
+          )
+        } catch (error) {
+          notifications.push(error instanceof Error ? error.message : "赠送背包物品失败。")
+          return false
+        }
       }
 
       if (action.type === "shop-gift") {

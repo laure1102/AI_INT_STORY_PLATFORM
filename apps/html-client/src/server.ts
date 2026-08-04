@@ -343,8 +343,11 @@ async function handleApi(app: HtmlClientApp, request: JsonRequest, response: Ser
       throw new HttpError(400, "缺少有效 action。")
     }
 
-    app.dispatch(action as RuntimeStorySessionAction)
-    sendJson(response, 200, buildClientState(app))
+    const actionSucceeded = app.dispatch(action as RuntimeStorySessionAction)
+    sendJson(response, 200, {
+      ...buildClientState(app),
+      actionSucceeded: actionSucceeded !== false
+    })
     return
   }
 

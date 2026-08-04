@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { storyDocumentSchema } from "./schema"
+import { storyDocumentSchema, storyShopSchema } from "./schema"
 import { validateStoryDocument } from "./validate"
 
 function createDocument(overrides: Record<string, unknown> = {}) {
@@ -118,6 +118,42 @@ describe("validateStoryDocument", () => {
 
     expect(validateStoryDocument(document).issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "schedule.dependency-cycle", level: "error" })
+    ]))
+  })
+
+  it("rejects multiple giftable shop products for the same item", () => {
+    const duplicateShop = {
+      currency_value_key: "player.money",
+      categories: [{ id: "gifts", name: "礼品" }],
+      products: [
+        { id: "first_gift", category_id: "gifts", item_id: "gift_box", allow_gift: true },
+        { id: "second_gift", category_id: "gifts", item_id: "gift_box", allow_gift: true }
+      ]
+    }
+    expect(storyShopSchema.safeParse(duplicateShop).success).toBe(false)
+
+    const document = createDocument({
+      shop: {
+        currency_value_key: "player.money",
+        categories: [{ id: "gifts", name: "礼品" }],
+        products: [{
+          id: "first_gift",
+          category_id: "gifts",
+          item_id: "gift_box",
+          allow_gift: true
+        }]
+      }
+    })
+    document.shop.products.push({
+      ...document.shop.products[0]!,
+      id: "second_gift"
+    })
+
+    expect(validateStoryDocument(document).issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "shop.product.duplicate-gift-item",
+        level: "error"
+      })
     ]))
   })
 })

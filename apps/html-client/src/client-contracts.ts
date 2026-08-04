@@ -102,7 +102,7 @@ export interface HtmlClientApp {
   startNewGame(): Promise<RuntimeStorySession>
   loadSave(slotId: string): Promise<RuntimeStorySession>
   saveToSlot(slotId: string): Promise<RuntimeStorySaveState>
-  dispatch(action: RuntimeStorySessionAction): void
+  dispatch(action: RuntimeStorySessionAction): boolean | void
   tick(deltaMs: number): void
   setTimePause(paused: boolean): void
   setTimeSpeed(speed: number): void

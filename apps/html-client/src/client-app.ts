@@ -462,12 +462,13 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
 
       return saveState
     },
-    /** @param action Runtime 交互动作。 @returns 无返回值；派发后立即重新构建 view。 */
+    /** @param action Runtime 交互动作。 @returns 领域动作的可选成功状态；派发后立即重新构建 view。 */
     dispatch(action) {
       const session = assertSession(state.session)
-      session.dispatch(action)
+      const actionSucceeded = session.dispatch(action)
       // 每次动作派发后立即刷新视图模型，保持 UI 壳层尽量薄。
       state.view = session.getViewModel()
+      return actionSucceeded
     },
     /** @param deltaMs 本帧真实毫秒数。 @returns 无返回值；推进确定性运行时并刷新 view。 */
     tick(deltaMs) {
