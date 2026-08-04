@@ -6,6 +6,7 @@ import {
   ui
 } from "./browser-state.js"
 import { renderGame, renderProfiles, renderSaves } from "./browser-render.js"
+import { filterShopGiftTargetOptions } from "./browser-shop.js"
 
 /** @param message 提示文本。 @param variant info 或 error 样式。 @returns 无返回值；显示 2.6 秒后自动隐藏的 toast。 */
 function showToast(message, variant = "info") {
@@ -319,6 +320,14 @@ async function loadPrompts({ force = false } = {}) {
  * @returns 无返回值。重绘前先记住滚动，避免 innerHTML 替换节点后用户阅读位置跳动。
  */
 function render() {
+  const activeShopGiftSearch = document.activeElement?.matches?.("[data-shop-gift-search]")
+    ? {
+        productId: document.activeElement.dataset.shopGiftSearch,
+        selectionStart: document.activeElement.selectionStart,
+        selectionEnd: document.activeElement.selectionEnd
+      }
+    : null
+
   rememberMenuPanelScroll()
   rememberPhoneThreadScroll()
   rememberPhoneOptionsScroll()
@@ -346,6 +355,16 @@ function render() {
   restoreMenuPanelScroll()
   restorePhoneThreadScroll()
   restorePhoneOptionsScroll()
+
+  if (activeShopGiftSearch) {
+    const input = Array.from(dom.app.querySelectorAll("[data-shop-gift-search]"))
+      .find((element) => element.dataset.shopGiftSearch === activeShopGiftSearch.productId)
+    input?.focus()
+    input?.setSelectionRange(
+      activeShopGiftSearch.selectionStart ?? input.value.length,
+      activeShopGiftSearch.selectionEnd ?? input.value.length
+    )
+  }
 }
 
 /** @param action Runtime 交互动作。 @returns 无返回值；提交动作、刷新状态/手机线程并统一处理错误。 */
@@ -541,6 +560,7 @@ function bindEvents() {
   dom.app.querySelectorAll("[data-shop-category]").forEach((button) => {
     button.addEventListener("click", () => {
       ui.selectedShopCategoryId = button.dataset.shopCategory
+      ui.selectedShopGiftProductId = null
       render()
     })
   })
@@ -551,13 +571,51 @@ function bindEvents() {
     })
   })
 
-  dom.app.querySelectorAll("[data-shop-gift]").forEach((button) => {
+  dom.app.querySelectorAll("[data-shop-gift-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const productId = button.dataset.shopGiftToggle
+      const opening = ui.selectedShopGiftProductId !== productId
+      ui.selectedShopGiftProductId = opening ? productId : null
+      if (opening) {
+        ui.shopGiftSearchQueries[productId] = ""
+        delete ui.shopGiftSelectedRoleKeys[productId]
+      }
+      render()
+      if (opening) {
+        dom.app.querySelector("[data-shop-gift-search]")?.focus()
+      }
+    })
+  })
+
+  dom.app.querySelectorAll("[data-shop-gift-search]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const productId = input.dataset.shopGiftSearch
+      ui.shopGiftSearchQueries[productId] = input.value
+      delete ui.shopGiftSelectedRoleKeys[productId]
+      filterShopGiftTargetOptions(input)
+    })
+  })
+
+  dom.app.querySelectorAll("[data-shop-gift-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const productId = button.dataset.shopGiftTarget
+      ui.shopGiftSelectedRoleKeys[productId] = button.dataset.shopGiftRole
+      ui.shopGiftSearchQueries[productId] = button.dataset.shopGiftLabel
+      render()
+    })
+  })
+
+  dom.app.querySelectorAll("[data-shop-gift-confirm]").forEach((button) => {
     button.addEventListener("click", async () => {
       await dispatchRuntimeAction({
         type: "shop-gift",
-        productId: button.dataset.shopGift,
+        productId: button.dataset.shopGiftConfirm,
         roleKey: button.dataset.shopGiftRole
       })
+      delete ui.shopGiftSelectedRoleKeys[button.dataset.shopGiftConfirm]
+      delete ui.shopGiftSearchQueries[button.dataset.shopGiftConfirm]
+      ui.selectedShopGiftProductId = null
+      render()
     })
   })
 

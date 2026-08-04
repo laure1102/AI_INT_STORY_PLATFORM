@@ -637,7 +637,7 @@ export function createRuntimeShopScriptFunctions(
       const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
       return buyShopProduct(bundle, snapshot, notifications, normalizedProductId)
     },
-    /** @param productId 商品 id。 @param roleKey 收礼角色键。 @returns 赠礼结果；成功时扣除玩家背包物品。 */
+    /** @param productId 商品 id。 @param roleKey 收礼角色键。 @returns 赠礼结果；成功时扣款并直接送出，不进入背包。 */
     shop_gift(productId: unknown, roleKey: unknown) {
       const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
       const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)

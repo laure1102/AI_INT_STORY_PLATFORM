@@ -56,7 +56,7 @@ import { sendPhoneMessageToContact } from "./phone-actions"
 import { getBundleItemNameMap } from "./phone-config"
 import { assertRuntimePhoneRoleKey, ensurePhoneContact, findRoleLabel } from "./phone-threads"
 import { getCurrentGameMinute } from "./schedule-clock"
-import { buildRuntimeContextValues, createRuntimeBagScriptFunctions, findBagEntry } from "./script-context"
+import { buildRuntimeContextValues, createRuntimeBagScriptFunctions } from "./script-context"
 import { appendHistory } from "./script-execution"
 import { clampPhoneFavor, createCombinedValsFile, createDefaultDoingConfig, createDefaultShopConfig, normalizeDoingId, normalizeDoingState, normalizeItemId, normalizePhoneRoleKey, normalizeShopProductId, normalizeShopState, normalizeText, readSnapshotValue, writeSnapshotValue } from "./state-values"
 
@@ -303,6 +303,42 @@ export function writeShopCurrencyBalance(
   )
 }
 
+/** @param bundle 编译故事。 @param snapshot 会话快照。 @param product 商品定义。 @returns 无返回值；成功时扣除本次商城结算金额。 */
+function chargeShopProduct(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  product: RuntimeStoryShopProduct
+) {
+  if (product.price <= 0) {
+    return
+  }
+
+  const currentMoney = getShopCurrencyBalance(bundle, snapshot)
+  if (currentMoney === null) {
+    throw new Error(`扣款变量 ${getBundleShopConfig(bundle).currency_value_key} 当前不可读取。`)
+  }
+
+  if (currentMoney < product.price) {
+    throw new Error(`需要 ${product.price} 元，当前只有 ${Math.max(0, Math.trunc(currentMoney))} 元。`)
+  }
+
+  if (!writeShopCurrencyBalance(bundle, snapshot, currentMoney - product.price)) {
+    throw new Error(`${getBundleShopConfig(bundle).currency_value_key} 不是可写 value 变量，无法扣款。`)
+  }
+}
+
+/** @param snapshot 会话快照。 @param product 商品定义。 @returns 更新后的购买记录；自购和直接赠礼都会计入。 */
+function recordShopPurchase(snapshot: RuntimeStorySessionSnapshot, product: RuntimeStoryShopProduct) {
+  const record = ensureShopPurchaseRecord(snapshot, product.id)
+  const currentGameMinute = getCurrentGameMinute(snapshot)
+  record.purchased_count += 1
+  record.last_purchased_game_minute = currentGameMinute
+  record.cooldown_until_game_minute = product.purchase_cooldown_hours > 0
+    ? currentGameMinute + product.purchase_cooldown_hours * 60
+    : null
+  return record
+}
+
 /**
  * 在安全 StoryScript 上下文中计算商店显示/购买条件。
  * @param bundle 编译故事。 @param snapshot 当前快照。 @param source 布尔表达式源码。
@@ -450,30 +486,11 @@ export function buyShopProduct(
     throw new Error(disabledReason)
   }
 
-  if (product.price > 0) {
-    const currentMoney = getShopCurrencyBalance(bundle, snapshot)
-    if (currentMoney === null) {
-      throw new Error(`扣款变量 ${getBundleShopConfig(bundle).currency_value_key} 当前不可读取。`)
-    }
-
-    if (currentMoney < product.price) {
-      throw new Error(`需要 ${product.price} 元，当前只有 ${Math.max(0, Math.trunc(currentMoney))} 元。`)
-    }
-
-    if (!writeShopCurrencyBalance(bundle, snapshot, currentMoney - product.price)) {
-      throw new Error(`${getBundleShopConfig(bundle).currency_value_key} 不是可写 value 变量，无法扣款。`)
-    }
-  }
+  chargeShopProduct(bundle, snapshot, product)
 
   createRuntimeBagScriptFunctions(bundle, snapshot).bag_add("player", product.item_id, product.quantity)
 
-  const record = ensureShopPurchaseRecord(snapshot, product.id)
-  const currentGameMinute = getCurrentGameMinute(snapshot)
-  record.purchased_count += 1
-  record.last_purchased_game_minute = currentGameMinute
-  record.cooldown_until_game_minute = product.purchase_cooldown_hours > 0
-    ? currentGameMinute + product.purchase_cooldown_hours * 60
-    : null
+  const record = recordShopPurchase(snapshot, product)
 
   const itemName = getBundleItemNameMap(bundle).get(product.item_id) ?? product.item_id
   notifications.push(`已购买：${itemName} x${product.quantity}`)
@@ -488,10 +505,10 @@ export function buyShopProduct(
 }
 
 /**
- * 将玩家背包中的可赠商品送给联系人。
+ * 从商城购买商品并直接送给联系人。
  * @param bundle 编译故事。 @param snapshot 会话快照。 @param notifications UI 通知数组。
  * @param productId 商品 id。 @param roleKey 收礼角色键。 @returns 更新后的赠礼结果。
- * @throws 商品不可赠、未添加联系人、库存不足或仍在冷却时抛错；校验通过后才扣物品并写记录。
+ * @throws 商品不可购买、不可赠、余额不足或仍在冷却时抛错；成功时不经过玩家背包。
  */
 export function giftShopProduct(
   bundle: RuntimeStoryBundle,
@@ -511,9 +528,9 @@ export function giftShopProduct(
     throw new Error("该商品不能送人。")
   }
 
-  const itemId = normalizeItemId(product.item_id)
-  if (!itemId || !getBundleItemIds(bundle).has(itemId)) {
-    throw new Error(`商品引用的物品 "${itemId || product.item_id}" 不存在。`)
+  const disabledReason = resolveShopProductDisabledReason(bundle, snapshot, product)
+  if (disabledReason) {
+    throw new Error(disabledReason)
   }
 
   const cooldownLeftHours = getShopGiftCooldownLeftHours(snapshot, product.id, normalizedRoleKey)
@@ -521,16 +538,8 @@ export function giftShopProduct(
     throw new Error(`送礼冷却中，还需 ${Math.ceil(cooldownLeftHours)} 小时。`)
   }
 
-  const currentQuantity = findBagEntry(snapshot, "player", itemId)?.quantity ?? 0
-  if (currentQuantity < product.quantity) {
-    const itemName = getBundleItemNameMap(bundle).get(itemId) ?? itemId
-    throw new Error(`背包里 ${itemName} 数量不足，需要 ${product.quantity}，当前只有 ${currentQuantity}。`)
-  }
-
-  const removed = createRuntimeBagScriptFunctions(bundle, snapshot).bag_remove("player", itemId, product.quantity)
-  if (!removed) {
-    throw new Error("送礼扣除背包物品失败。")
-  }
+  chargeShopProduct(bundle, snapshot, product)
+  recordShopPurchase(snapshot, product)
 
   const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
   contact.favor = clampPhoneFavor(contact.favor + product.gift_favor_delta, contact.favor)
@@ -543,15 +552,15 @@ export function giftShopProduct(
     ? currentGameMinute + product.gift_cooldown_hours * 60
     : null
 
-  const itemName = getBundleItemNameMap(bundle).get(itemId) ?? itemId
+  const itemName = getBundleItemNameMap(bundle).get(product.item_id) ?? product.item_id
   const roleLabel = findRoleLabel(bundle, normalizedRoleKey)
   sendPhoneMessageToContact(bundle, snapshot, normalizedRoleKey, `我给你准备了${itemName}。`)
-  notifications.push(`已送给 ${roleLabel}：${itemName} x${product.quantity}，好感 ${product.gift_favor_delta >= 0 ? "+" : ""}${product.gift_favor_delta}`)
+  notifications.push(`已购买并送给 ${roleLabel}：${itemName} x${product.quantity}，好感 ${product.gift_favor_delta >= 0 ? "+" : ""}${product.gift_favor_delta}`)
   appendHistory(snapshot, {
     type: "system",
     id: `shop-gift:${product.id}:${normalizedRoleKey}:${record.gifted_count}`,
     title: "shop:gift",
-    content: `送给 ${roleLabel} ${itemName} x${product.quantity}，好感变化 ${product.gift_favor_delta}。`
+    content: `购买 ${itemName} x${product.quantity} 并送给 ${roleLabel}，花费 ${product.price}，好感变化 ${product.gift_favor_delta}。`
   })
 
   return true

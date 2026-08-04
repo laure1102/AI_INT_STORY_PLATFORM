@@ -382,7 +382,7 @@ function renderMenuPanelBody(panelId) {
     const selectedProducts = selectedCategoryId
       ? products.filter((product) => product.categoryId === selectedCategoryId)
       : []
-    const contacts = ui.data?.phoneContacts ?? []
+    const contacts = Array.isArray(ui.data?.phoneContacts) ? ui.data.phoneContacts : []
 
     body = `
       <div class="shop-panel">
@@ -410,25 +410,99 @@ function renderMenuPanelBody(panelId) {
               product.allowGift ? `送礼好感 ${product.giftFavorDelta >= 0 ? "+" : ""}${product.giftFavorDelta}` : "不可送礼",
               product.giftCooldownHours > 0 ? `送礼冷却 ${product.giftCooldownHours}小时` : ""
             ].filter(Boolean).join(" · ")
-            const giftTargets = product.allowGift && product.ownedQuantity >= product.quantity
-              ? contacts.map((contact) => `
-                <button class="tiny-command" data-shop-gift="${h(product.id)}" data-shop-gift-role="${h(contact.roleKey)}">
-                  送 ${h(contact.label)}
+            const canOpenGift = product.allowGift && !product.disabled && contacts.length > 0
+            const giftDisabledReason = !product.allowGift
+              ? "该商品不可赠礼"
+              : product.disabled
+                ? product.disabledReason || "当前无法购买赠礼"
+                : contacts.length === 0
+                  ? "暂无可赠送好友"
+                  : "购买后直接赠送，不进入背包"
+            const giftOpen = canOpenGift && ui.selectedShopGiftProductId === product.id
+            const selectedGiftRoleKey = ui.shopGiftSelectedRoleKeys[product.id] ?? ""
+            const selectedGiftContact = contacts.find((contact) => contact.roleKey === selectedGiftRoleKey) ?? null
+            const giftQuery = selectedGiftContact?.label ?? String(ui.shopGiftSearchQueries[product.id] ?? "")
+            const normalizedGiftQuery = giftQuery.trim().toLocaleLowerCase("zh-Hans-CN")
+            let visibleGiftTargetCount = 0
+            const giftOptions = contacts.map((contact) => {
+              const searchText = `${contact.label ?? ""} ${contact.roleKey ?? ""} ${contact.relationStageLabel ?? ""}`
+              const hidden = normalizedGiftQuery
+                ? !searchText.toLocaleLowerCase("zh-Hans-CN").includes(normalizedGiftQuery)
+                : false
+              if (!hidden) {
+                visibleGiftTargetCount += 1
+              }
+
+              return `
+                <button
+                  class="shop-gift-option ${contact.roleKey === selectedGiftRoleKey ? "selected" : ""}"
+                  type="button"
+                  role="option"
+                  aria-selected="${contact.roleKey === selectedGiftRoleKey ? "true" : "false"}"
+                  ${hidden ? "hidden" : ""}
+                  data-shop-gift-target="${h(product.id)}"
+                  data-shop-gift-role="${h(contact.roleKey)}"
+                  data-shop-gift-label="${h(contact.label ?? contact.roleKey)}"
+                  data-shop-gift-search-text="${h(searchText)}"
+                >
+                  <span class="item-title">${h(contact.label ?? contact.roleKey)}</span>
+                  <span class="item-meta">${h(contact.relationStageLabel ?? "好友")} · 好感 ${h(contact.favor ?? 0)}/100</span>
                 </button>
-              `).join("")
-              : ""
+              `
+            }).join("")
+            const giftPickerId = `shop-gift-picker-${product.id}`
+            const giftOptionsId = `shop-gift-options-${product.id}`
 
             return `
-              <article class="shop-product ${product.disabled ? "disabled" : ""}">
+              <article class="shop-product">
                 <div class="shop-product-main">
                   <div>
                     <div class="item-title">${h(product.itemName ?? product.itemId)}</div>
                     <div class="item-meta">${h(product.itemId)} · ${h(buyMeta)}</div>
                     <div class="item-meta">${h(giftMeta)}</div>
                   </div>
-                  <button class="footer-command" ${product.disabled ? "disabled" : ""} data-shop-buy="${h(product.id)}">购买</button>
+                  <div class="shop-product-actions">
+                    <button class="footer-command" ${product.disabled ? "disabled" : ""} title="购买后直接进入自己的背包" data-shop-buy="${h(product.id)}">购买</button>
+                    <button
+                      class="footer-command ${giftOpen ? "active" : ""}"
+                      ${canOpenGift ? "" : "disabled"}
+                      title="${h(giftDisabledReason)}"
+                      aria-expanded="${giftOpen ? "true" : "false"}"
+                      aria-controls="${h(giftPickerId)}"
+                      data-shop-gift-toggle="${h(product.id)}"
+                    >赠礼</button>
+                  </div>
                 </div>
-                ${giftTargets ? `<div class="shop-gift-row">${giftTargets}</div>` : ""}
+                ${giftOpen ? `
+                  <div class="shop-gift-row" id="${h(giftPickerId)}" data-shop-gift-picker="${h(product.id)}">
+                    <label for="shop-gift-search-${h(product.id)}">赠送给</label>
+                    <div class="shop-gift-combobox">
+                      <input
+                        id="shop-gift-search-${h(product.id)}"
+                        type="search"
+                        value="${h(giftQuery)}"
+                        placeholder="选择或搜索好友"
+                        autocomplete="off"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-expanded="true"
+                        aria-controls="${h(giftOptionsId)}"
+                        data-shop-gift-search="${h(product.id)}"
+                      >
+                      <div class="shop-gift-options" id="${h(giftOptionsId)}" role="listbox">
+                        ${giftOptions}
+                        <div class="shop-gift-empty" ${visibleGiftTargetCount > 0 ? "hidden" : ""} data-shop-gift-empty>没有匹配的好友</div>
+                      </div>
+                    </div>
+                    <button
+                      class="footer-command shop-gift-confirm"
+                      type="button"
+                      ${selectedGiftContact ? "" : "disabled"}
+                      data-shop-gift-confirm="${h(product.id)}"
+                      data-shop-gift-role="${h(selectedGiftContact?.roleKey ?? "")}"
+                    >确定</button>
+                  </div>
+                ` : ""}
               </article>
             `
           }).join("")}

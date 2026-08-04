@@ -1,6 +1,6 @@
 ﻿# Story Manager Agent Guide
 
-Last updated: `2026-08-03`
+Last updated: `2026-08-04`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -580,7 +580,7 @@ Implementation notes:
 - `shop.currency_value_key` points to a writable value variable, defaulting to `player.money`.
 - runtime session snapshots store `shop.purchases` and `shop.gifts` with counts, last game minute, and cooldown end game minute.
 - buying a product deducts `currency_value_key` and adds the referenced item to the player bag.
-- gifting a product removes the referenced item from the player bag, ensures the target phone contact exists, and applies `gift_favor_delta`.
+- gifting a product performs a direct shop purchase: it deducts `currency_value_key`, applies purchase and gift cooldown records, sends the item directly to the target phone contact, and applies `gift_favor_delta` without adding or removing player bag entries.
 - HTML client footer exposes `M 商城` left of `N 下一天`; clicking or pressing `M` opens the shop popup.
 - StoryScript exposes `shop_can_buy`, `shop_purchase_cooldown_left`, `shop_gift_cooldown_left`, `shop_buy`, and `shop_gift`.
 - backend AI creation Agent reads existing shop categories/products and can output `draft.shop.categories` / `draft.shop.products`; selected draft entries are applied to `shop.json5`.
@@ -660,7 +660,7 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - scripts and conditions can use `bag_count("player", "item_id")` and `bag_has("player", "item_id", 1)` to inspect runtime inventory
 - literal `item_id` arguments are validated against `items.json5`; dynamic ids are checked at runtime
 - scripts and conditions can use shop read helpers: `shop_can_buy`, `shop_purchase_cooldown_left`, and `shop_gift_cooldown_left`
-- event/action scripts can use `shop_buy(productId)` and `shop_gift(productId, roleKey)` to buy existing shop products or gift owned items to phone contacts
+- event/action scripts can use `shop_buy(productId)` to buy into the player bag and `shop_gift(productId, roleKey)` to pay for an existing shop product and send it directly to a phone contact
 - literal shop product ids are validated against `shop.json5`; dynamic ids are checked at runtime
 - runtime text substitution for dialogue/template content is implemented in `packages/runtime`
 - editor `?` help popovers for condition/script/dialogue fields should eventually be sourced from `StoryScript.md`

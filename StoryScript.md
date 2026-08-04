@@ -561,7 +561,7 @@ shop_gift("shop_local_specialty_gift_box", "important:zhuli")
 - `shop_purchase_cooldown_left` 返回商品购买剩余冷却小时数；无冷却或冷却已结束时返回 `0`
 - `shop_gift_cooldown_left` 返回商品送给指定联系人的剩余冷却小时数；无冷却或冷却已结束时返回 `0`
 - `shop_buy` 会按 `shop.json5.currency_value_key` 扣钱，并把商品对应物品加入玩家背包
-- `shop_gift` 会从玩家背包扣除商品对应物品，并给指定联系人增加好感度
+- `shop_gift` 会按商城价格扣款并把商品直接送给指定联系人，不写入或扣除玩家背包，同时更新购买/赠礼冷却并增加好感度
 - `trigger_expr`、doing 可见条件、shop 分类/商品条件只允许使用三个只读商城函数
 - `init_script`、`end_script`、`action.exec_script` 可以使用全部商城函数
 - 静态校验会检查字面量 `shop product id` 是否存在；动态商品 id 在运行时检查

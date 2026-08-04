@@ -27,6 +27,57 @@ function createBundle(options: Partial<RuntimeStoryBundle> = {}): RuntimeStoryBu
   }
 }
 
+function createShopBundle(money: number): RuntimeStoryBundle {
+  return createBundle({
+    vals: {
+      variables: [
+        {
+          name: "player",
+          vals: [
+            { name: "money", value_type: "value", value: money, calc_rule: "" }
+          ]
+        }
+      ]
+    },
+    roles: {
+      normal: {
+        roles: [
+          { id: "friend", name: "好友", descr: "测试好友", zhiye: "" }
+        ]
+      },
+      important: { roles: [] }
+    },
+    items: {
+      items: [
+        { id: "gift_box", name: "礼盒", stackable: true, max_stack: 99 }
+      ]
+    },
+    shop: {
+      currency_value_key: "player.money",
+      categories: [
+        { id: "gifts", name: "礼品", sort_order: 10, visible_expr: "", descr: "" }
+      ],
+      products: [
+        {
+          id: "gift_box_product",
+          category_id: "gifts",
+          item_id: "gift_box",
+          price: 199,
+          quantity: 1,
+          sort_order: 10,
+          enabled: true,
+          available_expr: "",
+          unavailable_reason: "",
+          allow_gift: true,
+          gift_favor_delta: 3,
+          purchase_cooldown_hours: 12,
+          gift_cooldown_hours: 24
+        }
+      ]
+    }
+  })
+}
+
 function createSave(
   session: RuntimeStorySession,
   bundle: RuntimeStoryBundle,
@@ -169,6 +220,42 @@ describe("RuntimeStorySession v2 saves", () => {
       session.getSnapshot().vals.variables[0]?.vals[0]?.value
     expect(readRoll(restored)).toBe(readRoll(uninterrupted))
     expect(restored.getSnapshot().rng).toEqual(uninterrupted.getSnapshot().rng)
+  })
+})
+
+describe("Runtime shop direct gifting", () => {
+  it("charges the shop price and gifts without using the player bag", () => {
+    const bundle = createShopBundle(500)
+    const session = createStorySession({ bundle })
+
+    session.dispatch({ type: "shop-gift", productId: "gift_box_product", roleKey: "normal:friend" })
+
+    const snapshot = session.getSnapshot()
+    expect(snapshot.vals.variables[0]?.vals[0]?.value).toBe(301)
+    expect(snapshot.bags.player.entries).toEqual([])
+    expect(snapshot.shop.purchases).toMatchObject([
+      { product_id: "gift_box_product", purchased_count: 1, cooldown_until_game_minute: 720 }
+    ])
+    expect(snapshot.shop.gifts).toMatchObject([
+      { product_id: "gift_box_product", role_key: "normal:friend", gifted_count: 1, cooldown_until_game_minute: 1440 }
+    ])
+    expect(snapshot.phone.contacts).toContainEqual(expect.objectContaining({ role_key: "normal:friend", favor: 23 }))
+    expect(snapshot.history.at(-1)?.content).toContain("花费 199")
+  })
+
+  it("leaves all state unchanged when the direct gift cannot be purchased", () => {
+    const bundle = createShopBundle(100)
+    const session = createStorySession({ bundle })
+
+    session.dispatch({ type: "shop-gift", productId: "gift_box_product", roleKey: "normal:friend" })
+
+    const snapshot = session.getSnapshot()
+    expect(snapshot.vals.variables[0]?.vals[0]?.value).toBe(100)
+    expect(snapshot.bags.player.entries).toEqual([])
+    expect(snapshot.shop.purchases).toEqual([])
+    expect(snapshot.shop.gifts).toEqual([])
+    expect(snapshot.phone.contacts).toEqual([])
+    expect(session.getViewModel().notifications).toContain("需要 199 元，当前只有 100 元。")
   })
 })
 

@@ -109,7 +109,7 @@ const STORY_SCRIPT_BUILTIN_AUTOCOMPLETE_ITEMS: StoryScriptAutocompleteItem[] = [
   { name: "shop_can_buy", description: "检查指定商城商品当前是否可购买。" },
   { name: "shop_buy", description: "购买指定商城商品，扣钱并加入玩家背包。" },
   { name: "shop_purchase_cooldown_left", description: "读取指定商品购买剩余冷却小时数。" },
-  { name: "shop_gift", description: "把背包中的指定商城商品送给联系人并增加好感度。" },
+  { name: "shop_gift", description: "购买指定商城商品并直接送给联系人，不进入背包，同时增加好感度。" },
   { name: "shop_gift_cooldown_left", description: "读取指定商品送给指定联系人的剩余冷却小时数。" },
   { name: "phone_start_conversation", description: "启动 phone_conversations.json5 中预设的连续剧情手机对话。" }
 ]
