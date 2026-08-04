@@ -8,7 +8,7 @@ export {
   validateStoryValsCalcRules,
   parseStoryValInput,
   formatStoryValInput
-} from "@story-mgr/runtime"
+} from "@story-mgr/storyscript"
 
 export type {
   StoryValCalcEvaluation,
@@ -16,4 +16,4 @@ export type {
   StoryValCalcDisplay,
   StoryScriptExecutionResult,
   StoryScriptValidationIssue
-} from "@story-mgr/runtime"
+} from "@story-mgr/storyscript"

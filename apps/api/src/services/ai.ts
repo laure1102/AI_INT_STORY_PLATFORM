@@ -1,577 +1,46 @@
+/**
+ * 地点、角色和物品的 AI 提示词与图片生成入口。
+ *
+ * 调用方只需要提供应用设置和领域参数，不需要了解具体上游协议。
+ */
 import type { AppSettingsFile } from "@story-mgr/core"
 import { FileStoreError } from "@story-mgr/file-store"
 import { Agent, fetch as undiciFetch } from "undici"
-
-interface LocationPromptInput {
-  descr: string
-  locationName: string
-  storyTitle?: string
-}
-
-interface ItemPromptInput {
-  categoryName: string
-  descr: string
-  itemName: string
-  storyTitle?: string
-}
-
-interface RolePromptInput {
-  descr: string
-  gender: "common" | "male" | "female"
-  important: boolean
-  qufenXingbie: boolean
-  roleName: string
-  storyTitle?: string
-  xingge?: string
-}
-
-interface GeneratedImageResult {
-  buffer: Buffer
-  mimeType: string
-}
-
-interface OpenAiChatCompletionResponse {
-  choices?: Array<{
-    message?: {
-      content?: string | Array<{ type?: string; text?: string }>
-    }
-  }>
-}
-
-interface OpenAiImageGenerationResponse {
-  data?: Array<{
-    b64_json?: string
-    revised_prompt?: string
-    url?: string
-  }>
-}
-
-interface MidjourneySubmitResponse {
-  code?: number
-  description?: string
-  properties?: Record<string, unknown>
-  result?: number | string
-}
-
-interface MidjourneyTaskResponse {
-  action?: string
-  description?: string
-  failReason?: string
-  finishTime?: number
-  id?: string
-  imageUrl?: string
-  progress?: string
-  prompt?: string
-  promptEn?: string
-  properties?: Record<string, unknown>
-  startTime?: number
-  state?: string
-  status?: string
-  submitTime?: number
-}
-
-interface MidjourneyPromptLimits {
-  globalPromptMaxChars: number
-  promptMaxChars: number
-  totalMaxChars: number
-}
-
-const AI_HEADERS_TIMEOUT_MS = 5 * 60 * 1000
-const AI_BODY_TIMEOUT_MS = 10 * 60 * 1000
-const AI_TOTAL_TIMEOUT_MS = 10 * 60 * 1000
-const MIDJOURNEY_TASK_TIMEOUT_MS = 20 * 60 * 1000
-const MIDJOURNEY_POLL_INTERVAL_MS = 5 * 1000
-const MIDJOURNEY_DEFAULT_PROMPT_LIMITS: MidjourneyPromptLimits = {
-  globalPromptMaxChars: 520,
-  promptMaxChars: 1400,
-  totalMaxChars: 1700
-}
-const MIDJOURNEY_RETRY_PROMPT_LIMITS: MidjourneyPromptLimits = {
-  globalPromptMaxChars: 320,
-  promptMaxChars: 1200,
-  totalMaxChars: 1400
-}
-
-const aiHttpAgent = new Agent({
-  bodyTimeout: AI_BODY_TIMEOUT_MS,
-  connectTimeout: 60 * 1000,
-  headersTimeout: AI_HEADERS_TIMEOUT_MS
-})
-
-function requireAiConfig(settings: AppSettingsFile) {
-  return settings.ai
-}
-
-function normalizeBaseUrl(baseUrl: string) {
-  const trimmed = baseUrl.trim()
-
-  if (!trimmed) {
-    return ""
-  }
-
-  const url = new URL(trimmed)
-  const pathname = url.pathname.replace(/\/+$/, "")
-  url.pathname = pathname.endsWith("/v1") ? pathname : `${pathname}/v1`
-
-  return url.toString().replace(/\/+$/, "")
-}
-
-function buildCompatibleUrl(baseUrl: string, endpoint: string) {
-  const normalized = normalizeBaseUrl(baseUrl)
-  if (!normalized) return ""
-  return `${normalized.replace(/\/+$/, "")}${endpoint}`
-}
-
-function normalizeMidjourneyBaseUrl(baseUrl: string) {
-  const trimmed = baseUrl.trim()
-
-  if (!trimmed) {
-    return ""
-  }
-
-  const url = new URL(trimmed)
-  const pathname = url.pathname.replace(/\/+$/, "")
-  const rootPathname = pathname.replace(/\/v1$/, "")
-  url.pathname = rootPathname || "/"
-
-  return url.toString().replace(/\/+$/, "")
-}
-
-function buildMidjourneyUrl(baseUrl: string, endpoint: string) {
-  const normalized = normalizeMidjourneyBaseUrl(baseUrl)
-  if (!normalized) return ""
-  return `${normalized.replace(/\/+$/, "")}${endpoint}`
-}
-
-function extractTextContent(
-  content: string | Array<{ type?: string; text?: string }> | undefined
-) {
-  if (typeof content === "string") {
-    return content.trim()
-  }
-
-  if (!Array.isArray(content)) {
-    return ""
-  }
-
-  return content
-    .map((part) => (part?.type === "text" ? part.text ?? "" : part.text ?? ""))
-    .join("")
-    .trim()
-}
-
-async function postJson<TResponse>(
-  url: string,
-  apiKey: string,
-  payload: Record<string, unknown>,
-  errorCode: string,
-  errorMessage: string
-) {
-  let response
-
-  try {
-    response = await undiciFetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload),
-      dispatcher: aiHttpAgent,
-      signal: AbortSignal.timeout(AI_TOTAL_TIMEOUT_MS)
-    })
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    throw new FileStoreError(`${errorMessage}: ${detail}`, 502, errorCode)
-  }
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "")
-    throw new FileStoreError(
-      `${errorMessage}: ${response.status} ${errorText || response.statusText}`,
-      502,
-      errorCode
-    )
-  }
-
-  return (await response.json()) as TResponse
-}
-
-async function getJson<TResponse>(
-  url: string,
-  apiKey: string,
-  errorCode: string,
-  errorMessage: string
-) {
-  let response
-
-  try {
-    response = await undiciFetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`
-      },
-      dispatcher: aiHttpAgent,
-      signal: AbortSignal.timeout(AI_TOTAL_TIMEOUT_MS)
-    })
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    throw new FileStoreError(`${errorMessage}: ${detail}`, 502, errorCode)
-  }
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "")
-    throw new FileStoreError(
-      `${errorMessage}: ${response.status} ${errorText || response.statusText}`,
-      502,
-      errorCode
-    )
-  }
-
-  return (await response.json()) as TResponse
-}
-
-async function downloadBinary(url: string, errorCode: string, errorMessage: string) {
-  let response
-
-  try {
-    response = await undiciFetch(url, {
-      method: "GET",
-      dispatcher: aiHttpAgent,
-      signal: AbortSignal.timeout(AI_TOTAL_TIMEOUT_MS)
-    })
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    throw new FileStoreError(`${errorMessage}: ${detail}`, 502, errorCode)
-  }
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "")
-    throw new FileStoreError(
-      `${errorMessage}: ${response.status} ${errorText || response.statusText}`,
-      502,
-      errorCode
-    )
-  }
-
-  const mimeType = response.headers.get("content-type")?.split(";")[0]?.trim() || "image/png"
-  const arrayBuffer = await response.arrayBuffer()
-
-  return {
-    buffer: Buffer.from(arrayBuffer),
-    mimeType
-  } satisfies GeneratedImageResult
-}
-
-function isMidjourneyImagineModel(model: string) {
-  return model.trim().toLowerCase() === "mj_imagine"
-}
-
-function isDoubaoSeedreamModel(model: string) {
-  return model.trim().toLowerCase() === "doubao-seedream-4-0-250828"
-}
-
-function greatestCommonDivisor(a: number, b: number): number {
-  let left = Math.abs(a)
-  let right = Math.abs(b)
-
-  while (right !== 0) {
-    const temp = left % right
-    left = right
-    right = temp
-  }
-
-  return left || 1
-}
-
-function buildAspectRatio(width: number, height: number) {
-  const normalizedWidth = Math.max(1, Math.round(width))
-  const normalizedHeight = Math.max(1, Math.round(height))
-  const divisor = greatestCommonDivisor(normalizedWidth, normalizedHeight)
-
-  return `${normalizedWidth / divisor}:${normalizedHeight / divisor}`
-}
-
-function normalizeMidjourneyPromptText(text: string) {
-  return text
-    .replace(/\r\n/g, "\n")
-    .replace(/\s+/g, " ")
-    .replace(/[“”]/g, "\"")
-    .replace(/[‘’]/g, "'")
-    .trim()
-}
-
-function stripAspectRatioFlag(text: string) {
-  return text.replace(/\s*--ar\s+\d+\s*:\s*\d+/gi, " ").replace(/\s+/g, " ").trim()
-}
-
-function truncateMidjourneyText(text: string, maxChars: number) {
-  const normalizedText = text.trim()
-
-  if (normalizedText.length <= maxChars) {
-    return normalizedText
-  }
-
-  const clipped = normalizedText.slice(0, Math.max(1, maxChars)).trim()
-  const sentenceBoundary = Math.max(
-    clipped.lastIndexOf(". "),
-    clipped.lastIndexOf("! "),
-    clipped.lastIndexOf("? "),
-    clipped.lastIndexOf("; ")
-  )
-  const clauseBoundary = Math.max(clipped.lastIndexOf(", "), clipped.lastIndexOf(" "))
-  const preferredBoundary = Math.max(sentenceBoundary, clauseBoundary)
-
-  if (preferredBoundary > maxChars * 0.6) {
-    return clipped.slice(0, preferredBoundary).trim().replace(/[,:;.!?\-]+$/g, "")
-  }
-
-  return clipped.replace(/[,:;.!?\-]+$/g, "")
-}
-
-function applyMidjourneyPromptLimits(
-  prompt: string,
-  globalPrompt: string,
-  limits: MidjourneyPromptLimits
-) {
-  let normalizedPrompt = truncateMidjourneyText(
-    stripAspectRatioFlag(normalizeMidjourneyPromptText(prompt)),
-    limits.promptMaxChars
-  )
-  let normalizedGlobalPrompt = truncateMidjourneyText(
-    stripAspectRatioFlag(normalizeMidjourneyPromptText(globalPrompt)),
-    limits.globalPromptMaxChars
-  )
-
-  let mergedPrompt = [normalizedGlobalPrompt, normalizedPrompt].filter(Boolean).join(" ")
-
-  if (mergedPrompt.length <= limits.totalMaxChars) {
-    return mergedPrompt.trim()
-  }
-
-  const overflow = mergedPrompt.length - limits.totalMaxChars
-
-  if (normalizedGlobalPrompt) {
-    normalizedGlobalPrompt = truncateMidjourneyText(
-      normalizedGlobalPrompt,
-      Math.max(0, normalizedGlobalPrompt.length - overflow)
-    )
-    mergedPrompt = [normalizedGlobalPrompt, normalizedPrompt].filter(Boolean).join(" ")
-  }
-
-  if (mergedPrompt.length <= limits.totalMaxChars) {
-    return mergedPrompt.trim()
-  }
-
-  normalizedPrompt = truncateMidjourneyText(
-    normalizedPrompt,
-    Math.max(1, normalizedPrompt.length - (mergedPrompt.length - limits.totalMaxChars))
-  )
-
-  return [normalizedGlobalPrompt, normalizedPrompt].filter(Boolean).join(" ").trim()
-}
-
-function buildMidjourneyPrompt(
-  prompt: string,
-  globalPrompt: string,
-  width: number,
-  height: number,
-  limits: MidjourneyPromptLimits = MIDJOURNEY_DEFAULT_PROMPT_LIMITS
-) {
-  const mergedPrompt = applyMidjourneyPromptLimits(prompt, globalPrompt, limits)
-  const normalizedPrompt = mergedPrompt.replace(/\s+/g, " ").trim()
-
-  if (!normalizedPrompt) {
-    return ""
-  }
-
-  if (/--ar\s+\d+\s*:\s*\d+/i.test(normalizeMidjourneyPromptText(`${globalPrompt} ${prompt}`))) {
-    return normalizedPrompt
-  }
-
-  return `${normalizedPrompt} --ar ${buildAspectRatio(width, height)}`.trim()
-}
-
-function sleep(milliseconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
-}
-
-function isMidjourneyUpstreamRetryFailure(error: unknown) {
-  if (!(error instanceof FileStoreError)) {
-    return false
-  }
-
-  return /all_retries_failed|upstream_error/i.test(error.message)
-}
-
-async function waitForMidjourneyTask(
-  baseUrl: string,
-  apiKey: string,
-  taskId: string
-): Promise<MidjourneyTaskResponse> {
-  const deadline = Date.now() + MIDJOURNEY_TASK_TIMEOUT_MS
-
-  while (Date.now() <= deadline) {
-    const task = await getJson<MidjourneyTaskResponse>(
-      buildMidjourneyUrl(baseUrl, `/mj/task/${encodeURIComponent(taskId)}/fetch`),
-      apiKey,
-      "ai.midjourney-task-fetch-failed",
-      "Failed to fetch Midjourney task"
-    )
-
-    const status = task.status?.trim().toUpperCase() || ""
-
-    if (status === "SUCCESS") {
-      return task
-    }
-
-    if (["FAIL", "FAILED", "FAILURE", "CANCEL", "CANCELLED", "ERROR"].includes(status)) {
-      const reason = task.failReason?.trim() || task.description?.trim() || `status ${status}`
-      throw new FileStoreError(
-        `Midjourney task failed: ${reason}`,
-        502,
-        "ai.midjourney-task-failed"
-      )
-    }
-
-    await sleep(MIDJOURNEY_POLL_INTERVAL_MS)
-  }
-
-  throw new FileStoreError(
-    `Midjourney task timed out after ${Math.round(MIDJOURNEY_TASK_TIMEOUT_MS / 60000)} minutes.`,
-    502,
-    "ai.midjourney-task-timeout"
-  )
-}
-
-async function generateMidjourneyImage(
-  settings: AppSettingsFile,
-  prompt: string,
-  globalPrompt: string,
-  width: number,
-  height: number
-): Promise<GeneratedImageResult> {
-  const ai = requireImageProvider(settings)
-  const primaryPrompt = buildMidjourneyPrompt(prompt, globalPrompt, width, height)
-
-  if (!primaryPrompt) {
-    throw new FileStoreError("Location prompt is required.", 400, "location.prompt-required")
-  }
-
-  async function submitMidjourneyPrompt(finalPrompt: string) {
-    return postJson<MidjourneySubmitResponse>(
-      buildMidjourneyUrl(ai.baseUrl, "/mj/submit/imagine"),
-      ai.apiKey,
-      {
-        botType: "MID_JOURNEY",
-        prompt: finalPrompt,
-        state: "story-mgr"
-      },
-      "ai.midjourney-submit-failed",
-      "Failed to submit Midjourney imagine task"
-    )
-  }
-
-  let submitResult: MidjourneySubmitResponse
-
-  try {
-    submitResult = await submitMidjourneyPrompt(primaryPrompt)
-  } catch (error) {
-    if (!isMidjourneyUpstreamRetryFailure(error)) {
-      throw error
-    }
-
-    const retryPrompt = buildMidjourneyPrompt(
-      prompt,
-      globalPrompt,
-      width,
-      height,
-      MIDJOURNEY_RETRY_PROMPT_LIMITS
-    )
-
-    if (!retryPrompt || retryPrompt === primaryPrompt) {
-      throw error
-    }
-
-    submitResult = await submitMidjourneyPrompt(retryPrompt)
-  }
-
-  if (typeof submitResult.code === "number" && ![1, 22].includes(submitResult.code)) {
-    throw new FileStoreError(
-      `Failed to submit Midjourney imagine task: ${submitResult.description?.trim() || `code ${submitResult.code}`}`,
-      502,
-      "ai.midjourney-submit-failed"
-    )
-  }
-
-  const taskId = String(submitResult.result ?? "").trim()
-
-  if (!taskId) {
-    throw new FileStoreError(
-      "Midjourney did not return a task id.",
-      502,
-      "ai.midjourney-missing-task-id"
-    )
-  }
-
-  const task = await waitForMidjourneyTask(ai.baseUrl, ai.apiKey, taskId)
-  const imageUrl = task.imageUrl?.trim()
-
-  if (!imageUrl) {
-    throw new FileStoreError(
-      "Midjourney task completed but did not return an image URL.",
-      502,
-      "ai.midjourney-empty-image-url"
-    )
-  }
-
-  return downloadBinary(
-    imageUrl,
-    "ai.midjourney-download-failed",
-    "Failed to download Midjourney image"
-  )
-}
-
-function requireTextProvider(settings: AppSettingsFile) {
-  const ai = requireAiConfig(settings).text
-
-  if (!ai.baseUrl.trim()) {
-    throw new FileStoreError("Text model baseUrl is required.", 400, "ai.text-base-url-required")
-  }
-
-  if (!ai.apiKey.trim()) {
-    throw new FileStoreError("Text model apiKey is required.", 400, "ai.text-api-key-required")
-  }
-
-  if (!ai.model.trim()) {
-    throw new FileStoreError("Text model name is required.", 400, "ai.text-model-required")
-  }
-
-  return ai
-}
-
-function requireImageProvider(settings: AppSettingsFile) {
-  const ai = requireAiConfig(settings).image
-
-  if (!ai.baseUrl.trim()) {
-    throw new FileStoreError("Image model baseUrl is required.", 400, "ai.image-base-url-required")
-  }
-
-  if (!ai.apiKey.trim()) {
-    throw new FileStoreError("Image model apiKey is required.", 400, "ai.image-api-key-required")
-  }
-
-  if (!ai.model.trim()) {
-    throw new FileStoreError("Image model name is required.", 400, "ai.image-model-required")
-  }
-
-  return ai
-}
-
+import type {
+  GeneratedImageResult,
+  ItemPromptInput,
+  LocationPromptInput,
+  OpenAiChatCompletionResponse,
+  OpenAiImageGenerationResponse,
+  RolePromptInput
+} from "./ai-provider"
+import {
+  buildCompatibleUrl,
+  downloadBinary,
+  extractTextContent,
+  generateMidjourneyImage,
+  isDoubaoSeedreamModel,
+  isMidjourneyImagineModel,
+  postJson,
+  requireImageProvider,
+  requireTextProvider
+} from "./ai-provider"
+
+/**
+ * 根据地点资料生成英文绘图提示词。
+ *
+ * @param settings 应用设置，函数从中读取文本模型 baseUrl、apiKey 和 model。
+ * @param input 地点名称、中文描述和可选故事标题。
+ * @returns 模型返回并去除首尾空白的英文提示词。
+ * @throws 描述为空时抛 400；模型配置缺失时抛 400；上游请求失败或返回空文本时抛 502。
+ *
+ * 系统提示词限定模型只返回最终绘图文本，用户提示词再提供故事语境。网络响应必须经过
+ * `extractTextContent`，兼容字符串和多段 content 两种 OpenAI 风格格式。
+ */
 export async function generateLocationPrompt(
   settings: AppSettingsFile,
   input: LocationPromptInput
-) {
+): Promise<string> {
   const ai = requireTextProvider(settings)
 
   if (!input.descr.trim()) {
@@ -616,10 +85,20 @@ export async function generateLocationPrompt(
   return prompt
 }
 
+/**
+ * 根据物品资料生成适合图标或单体资产的英文绘图提示词。
+ *
+ * @param settings 应用级 AI 设置。
+ * @param input 物品名称、分类、描述和可选故事标题。
+ * @returns 清理后的英文提示词字符串。
+ * @throws 物品描述为空时抛 400；文本模型配置或上游响应异常时抛对应 FileStoreError。
+ *
+ * 与地点提示词不同，这里的系统要求强调“单个、居中、无手和人物”，避免生成难以裁成游戏资产的图。
+ */
 export async function generateItemPrompt(
   settings: AppSettingsFile,
   input: ItemPromptInput
-) {
+): Promise<string> {
   const ai = requireTextProvider(settings)
 
   if (!input.descr.trim()) {
@@ -666,10 +145,21 @@ export async function generateItemPrompt(
   return prompt
 }
 
+/**
+ * 根据角色资料生成角色设定图或肖像提示词。
+ *
+ * @param settings 应用级 AI 设置。
+ * @param input 角色名、描述、性格、性别策略、重要性和可选故事标题。
+ * @returns 模型输出的英文角色提示词。
+ * @throws 描述为空时抛 400；模型配置、网络或空响应问题抛 400/502。
+ *
+ * gender 和 important 会作为明确文字写入用户提示，让模型分别控制性别表现与角色辨识度；函数只
+ * 生成文字，不生成或保存图片。
+ */
 export async function generateRolePrompt(
   settings: AppSettingsFile,
   input: RolePromptInput
-) {
+): Promise<string> {
   const ai = requireTextProvider(settings)
 
   if (!input.descr.trim()) {
@@ -721,6 +211,21 @@ export async function generateRolePrompt(
   return prompt
 }
 
+/**
+ * 调用配置的图片模型生成地点/通用图片二进制。
+ *
+ * @param settings 应用级图片模型设置。
+ * @param prompt 当前资产的主要提示词。
+ * @param globalPrompt 编辑器设置的全局画风提示词。
+ * @param width 期望宽度，至少按 1 处理。
+ * @param height 期望高度，至少按 1 处理。
+ * @returns `{ buffer, mimeType }`，由路由交给 File Store 验证并写盘。
+ * @throws 提示词为空时抛 400；上游生成、下载或空结果时抛 502。
+ *
+ * 关键分支：`mj_imagine` 走提交任务再轮询的 Midjourney 协议；其他模型走 OpenAI 兼容图片接口。
+ * 豆包返回 URL，因此需要二次下载；常规兼容模型优先读取 base64。这里不信任扩展名，最终图片能否
+ * 解码仍由 File Store 中的 Sharp 检查。
+ */
 export async function generateLocationImage(
   settings: AppSettingsFile,
   prompt: string,
@@ -786,6 +291,20 @@ export async function generateLocationImage(
   }
 }
 
+/**
+ * 生成角色图片，并把性别约束追加到主要提示词。
+ *
+ * @param settings 应用级图片模型设置。
+ * @param prompt 角色自己的提示词。
+ * @param globalPrompt 全局画风提示词。
+ * @param width 目标宽度。
+ * @param height 目标高度。
+ * @param gender common 表示不额外限定，male/female 会加入明确的成年性别表现描述。
+ * @returns 与通用图片生成相同的二进制结果。
+ * @throws 沿用 `generateLocationImage` 的配置、网络和空结果错误。
+ *
+ * 本函数只负责组装角色特有提示词，具体供应商分流和下载逻辑统一复用通用入口，避免三套实现漂移。
+ */
 export async function generateRoleImage(
   settings: AppSettingsFile,
   prompt: string,
@@ -810,6 +329,19 @@ export async function generateRoleImage(
   )
 }
 
+/**
+ * 生成物品图片，并追加适合游戏物品资产的构图约束。
+ *
+ * @param settings 应用级图片模型设置。
+ * @param prompt 物品主要提示词。
+ * @param globalPrompt 全局画风提示词。
+ * @param width 目标宽度。
+ * @param height 目标高度。
+ * @returns 图片 Buffer 和 MIME 类型。
+ * @throws 提示词为空时抛 400；其他错误沿用通用图片生成入口。
+ *
+ * 附加的“居中、孤立、无人和手”约束能让生成结果更容易作为背包图标使用。
+ */
 export async function generateItemImage(
   settings: AppSettingsFile,
   prompt: string,

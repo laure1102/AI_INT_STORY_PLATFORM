@@ -30,6 +30,7 @@ const emit = defineEmits<{
   abort: []
 }>()
 
+/** 根据当前上下文解析 `SpeakerLabel`。 @param dialogue 调用方传入的 `dialogue`。 @returns 计算、查找或构建后的结果。 */
 function resolveSpeakerLabel(dialogue: StoryOnceDialogueDefinition) {
   if (dialogue.speaker_type === "player") {
     return "主角"

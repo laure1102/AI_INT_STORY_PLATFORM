@@ -80,6 +80,7 @@ const textareaStyle = computed(() => ({
   maxHeight: props.minHeight
 }))
 
+/** 关闭 `Autocomplete` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function closeAutocomplete() {
   autocompleteState.open = false
   autocompleteState.query = ""
@@ -91,6 +92,7 @@ function closeAutocomplete() {
   autocompleteState.commandItems = []
 }
 
+/** 执行 `updateAutocompleteFromCaret` 对应的局部业务逻辑。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function updateAutocompleteFromCaret() {
   const textarea = textareaRef.value
   if (!textarea) {
@@ -121,6 +123,7 @@ function updateAutocompleteFromCaret() {
   }
 }
 
+/** 执行 `insertAutocompleteItem` 对应的局部业务逻辑。 @param itemName 调用方传入的 `itemName`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function insertAutocompleteItem(itemName: string) {
   const textarea = textareaRef.value
   const replaceStart = autocompleteState.replaceStart
@@ -141,10 +144,12 @@ function insertAutocompleteItem(itemName: string) {
   })
 }
 
+/** 处理 `Input` 用户交互。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleInput() {
   updateAutocompleteFromCaret()
 }
 
+/** 处理 `Keydown` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleKeydown(event: KeyboardEvent) {
   if (!autocompleteState.open) {
     if (event.key === "{") {
@@ -183,6 +188,7 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
+/** 处理 `Scroll` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleScroll(event: Event) {
   const textarea = event.target as HTMLTextAreaElement | null
   const highlightElement = highlightRef.value

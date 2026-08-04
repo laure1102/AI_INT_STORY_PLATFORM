@@ -10,6 +10,11 @@ import {
   type HtmlClientAppState
 } from "./client-app"
 import {
+  buildClientState,
+  findSystemValue,
+  formatGameMinuteLabel
+} from "./server-view"
+import {
   buildRuntimePhoneContacts,
   buildRuntimePhoneThreadView,
   formatStoryValInput,
@@ -30,6 +35,7 @@ interface JsonRequest extends IncomingMessage {
 class HttpError extends Error {
   statusCode: number
 
+  /** @param statusCode 要返回的 HTTP 状态码。 @param message 面向本地客户端的错误说明。 @returns 带状态码的 Error。 */
   constructor(statusCode: number, message: string) {
     super(message)
     this.name = "HttpError"
@@ -41,6 +47,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const publicDir = path.resolve(__dirname, "..", "public")
 
+/** @param startDirectory 搜索起点。 @returns 最近包含 pnpm-workspace.yaml 的父目录，找不到时返回起点。 */
 function findWorkspaceRoot(startDirectory: string) {
   let currentDirectory = path.resolve(startDirectory)
 
@@ -58,6 +65,11 @@ function findWorkspaceRoot(startDirectory: string) {
   }
 }
 
+/**
+ * 解析 HTML 客户端命令行参数。
+ * @param argv 不含 node 和脚本路径的参数数组。 @returns 补齐故事、目录、host、port 和自动启动选项的配置。
+ * @throws 端口非法或参数缺值时抛错，避免服务器以意外配置启动。
+ */
 function parseArgs(argv: string[]): HtmlClientOptions {
   const workspaceRoot = findWorkspaceRoot(process.cwd())
   const options: HtmlClientOptions = {
@@ -124,6 +136,7 @@ function parseArgs(argv: string[]): HtmlClientOptions {
   return options
 }
 
+/** @param options 服务器默认配置。 @param storyId 当前 URL 指定故事。 @returns 只替换 storyId 的新应用配置。 */
 function cloneOptionsForStory(options: HtmlClientOptions, storyId: string): HtmlClientOptions {
   return {
     ...options,
@@ -131,6 +144,7 @@ function cloneOptionsForStory(options: HtmlClientOptions, storyId: string): Html
   }
 }
 
+/** @param value URL 编码的故事段。 @returns 解码后的安全故事 id。 @throws 含路径字符或非法字符时抛 404。 */
 function normalizeStoryIdSegment(value: string) {
   const decoded = decodeURIComponent(value).trim()
   if (!/^[a-zA-Z0-9._-]+$/.test(decoded)) {
@@ -139,6 +153,10 @@ function normalizeStoryIdSegment(value: string) {
   return decoded
 }
 
+/**
+ * 将外部 `/<storyId>/...` URL 拆成故事 id 与故事内路径。
+ * @param pathname 请求 pathname。 @param defaultStoryId 根路径重定向使用的故事。 @returns storyId、innerPathname 和是否根路径。
+ */
 function getStoryRoute(pathname: string, defaultStoryId: string) {
   const segments = pathname.split("/").filter(Boolean)
   if (segments.length === 0) {
@@ -158,10 +176,16 @@ function getStoryRoute(pathname: string, defaultStoryId: string) {
   }
 }
 
+/** @param value 未知 JSON 值。 @returns 是否为非数组对象，并帮助 TypeScript 收窄类型。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value))
 }
 
+/**
+ * 读取并解析一个 JSON 请求体。
+ * @param request Node HTTP 请求流。 @returns 空请求为 `{}`，否则为 JSON 解析值。
+ * @throws JSON 语法错误时抛错；本地客户端请求体较小，此处按完整缓冲区读取。
+ */
 async function readRequestBody(request: IncomingMessage) {
   const chunks: Buffer[] = []
 
@@ -181,7 +205,8 @@ async function readRequestBody(request: IncomingMessage) {
   }
 }
 
-function sendJson(response: ServerResponse, statusCode: number, value: unknown) {
+/** @param response Node HTTP 响应。 @param statusCode 状态码。 @param value JSON 值。 @returns 无返回值；设置 no-store 并结束响应。 */
+function sendJson(response: ServerResponse, statusCode: number, value: unknown): void {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store"
@@ -189,7 +214,8 @@ function sendJson(response: ServerResponse, statusCode: number, value: unknown) 
   response.end(JSON.stringify(value))
 }
 
-function sendError(response: ServerResponse, error: unknown) {
+/** @param response Node HTTP 响应。 @param error 捕获到的错误。 @returns 无返回值；HttpError 保留状态，其它异常返回 500 JSON。 */
+function sendError(response: ServerResponse, error: unknown): void {
   const statusCode = error instanceof HttpError ? error.statusCode : 500
   const message = error instanceof Error ? error.message : String(error)
   sendJson(response, statusCode, {
@@ -198,406 +224,30 @@ function sendError(response: ServerResponse, error: unknown) {
   })
 }
 
-function findSystemValue(snapshot: RuntimeStorySessionSnapshot | null, token: string) {
-  if (!snapshot) {
-    return undefined
-  }
-
-  const [groupName, rowName] = token.split(".")
-  if (!groupName || !rowName) {
-    return undefined
-  }
-
-  const matchedGroups = [
-    ...snapshot.system_vals.variables,
-    ...snapshot.vals.variables
-  ]
-  const group = matchedGroups.find((item) => item.name.trim() === groupName.trim())
-  const row = group?.vals.find((item) => item.name.trim() === rowName.trim())
-  return row?.value
-}
-
-function formatHumanizedAmount(amount: unknown) {
-  const cleanAmount = String(amount ?? "").replace(/\s+/g, "")
-  if (!cleanAmount || Number.isNaN(Number(cleanAmount))) {
-    return "0"
-  }
-
-  let num = BigInt(cleanAmount)
-  if (num === 0n) {
-    return "0"
-  }
-
-  if (num < 10000n) {
-    return `${num}`
-  }
-
-  num = (num / 1000n) * 1000n
-
-  const oneYi = 100000000n
-  const oneWan = 10000n
-  const oneQian = 1000n
-  const yi = num / oneYi
-  let remainder = num % oneYi
-  const wan = remainder / oneWan
-  remainder %= oneWan
-  const qian = remainder / oneQian
-  let result = ""
-
-  if (yi > 0n) {
-    result += `${yi}亿`
-  }
-  if (wan > 0n) {
-    result += `${wan}万`
-  }
-  if (qian > 0n) {
-    result += `${qian}千`
-  }
-
-  return result
-}
-
-function formatGameMinuteLabel(gameMinute: number | null | undefined, baseDay = 1) {
-  if (typeof gameMinute !== "number" || !Number.isFinite(gameMinute) || gameMinute < 0) {
-    return "未定"
-  }
-
-  const safeMinute = Math.trunc(gameMinute)
-  const normalizedBaseDay = Number.isFinite(baseDay) ? Math.max(1, Math.trunc(baseDay)) : 1
-  const dayNumber = Math.floor(safeMinute / (24 * 60)) + normalizedBaseDay
-  const minuteOfDay = ((safeMinute % (24 * 60)) + (24 * 60)) % (24 * 60)
-  const hour = Math.floor(minuteOfDay / 60)
-  const minute = minuteOfDay % 60
-  return `第${dayNumber}天 ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
-}
-
-function formatClockMinuteLabel(gameMinute: number | null | undefined) {
-  if (typeof gameMinute !== "number" || !Number.isFinite(gameMinute) || gameMinute < 0) {
-    return "--:--"
-  }
-
-  const safeMinute = Math.trunc(gameMinute)
-  const minuteOfDay = ((safeMinute % (24 * 60)) + (24 * 60)) % (24 * 60)
-  const hour = Math.floor(minuteOfDay / 60)
-  const minute = minuteOfDay % 60
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
-}
-
-function buildValueLines(snapshot: RuntimeStorySessionSnapshot | null, source: "global" | "system") {
-  if (!snapshot) {
-    return []
-  }
-
-  const valsFile = source === "global" ? snapshot.vals : snapshot.system_vals
-  return valsFile.variables.flatMap((group) => {
-    const groupName = group.name.trim()
-
-    return group.vals.map((row) => {
-      const rowName = row.name.trim()
-      const token = groupName ? `${groupName}.${rowName}` : rowName
-      const displayValue = row.value_type === "calc"
-        ? getStoryValCalcDisplay(valsFile, group, row).text
-        : formatStoryValInput(row.value)
-
-      return `${token}: ${displayValue}`
-    })
-  })
-}
-
-function formatSchedulerSourceLabel(sourceType: string, sourceId: string, entryEventId: string) {
-  if (entryEventId && entryEventId !== sourceId) {
-    return `${sourceType}/${sourceId} -> ${entryEventId}`
-  }
-
-  return `${sourceType}/${sourceId}`
-}
-
-function formatSchedulerAuditKindLabel(kind: string) {
-  switch (kind) {
-    case "schedule-future":
-      return "未来排期"
-    case "queue-ready":
-      return "进入就绪"
-    case "promote-due":
-      return "到时晋升"
-    case "start-event":
-      return "开始执行"
-    case "skip-event":
-      return "跳过事件"
-    case "complete-event":
-      return "执行完成"
-    case "loop-reschedule":
-      return "循环重排"
-    default:
-      return kind
-  }
-}
-
-function buildSchedulerLines(snapshot: RuntimeStorySessionSnapshot | null) {
-  if (!snapshot) {
-    return []
-  }
-
-  const lines: string[] = []
-  const scheduler = snapshot.scheduler
-  const baseDay = snapshot.clock.base_day
-  const pauseFlags = [
-    scheduler.manual_pause ? "手动暂停" : "",
-    scheduler.event_pause ? "事件暂停" : ""
-  ].filter(Boolean)
-
-  lines.push("[当前执行]")
-  if (scheduler.active) {
-    lines.push(
-      `${formatSchedulerSourceLabel(
-        scheduler.active.source_type,
-        scheduler.active.source_id,
-        scheduler.active.entry_event_id
-      )} · ${scheduler.active.status}`
-    )
-    lines.push(`到期 ${formatGameMinuteLabel(scheduler.active.due_game_minute, baseDay)}`)
-  } else {
-    lines.push("当前没有正在执行的调度事件")
-  }
-
-  lines.push("")
-  lines.push("[队列概览]")
-  lines.push(
-    `就绪 ${scheduler.ready_queue.length} · 未来 ${scheduler.scheduled.length} · 循环 ${scheduler.loop_states.length} · 审计 ${scheduler.audit_logs.length} · 导演 ${scheduler.director_logs.length}`
-  )
-  lines.push(`暂停状态 ${pauseFlags.length > 0 ? pauseFlags.join(" + ") : "无"}`)
-  lines.push(`已消费 根事件 ${scheduler.consumed_graph_root_ids.length} · 一次性事件 ${scheduler.consumed_once_ids.length}`)
-
-  lines.push("")
-  lines.push("[就绪队列]")
-  if (scheduler.ready_queue.length === 0) {
-    lines.push("空")
-  } else {
-    for (const item of scheduler.ready_queue) {
-      lines.push(
-        `${formatSchedulerSourceLabel(item.source_type, item.source_id, item.entry_event_id)} · ${formatGameMinuteLabel(item.due_game_minute, baseDay)}`
-      )
-    }
-  }
-
-  lines.push("")
-  lines.push("[未来调度]")
-  if (scheduler.scheduled.length === 0) {
-    lines.push("空")
-  } else {
-    for (const item of scheduler.scheduled) {
-      lines.push(
-        `${formatSchedulerSourceLabel(item.source_type, item.source_id, item.entry_event_id)} · ${formatGameMinuteLabel(item.due_game_minute, baseDay)}`
-      )
-    }
-  }
-
-  lines.push("")
-  lines.push("[循环状态]")
-  if (scheduler.loop_states.length === 0) {
-    lines.push("空")
-  } else {
-    for (const item of scheduler.loop_states) {
-      lines.push(
-        `${item.event_id} · next ${formatGameMinuteLabel(item.next_due_game_minute, baseDay)} · last ${formatGameMinuteLabel(item.last_triggered_game_minute, baseDay)} · x${item.trigger_count}`
-      )
-    }
-  }
-
-  lines.push("")
-  lines.push("[AI剧情导演]")
-  const directorLogs = scheduler.director_logs.slice().reverse()
-  if (directorLogs.length === 0) {
-    lines.push("暂无导演决策日志")
-  } else {
-    for (const item of directorLogs.slice(0, 8)) {
-      const selectedSource = item.selected_source_type ? `${item.selected_source_type}/` : ""
-      const selectedLabel = item.selected_event_id
-        ? `${selectedSource}${item.selected_event_id}${item.selected_event_title ? ` / ${item.selected_event_title}` : ""}`
-        : "无"
-      const topCandidate = item.candidates[0]
-      const topLabel = topCandidate
-        ? `${topCandidate.sourceType}/${topCandidate.eventId}:${topCandidate.score}`
-        : "无"
-      lines.push(
-        `${formatGameMinuteLabel(item.game_minute, baseDay)} · 选择 ${selectedLabel} · 候选 ${item.candidate_count} · 最高 ${topLabel}`
-      )
-    }
-  }
-
-  lines.push("")
-  lines.push("[最近审计]")
-  const auditLogs = scheduler.audit_logs.slice().reverse()
-  if (auditLogs.length === 0) {
-    lines.push("暂无调度审计日志")
-  } else {
-    for (const item of auditLogs.slice(0, 10)) {
-      const sourceLabel = item.source_type && item.source_id
-        ? ` · ${formatSchedulerSourceLabel(item.source_type, item.source_id, item.entry_event_id ?? "")}`
-        : ""
-      lines.push(
-        `${formatGameMinuteLabel(item.game_minute, baseDay)} · ${formatSchedulerAuditKindLabel(item.kind)}${sourceLabel} · ${item.message}`
-      )
-    }
-  }
-
-  return lines
-}
-
-function buildBagLines(state: HtmlClientAppState) {
-  const view = state.view
-  if (!view) {
-    return []
-  }
-
-  const lines: string[] = []
-  const maxInlineEntries = 12
-
-  if (view.bagSummary.length === 0) {
-    return ["暂无背包 owner"]
-  }
-
-  for (const bag of view.bagSummary) {
-    lines.push(`${bag.ownerId}: ${bag.itemCount} 类 / ${bag.totalQuantity} 件`)
-
-    if (bag.entries.length === 0) {
-      lines.push("  空")
-      continue
-    }
-
-    for (const entry of bag.entries.slice(0, maxInlineEntries)) {
-      const itemLabel = entry.itemName === entry.itemId
-        ? entry.itemId
-        : `${entry.itemName} (${entry.itemId})`
-      const boundLabel = entry.bound ? " · bound" : ""
-      lines.push(
-        `  - ${itemLabel} x${entry.quantity} · 第${entry.obtainedAtDay}天 ${formatClockMinuteLabel(entry.obtainedAtMinute)}${boundLabel}`
-      )
-    }
-
-    const hiddenCount = bag.entries.length - maxInlineEntries
-    if (hiddenCount > 0) {
-      lines.push(`  ... 另有 ${hiddenCount} 类物品`)
-    }
-  }
-
-  return lines
-}
-
-function findPlayerName(state: HtmlClientAppState) {
-  const playerSetup = state.profile?.player_setup
-  const fullName = playerSetup
-    ? `${playerSetup.player_surname ?? ""}${playerSetup.player_given_name ?? ""}`
-    : ""
-
-  return fullName || playerSetup?.player_name || state.profile?.profile_name || "未命名角色"
-}
-
-function findLocationLabel(state: HtmlClientAppState) {
-  const playerSetup = state.profile?.player_setup
-  if (!playerSetup) {
-    return "未设置"
-  }
-
-  return [
-    playerSetup.province_name,
-    playerSetup.city_name,
-    playerSetup.county_name
-  ].filter(Boolean).join("/") || "未设置"
-}
-
-function buildSummary(state: HtmlClientAppState, snapshot: RuntimeStorySessionSnapshot | null) {
-  const nowDay = findSystemValue(snapshot, "system.now_day")
-  const nowHour = findSystemValue(snapshot, "system.now_hour")
-  const nowMinute = findSystemValue(snapshot, "system.now_minute")
-  const nowShiduan = findSystemValue(snapshot, "system.now_shiduan")
-  const paused = findSystemValue(snapshot, "system.time_pause") === true
-  const rawSpeed = findSystemValue(snapshot, "system.time_speed")
-  const speed = typeof rawSpeed === "number" && Number.isFinite(rawSpeed) ? rawSpeed : 0
-  const countyName = findSystemValue(snapshot, "county.name_full")
-  const countyLevel = findSystemValue(snapshot, "county.level")
-  const money = findSystemValue(snapshot, "player.money")
-  const clock = typeof nowHour === "number" && typeof nowMinute === "number"
-    ? `${String(nowHour).padStart(2, "0")}:${String(nowMinute).padStart(2, "0")}`
-    : "--:--"
-  const dayLabel = typeof nowDay === "number" && Number.isFinite(nowDay)
-    ? `第${nowDay}天`
-    : "未初始化"
-  const shiduanLabel = typeof nowShiduan === "string" && nowShiduan.trim() ? nowShiduan.trim() : ""
-  const countyLabel = typeof countyName === "string" && countyName.trim()
-    ? `${countyName.trim()}县${countyLevel === null || countyLevel === undefined || countyLevel === "" ? "" : `(${String(countyLevel).trim()})`}`
-    : "未设县名"
-
-  return {
-    playerName: findPlayerName(state),
-    locationLabel: findLocationLabel(state),
-    countyLabel,
-    dayLabel,
-    clock,
-    shiduanLabel,
-    paused,
-    speed,
-    moneyLabel: formatHumanizedAmount(money)
-  }
-}
-
-function buildClientState(app: HtmlClientApp) {
-  const state = app.getState()
-  const snapshot = state.session?.getSnapshot() ?? null
-  const contacts = state.bundle && snapshot ? buildRuntimePhoneContacts(state.bundle, snapshot) : []
-  const runtimeNotifications = state.view?.notifications ?? []
-  const notifications = [
-    ...state.notifications,
-    ...runtimeNotifications
-  ]
-
-  return {
-    ok: true,
-    stage: state.stage,
-    storyId: state.storyId,
-    storyTitle: state.bundle?.title ?? state.storyId,
-    paths: state.paths,
-    profiles: state.profiles,
-    profile: state.profile
-      ? {
-          profile_id: state.profile.profile_id,
-          profile_name: state.profile.profile_name,
-          created_at: state.profile.created_at,
-          player_setup: state.profile.player_setup ?? null,
-          custom_value_count: Object.keys(state.profile.custom_values ?? {}).length
-        }
-      : null,
-    saveSlots: state.saveSlots,
-    hasBundle: Boolean(state.bundle),
-    hasSession: Boolean(state.session),
-    view: state.view,
-    summary: buildSummary(state, snapshot),
-    notifications,
-    latestNotification: notifications.at(-1) ?? "",
-    globalValueLines: buildValueLines(snapshot, "global"),
-    systemValueLines: buildValueLines(snapshot, "system"),
-    schedulerLines: buildSchedulerLines(snapshot),
-    bagLines: buildBagLines(state),
-    phoneContacts: contacts,
-    phoneUnreadCount: contacts.reduce((sum, contact) => sum + contact.unreadCount, 0)
-  }
-}
-
+/** @param request 已附加 body 的请求。 @returns body 为对象时原样返回，否则返回空对象。 */
 function getJsonBody(request: JsonRequest) {
   return isRecord(request.body) ? request.body : {}
 }
 
+/** @param body JSON 对象。 @param key 字段名。 @returns 去空白字符串；类型不符时为空串。 */
 function getStringBodyValue(body: Record<string, unknown>, key: string) {
   const value = body[key]
   return typeof value === "string" ? value.trim() : ""
 }
 
-function requireSession(app: HtmlClientApp) {
+/** @param app 故事应用门面。 @returns 无返回值。 @throws 尚无运行时会话时抛 409，阻止游戏动作 API。 */
+function requireSession(app: HtmlClientApp): void {
   if (!app.getState().session) {
     throw new HttpError(409, "当前还没有运行时会话。")
   }
 }
 
+/**
+ * 分派一个故事命名空间内的本地 JSON API。
+ * @param app 当前故事应用。 @param request 请求及已解析 body。 @param response HTTP 响应。
+ * @param pathname 去掉 storyId 后的 API 路径。 @param url 完整 URL。 @returns 处理完成的 Promise。
+ * 各分支先校验会话和字符串字段，再调用门面；未知路径最终返回 404，不在这里提供静态文件。
+ */
 async function handleApi(app: HtmlClientApp, request: JsonRequest, response: ServerResponse, pathname: string, url: URL) {
   if (request.method === "GET" && pathname === "/api/state") {
     sendJson(response, 200, buildClientState(app))
@@ -770,6 +420,7 @@ async function handleApi(app: HtmlClientApp, request: JsonRequest, response: Ser
   throw new HttpError(404, "接口不存在。")
 }
 
+/** @param thread Runtime 手机线程视图或 null。 @returns 适合浏览器 JSON 的线程，并补消息时间标签；null 原样返回。 */
 function buildPhoneThreadClientView(thread: ReturnType<typeof buildRuntimePhoneThreadView>) {
   if (!thread) {
     return null
@@ -784,6 +435,7 @@ function buildPhoneThreadClientView(thread: ReturnType<typeof buildRuntimePhoneT
   }
 }
 
+/** @param filePath 静态文件路径。 @returns 根据扩展名确定的 Content-Type，未知类型使用二进制流。 */
 function getContentType(filePath: string) {
   switch (path.extname(filePath).toLowerCase()) {
     case ".html":
@@ -806,6 +458,7 @@ function getContentType(filePath: string) {
   }
 }
 
+/** @param response Node HTTP 响应。 @returns 读取并发送 public/index.html 的 Promise，禁用缓存。 */
 async function sendIndexHtml(response: ServerResponse) {
   const indexPath = path.join(publicDir, "index.html")
   const indexHtml = await readFile(indexPath, "utf8")
@@ -816,6 +469,12 @@ async function sendIndexHtml(response: ServerResponse) {
   response.end(indexHtml)
 }
 
+/**
+ * 安全发送浏览器静态资源。
+ * @param request HTTP 请求。 @param response HTTP 响应。 @param innerPathname 故事内资源路径。 @param storyId 当前故事 id。
+ * @returns 发送完成的 Promise。 @throws 路径越出 publicDir 时抛 403，不存在时回退 SPA index。
+ * 解析后再次比较绝对路径前缀，避免 URL 编码或 `..` 绕过目录边界。
+ */
 async function serveStatic(request: IncomingMessage, response: ServerResponse, innerPathname: string, storyId: string) {
   const safePathname = innerPathname === "/" ? "/index.html" : innerPathname
   const decodedPath = decodeURIComponent(safePathname)
@@ -852,9 +511,14 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse, i
   void storyId
 }
 
+/**
+ * 启动多故事 HTML 客户端 HTTP 服务器。
+ * @returns 服务器开始监听后的 Promise；每个 storyId 懒创建并缓存独立 HtmlClientApp。
+ */
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   const apps = new Map<string, HtmlClientApp>()
+  /** @param storyId URL 中的故事 id。 @returns 已缓存或新创建的故事应用门面。 */
   const getApp = (storyId: string) => {
     const cached = apps.get(storyId)
     if (cached) {
@@ -910,4 +574,3 @@ async function main() {
 }
 
 void main()
-

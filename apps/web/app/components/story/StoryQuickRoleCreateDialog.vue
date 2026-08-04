@@ -70,6 +70,7 @@ onMounted(() => {
   idInputRef.value?.focus()
 })
 
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submit() {
   if (!canSubmit.value) {
     return

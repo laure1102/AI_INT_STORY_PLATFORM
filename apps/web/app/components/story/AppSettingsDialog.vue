@@ -47,14 +47,17 @@ const draft = reactive<AppSettingsDraft>({
   agentTemperatureText: "0.7"
 })
 
+/** 将 `Text` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value : ""
 }
 
+/** 将 `Temperature` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeTemperature(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "0.7"
 }
 
+/** 解析 `Temperature` 输入，并为非法值提供安全结果。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function parseTemperature(value: string) {
   const parsedValue = Number(value)
 
@@ -65,6 +68,7 @@ function parseTemperature(value: string) {
   return Math.max(0, Math.min(2, parsedValue))
 }
 
+/** 把外部设置同步到本地响应式草稿。 @param settings 当前应用设置。 @returns 无返回值；原地更新 draft。 */
 function syncDraft(settings: AppSettingsFile) {
   draft.imageApiKey = normalizeText(settings.ai.image.apiKey)
   draft.imageBaseUrl = normalizeText(settings.ai.image.baseUrl)
@@ -83,6 +87,7 @@ function syncDraft(settings: AppSettingsFile) {
   draft.agentTemperatureText = normalizeTemperature(settings.ai.agent.temperature)
 }
 
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
   emit("save", {
     ai: {

@@ -1,0 +1,441 @@
+/* StoryRolesDialog 的局部样式，只影响同名 Vue 组件。 */
+.roles-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 8, 16, 0.72);
+}
+
+.roles-dialog__panel {
+  width: min(1760px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  padding: 20px;
+  overflow: auto;
+  border-radius: 22px;
+}
+
+.roles-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.roles-dialog__title,
+.roles-dialog__config-title,
+.roles-dialog__prompt-title {
+  margin: 10px 0 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.4rem;
+  line-height: 1.1;
+}
+
+.roles-dialog__body,
+.roles-dialog__section {
+  display: grid;
+  gap: 12px;
+}
+
+.roles-dialog__body {
+  margin-top: 16px;
+}
+
+.roles-dialog__config {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.roles-dialog__config-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 220px)
+    minmax(180px, 220px)
+    minmax(180px, 220px)
+    minmax(180px, 220px)
+    minmax(0, 1fr);
+  gap: 12px;
+}
+
+.roles-dialog__field {
+  display: grid;
+  gap: 6px;
+}
+
+.roles-dialog__field--wide {
+  min-width: 0;
+}
+
+.roles-dialog__label,
+.roles-dialog__count {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.roles-dialog__tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.roles-dialog__tab {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.roles-dialog__tab--active {
+  border-color: rgba(124, 227, 195, 0.45);
+  color: var(--text);
+  background: rgba(124, 227, 195, 0.12);
+}
+
+.roles-dialog__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.roles-dialog__batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.roles-dialog__select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.roles-dialog__warning {
+  color: var(--warning);
+  font-size: 0.82rem;
+}
+
+.roles-dialog__success {
+  color: var(--accent);
+  font-size: 0.84rem;
+}
+
+.roles-dialog__select,
+.roles-dialog__textarea {
+  resize: vertical;
+}
+
+.roles-dialog__meta-stack {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.roles-dialog__inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.roles-dialog__textarea--cell {
+  min-height: 82px;
+}
+
+.roles-dialog__table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.roles-dialog__table {
+  width: 100%;
+  min-width: 1600px;
+  border-collapse: collapse;
+}
+
+.roles-dialog__table th,
+.roles-dialog__table td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+
+.roles-dialog__table th {
+  position: sticky;
+  top: 0;
+  background: rgba(9, 19, 30, 0.92);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.roles-dialog__select-col {
+  width: 56px;
+  text-align: center;
+}
+
+.roles-dialog__actions-col {
+  width: 96px;
+}
+
+.roles-dialog__cell-input {
+  min-width: 0;
+}
+
+.roles-dialog__prompt-cell {
+  display: grid;
+  gap: 6px;
+}
+
+.roles-dialog__prompt-link {
+  padding: 0;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  word-break: break-all;
+  font-size: 0.8rem;
+}
+
+.roles-dialog__prompt-status,
+.roles-dialog__prompt-error {
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+.roles-dialog__prompt-status {
+  color: var(--text-muted);
+}
+
+.roles-dialog__prompt-error {
+  color: var(--warning);
+}
+
+.roles-dialog__asset-group,
+.roles-dialog__asset-set,
+.roles-dialog__asset-card,
+.roles-dialog__action-stack {
+  display: grid;
+  gap: 6px;
+}
+
+.roles-dialog__asset-group--images {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.roles-dialog__asset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.roles-dialog__asset-set-title,
+.roles-dialog__asset-title {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.roles-dialog__asset-thumb-button {
+  justify-self: start;
+  width: 88px;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(186, 220, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: zoom-in;
+}
+
+.roles-dialog__asset-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.roles-dialog__asset-link,
+.roles-dialog__asset-empty,
+.roles-dialog__asset-meta,
+.roles-dialog__asset-status,
+.roles-dialog__asset-error {
+  min-width: 0;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.roles-dialog__asset-link {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.roles-dialog__asset-empty,
+.roles-dialog__asset-meta,
+.roles-dialog__asset-status {
+  color: var(--text-muted);
+}
+
+.roles-dialog__asset-error {
+  color: var(--warning);
+}
+
+.roles-dialog__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.roles-dialog__row-add,
+.roles-dialog__row-button {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.roles-dialog__empty {
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.roles-dialog__footer {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.roles-dialog__actions--footer {
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+.roles-dialog__prompt-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  pointer-events: none;
+}
+
+.roles-dialog__prompt-panel {
+  width: min(880px, calc(100vw - 48px));
+  padding: 18px;
+  border-radius: 20px;
+  pointer-events: auto;
+}
+
+.roles-dialog__prompt-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.roles-dialog__prompt-textarea {
+  width: 100%;
+  min-height: 240px;
+  margin-top: 14px;
+  resize: vertical;
+}
+
+.roles-dialog__image-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 8, 16, 0.82);
+}
+
+.roles-dialog__image-panel {
+  width: min(1120px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 18px;
+  overflow: auto;
+  border-radius: 20px;
+}
+
+.roles-dialog__image-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.roles-dialog__image-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.roles-dialog__image-title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.roles-dialog__image-path {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.roles-dialog__image-frame {
+  display: grid;
+  place-items: center;
+  margin-top: 14px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.roles-dialog__image-full {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 220px);
+  object-fit: contain;
+}
+
+@media (max-width: 900px) {
+  .roles-dialog__header,
+  .roles-dialog__actions,
+  .roles-dialog__config-grid,
+  .roles-dialog__prompt-head,
+  .roles-dialog__tabs,
+  .roles-dialog__image-head {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .roles-dialog__asset-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .roles-dialog__asset-group--images {
+    grid-template-columns: 1fr;
+  }
+}

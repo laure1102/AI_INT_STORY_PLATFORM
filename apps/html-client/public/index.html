@@ -22,7 +22,7 @@
         document.head.append(style)
 
         const script = document.createElement("script")
-        script.defer = true
+        script.type = "module"
         script.src = `${basePath}/app.js`
         document.head.append(script)
       })()

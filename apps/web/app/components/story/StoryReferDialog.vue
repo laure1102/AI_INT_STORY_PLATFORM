@@ -25,6 +25,7 @@ const maleAliasesText = shallowRef("男, male, m")
 const femaleAliasesText = shallowRef("女, female, f")
 const terms = ref<ReferTermDraft[]>([])
 
+/** 解析 `AliasText` 输入，并为非法值提供安全结果。 @param value 调用方传入的 `value`。 @param fallback 调用方传入的 `fallback`。 @returns 计算、查找或构建后的结果。 */
 function parseAliasText(value: string, fallback: string[]) {
   const aliases = Array.from(
     new Set(
@@ -38,6 +39,7 @@ function parseAliasText(value: string, fallback: string[]) {
   return aliases.length > 0 ? aliases : fallback
 }
 
+/** 复制 `Term`，避免共享可变引用。 @param term 调用方传入的 `term`。 @returns 计算、查找或构建后的结果。 */
 function cloneTerm(term: StoryReferFile["terms"][number]): ReferTermDraft {
   return {
     id: term.id.trim(),
@@ -48,6 +50,7 @@ function cloneTerm(term: StoryReferFile["terms"][number]): ReferTermDraft {
   }
 }
 
+/** 把外部或服务端数据同步到本地响应式状态。 @param refer 调用方传入的 `refer`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function syncDraft(refer: StoryReferFile) {
   genderValueKey.value = refer.gender_value_key?.trim() || "player.gender"
   maleAliasesText.value = (refer.gender_aliases?.male?.length ? refer.gender_aliases.male : ["男", "male", "m"]).join(", ")
@@ -55,6 +58,7 @@ function syncDraft(refer: StoryReferFile) {
   terms.value = (refer.terms ?? []).map(cloneTerm)
 }
 
+/** 创建一份新的 `EmptyTerm` 数据。 @returns 计算、查找或构建后的结果。 */
 function createEmptyTerm(): ReferTermDraft {
   const index = terms.value.length + 1
   return {
@@ -66,19 +70,23 @@ function createEmptyTerm(): ReferTermDraft {
   }
 }
 
+/** 新增一项 `Term` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addTerm() {
   terms.value = [...terms.value, createEmptyTerm()]
 }
 
+/** 移除指定的 `Term` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeTerm(index: number) {
   terms.value = terms.value.filter((_term, currentIndex) => currentIndex !== index)
 }
 
+/** 把 `TermToken` 转换成界面可读文本。 @param termId 调用方传入的 `termId`。 @returns 计算、查找或构建后的结果。 */
 function formatTermToken(termId: string) {
   const normalizedId = termId.trim().replace(/^term\./, "")
   return normalizedId ? `\${term.${normalizedId}}` : "${term.xxx}"
 }
 
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
   emit("save", {
     gender_value_key: genderValueKey.value.trim() || "player.gender",

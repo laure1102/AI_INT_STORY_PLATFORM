@@ -21,6 +21,7 @@ const draft = reactive<GameSettingsDraft>({
 
 const validationMessage = shallowRef<string | null>(null)
 
+/** 将 `StartTime` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeStartTime(value: unknown) {
   if (typeof value !== "string") {
     return "00:00"
@@ -29,11 +30,13 @@ function normalizeStartTime(value: unknown) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : "00:00"
 }
 
+/** 把外部或服务端数据同步到本地响应式状态。 @param story 调用方传入的 `story`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function syncDraft(story: StoryMetaFile) {
   draft.startTime = normalizeStartTime(story.game_settings?.start_time)
   validationMessage.value = null
 }
 
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
   const startTime = normalizeStartTime(draft.startTime)
   if (startTime !== draft.startTime) {

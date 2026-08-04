@@ -34,10 +34,12 @@ export interface StoryScriptFieldValidationResult {
   issues: StoryScriptValidationIssue[]
 }
 
+/** 收集 `StoryScriptValueNames` 所需的数据。 @param vals 调用方传入的 `vals`。 @returns 计算、查找或构建后的结果。 */
 export function collectStoryScriptValueNames(vals: StoryValsFile) {
   return buildStoryScriptValAutocompleteItems(vals).map((item) => item.name)
 }
 
+/** 执行 `toContextValueMap` 对应的局部业务逻辑。 @param tokens 调用方传入的 `tokens`。 @returns 计算、查找或构建后的结果。 */
 function toContextValueMap(tokens: string[] | undefined) {
   return Object.fromEntries(
     (tokens ?? [])
@@ -47,6 +49,7 @@ function toContextValueMap(tokens: string[] | undefined) {
   )
 }
 
+/** 收集 `StoryRoleKeys` 所需的数据。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
 function collectStoryRoleKeys(story: StoryDocument | null | undefined) {
   if (!story) {
     return []
@@ -58,14 +61,17 @@ function collectStoryRoleKeys(story: StoryDocument | null | undefined) {
   ].filter((roleKey) => roleKey !== "important:" && roleKey !== "normal:")
 }
 
+/** 收集 `StoryDoingIds` 所需的数据。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
 function collectStoryDoingIds(story: StoryDocument | null | undefined) {
   return story?.doing.doings.map((doing) => doing.id.trim()).filter(Boolean) ?? []
 }
 
+/** 收集 `StoryShopProductIds` 所需的数据。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
 function collectStoryShopProductIds(story: StoryDocument | null | undefined) {
   return story?.shop.products.map((product) => product.id.trim()).filter(Boolean) ?? []
 }
 
+/** 收集 `StoryReferValues` 所需的数据。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
 function collectStoryReferValues(story: StoryDocument | null | undefined) {
   if (!story) {
     return {}
@@ -79,10 +85,12 @@ function collectStoryReferValues(story: StoryDocument | null | undefined) {
   )
 }
 
+/** 收集 `StoryItemIds` 所需的数据。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
 function collectStoryItemIds(story: StoryDocument | null | undefined) {
   return story?.items.items.map((item) => item.id.trim()).filter(Boolean) ?? []
 }
 
+/** 校验 `InvokeOnceReferences` 并整理错误信息。 @param source 调用方传入的 `source`。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
 function validateInvokeOnceReferences(
   source: string,
   story: StoryDocument | null | undefined
@@ -102,6 +110,7 @@ function validateInvokeOnceReferences(
   )
 }
 
+/** 校验 `StoryScriptField` 并整理错误信息。 @param options 调用方传入的 `options`。 @returns 计算、查找或构建后的结果。 */
 export function validateStoryScriptField(
   options: StoryScriptFieldValidationOptions
 ): StoryScriptFieldValidationResult {
@@ -136,6 +145,7 @@ export function validateStoryScriptField(
   }
 }
 
+/** 把 `StoryScriptValidationIssue` 转换成界面可读文本。 @param issue 调用方传入的 `issue`。 @returns 计算、查找或构建后的结果。 */
 export function formatStoryScriptValidationIssue(issue: StoryScriptValidationIssue) {
   return issue.lineNumber > 0
     ? `第 ${issue.lineNumber} 行: ${issue.message}`

@@ -1,0 +1,498 @@
+/* StoryPhoneConversationsDialog 的局部样式，只影响同名 Vue 组件。 */
+.phone-conversations-board {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(125, 211, 252, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+.phone-conversations-board--floating {
+  min-height: min(720px, calc(100vh - 40px));
+}
+
+.phone-conversations-board__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.phone-conversations-board__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.phone-conversations-board__summary,
+.phone-conversations-board__error,
+.phone-conversations-board__success,
+.phone-conversations-board__empty-copy {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.phone-conversations-board__error {
+  color: #ff8b7b;
+}
+
+.phone-conversations-board__success {
+  color: var(--accent);
+}
+
+.phone-conversations-board__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.phone-conversations-board__button {
+  min-height: 32px;
+}
+
+.phone-conversations-board__search {
+  width: min(280px, 36vw);
+  min-height: 32px;
+}
+
+.phone-conversations-board__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.phone-conversation-card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgba(125, 211, 252, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(8, 18, 29, 0.88);
+  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.18);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.phone-conversation-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(125, 211, 252, 0.34);
+}
+
+.phone-conversation-card--active {
+  border-color: rgba(125, 211, 252, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(125, 211, 252, 0.22),
+    0 22px 32px rgba(0, 0, 0, 0.24);
+}
+
+.phone-conversation-card__trigger-mark {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.phone-conversation-card__trigger-mark--once {
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 18px solid rgba(125, 211, 252, 0.96);
+  border-right: 18px solid transparent;
+  filter: drop-shadow(0 0 8px rgba(125, 211, 252, 0.34));
+}
+
+.phone-conversation-card__trigger-mark--disabled {
+  top: 10px;
+  left: 10px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(255, 139, 123, 0.95);
+  box-shadow: 0 0 12px rgba(255, 139, 123, 0.4);
+}
+
+.phone-conversation-card__body {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.phone-conversation-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.phone-conversation-card__kind,
+.phone-conversation-card__tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(125, 211, 252, 0.14);
+  color: rgba(195, 232, 255, 0.92);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.phone-conversation-card__title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 0.96rem;
+  color: #e7f7ff;
+  line-height: 1.25;
+}
+
+.phone-conversation-card__id,
+.phone-conversation-card__status {
+  font-size: 0.74rem;
+  color: rgba(214, 222, 236, 0.72);
+}
+
+.phone-conversation-card__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+.phone-conversation-card__fact {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.phone-conversation-card__fact--wide {
+  grid-column: span 2;
+}
+
+.phone-conversation-card__fact strong {
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  color: rgba(195, 232, 255, 0.72);
+}
+
+.phone-conversation-card__fact span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  font-size: 0.8rem;
+  color: rgba(242, 246, 255, 0.88);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.phone-conversation-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.phone-conversation-card__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.phone-conversation-card__delete,
+.phone-conversation-card__edit {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 0.76rem;
+}
+
+.phone-conversations-board__empty {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 28px;
+  border: 1px dashed rgba(125, 211, 252, 0.2);
+  border-radius: 24px;
+  background: rgba(6, 12, 22, 0.4);
+}
+
+.phone-conversations-board__empty-title {
+  font-size: 1.05rem;
+  color: #e7f7ff;
+}
+
+.phone-conversations-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 72;
+  display: block;
+  padding: 0;
+  background: rgba(2, 8, 16, 0.82);
+}
+
+.phone-conversations-dialog__panel {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100dvh;
+  max-height: none;
+  padding: 18px;
+  overflow: hidden;
+  border-radius: 0;
+}
+
+.phone-conversations-dialog__header,
+.phone-conversations-dialog__section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.phone-conversations-dialog__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.phone-conversations-dialog__title,
+.phone-conversations-dialog__section-title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.phone-conversations-dialog__title {
+  font-size: 1.35rem;
+}
+
+.phone-conversations-dialog__section-title {
+  font-size: 1rem;
+}
+
+.phone-conversations-dialog__section-title--small {
+  font-size: 0.9rem;
+}
+
+.phone-conversations-dialog__subtitle,
+.phone-conversations-dialog__section-note,
+.phone-conversations-dialog__error,
+.phone-conversations-dialog__success,
+.phone-conversations-dialog__count {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.phone-conversations-dialog__error {
+  color: #ff8b7b;
+}
+
+.phone-conversations-dialog__success {
+  color: var(--accent);
+}
+
+.phone-conversations-dialog__actions,
+.phone-conversations-dialog__row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.phone-conversations-dialog__button,
+.phone-conversations-dialog__mini-button {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+}
+
+.phone-conversations-dialog__mini-button {
+  flex-shrink: 0;
+}
+
+.phone-conversations-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.phone-conversations-dialog__editor {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.phone-conversations-dialog__card,
+.phone-conversations-dialog__nested-card,
+.phone-conversations-dialog__line-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.phone-conversations-dialog__card,
+.phone-conversations-dialog__nested-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.phone-conversations-dialog__line-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+}
+
+.phone-conversations-dialog__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.phone-conversations-dialog__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.phone-conversations-dialog__field--disabled {
+  opacity: 0.58;
+}
+
+.phone-conversations-dialog__field--wide {
+  grid-column: span 3;
+}
+
+.phone-conversations-dialog__label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.phone-conversations-dialog__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.phone-conversations-dialog__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.phone-conversations-dialog__node-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.phone-conversations-dialog__node-tab {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.phone-conversations-dialog__node-tab--active {
+  color: #06131d;
+  border-color: rgba(125, 211, 252, 0.42);
+  background: rgba(125, 211, 252, 0.86);
+}
+
+.phone-conversations-dialog__node-editor,
+.phone-conversations-dialog__stack,
+.phone-conversations-dialog__subsection {
+  display: grid;
+  gap: 12px;
+}
+
+.phone-conversations-dialog__section-head--nested {
+  align-items: center;
+}
+
+.phone-conversations-dialog__empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.phone-conversations-dialog__empty--compact {
+  padding: 8px 0;
+}
+
+.phone-conversations-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid rgba(186, 220, 255, 0.12);
+}
+
+@media (max-width: 1100px) {
+  .phone-conversations-board__header,
+  .phone-conversation-card__footer,
+  .phone-conversations-dialog__header,
+  .phone-conversations-dialog__section-head {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .phone-conversations-board__actions {
+    justify-content: flex-start;
+  }
+
+  .phone-conversations-board__search {
+    width: 100%;
+  }
+
+  .phone-conversations-dialog__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .phone-conversations-dialog__field--wide {
+    grid-column: span 1;
+  }
+
+  .phone-conversations-dialog__line-card {
+    grid-template-columns: 1fr;
+  }
+}

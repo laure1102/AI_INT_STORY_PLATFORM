@@ -1,0 +1,200 @@
+/* 手机抽屉、联系人、会话和操作按钮。 */
+.phone-drawer {
+  position: fixed;
+  top: max(18px, 4dvh);
+  left: 50%;
+  bottom: max(18px, 4dvh);
+  z-index: 20;
+  width: min(1120px, calc(100vw - 28px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  transform: translateX(-50%);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius);
+  background: #080d09;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.phone-drawer::before {
+  content: none;
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  background: rgba(0, 0, 0, 0.46);
+}
+
+.phone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: #121a11;
+}
+
+.phone-header strong {
+  color: var(--cyan);
+  font-family: var(--mono);
+}
+
+.phone-body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(230px, 30%) minmax(0, 1fr);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.contacts-pane,
+.thread-pane {
+  min-height: 0;
+  overflow: auto;
+}
+
+.contacts-pane {
+  border-right: 1px solid var(--line-soft);
+  padding: 8px;
+  background: #0d130c;
+}
+
+.thread-pane {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  background:
+    linear-gradient(rgba(232, 240, 223, 0.022) 1px, transparent 1px),
+    #0b100a;
+  background-size: 100% 30px;
+}
+
+.message-list {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+  overflow: auto;
+}
+
+.bubble {
+  max-width: 84%;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #121a11;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.bubble.player {
+  align-self: flex-end;
+  color: #06110f;
+  border-color: var(--cyan);
+  background: var(--cyan);
+}
+
+.bubble.contact {
+  align-self: flex-start;
+}
+
+.bubble.system {
+  align-self: center;
+  color: var(--muted);
+  background: #0d130c;
+}
+
+.bubble-meta {
+  margin-bottom: 3px;
+  opacity: 0.76;
+  font: 11px/1.3 var(--mono);
+}
+
+.phone-actions {
+  border-top: 1px solid var(--line-soft);
+  padding: 10px 12px;
+  background: #121a11;
+}
+
+.segment {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.segment button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 0;
+}
+
+.segment button.active {
+  color: #06110f;
+  background: var(--gold);
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  max-height: min(190px, 28dvh);
+  overflow: auto;
+}
+
+.phone-conversation-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.phone-conversation-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid rgba(215, 183, 94, 0.42);
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: #1a180d;
+}
+
+.phone-conversation-title strong {
+  color: var(--gold);
+  font-family: var(--mono);
+}
+
+.phone-conversation-replies {
+  margin-top: 0;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 40;
+  max-width: min(680px, calc(100vw - 28px));
+  transform: translateX(-50%);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 9px 14px;
+  color: var(--ink);
+  background: #11180f;
+  box-shadow: var(--shadow);
+  font: 13px/1.4 var(--mono);
+}
+
+.toast.error {
+  border-color: var(--red);
+  color: #ffe3e1;
+  background: #391514;
+}
+
+.hidden {
+  display: none !important;
+}

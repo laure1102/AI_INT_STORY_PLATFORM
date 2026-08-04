@@ -5,6 +5,7 @@ export interface StoryQuickCreateLocationPayload {
   id: string
 }
 
+/** 清理 `QuickLocationIdInput` 输入中的非法字符或范围。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 export function sanitizeQuickLocationIdInput(value: string) {
   return value
     .trim()
@@ -13,6 +14,7 @@ export function sanitizeQuickLocationIdInput(value: string) {
     .replace(/^_+|_+$/g, "")
 }
 
+/** 判断 `hasQuickLocationIdConflict` 对应的条件是否成立。 @param eventLocations 调用方传入的 `eventLocations`。 @param sanitizedId 调用方传入的 `sanitizedId`。 @returns 布尔判断结果。 */
 export function hasQuickLocationIdConflict(
   eventLocations: StoryEventLocationFile,
   sanitizedId: string
@@ -24,6 +26,7 @@ export function hasQuickLocationIdConflict(
   return eventLocations.assignments.some((assignment) => assignment.id.trim() === sanitizedId)
 }
 
+/** 根据当前输入构建 `QuickCreateLocationPayload` 结果。 @param input 调用方传入的 `input`。 @returns 计算、查找或构建后的结果。 */
 export function buildQuickCreateLocationPayload(input: {
   descr: string
   id: string
@@ -40,6 +43,7 @@ export function buildQuickCreateLocationPayload(input: {
   }
 }
 
+/** 创建一份新的 `QuickLocationAssignment` 数据。 @param payload 调用方传入的 `payload`。 @returns 计算、查找或构建后的结果。 */
 function createQuickLocationAssignment(
   payload: StoryQuickCreateLocationPayload
 ): StoryEventLocationAssignment {
@@ -53,6 +57,7 @@ function createQuickLocationAssignment(
   }
 }
 
+/** 执行 `appendQuickLocationToEventLocations` 对应的局部业务逻辑。 @param eventLocations 调用方传入的 `eventLocations`。 @param payload 调用方传入的 `payload`。 @returns 计算、查找或构建后的结果。 */
 export function appendQuickLocationToEventLocations(
   eventLocations: StoryEventLocationFile,
   payload: StoryQuickCreateLocationPayload

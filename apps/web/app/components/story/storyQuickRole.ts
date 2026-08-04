@@ -16,6 +16,7 @@ export interface StoryQuickCreateRolePayload {
   zhiye: string
 }
 
+/** 清理 `QuickRoleIdInput` 输入中的非法字符或范围。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 export function sanitizeQuickRoleIdInput(value: string) {
   return value
     .trim()
@@ -24,6 +25,7 @@ export function sanitizeQuickRoleIdInput(value: string) {
     .replace(/^_+|_+$/g, "")
 }
 
+/** 判断 `hasQuickRoleIdConflict` 对应的条件是否成立。 @param roles 调用方传入的 `roles`。 @param scope 调用方传入的 `scope`。 @param sanitizedId 调用方传入的 `sanitizedId`。 @returns 布尔判断结果。 */
 export function hasQuickRoleIdConflict(
   roles: StoryRolesFile,
   scope: StoryRoleScope,
@@ -38,6 +40,7 @@ export function hasQuickRoleIdConflict(
   return sourceRoles.some((role) => role.id.trim() === sanitizedId)
 }
 
+/** 创建一份新的 `NormalQuickRole` 数据。 @param payload 调用方传入的 `payload`。 @returns 计算、查找或构建后的结果。 */
 function createNormalQuickRole(payload: StoryQuickCreateRolePayload): StoryNormalRoleDefinition {
   return {
     contact_enabled: false,
@@ -56,6 +59,7 @@ function createNormalQuickRole(payload: StoryQuickCreateRolePayload): StoryNorma
   }
 }
 
+/** 创建一份新的 `ImportantQuickRole` 数据。 @param payload 调用方传入的 `payload`。 @returns 计算、查找或构建后的结果。 */
 function createImportantQuickRole(payload: StoryQuickCreateRolePayload): StoryImportantRoleDefinition {
   const baseRole: StoryImportantRoleDefinition = {
     contact_enabled: false,
@@ -88,6 +92,7 @@ function createImportantQuickRole(payload: StoryQuickCreateRolePayload): StoryIm
   return baseRole
 }
 
+/** 执行 `appendQuickRoleToRoles` 对应的局部业务逻辑。 @param roles 调用方传入的 `roles`。 @param payload 调用方传入的 `payload`。 @returns 计算、查找或构建后的结果。 */
 export function appendQuickRoleToRoles(
   roles: StoryRolesFile,
   payload: StoryQuickCreateRolePayload
@@ -111,6 +116,7 @@ export function appendQuickRoleToRoles(
   }
 }
 
+/** 根据当前输入构建 `QuickCreateRolePayload` 结果。 @param input 调用方传入的 `input`。 @returns 计算、查找或构建后的结果。 */
 export function buildQuickCreateRolePayload(input: {
   descr: string
   id: string

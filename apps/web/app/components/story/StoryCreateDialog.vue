@@ -67,6 +67,7 @@ const canSubmit = computed(() => {
   return !props.saving && !titleError.value && !idError.value
 })
 
+/** 执行 `slugifyStoryId` 对应的局部业务逻辑。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function slugifyStoryId(value: string) {
   return value
     .trim()
@@ -77,11 +78,13 @@ function slugifyStoryId(value: string) {
     .replace(/^-+|-+$/g, "")
 }
 
+/** 处理 `IdInput` 用户交互。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleIdInput() {
   isIdTouched.value = true
   draft.id = normalizedId.value
 }
 
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
   if (!canSubmit.value) {
     return

@@ -75,12 +75,14 @@ const hasMatches = computed(() => {
   )
 })
 
+/** 执行 `focusSearchInput` 对应的局部业务逻辑。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function focusSearchInput() {
   void nextTick(() => {
     searchInputRef.value?.focus()
   })
 }
 
+/** 打开 `Panel` 界面并初始化临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function openPanel() {
   if (isOpen.value) {
     focusSearchInput()
@@ -91,11 +93,13 @@ function openPanel() {
   focusSearchInput()
 }
 
+/** 关闭 `Panel` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function closePanel() {
   isOpen.value = false
   searchQuery.value = ""
 }
 
+/** 切换 `Panel` 的当前状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function togglePanel() {
   if (isOpen.value) {
     closePanel()
@@ -105,6 +109,7 @@ function togglePanel() {
   openPanel()
 }
 
+/** 切换 `Option` 的当前状态。 @param roleKey 调用方传入的 `roleKey`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function toggleOption(roleKey: string) {
   if (selectedSet.value.has(roleKey)) {
     model.value = model.value.filter((currentRoleKey) => currentRoleKey !== roleKey)
@@ -116,16 +121,19 @@ function toggleOption(roleKey: string) {
   openPanel()
 }
 
+/** 移除指定的 `Option` 数据。 @param roleKey 调用方传入的 `roleKey`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeOption(roleKey: string) {
   model.value = model.value.filter((currentRoleKey) => currentRoleKey !== roleKey)
 }
 
+/** 重置或清理 `clearSelection` 对应的临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function clearSelection() {
   model.value = []
   searchQuery.value = ""
   openPanel()
 }
 
+/** 处理 `ControlPointerDown` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleControlPointerDown(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (target?.closest(".role-multi-select__chip-remove")) {
@@ -135,6 +143,7 @@ function handleControlPointerDown(event: MouseEvent) {
   event.preventDefault()
 }
 
+/** 处理 `ControlClick` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleControlClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (target?.closest(".role-multi-select__chip-remove")) {
@@ -144,6 +153,7 @@ function handleControlClick(event: MouseEvent) {
   openPanel()
 }
 
+/** 处理 `DocumentPointerDown` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleDocumentPointerDown(event: MouseEvent) {
   if (!isOpen.value) {
     return

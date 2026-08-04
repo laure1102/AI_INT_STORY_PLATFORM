@@ -68,11 +68,13 @@ interface PhoneConversationsDraftState {
 
 let draftKeySeed = 0
 
+/** 创建一份新的 `DraftKey` 数据。 @param prefix 调用方传入的 `prefix`。 @returns 计算、查找或构建后的结果。 */
 function createDraftKey(prefix: string) {
   draftKeySeed += 1
   return `${prefix}-${draftKeySeed}`
 }
 
+/** 解析 `IntegerText` 输入，并为非法值提供安全结果。 @param value 调用方传入的 `value`。 @param fallback 调用方传入的 `fallback`。 @returns 计算、查找或构建后的结果。 */
 function parseIntegerText(value: unknown, fallback: number) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? Math.trunc(value) : fallback
@@ -86,6 +88,7 @@ function parseIntegerText(value: unknown, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+/** 创建一份新的 `InvokeDraft` 数据。 @param invoke 调用方传入的 `invoke`。 @returns 计算、查找或构建后的结果。 */
 function createInvokeDraft(invoke?: Partial<StoryPhoneEventInvocation>): PhoneConversationInvokeDraft {
   return {
     delayEnabled: Boolean(invoke?.delay),
@@ -97,6 +100,7 @@ function createInvokeDraft(invoke?: Partial<StoryPhoneEventInvocation>): PhoneCo
   }
 }
 
+/** 根据当前输入构建 `InvokePayload` 结果。 @param invoke 调用方传入的 `invoke`。 @returns 计算、查找或构建后的结果。 */
 function buildInvokePayload(invoke: PhoneConversationInvokeDraft): StoryPhoneEventInvocation | undefined {
   if (!invoke.enabled || !invoke.eventId.trim()) {
     return undefined
@@ -117,6 +121,7 @@ function buildInvokePayload(invoke: PhoneConversationInvokeDraft): StoryPhoneEve
   return payload
 }
 
+/** 创建一份新的 `MessageDraft` 数据。 @param message 调用方传入的 `message`。 @returns 计算、查找或构建后的结果。 */
 function createMessageDraft(message?: Partial<StoryPhoneConversationMessage>): PhoneConversationMessageDraft {
   return {
     content: message?.content?.trim() ?? "",
@@ -124,6 +129,7 @@ function createMessageDraft(message?: Partial<StoryPhoneConversationMessage>): P
   }
 }
 
+/** 创建一份新的 `OptionDraft` 数据。 @param option 调用方传入的 `option`。 @returns 计算、查找或构建后的结果。 */
 function createOptionDraft(option?: Partial<StoryPhoneConversationOption>): PhoneConversationOptionDraft {
   return {
     draftKey: createDraftKey("phone-conversation-option"),
@@ -135,6 +141,7 @@ function createOptionDraft(option?: Partial<StoryPhoneConversationOption>): Phon
   }
 }
 
+/** 创建一份新的 `ReminderDraft` 数据。 @param reminder 调用方传入的 `reminder`。 @returns 计算、查找或构建后的结果。 */
 function createReminderDraft(reminder?: Partial<StoryPhoneConversationReminder>) {
   return {
     enabled: reminder?.enabled ?? false,
@@ -142,6 +149,7 @@ function createReminderDraft(reminder?: Partial<StoryPhoneConversationReminder>)
   }
 }
 
+/** 创建一份新的 `NodeDraft` 数据。 @param node 调用方传入的 `node`。 @returns 计算、查找或构建后的结果。 */
 function createNodeDraft(node?: Partial<StoryPhoneConversationNode>): PhoneConversationNodeDraft {
   return {
     contactMessages: (node?.contact_messages ?? []).map((message) => createMessageDraft(message)),
@@ -155,6 +163,7 @@ function createNodeDraft(node?: Partial<StoryPhoneConversationNode>): PhoneConve
   }
 }
 
+/** 创建一份新的 `ConversationDraft` 数据。 @param conversation 调用方传入的 `conversation`。 @returns 计算、查找或构建后的结果。 */
 function createConversationDraft(
   conversation?: Partial<StoryPhoneConversationDefinition>
 ): PhoneConversationDraft {
@@ -181,12 +190,14 @@ function createConversationDraft(
   return draft
 }
 
+/** 根据当前输入构建 `MessagePayload` 结果。 @param message 调用方传入的 `message`。 @returns 计算、查找或构建后的结果。 */
 function buildMessagePayload(message: PhoneConversationMessageDraft): StoryPhoneConversationMessage {
   return {
     content: message.content.trim()
   }
 }
 
+/** 根据当前输入构建 `OptionPayload` 结果。 @param option 调用方传入的 `option`。 @returns 计算、查找或构建后的结果。 */
 function buildOptionPayload(option: PhoneConversationOptionDraft): StoryPhoneConversationOption {
   return {
     id: option.id.trim(),
@@ -197,6 +208,7 @@ function buildOptionPayload(option: PhoneConversationOptionDraft): StoryPhoneCon
   }
 }
 
+/** 根据当前输入构建 `NodePayload` 结果。 @param node 调用方传入的 `node`。 @returns 计算、查找或构建后的结果。 */
 function buildNodePayload(node: PhoneConversationNodeDraft): StoryPhoneConversationNode {
   const invoke = buildInvokePayload(node.invoke)
   return {
@@ -213,6 +225,7 @@ function buildNodePayload(node: PhoneConversationNodeDraft): StoryPhoneConversat
   }
 }
 
+/** 根据当前输入构建 `ConversationPayload` 结果。 @param conversation 调用方传入的 `conversation`。 @returns 计算、查找或构建后的结果。 */
 function buildConversationPayload(conversation: PhoneConversationDraft): StoryPhoneConversationDefinition {
   return {
     enabled: conversation.enabled,
@@ -227,27 +240,32 @@ function buildConversationPayload(conversation: PhoneConversationDraft): StoryPh
   }
 }
 
+/** 创建一份新的 `EmptyDraftState` 数据。 @returns 计算、查找或构建后的结果。 */
 function createEmptyDraftState(): PhoneConversationsDraftState {
   return {
     conversations: []
   }
 }
 
+/** 组合 `StoryPhoneConversationsDraft` 的响应式状态、派生值和操作方法。 @param source 调用方传入的 `source`。 @returns 响应式状态、派生值和操作函数组成的 API 对象。 */
 export function useStoryPhoneConversationsDraft(source: StoryPhoneConversationsFile) {
   const draft = reactive(createEmptyDraftState())
 
+  /** 把外部或服务端数据同步到本地响应式状态。 @param phoneConversations 调用方传入的 `phoneConversations`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function syncFromPhoneConversations(phoneConversations: StoryPhoneConversationsFile) {
     draft.conversations = (phoneConversations.conversations ?? []).map((conversation) =>
       createConversationDraft(conversation)
     )
   }
 
+  /** 根据当前输入构建 `PhoneConversationsFile` 结果。 @returns 计算、查找或构建后的结果。 */
   function buildPhoneConversationsFile(): StoryPhoneConversationsFile {
     return {
       conversations: draft.conversations.map((conversation) => buildConversationPayload(conversation))
     }
   }
 
+  /** 新增一项 `Conversation` 草稿。 @param roleKey 调用方传入的 `roleKey`。 @returns 计算、查找或构建后的结果。 */
   function addConversation(roleKey = "") {
     const conversation = createConversationDraft({
       enabled: true,
@@ -274,10 +292,12 @@ export function useStoryPhoneConversationsDraft(source: StoryPhoneConversationsF
     return conversation
   }
 
+  /** 移除指定的 `Conversation` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeConversation(index: number) {
     draft.conversations.splice(index, 1)
   }
 
+  /** 新增一项 `Node` 草稿。 @param conversation 调用方传入的 `conversation`。 @returns 计算、查找或构建后的结果。 */
   function addNode(conversation: PhoneConversationDraft) {
     const node = createNodeDraft({
       id: `node_${conversation.nodes.length + 1}`
@@ -289,6 +309,7 @@ export function useStoryPhoneConversationsDraft(source: StoryPhoneConversationsF
     return node
   }
 
+  /** 移除指定的 `Node` 数据。 @param conversation 调用方传入的 `conversation`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeNode(conversation: PhoneConversationDraft, index: number) {
     const removedNodeId = conversation.nodes[index]?.id ?? ""
     conversation.nodes.splice(index, 1)
@@ -305,18 +326,22 @@ export function useStoryPhoneConversationsDraft(source: StoryPhoneConversationsF
     }
   }
 
+  /** 新增一项 `Message` 草稿。 @param node 调用方传入的 `node`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addMessage(node: PhoneConversationNodeDraft) {
     node.contactMessages.push(createMessageDraft())
   }
 
+  /** 移除指定的 `Message` 数据。 @param node 调用方传入的 `node`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeMessage(node: PhoneConversationNodeDraft, index: number) {
     node.contactMessages.splice(index, 1)
   }
 
+  /** 新增一项 `Option` 草稿。 @param node 调用方传入的 `node`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addOption(node: PhoneConversationNodeDraft) {
     node.playerOptions.push(createOptionDraft())
   }
 
+  /** 移除指定的 `Option` 数据。 @param node 调用方传入的 `node`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeOption(node: PhoneConversationNodeDraft, index: number) {
     node.playerOptions.splice(index, 1)
   }

@@ -714,12 +714,6 @@ export interface StoryDocument {
   chainEvents: StoryChainEventsFile
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile
-  /** @deprecated 请改用 chainEvents */
-  graphEvents: StoryGraphEventsFile
-  /** @deprecated 请改用 poolEvents */
-  onceEvents: StoryOnceEventsFile
-  /** @deprecated 请改用 scheduleEvents */
-  loopEvents: StoryLoopEventsFile
 }
 
 export interface StorySummary {
@@ -769,6 +763,8 @@ export interface CompiledAction {
 }
 
 export interface CompiledStory {
+  schemaVersion: 2
+  contentHash: string
   storyId: string
   title: string
   generatedAt: string
@@ -789,10 +785,4 @@ export interface CompiledStory {
   chainEvents: Record<string, CompiledEvent | CompiledAction>
   poolEvents: StoryPoolEventsFile
   scheduleEvents: StoryScheduleEventsFile
-  /** @deprecated 请改用 chainEvents */
-  graphEvents: Record<string, CompiledEvent | CompiledAction>
-  /** @deprecated 请改用 poolEvents */
-  onceEvents: StoryOnceEventsFile
-  /** @deprecated 请改用 scheduleEvents */
-  loopEvents: StoryLoopEventsFile
 }

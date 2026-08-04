@@ -148,6 +148,7 @@ export interface RuntimeStoryDirector {
 const MAX_DIRECTOR_VALUE_COUNT = 200
 const RUNTIME_DIRECTOR_TRAINING_SAMPLE_SCHEMA_VERSION = 2
 
+/** @param value 训练数据中的任意 JSON 风格值。 @returns 与原值不共享数组和对象引用的深拷贝。 */
 function cloneValue<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((item) => cloneValue(item)) as T
@@ -162,33 +163,44 @@ function cloneValue<T>(value: T): T {
   return value
 }
 
+/** @param value 未知输入。 @returns 去除首尾空白的字符串；非字符串返回空串。 */
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+/** @param value 未知输入。 @returns 是否为非数组对象，并同时为 TypeScript 收窄类型。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value))
 }
 
+/** @param value 未知输入。 @param fallback 非有限数字时的默认值。 @returns 可用的有限数字。 */
 function readNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
 
+/** @param event 导演候选事件。 @returns 优先取 `meta.director`，否则取整个 meta 的导演参数对象。 */
 function getDirectorMeta(event: RuntimeDirectorEvent) {
   const meta = isRecord(event.meta) ? event.meta : {}
   return isRecord(meta.director) ? meta.director : meta
 }
 
+/** @param event 导演候选事件。 @returns 配置的 priority，缺失或非法时为 0。 */
 function readDirectorPriority(event: RuntimeDirectorEvent) {
   const directorMeta = getDirectorMeta(event)
   return readNumber(directorMeta.priority, 0)
 }
 
+/** @param event 导演候选事件。 @returns 配置的 weight，缺失或非法时为 0。 */
 function readDirectorWeight(event: RuntimeDirectorEvent) {
   const directorMeta = getDirectorMeta(event)
   return readNumber(directorMeta.weight, 0)
 }
 
+/**
+ * 用可解释规则为一个导演候选事件打分。
+ * @param candidate 事件、来源、原顺序及进入候选集的理由。 @returns 分数和逐项理由。
+ * priority 权重最高，其次考虑普通 weight、条件触发、对白数量、消息和关联对象数，便于日志解释选择原因。
+ */
 function createRuleBasedScore(candidate: RuntimeDirectorCandidate): RuntimeDirectorCandidateScore {
   const event = candidate.event
   const reasons: string[] = [...candidate.reasons]
@@ -235,18 +247,29 @@ function createRuleBasedScore(candidate: RuntimeDirectorCandidate): RuntimeDirec
   }
 }
 
+/** @returns 默认规则评分器；它为上下文中的每个候选调用同一套可解释评分规则。 */
 export function createRuleBasedRuntimeDirectorScorer(): RuntimeDirectorScorer {
   return {
+    /** @param context 候选事件和当前特征快照。 @returns 与候选一一对应的评分结果。 */
     score(context) {
       return context.candidates.map(createRuleBasedScore)
     }
   }
 }
 
+/**
+ * 创建默认运行时导演。
+ * @param scorer 可替换的评分器，默认使用内置规则。 @returns 根据分数选择剧情的导演对象。
+ */
 export function createRuleBasedRuntimeDirector(
   scorer: RuntimeDirectorScorer = createRuleBasedRuntimeDirectorScorer()
 ): RuntimeStoryDirector {
   return {
+    /**
+     * 从候选事件中选择最高分事件。
+     * @param context 当前候选及特征。 @returns 选择结果和按分数排序的完整解释；无候选时明确返回空选择。
+     * 分数相同时按候选原始 index 排序，保证相同存档、相同输入总得到相同结果。
+     */
     decide(context) {
       const candidateScores = scorer.score(context)
 
@@ -288,6 +311,10 @@ export function createRuleBasedRuntimeDirector(
   }
 }
 
+/**
+ * 把分组变量展平为导演特征使用的 `组名.变量名 -> 值` 字典。
+ * @param vals 普通变量。 @param systemVals 系统变量。 @returns 最多 200 个非 calc 变量的独立副本。
+ */
 export function flattenDirectorValues(
   vals: StoryValsFile,
   systemVals: StoryValsFile
@@ -305,6 +332,10 @@ export function flattenDirectorValues(
   return Object.fromEntries(entries.slice(0, MAX_DIRECTOR_VALUE_COUNT))
 }
 
+/**
+ * 将一个变量组追加到展平结果。
+ * @param group 变量组。 @param entries 正在构建的键值数组。 @returns 无返回值；会原地追加 entries。
+ */
 function collectDirectorValueEntries(
   group: StoryValDefinition,
   entries: Array<[string, unknown]>
@@ -328,6 +359,10 @@ function collectDirectorValueEntries(
   }
 }
 
+/**
+ * 把一次导演决定冻结为可持久化日志。
+ * @param decision 选择结果。 @param features 当时的特征快照。 @returns 不共享可变引用的决策日志。
+ */
 export function createRuntimeDirectorDecisionLog(
   decision: RuntimeDirectorDecision,
   features: RuntimeDirectorFeatureSnapshot
@@ -350,6 +385,11 @@ export function createRuntimeDirectorDecisionLog(
   }
 }
 
+/**
+ * 将导演日志转换成监督训练样本。
+ * @param logs 历史决策日志。 @param options 样本来源以及是否保留“未选择”记录。 @returns Schema v2 样本数组。
+ * 找不到所选事件对应候选的异常日志会被跳过，避免产生标签与输入不一致的训练数据。
+ */
 export function createRuntimeDirectorTrainingSamples(
   logs: RuntimeDirectorDecisionLog[],
   options: RuntimeDirectorTrainingSampleOptions = {}
@@ -412,6 +452,7 @@ export function createRuntimeDirectorTrainingSamples(
   return samples
 }
 
+/** @param sourceType 候选来源。 @param eventId 事件 id。 @returns 可区分同 id 不同来源的稳定 Map 键。 */
 function createDirectorCandidateKey(
   sourceType: RuntimeDirectorCandidateSourceType,
   eventId: string

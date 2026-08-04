@@ -1,0 +1,353 @@
+/* StoryGraphCanvas 的局部样式，只影响同名 Vue 组件。 */
+.graph-panel {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 10px 10px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.graph-panel__header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.graph-panel__headline {
+  display: grid;
+  gap: 4px;
+}
+
+.graph-panel__meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.graph-panel__meta :deep(.pill) {
+  min-height: 26px;
+  padding: 0 9px;
+  font-size: 0.76rem;
+}
+
+.graph-panel__meta :deep(.btn-secondary) {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.graph-panel__button,
+.graph-panel__direction-button {
+  min-height: 28px;
+}
+
+.graph-panel__direction-button--active {
+  border-color: rgba(255, 180, 84, 0.65);
+  background: rgba(255, 180, 84, 0.14);
+}
+
+.graph-panel .section-title {
+  font-size: 0.98rem;
+}
+
+.graph-panel .eyebrow {
+  gap: 6px;
+  font-size: 0.72rem;
+}
+
+.graph-panel .eyebrow::before {
+  width: 24px;
+}
+
+.graph-panel__zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.graph-panel__zoom-button {
+  min-width: 28px;
+  padding: 0;
+}
+
+.graph-panel__zoom-value {
+  min-width: 52px;
+  justify-content: center;
+}
+
+.graph-canvas__viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 180, 84, 0.08), transparent 26%),
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    rgba(0, 0, 0, 0.14);
+  background-size:
+    auto,
+    28px 28px,
+    28px 28px,
+    auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.graph-canvas__viewport--panning {
+  cursor: grabbing;
+}
+
+.graph-canvas__edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+
+.graph-canvas__edge {
+  fill: none;
+  stroke: rgba(158, 200, 255, 0.82);
+  stroke-width: 2.2;
+  pointer-events: none;
+}
+
+.graph-canvas__edge--active {
+  stroke: rgba(124, 227, 195, 0.95);
+  stroke-width: 4.5;
+  filter: drop-shadow(0 0 8px rgba(124, 227, 195, 0.45));
+}
+
+.graph-canvas__edge--link-source {
+  stroke: rgba(255, 180, 84, 0.96);
+}
+
+.graph-canvas__edge--preview {
+  stroke: rgba(255, 180, 84, 0.95);
+  stroke-dasharray: 10 8;
+  pointer-events: none;
+}
+
+.graph-canvas__stage {
+  position: absolute;
+  inset: 0;
+}
+
+.graph-node {
+  position: absolute;
+}
+
+.graph-node__frame {
+  transform-origin: top left;
+}
+
+.graph-node__card {
+  position: relative;
+  height: 100%;
+  padding: 14px 14px 52px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  background:
+    linear-gradient(180deg, rgba(13, 22, 35, 0.96), rgba(8, 14, 23, 0.98));
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.26);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.graph-node--action .graph-node__card {
+  border-style: dashed;
+  border-color: rgba(125, 196, 255, 0.34);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(10, 20, 34, 0.96), rgba(7, 13, 23, 0.98));
+}
+
+.graph-node--active .graph-node__card {
+  border-color: rgba(124, 227, 195, 0.74);
+  box-shadow: 0 0 0 1px rgba(124, 227, 195, 0.25), 0 20px 44px rgba(0, 0, 0, 0.34);
+}
+
+.graph-node--link-source .graph-node__card {
+  border-color: rgba(255, 180, 84, 0.7);
+}
+
+.graph-node--drop-target .graph-node__card {
+  border-color: rgba(125, 196, 255, 0.82);
+  box-shadow: 0 0 0 1px rgba(125, 196, 255, 0.24), 0 18px 38px rgba(0, 0, 0, 0.26);
+}
+
+.graph-node__accent {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  border-radius: 0;
+}
+
+.graph-node__trigger-mark {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.graph-node__trigger-mark--invoke {
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 20px solid rgba(255, 180, 84, 0.96);
+  border-right: 20px solid transparent;
+  filter: drop-shadow(0 0 8px rgba(255, 180, 84, 0.34));
+}
+
+.graph-node__trigger-mark--condition {
+  left: 8px;
+  bottom: 8px;
+  color: rgba(255, 214, 107, 0.98);
+  font-size: 0.82rem;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(255, 214, 107, 0.45);
+}
+
+.graph-node__header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.graph-node__tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.graph-node__tool {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.graph-node__tool--danger {
+  background: rgba(255, 139, 123, 0.12);
+  color: rgba(255, 191, 182, 0.96);
+}
+
+.graph-node__edit-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.graph-node__title {
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.graph-node__title--header {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding-right: 6px;
+}
+
+.graph-node__id {
+  color: var(--text-muted);
+  font-family: "IBM Plex Mono", "Fira Code", monospace;
+  font-size: 0.76rem;
+  word-break: break-all;
+}
+
+.graph-node__footer {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.graph-node__count {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  min-width: 0;
+}
+
+.graph-node__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.graph-node__add {
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(124, 227, 195, 0.14);
+  color: var(--text-main);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.graph-node__add--action {
+  min-width: 28px;
+  padding: 0;
+  background: rgba(125, 196, 255, 0.16);
+}
+
+.graph-node__add-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.graph-node__connector {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.36);
+  pointer-events: none;
+}
+
+.graph-node__connector--output {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.graph-node__connector--active {
+  background: rgba(255, 180, 84, 1);
+  box-shadow: 0 0 0 5px rgba(255, 180, 84, 0.18);
+}

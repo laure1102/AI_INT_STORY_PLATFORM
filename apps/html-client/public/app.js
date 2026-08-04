@@ -1,45 +1,13 @@
-const dom = {
-  app: document.querySelector("#app"),
-  toast: document.querySelector("#toast")
-}
+import {
+  dom,
+  getActivePhoneConversation,
+  h,
+  route,
+  ui
+} from "./browser-state.js"
+import { renderGame, renderProfiles, renderSaves } from "./browser-render.js"
 
-const routeStorySegment = window.location.pathname.split("/").filter(Boolean)[0] ?? ""
-const route = {
-  storyId: decodeURIComponent(routeStorySegment),
-  basePath: routeStorySegment ? `/${encodeURIComponent(routeStorySegment)}` : ""
-}
-
-const ui = {
-  data: null,
-  busy: false,
-  screen: "auto",
-  menuPanel: null,
-  selectedDoingMenuId: null,
-  selectedShopCategoryId: null,
-  menuPanelScrollTops: {},
-  phoneThreadScrollTops: {},
-  phoneOptionsScrollTops: {},
-  phoneThreadLastMessageKeys: {},
-  phoneThreadAutoScrollRoleKeys: {},
-  createOpen: false,
-  prompts: [],
-  phoneOpen: false,
-  phoneMode: "talk",
-  selectedRoleKey: null,
-  thread: null,
-  tickInFlight: false,
-  toastTimer: 0
-}
-
-function h(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;")
-}
-
+/** @param message 提示文本。 @param variant info 或 error 样式。 @returns 无返回值；显示 2.6 秒后自动隐藏的 toast。 */
 function showToast(message, variant = "info") {
   clearTimeout(ui.toastTimer)
   dom.toast.textContent = message
@@ -50,11 +18,13 @@ function showToast(message, variant = "info") {
   }, 2600)
 }
 
+/** @param nextBusy 是否正在执行异步任务。 @returns 无返回值；更新状态并重绘按钮禁用效果。 */
 function setBusy(nextBusy) {
   ui.busy = nextBusy
   render()
 }
 
+/** @returns 无返回值；把当前工具面板滚动位置按 panel id 保存到临时 UI 状态。 */
 function rememberMenuPanelScroll() {
   const body = dom.app.querySelector("[data-menu-panel-scroll]")
   const panel = body?.dataset.menuPanelScroll
@@ -64,6 +34,7 @@ function rememberMenuPanelScroll() {
   ui.menuPanelScrollTops[panel] = body.scrollTop
 }
 
+/** @returns 无返回值；重绘后恢复当前工具面板滚动位置。 */
 function restoreMenuPanelScroll() {
   const body = dom.app.querySelector("[data-menu-panel-scroll]")
   const panel = body?.dataset.menuPanelScroll
@@ -76,6 +47,7 @@ function restoreMenuPanelScroll() {
     return
   }
 
+  /** @returns 无返回值；把已记录位置写回当前面板元素。 */
   const apply = () => {
     body.scrollTop = top
   }
@@ -83,6 +55,7 @@ function restoreMenuPanelScroll() {
   window.requestAnimationFrame(apply)
 }
 
+/** @returns 无返回值；按联系人记住手机消息线程滚动位置。 */
 function rememberPhoneThreadScroll() {
   if (!ui.phoneOpen) {
     return
@@ -97,6 +70,7 @@ function rememberPhoneThreadScroll() {
   ui.phoneThreadScrollTops[roleKey] = body.scrollTop
 }
 
+/** @returns 无返回值；新消息时滚到底部，否则恢复联系人之前的阅读位置。 */
 function restorePhoneThreadScroll() {
   if (!ui.phoneOpen) {
     return
@@ -110,6 +84,7 @@ function restorePhoneThreadScroll() {
 
   if (ui.phoneThreadAutoScrollRoleKeys[roleKey]) {
     delete ui.phoneThreadAutoScrollRoleKeys[roleKey]
+    /** @returns 无返回值；滚动到消息末尾并保存最终 scrollTop。 */
     const applyBottom = () => {
       body.scrollTop = body.scrollHeight
       ui.phoneThreadScrollTops[roleKey] = body.scrollTop
@@ -124,6 +99,7 @@ function restorePhoneThreadScroll() {
     return
   }
 
+  /** @returns 无返回值；恢复该联系人的历史滚动位置。 */
   const apply = () => {
     body.scrollTop = top
   }
@@ -131,6 +107,7 @@ function restorePhoneThreadScroll() {
   window.requestAnimationFrame(apply)
 }
 
+/** @returns 无返回值；按联系人和手机模式记住选项区域滚动位置。 */
 function rememberPhoneOptionsScroll() {
   if (!ui.phoneOpen) {
     return
@@ -145,6 +122,7 @@ function rememberPhoneOptionsScroll() {
   ui.phoneOptionsScrollTops[key] = body.scrollTop
 }
 
+/** @returns 无返回值；重绘后恢复手机话题/动作选项滚动位置。 */
 function restorePhoneOptionsScroll() {
   if (!ui.phoneOpen) {
     return
@@ -161,6 +139,7 @@ function restorePhoneOptionsScroll() {
     return
   }
 
+  /** @returns 无返回值；把保存的 scrollTop 写回选项容器。 */
   const apply = () => {
     body.scrollTop = top
   }
@@ -168,6 +147,7 @@ function restorePhoneOptionsScroll() {
   window.requestAnimationFrame(apply)
 }
 
+/** @returns 无返回值；为本次 render 产生的三个滚动容器绑定被动监听器。 */
 function bindScrollMemory() {
   dom.app.querySelectorAll("[data-menu-panel-scroll]").forEach((element) => {
     element.addEventListener("scroll", () => {
@@ -200,12 +180,14 @@ function bindScrollMemory() {
   })
 }
 
+/** @param thread 手机消息线程。 @returns 由消息数和最后消息 id 组成的轻量变化键。 */
 function getPhoneThreadMessageKey(thread) {
   const messages = Array.isArray(thread?.messages) ? thread.messages : []
   const lastMessage = messages.at(-1)
   return `${messages.length}:${lastMessage?.id ?? ""}`
 }
 
+/** @param roleKey 联系人键。 @param thread 最新线程。 @param force 是否强制。 @returns 无返回值；消息变化时标记下次渲染滚到底部。 */
 function updatePhoneThreadAutoScroll(roleKey, thread, { force = false } = {}) {
   if (!roleKey) {
     return
@@ -220,6 +202,7 @@ function updatePhoneThreadAutoScroll(roleKey, thread, { force = false } = {}) {
   }
 }
 
+/** @param roleKey 联系人键。 @param options 可含 forceScroll。 @returns 服务端最新线程，并同步自动滚动状态。 */
 async function fetchPhoneThread(roleKey, options = {}) {
   const result = await api(`/api/phone/thread?roleKey=${encodeURIComponent(roleKey)}`, { method: "GET" })
   updatePhoneThreadAutoScroll(roleKey, result.thread, { force: Boolean(options.forceScroll) })
@@ -227,6 +210,7 @@ async function fetchPhoneThread(roleKey, options = {}) {
   return result.thread
 }
 
+/** @param options 线程加载选项。 @returns 当前选中线程；手机未打开或未选联系人时返回 null。 */
 async function refreshSelectedPhoneThread(options = {}) {
   if (!ui.phoneOpen || !ui.selectedRoleKey) {
     return null
@@ -235,6 +219,7 @@ async function refreshSelectedPhoneThread(options = {}) {
   return fetchPhoneThread(ui.selectedRoleKey, options)
 }
 
+/** @param panel notifications/variables/scheduler/bags/doing/shop 之一。 @returns 无返回值；关闭手机并打开对应工具面板。 */
 function openMenuPanel(panel) {
   if (ui.menuPanel !== panel) {
     ui.menuPanelScrollTops[panel] = 0
@@ -244,39 +229,7 @@ function openMenuPanel(panel) {
   render()
 }
 
-function getDoingView() {
-  return ui.data?.view?.doing ?? { menus: [], doings: [] }
-}
-
-function getShopView() {
-  return ui.data?.view?.shop ?? { currencyValueKey: "player.money", categories: [], products: [] }
-}
-
-function getActivePhoneConversation() {
-  const conversation = ui.data?.view?.phoneConversation ?? null
-  return conversation && !conversation.finished ? conversation : null
-}
-
-function getSelectedDoingMenu(menus) {
-  if (menus.some((menu) => menu.id === ui.selectedDoingMenuId)) {
-    return ui.selectedDoingMenuId
-  }
-
-  const firstMenuId = menus[0]?.id ?? null
-  ui.selectedDoingMenuId = firstMenuId
-  return firstMenuId
-}
-
-function getSelectedShopCategory(categories) {
-  if (categories.some((category) => category.id === ui.selectedShopCategoryId)) {
-    return ui.selectedShopCategoryId
-  }
-
-  const firstCategoryId = categories[0]?.id ?? null
-  ui.selectedShopCategoryId = firstCategoryId
-  return firstCategoryId
-}
-
+/** @returns 无返回值；关闭菜单、手机和建档浮层，回到主游戏画面。 */
 function returnToMainView() {
   ui.phoneOpen = false
   ui.menuPanel = null
@@ -287,6 +240,11 @@ function returnToMainView() {
   render()
 }
 
+/**
+ * 调用当前故事命名空间下的 JSON API。
+ * @param path `/api/...` 路径。 @param options method 和可选 body。 @returns 解析后的 payload。
+ * @throws HTTP 非成功或 payload.ok 为 false 时抛出服务端错误信息。
+ */
 async function api(path, options = {}) {
   const endpoint = path.startsWith("/api/")
     ? `${route.basePath}${path}`
@@ -303,6 +261,7 @@ async function api(path, options = {}) {
   return payload
 }
 
+/** @param label 成功 toast 文本。 @param handler 异步任务。 @returns handler 结果；统一管理 busy、状态更新和错误 toast。 */
 async function runTask(label, handler) {
   setBusy(true)
   try {
@@ -320,12 +279,14 @@ async function runTask(label, handler) {
   }
 }
 
+/** @returns 最新客户端状态；从服务端读取后立即重绘。 */
 async function refreshState() {
   const result = await api("/api/state", { method: "GET" })
   ui.data = result
   render()
 }
 
+/** @returns 启动 API 结果；同步 bundle/档案后切到档案页面。 */
 async function bootstrap() {
   await runTask("客户端已启动", async () => {
     const result = await api("/api/bootstrap")
@@ -335,6 +296,7 @@ async function bootstrap() {
   })
 }
 
+/** @returns 重新编译故事后的客户端状态；同时清空旧建角字段缓存。 */
 async function syncStoryBundle() {
   const result = await api("/api/sync-story-bundle")
   ui.data = result
@@ -342,6 +304,7 @@ async function syncStoryBundle() {
   return result
 }
 
+/** @param force 是否忽略已有缓存。 @returns 无返回值；加载玩家覆盖表单字段到 ui.prompts。 */
 async function loadPrompts({ force = false } = {}) {
   if (!force && ui.prompts.length > 0) {
     return
@@ -351,643 +314,10 @@ async function loadPrompts({ force = false } = {}) {
   ui.prompts = result.prompts ?? []
 }
 
-function profileMeta(profile) {
-  return [
-    profile.locationLabel,
-    `${profile.customValueCount ?? 0} 个自定义变量`,
-    profile.createdAt
-  ].filter(Boolean).join(" · ")
-}
-
-function buildProfileNameFromCustomValues(customValues) {
-  const surname = String(customValues["player.name_xing"] ?? "").trim()
-  const givenName = String(customValues["player.name_ming"] ?? "").trim()
-  const fullName = `${surname}${givenName}`.trim()
-
-  if (fullName) {
-    return fullName
-  }
-
-  const fallbackKeys = [
-    "player.name",
-    "system.player_name",
-    "system.role_name",
-    "system.player_display_name"
-  ]
-
-  for (const key of fallbackKeys) {
-    const value = String(customValues[key] ?? "").trim()
-    if (value) {
-      return value
-    }
-  }
-
-  return ""
-}
-
-function normalizePromptOptions(prompt) {
-  if (!Array.isArray(prompt?.options)) {
-    return []
-  }
-
-  return prompt.options
-    .map((option) => {
-      const value = String(option?.value ?? "").trim()
-      const label = String(option?.label ?? "").trim() || value
-      return value ? { label, value } : null
-    })
-    .filter(Boolean)
-}
-
-function renderCreatePromptField(prompt) {
-  const fieldId = `prompt-${prompt.varKey}`
-  const label = `${prompt.label}${prompt.required ? " *" : ""}`
-  const inputType = prompt.inputType === "select" ? "select" : "text"
-
-  if (inputType === "select") {
-    const options = normalizePromptOptions(prompt)
-    const optionHtml = options.map((option) => `
-      <option value="${h(option.value)}">${h(option.label)}</option>
-    `).join("")
-
-    return `
-      <div class="field">
-        <label for="${h(fieldId)}">${h(label)}</label>
-        <select id="${h(fieldId)}" name="${h(prompt.varKey)}" ${prompt.required ? "required" : ""}>
-          <option value="">${h(prompt.tips || "请选择")}</option>
-          ${optionHtml}
-        </select>
-      </div>
-    `
-  }
-
-  return `
-    <div class="field">
-      <label for="${h(fieldId)}">${h(label)}</label>
-      <input id="${h(fieldId)}" name="${h(prompt.varKey)}" placeholder="${h(prompt.tips || prompt.varKey)}" ${prompt.required ? "required" : ""}>
-    </div>
-  `
-}
-
-function topbar() {
-  const data = ui.data
-  const title = data?.storyTitle ?? "Story HTML Client"
-  const profile = data?.profile?.profile_name ? `角色：${data.profile.profile_name}` : "未选择角色"
-  const stage = data?.stage ? `阶段：${data.stage}` : "正在初始化"
-
-  return `
-    <header class="topbar">
-      <div class="brand">
-        <h1>${h(title)}</h1>
-        <div class="subline">${h(profile)} · ${h(stage)}${ui.busy ? " · 正在处理..." : ""}</div>
-      </div>
-    </header>
-  `
-}
-
-function renderProfiles() {
-  const profiles = ui.data?.profiles ?? []
-  const createFields = ui.prompts.map(renderCreatePromptField).join("")
-
-  return `
-    ${topbar()}
-    <main class="content">
-      <div class="setup-layout">
-        <section class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">选择角色</h2>
-            <button class="primary" data-action="toggle-create">${ui.createOpen ? "收起创建" : "创建角色"}</button>
-          </div>
-          <div class="panel-body">
-            <div class="list">
-              ${profiles.length === 0 ? `<div class="empty">还没有本地角色档。</div>` : profiles.map((profile) => `
-                <button class="list-item" data-select-profile="${h(profile.profileId)}">
-                  <span class="item-title">${h(profile.profileName)} (${h(profile.profileId)})</span>
-                  <span class="item-meta">${h(profileMeta(profile))}</span>
-                </button>
-              `).join("")}
-            </div>
-          </div>
-        </section>
-        <section class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">${ui.createOpen ? "创建新角色" : "角色信息"}</h2>
-          </div>
-          <div class="panel-body">
-            ${ui.createOpen ? `
-              <form id="create-profile-form" class="form-grid">
-                ${createFields || `<div class="empty">当前故事没有需要玩家创建时填写的变量。</div>`}
-                <div class="button-row">
-                  <button class="primary" type="submit">保存角色</button>
-                  <button type="button" data-action="toggle-create">取消</button>
-                </div>
-              </form>
-            ` : `
-              <p class="hint">选择一个角色档继续，或者创建新角色。HTML 客户端会使用独立的 <code>.html-client</code> 运行目录，不会和 TUI 存档混在一起。</p>
-            `}
-          </div>
-        </section>
-      </div>
-    </main>
-  `
-}
-
-function renderSaves() {
-  const saveSlots = ui.data?.saveSlots ?? []
-  const profile = ui.data?.profile
-
-  return `
-    ${topbar()}
-    <main class="content">
-      <div class="setup-layout">
-        <section class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">当前角色</h2>
-          </div>
-          <div class="panel-body">
-            <div class="list-item">
-              <span class="item-title">${h(profile?.profile_name ?? "未选择")}</span>
-              <span class="item-meta">${h(profile?.player_setup ? `${profile.player_setup.province_name}/${profile.player_setup.city_name}/${profile.player_setup.county_name}` : "无角色设定")}</span>
-            </div>
-            <div class="button-row" style="margin-top: 12px;">
-              <button class="primary" data-action="new-game">开始新游戏</button>
-              <button data-screen="profiles">更换角色</button>
-            </div>
-          </div>
-        </section>
-        <section class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">读取存档</h2>
-            <button data-action="refresh-saves">刷新</button>
-          </div>
-          <div class="panel-body">
-            <div class="list">
-              ${saveSlots.length === 0 ? `<div class="empty">这个角色还没有存档。</div>` : saveSlots.map((slot) => `
-                <button class="list-item" data-load-save="${h(slot.slotId)}">
-                  <span class="item-title">${h(slot.slotId)}</span>
-                  <span class="item-meta">${h(slot.savedAt)} · 当前事件 ${h(slot.activeEventId ?? "无")}</span>
-                </button>
-              `).join("")}
-            </div>
-          </div>
-        </section>
-      </div>
-    </main>
-  `
-}
-
-function renderDialogue(view) {
-  if (view?.currentDialogue) {
-    const dialogue = view.currentDialogue
-    return `
-      <section class="dialogue-card">
-        <div class="speaker">${h(dialogue.speakerLabel || dialogue.speakerKey || "旁白")} <span class="item-meta">${dialogue.index}/${dialogue.total}</span></div>
-        <div class="dialogue-text">${h(dialogue.content)}</div>
-      </section>
-    `
-  }
-
-  if (view?.currentMessage) {
-    const message = view.currentMessage
-    return `
-      <section class="message-card">
-        <div class="message-text">${h(message.content)}</div>
-        <div class="item-meta">剩余 ${h(message.remainingSeconds)} 秒</div>
-      </section>
-    `
-  }
-
-  return `<section class="dialogue-card"><div class="dialogue-text">当前没有正在展示的对白或提示消息。</div></section>`
-}
-
-function renderInteraction(view) {
-  const interaction = view?.interaction
-  if (!interaction) {
-    return `
-      <section class="interaction-card">
-        <p class="interaction-title">操作</p>
-        <button class="primary" data-runtime-action='${h(JSON.stringify({ type: "continue" }))}'>继续</button>
-      </section>
-    `
-  }
-
-  if (interaction.kind === "select") {
-    return `
-      <section class="interaction-card">
-        <p class="interaction-title">${h(interaction.prompt)}</p>
-        <div class="action-grid">
-          ${interaction.options.map((option, index) => `
-            <button class="primary option-button" data-runtime-action='${h(JSON.stringify({ type: "select-option", optionId: option.id }))}'>
-              ${index + 1}. ${h(option.label)}
-              ${option.description ? `<span class="option-desc">${h(option.description)}</span>` : ""}
-            </button>
-          `).join("")}
-        </div>
-      </section>
-    `
-  }
-
-  if (interaction.kind === "text-input") {
-    return `
-      <section class="interaction-card">
-        <form id="text-interaction-form" class="form-grid">
-          <div class="field">
-            <label>${h(interaction.prompt)}</label>
-            <input name="value" value="${h(interaction.initialValue ?? "")}" placeholder="${h(interaction.placeholder ?? "")}" autofocus>
-          </div>
-          <button class="primary" type="submit">提交</button>
-        </form>
-      </section>
-    `
-  }
-
-  if (interaction.kind === "confirm") {
-    return `
-      <section class="interaction-card">
-        <p class="interaction-title">${h(interaction.prompt)}</p>
-        <div class="button-row">
-          <button class="primary" data-runtime-action='${h(JSON.stringify({ type: "continue" }))}'>${h(interaction.confirmLabel ?? "继续")}</button>
-        </div>
-      </section>
-    `
-  }
-
-  return ""
-}
-
-function renderContext(view) {
-  const branches = view?.availableBranches ?? []
-  const context = view?.branchContextSummary ?? []
-
-  if (branches.length === 0 && context.length === 0) {
-    return ""
-  }
-
-  return `
-    <section class="context-card">
-      ${branches.length > 0 ? `
-        <p class="interaction-title">可用分支</p>
-        <div class="list">
-          ${branches.map((branch) => `
-            <div class="list-item">
-              <span class="item-title">${h(branch.title)}</span>
-              <span class="item-meta">下一事件：${h(branch.nextEventId ?? "无")}</span>
-            </div>
-          `).join("")}
-        </div>
-      ` : ""}
-      ${context.length > 0 ? `
-        <p class="interaction-title">分支上下文</p>
-        <pre class="pre-lines">${h(context.map((item) => `${item.key}: ${item.value}`).join("\n"))}</pre>
-      ` : ""}
-    </section>
-  `
-}
-
-function renderMenuPanelBody(panelId) {
-  const data = ui.data
-  let body = ""
-
-  if (panelId === "notifications") {
-    const notifications = data?.notifications ?? []
-    body = notifications.length === 0
-      ? `<div class="empty">暂无通知。</div>`
-      : `<div class="notification-list">${notifications.slice().reverse().map((item) => `<div class="notification-item">${h(item)}</div>`).join("")}</div>`
-  } else if (panelId === "global") {
-    body = `<pre class="pre-lines">${h((data?.globalValueLines ?? []).join("\n"))}</pre>`
-  } else if (panelId === "system") {
-    body = `<pre class="pre-lines">${h((data?.systemValueLines ?? []).join("\n"))}</pre>`
-  } else if (panelId === "scheduler") {
-    body = `<pre class="pre-lines">${h((data?.schedulerLines ?? []).join("\n"))}</pre>`
-  } else if (panelId === "bag") {
-    body = `<pre class="pre-lines">${h((data?.bagLines ?? []).join("\n"))}</pre>`
-  } else if (panelId === "doing") {
-    const doing = getDoingView()
-    const menus = Array.isArray(doing?.menus) ? doing.menus : []
-    const items = Array.isArray(doing?.doings) ? doing.doings : []
-    const selectedMenuId = getSelectedDoingMenu(menus)
-    const selectedItems = selectedMenuId
-      ? items.filter((item) => item.menuId === selectedMenuId)
-      : []
-    body = `
-      <div class="doing-panel">
-        <div class="doing-menu-tree">
-          ${menus.length === 0 ? `<div class="empty">暂无行动菜单。</div>` : menus.map((menu) => `
-            <button class="list-item ${menu.id === selectedMenuId ? "active" : ""}" data-doing-menu="${h(menu.id)}">
-              <span class="item-title">${h(menu.title ?? menu.id)}</span>
-              <span class="item-meta">${h(menu.descr ?? "")}</span>
-            </button>
-          `).join("")}
-        </div>
-        <div class="doing-list">
-          ${menus.length === 0 ? `<div class="empty">暂无可执行行动。请先在故事编辑器中配置 doing.json5。</div>` : ""}
-          ${menus.length > 0 && selectedItems.length === 0 ? `<div class="empty">当前菜单下暂无行动。</div>` : ""}
-          ${selectedItems.map((item) => `
-            <button class="option-button ${item.disabled ? "disabled" : ""}" ${item.disabled ? "disabled" : ""} data-doing-action="${h(item.id)}">
-              ${h(item.title ?? item.id)}
-              <span class="item-meta">${h([
-                item.descr,
-                item.once ? "一次性" : "",
-                item.cooldownHours > 0 ? `冷却 ${item.cooldownHours} 小时` : "",
-                item.usedCount > 0 ? `已执行 ${item.usedCount} 次` : "",
-                item.disabledReason
-              ].filter(Boolean).join(" · "))}</span>
-            </button>
-          `).join("")}
-        </div>
-      </div>
-    `
-  } else if (panelId === "shop") {
-    const shop = getShopView()
-    const categories = Array.isArray(shop?.categories) ? shop.categories : []
-    const products = Array.isArray(shop?.products) ? shop.products : []
-    const selectedCategoryId = getSelectedShopCategory(categories)
-    const selectedProducts = selectedCategoryId
-      ? products.filter((product) => product.categoryId === selectedCategoryId)
-      : []
-    const contacts = ui.data?.phoneContacts ?? []
-
-    body = `
-      <div class="shop-panel">
-        <div class="shop-category-list">
-          ${categories.length === 0 ? `<div class="empty">暂无商城分类。</div>` : categories.map((category) => `
-            <button class="list-item ${category.id === selectedCategoryId ? "active" : ""}" data-shop-category="${h(category.id)}">
-              <span class="item-title">${h(category.name ?? category.id)}</span>
-              <span class="item-meta">${h(category.descr ?? "")}</span>
-            </button>
-          `).join("")}
-        </div>
-        <div class="shop-product-list">
-          <div class="shop-currency">扣款变量：${h(shop.currencyValueKey ?? "player.money")}</div>
-          ${categories.length === 0 ? `<div class="empty">请先在故事编辑器配置 shop.json5。</div>` : ""}
-          ${categories.length > 0 && selectedProducts.length === 0 ? `<div class="empty">当前分类下暂无商品。</div>` : ""}
-          ${selectedProducts.map((product) => {
-            const buyMeta = [
-              `价格 ${product.price}`,
-              `数量 x${product.quantity}`,
-              product.ownedQuantity > 0 ? `背包 ${product.ownedQuantity}` : "",
-              product.purchaseCooldownHours > 0 ? `购买冷却 ${product.purchaseCooldownHours}小时` : "",
-              product.disabledReason
-            ].filter(Boolean).join(" · ")
-            const giftMeta = [
-              product.allowGift ? `送礼好感 ${product.giftFavorDelta >= 0 ? "+" : ""}${product.giftFavorDelta}` : "不可送礼",
-              product.giftCooldownHours > 0 ? `送礼冷却 ${product.giftCooldownHours}小时` : ""
-            ].filter(Boolean).join(" · ")
-            const giftTargets = product.allowGift && product.ownedQuantity >= product.quantity
-              ? contacts.map((contact) => `
-                <button class="tiny-command" data-shop-gift="${h(product.id)}" data-shop-gift-role="${h(contact.roleKey)}">
-                  送 ${h(contact.label)}
-                </button>
-              `).join("")
-              : ""
-
-            return `
-              <article class="shop-product ${product.disabled ? "disabled" : ""}">
-                <div class="shop-product-main">
-                  <div>
-                    <div class="item-title">${h(product.itemName ?? product.itemId)}</div>
-                    <div class="item-meta">${h(product.itemId)} · ${h(buyMeta)}</div>
-                    <div class="item-meta">${h(giftMeta)}</div>
-                  </div>
-                  <button class="footer-command" ${product.disabled ? "disabled" : ""} data-shop-buy="${h(product.id)}">购买</button>
-                </div>
-                ${giftTargets ? `<div class="shop-gift-row">${giftTargets}</div>` : ""}
-              </article>
-            `
-          }).join("")}
-        </div>
-      </div>
-    `
-  } else if (panelId === "save") {
-    body = `
-      <div class="panel-menu-actions">
-        <button class="primary" data-action="save-game">保存当前进度</button>
-        <button data-screen="saves">读取存档</button>
-        <button data-screen="profiles">更换角色</button>
-      </div>
-    `
-  } else {
-    body = `<pre class="pre-lines">${h(JSON.stringify(data?.view?.debugSummary ?? {}, null, 2))}</pre>`
-  }
-
-  return body
-}
-
-function renderMenuPanel() {
-  if (!ui.menuPanel) {
-    return ""
-  }
-
-  const labels = {
-    notifications: "消息",
-    global: "全局变量",
-    system: "系统变量",
-    scheduler: "调度",
-    bag: "背包",
-    doing: "行动",
-    shop: "商城",
-    save: "存档",
-    debug: "调试"
-  }
-  const label = labels[ui.menuPanel] ?? "菜单"
-
-  return `
-    <div class="menu-backdrop" data-action="close-menu"></div>
-    <aside class="menu-panel">
-      <div class="menu-panel-header">
-        <strong>${h(label)}</strong>
-        <button data-action="close-menu">关闭</button>
-      </div>
-      <div class="menu-panel-body" data-menu-panel-scroll="${h(ui.menuPanel)}">${renderMenuPanelBody(ui.menuPanel)}</div>
-    </aside>
-  `
-}
-
-function renderGameHeader(summary, data, view) {
-  return `
-    <header class="game-header">
-      <div class="game-header-main">
-        <div class="game-header-title">${h(view?.activeEventTitle ?? "等待事件")}</div>
-        <div class="game-header-meta">
-          ${h(summary.countyLabel || "未知地点")} · ${h(summary.dayLabel || "")} ${h(summary.clock || "")} ${h(summary.shiduanLabel || "")} · ${summary.paused ? "暂停" : "运行中"} x${h(summary.speed || 0)}
-        </div>
-      </div>
-    </header>
-  `
-}
-
-function renderGameFooter(summary, data) {
-  const phoneClass = data?.phoneUnreadCount > 0 ? "footer-stat phone-unread" : "footer-stat"
-
-  return `
-    <footer class="game-footer">
-      <div class="footer-status-row">
-        <div class="footer-status-left">
-          <span class="footer-stat strong">${h(summary.playerName || "未命名")}</span>
-          <span class="footer-stat">资金 ${h(summary.moneyLabel)}</span>
-          <button class="${phoneClass}" data-action="open-phone">手机 ${h(data?.phoneUnreadCount ?? 0)}</button>
-        </div>
-        <div class="footer-status-right">
-          <button class="footer-command" data-menu-panel="doing">D 行动</button>
-          <button class="footer-command" data-menu-panel="shop">M 商城</button>
-          <button class="footer-command footer-next-day" data-action="advance-day">N 下一天</button>
-        </div>
-      </div>
-      <div class="footer-command-row">
-        <button class="footer-command primary" data-action="back-main">Esc 返回主界面</button>
-        <button class="footer-command" data-action="toggle-pause">${summary.paused ? "Space 继续" : "Space 暂停"}</button>
-        <button class="footer-command" data-menu-panel="notifications">L 消息</button>
-        <button class="footer-command" data-menu-panel="bag">B 背包</button>
-        <button class="footer-command" data-menu-panel="global">I 全局</button>
-        <button class="footer-command" data-menu-panel="system">O 系统</button>
-        <button class="footer-command" data-menu-panel="scheduler">T 调度</button>
-        <button class="footer-command" data-menu-panel="save">S 存档</button>
-      </div>
-    </footer>
-  `
-}
-
-function renderGame() {
-  const data = ui.data
-  const view = data?.view
-  const summary = data?.summary ?? {}
-
-  return `
-    <main class="game-shell">
-      ${renderGameHeader(summary, data, view)}
-      <section class="game-stage">
-        <div class="story-scroll">
-            <div>
-              <h2 class="event-title">${h(view?.activeEventTitle ?? "等待事件")}</h2>
-              <div class="event-meta">事件：${h(view?.activeEventId ?? "无")} · 地点：${h(view?.currentLocationName ?? view?.currentLocationId ?? "未指定")}</div>
-            </div>
-            ${renderDialogue(view)}
-            ${renderInteraction(view)}
-            ${renderContext(view)}
-        </div>
-      </section>
-      ${renderGameFooter(summary, data)}
-    </main>
-    ${renderMenuPanel()}
-    ${renderPhoneDrawer()}
-  `
-}
-
-function formatPhoneCost(action) {
-  const parts = []
-  if (action.costMoney > 0) {
-    parts.push(`${action.costMoney}元`)
-  }
-  if (action.costItems?.length > 0) {
-    parts.push(action.costItems.map((item) => `${item.itemName}x${item.quantity}`).join("、"))
-  }
-  return parts.length > 0 ? parts.join(" + ") : "无消耗"
-}
-
-function renderPhoneConversationActions(conversation) {
-  const replies = (conversation?.replies ?? []).filter((reply) => reply.visible)
-
-  return `
-    <div class="phone-conversation-panel">
-      <div class="phone-conversation-title">
-        <strong>${h(conversation.title || "剧情手机对话")}</strong>
-        <span class="item-meta">节点 ${h(conversation.nodeIndex)}/${h(conversation.nodeTotal)} · ${h(conversation.nodeTitle || conversation.nodeId)}</span>
-      </div>
-      <div class="quick-grid phone-conversation-replies" data-phone-options-scroll="${h(`${conversation.roleKey}:conversation:${conversation.nodeId}`)}">
-        ${replies.length === 0 ? `<div class="empty">当前剧情对话没有可选回复。</div>` : replies.map((reply, index) => `
-          <button class="option-button" data-phone-conversation-reply="${h(reply.id)}">
-            ${index + 1}. ${h(reply.text)}
-            <span class="item-meta">剧情回复</span>
-          </button>
-        `).join("")}
-      </div>
-    </div>
-  `
-}
-
-function renderPhoneDrawer() {
-  if (!ui.phoneOpen) {
-    return ""
-  }
-
-  const contacts = ui.data?.phoneContacts ?? []
-  const activeConversation = getActivePhoneConversation()
-  if (!ui.selectedRoleKey && activeConversation?.roleKey) {
-    ui.selectedRoleKey = activeConversation.roleKey
-  }
-  const selected = contacts.find((contact) => contact.roleKey === ui.selectedRoleKey) ?? null
-  const thread = ui.thread
-  const messages = thread?.messages ?? []
-  const options = ui.phoneMode === "talk" ? (thread?.talks ?? []) : (thread?.actions ?? [])
-  const selectedConversation = selected && activeConversation?.roleKey === selected.roleKey
-    ? activeConversation
-    : null
-
-  return `
-    <div class="drawer-backdrop" data-action="close-phone"></div>
-    <aside class="phone-drawer">
-      <div class="phone-header">
-        <div>
-          <strong>手机联系人</strong>
-          <div class="item-meta">未读 ${h(ui.data?.phoneUnreadCount ?? 0)}</div>
-        </div>
-        <button data-action="close-phone">关闭</button>
-      </div>
-      <div class="phone-body">
-        <div class="contacts-pane">
-          <div class="list">
-            ${contacts.length === 0 ? `<div class="empty">还没有联系人。</div>` : contacts.map((contact) => `
-              <button class="list-item ${contact.roleKey === ui.selectedRoleKey ? "active" : ""}" data-phone-contact="${h(contact.roleKey)}">
-                <span class="item-title">${h(contact.label)}${contact.unreadCount > 0 ? ` · 未读 ${contact.unreadCount}` : ""}${activeConversation?.roleKey === contact.roleKey ? " · 剧情中" : ""}</span>
-                <span class="item-meta">${h(contact.relationStageLabel)} · 好感 ${h(contact.favor)}/100 · ${h(contact.personalityLabel)}${contact.canContact ? "" : ` · ${contact.lockMessage ?? "不可联系"}`}</span>
-                ${contact.lastMessagePreview ? `<span class="item-meta">${h(contact.lastMessagePreview)}</span>` : ""}
-              </button>
-            `).join("")}
-          </div>
-        </div>
-        <div class="thread-pane">
-          <div class="message-list" data-phone-thread-scroll="${h(selected?.roleKey ?? "")}">
-            ${selected ? `
-              <div class="item-meta">${h(selected.label)} · ${h(selected.relationTrackLabel)} / ${h(selected.relationStageLabel)} · 好感 ${h(selected.favor)}/100</div>
-              ${messages.length === 0 ? `<div class="empty">还没有往来消息。</div>` : messages.map((message) => `
-                <div class="bubble ${h(message.sender)}">
-                  <div class="bubble-meta">${h(message.senderLabel)} · ${h(message.gameMinuteLabel ?? message.gameMinute)}</div>
-                  <div>${h(message.content)}</div>
-                </div>
-              `).join("")}
-            ` : `<div class="empty">选择左侧联系人查看消息。</div>`}
-          </div>
-          <div class="phone-actions">
-            ${selected ? `
-              ${selectedConversation ? renderPhoneConversationActions(selectedConversation) : `
-                <div class="segment">
-                  <button class="${ui.phoneMode === "talk" ? "active" : ""}" data-phone-mode="talk">说话</button>
-                  <button class="${ui.phoneMode === "action" ? "active" : ""}" data-phone-mode="action">动作</button>
-                </div>
-                <div class="quick-grid" data-phone-options-scroll="${h(`${selected.roleKey}:${ui.phoneMode}`)}">
-                  ${thread?.canContact === false ? `<div class="empty">${h(thread.lockMessage ?? "对方现在不想理我。")}</div>` : ""}
-                  ${options.length === 0 ? `<div class="empty">当前没有可用${ui.phoneMode === "talk" ? "短句" : "动作"}。</div>` : options.map((option) => {
-                    const disabled = ui.phoneMode === "action" && option.disabled
-                    const meta = ui.phoneMode === "action"
-                      ? `${formatPhoneCost(option)}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.disabledReason ? ` · ${option.disabledReason}` : ""}`
-                      : `${option.tags?.slice(0, 2).join("/") || "闲聊"}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.suggested ? " · 推荐" : ""}`
-                    return `
-                      <button class="option-button" ${disabled ? "disabled" : ""} data-phone-${ui.phoneMode}="${h(option.id)}">
-                        ${h(ui.phoneMode === "action" ? option.label : option.text)}
-                        <span class="item-meta">${h(meta)}</span>
-                      </button>
-                    `
-                  }).join("")}
-                </div>
-              `}
-            ` : `<div class="empty">先选择联系人。</div>`}
-          </div>
-        </div>
-      </div>
-    </aside>
-  `
-}
-
+/**
+ * 根据当前 ui 状态重建页面 HTML，并重新绑定事件和恢复滚动位置。
+ * @returns 无返回值。重绘前先记住滚动，避免 innerHTML 替换节点后用户阅读位置跳动。
+ */
 function render() {
   rememberMenuPanelScroll()
   rememberPhoneThreadScroll()
@@ -1018,6 +348,7 @@ function render() {
   restorePhoneOptionsScroll()
 }
 
+/** @param action Runtime 交互动作。 @returns 无返回值；提交动作、刷新状态/手机线程并统一处理错误。 */
 async function dispatchRuntimeAction(action) {
   setBusy(true)
   try {
@@ -1036,11 +367,13 @@ async function dispatchRuntimeAction(action) {
   }
 }
 
+/** @param roleKey 联系人键。 @param options 加载选项。 @returns 无返回值；读取线程后重绘手机。 */
 async function loadPhoneThread(roleKey, options = {}) {
   await fetchPhoneThread(roleKey, options)
   render()
 }
 
+/** @param roleKey 联系人键。 @returns 无返回值；先标记服务端消息已读，再加载并强制滚到最新消息。 */
 async function openPhoneThread(roleKey) {
   ui.selectedRoleKey = roleKey
   await api("/api/session/action", {
@@ -1053,6 +386,7 @@ async function openPhoneThread(roleKey) {
   await loadPhoneThread(roleKey, { forceScroll: true })
 }
 
+/** @returns 无返回值；打开手机并优先选活动剧情联系人、上次联系人或第一联系人。 */
 async function openPhoneDrawer() {
   ui.menuPanel = null
   ui.phoneOpen = true
@@ -1070,6 +404,7 @@ async function openPhoneDrawer() {
   render()
 }
 
+/** @returns 无返回值；询问槽名，用户未取消时保存当前会话。 */
 async function saveGame() {
   const defaultSlot = `slot-${(ui.data?.saveSlots?.length ?? 0) + 1}`
   const slotId = window.prompt("保存到哪个存档？", defaultSlot)
@@ -1079,6 +414,7 @@ async function saveGame() {
   await runTask("进度已保存", async () => api("/api/session/save", { body: { slotId } }))
 }
 
+/** @returns 无返回值；调用调试 API 推进一天，并刷新可能产生主动消息的手机线程。 */
 async function advanceDay() {
   await runTask("已推进到下一天", async () => {
     const result = await api("/api/session/advance-day")
@@ -1088,6 +424,7 @@ async function advanceDay() {
   })
 }
 
+/** @param key 键盘字符。 @returns 1–9 成功选择当前互动选项时为 true，否则 false。 */
 async function selectInteractionOptionByNumber(key) {
   if (ui.phoneOpen || ui.menuPanel) {
     return false
@@ -1111,6 +448,7 @@ async function selectInteractionOptionByNumber(key) {
   return true
 }
 
+/** @returns 无返回值；若会话空闲则向服务端提交固定帧 tick，并防止请求重入。 */
 async function tick() {
   if (!ui.data?.hasSession || ui.tickInFlight) {
     return
@@ -1129,6 +467,10 @@ async function tick() {
   }
 }
 
+/**
+ * 为当前 render 生成的按钮、表单和菜单节点绑定事件。
+ * @returns 无返回值；节点每次由 innerHTML 重建，所以监听器也在每次 render 后重新绑定。
+ */
 function bindEvents() {
   dom.app.querySelectorAll("[data-screen]").forEach((button) => {
     button.addEventListener("click", () => {

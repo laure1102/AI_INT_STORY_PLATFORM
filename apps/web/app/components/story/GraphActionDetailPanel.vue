@@ -71,11 +71,13 @@ const draft = reactive({
 
 let varIdSeed = 0
 
+/** 创建一份新的 `VarDraftId` 数据。 @returns 计算、查找或构建后的结果。 */
 function createVarDraftId() {
   varIdSeed += 1
   return `action-var-${varIdSeed}`
 }
 
+/** 创建一份新的 `VarDraft` 数据。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function createVarDraft(value?: { descr?: string; initial_value?: string; name?: string }): ActionVarDraft {
   return {
     id: createVarDraftId(),
@@ -165,6 +167,7 @@ const linkedNextNodes = computed(() => {
   })
 })
 
+/** 把外部或服务端数据同步到本地响应式状态。 @param action 调用方传入的 `action`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function syncDraft(action: StoryActionFile | null) {
   draft.id = action?.id ?? ""
   draft.title = action?.title ?? ""
@@ -172,18 +175,22 @@ function syncDraft(action: StoryActionFile | null) {
   draft.vars = (action?.vars ?? []).map((actionVar) => createVarDraft(actionVar))
 }
 
+/** 新增一项 `VarRow` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addVarRow() {
   draft.vars.push(createVarDraft())
 }
 
+/** 移除指定的 `VarRow` 数据。 @param varId 调用方传入的 `varId`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeVarRow(varId: string) {
   draft.vars = draft.vars.filter((item) => item.id !== varId)
 }
 
+/** 切换 `ExecScriptHelp` 的当前状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function toggleExecScriptHelp() {
   openStoryScriptReferencePage()
 }
 
+/** 关闭 `Autocomplete` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function closeAutocomplete() {
   autocompleteState.open = false
   autocompleteState.query = ""
@@ -193,6 +200,7 @@ function closeAutocomplete() {
   autocompleteState.placement = "bottom"
 }
 
+/** 执行 `updateAutocompleteFromCaret` 对应的局部业务逻辑。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function updateAutocompleteFromCaret() {
   const textarea = execScriptTextareaRef.value
   const fieldValue = draft.execScript
@@ -227,6 +235,7 @@ function updateAutocompleteFromCaret() {
   }
 }
 
+/** 执行 `insertAutocompleteItem` 对应的局部业务逻辑。 @param itemName 调用方传入的 `itemName`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function insertAutocompleteItem(itemName: string) {
   const replaceStart = autocompleteState.replaceStart
   draft.execScript =
@@ -244,10 +253,12 @@ function insertAutocompleteItem(itemName: string) {
   })
 }
 
+/** 处理 `ExecScriptInput` 用户交互。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function onExecScriptInput() {
   updateAutocompleteFromCaret()
 }
 
+/** 处理 `ExecScriptKeydown` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function onExecScriptKeydown(event: KeyboardEvent) {
   if (!autocompleteState.open) {
     if (event.key === "Escape") {
@@ -288,6 +299,7 @@ function onExecScriptKeydown(event: KeyboardEvent) {
   }
 }
 
+/** 处理 `ExecScriptScroll` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function onExecScriptScroll(event: Event) {
   const textarea = event.target as HTMLTextAreaElement | null
   const highlightElement = execScriptFieldRef.value?.querySelector<HTMLElement>("[data-script-highlight]")
@@ -300,6 +312,7 @@ function onExecScriptScroll(event: Event) {
   highlightElement.scrollLeft = textarea.scrollLeft
 }
 
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
   if (!props.action) {
     return
@@ -319,6 +332,7 @@ function submitDraft() {
   })
 }
 
+/** 移除指定的 `NextNode` 数据。 @param nextNodeId 调用方传入的 `nextNodeId`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeNextNode(nextNodeId: string) {
   if (!props.action) {
     return
@@ -352,6 +366,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("mousedown", handleDocumentPointerDown)
 })
 
+/** 处理 `DocumentPointerDown` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleDocumentPointerDown(event: MouseEvent) {
   const target = event.target as Node | null
 
@@ -590,398 +605,4 @@ function handleDocumentPointerDown(event: MouseEvent) {
   </section>
 </template>
 
-<style scoped>
-.action-detail-panel {
-  width: min(960px, calc(100vw - 48px));
-  max-height: min(860px, calc(100dvh - 48px));
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow: hidden;
-}
-
-.action-detail-panel__header-copy {
-  display: grid;
-  gap: 6px;
-}
-
-.action-detail-panel__title {
-  margin: 0;
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.3rem;
-}
-
-.action-detail-panel__tabs {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 0;
-  padding: 4px 4px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.action-detail-panel__tab {
-  min-height: 38px;
-  padding: 0 16px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 12px 12px 0 0;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transform: translateY(1px);
-  transition:
-    color 0.18s ease,
-    background-color 0.18s ease,
-    border-color 0.18s ease;
-}
-
-.action-detail-panel__tab--active {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(8, 15, 26, 0.92);
-  color: var(--text-main);
-  box-shadow: inset 0 2px 0 rgba(124, 227, 195, 0.5);
-}
-
-.action-detail-panel__tab:hover:not(.action-detail-panel__tab--active) {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-main);
-}
-
-.action-detail-panel__body {
-  display: grid;
-  gap: 14px;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.action-detail-card {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  background: rgba(8, 15, 26, 0.58);
-}
-
-.action-detail-card__title {
-  margin: 0;
-  font-size: 0.96rem;
-}
-
-.action-detail-card__table-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.action-detail-panel__next-summary {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
-.action-detail-panel__next-heading {
-  display: grid;
-  gap: 4px;
-}
-
-.action-detail-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.action-vars {
-  overflow-x: auto;
-}
-
-.action-vars__table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.action-vars__table th,
-.action-vars__table td {
-  padding: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  text-align: left;
-  vertical-align: top;
-}
-
-.action-vars__table th {
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.action-vars__input {
-  min-width: 160px;
-}
-
-.action-vars__actions {
-  width: 88px;
-  text-align: right;
-}
-
-.action-vars__remove {
-  min-height: 30px;
-  padding: 0 12px;
-}
-
-.action-vars__empty {
-  color: var(--text-muted);
-  text-align: center;
-  padding: 18px 10px;
-}
-
-.action-next-list,
-.action-next-picker {
-  display: grid;
-  gap: 8px;
-}
-
-.action-next-list__item,
-.action-next-picker__item {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
-    rgba(7, 13, 23, 0.72);
-}
-
-.action-next-picker__item {
-  width: 100%;
-  text-align: left;
-  color: var(--text-main);
-  cursor: pointer;
-}
-
-.action-next-picker__item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.action-next-list__copy,
-.action-next-picker__item {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.action-next-list__copy span,
-.action-next-picker__item span {
-  color: var(--text-muted);
-  font-size: 0.78rem;
-}
-
-.action-next-list__copy strong {
-  font-size: 0.95rem;
-  line-height: 1.35;
-}
-
-.action-next-list__meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.action-next-list__type {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border: 1px solid rgba(124, 227, 195, 0.24);
-  border-radius: 999px;
-  background: rgba(124, 227, 195, 0.1);
-  color: #c8fff0;
-  font-size: 0.72rem;
-  line-height: 1;
-}
-
-.action-next-list__id {
-  color: var(--text-dim);
-  font-size: 0.74rem;
-  font-family: "IBM Plex Mono", "Fira Code", monospace;
-  word-break: break-all;
-}
-
-.action-next-list__remove {
-  flex: 0 0 auto;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 122, 122, 0.2);
-  border-radius: 10px;
-  background: rgba(255, 122, 122, 0.08);
-  color: #ffd1d1;
-  cursor: pointer;
-}
-
-.action-next-list__remove:hover {
-  background: rgba(255, 122, 122, 0.14);
-}
-
-.action-detail-panel__label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.action-detail-panel__help {
-  position: relative;
-}
-
-.action-detail-panel__help-button {
-  width: 24px;
-  height: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-main);
-  cursor: pointer;
-}
-
-.action-detail-panel__script-wrap {
-  position: relative;
-}
-
-.action-detail-panel__script-editor {
-  position: relative;
-  min-height: 240px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  background: rgba(5, 10, 18, 0.86);
-  overflow: hidden;
-}
-
-.action-detail-panel__script-highlight,
-.action-detail-panel__script-textarea {
-  margin: 0;
-  padding: 14px 16px;
-  font-family: "IBM Plex Mono", "Fira Code", monospace;
-  font-size: 0.86rem;
-  line-height: 1.6;
-  white-space: pre;
-  overflow: auto;
-}
-
-.action-detail-panel__script-highlight {
-  position: absolute;
-  inset: 0;
-  color: rgba(255, 255, 255, 0.92);
-  pointer-events: none;
-}
-
-.action-detail-panel__script-textarea {
-  position: relative;
-  width: 100%;
-  min-height: 240px;
-  border: 0;
-  background: transparent;
-  color: transparent;
-  caret-color: var(--text-main);
-  resize: vertical;
-}
-
-.action-detail-panel__script-textarea::selection {
-  background: rgba(124, 227, 195, 0.24);
-}
-
-.action-detail-panel__script-token--keyword {
-  color: #79b7ff;
-}
-
-.action-detail-panel__autocomplete {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  max-height: 240px;
-  overflow: auto;
-  padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  background: rgba(6, 12, 20, 0.98);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
-  z-index: 12;
-}
-
-.action-detail-panel__autocomplete--top {
-  top: auto;
-  bottom: calc(100% + 8px);
-}
-
-.action-detail-panel__autocomplete-item {
-  width: 100%;
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-main);
-  text-align: left;
-  cursor: pointer;
-}
-
-.action-detail-panel__autocomplete-item:hover,
-.action-detail-panel__autocomplete-item--active {
-  background: rgba(124, 227, 195, 0.12);
-}
-
-.action-detail-panel__autocomplete-name {
-  font-family: "IBM Plex Mono", "Fira Code", monospace;
-  font-size: 0.82rem;
-}
-
-.action-detail-panel__autocomplete-description,
-.action-detail-panel__autocomplete-empty {
-  color: var(--text-muted);
-  font-size: 0.76rem;
-}
-
-.action-detail-panel__autocomplete-empty {
-  padding: 10px 12px;
-}
-
-.action-detail-panel__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-@media (max-width: 900px) {
-  .action-detail-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .action-detail-panel {
-    width: min(100vw - 20px, 100%);
-    max-height: calc(100dvh - 20px);
-    padding: 16px;
-  }
-
-  .action-detail-card__table-head,
-  .action-detail-panel__label-row,
-  .action-detail-panel__footer {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .action-vars__actions {
-    width: 100px;
-  }
-}
-</style>
+<style scoped src="./styles/GraphActionDetailPanel.css"></style>

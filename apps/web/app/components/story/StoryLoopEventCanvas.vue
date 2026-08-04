@@ -17,6 +17,7 @@ const selectedEvent = computed(() => {
   return props.events.find((event) => event.id === props.selectedEventId) ?? null
 })
 
+/** 执行 `summarizeTrigger` 对应的局部业务逻辑。 @param event 调用方传入的 `event`。 @returns 计算、查找或构建后的结果。 */
 function summarizeTrigger(event: StoryLoopEventFile) {
   const mode = event.trigger_mode ?? "default"
 
@@ -41,6 +42,7 @@ function summarizeTrigger(event: StoryLoopEventFile) {
   return `${trimmed.slice(0, 56)}...`
 }
 
+/** 把 `LoopMode` 转换成界面可读文本。 @param event 调用方传入的 `event`。 @returns 计算、查找或构建后的结果。 */
 function formatLoopMode(event: StoryLoopEventFile) {
   const at = event.loop.at ?? "00:00"
 
@@ -69,6 +71,7 @@ function formatLoopMode(event: StoryLoopEventFile) {
   return `每 ${event.loop.interval_days ?? 1} 天 ${at}`
 }
 
+/** 执行 `summarizeScheduleOrder` 对应的局部业务逻辑。 @param event 调用方传入的 `event`。 @returns 计算、查找或构建后的结果。 */
 function summarizeScheduleOrder(event: StoryLoopEventFile) {
   const priority = event.loop.priority ?? 100
   const after = event.loop.after ?? []
@@ -80,6 +83,7 @@ function summarizeScheduleOrder(event: StoryLoopEventFile) {
   return `优先级 ${priority} · after ${after.join(", ")}`
 }
 
+/** 执行 `summarizePresentation` 对应的局部业务逻辑。 @param event 调用方传入的 `event`。 @returns 计算、查找或构建后的结果。 */
 function summarizePresentation(event: StoryLoopEventFile) {
   if (event.presentation.type === "silent") {
     return "静默"
@@ -92,11 +96,13 @@ function summarizePresentation(event: StoryLoopEventFile) {
   return `${event.presentation.dialogues.length} 条对白`
 }
 
+/** 处理 `Edit` 用户交互。 @param eventId 调用方传入的 `eventId`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleEdit(eventId: string) {
   emit("select", eventId)
   emit("edit", eventId)
 }
 
+/** 处理 `Delete` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleDelete(event: StoryLoopEventFile) {
   const label = event.title.trim() || event.id
   const confirmed =

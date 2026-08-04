@@ -1,0 +1,138 @@
+/* 窄屏适配集中在最后，确保它能覆盖前面的默认规则。 */
+@media (max-width: 980px) {
+  .app-shell {
+    padding: 8px;
+  }
+
+  .topbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .content {
+    padding: 10px;
+  }
+
+  .game-header {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .game-status-row {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 0;
+  }
+
+  .topbar {
+    width: 100%;
+    min-height: 0;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    padding: 8px;
+  }
+
+  .brand h1 {
+    font-size: 15px;
+  }
+
+  .content {
+    width: 100%;
+    padding: 8px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  .dialogue-card {
+    min-height: 130px;
+  }
+
+  .dialogue-text,
+  .message-text {
+    font-size: 16px;
+    line-height: 1.7;
+  }
+
+  .game-footer {
+    gap: 6px;
+  }
+
+  .footer-stat,
+  .footer-command {
+    min-height: 24px;
+    padding-inline: 7px;
+  }
+
+  .game-shell {
+    width: 100%;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  .game-header {
+    min-height: 0;
+    padding: 8px;
+  }
+
+  .game-header-title {
+    font-size: 15px;
+  }
+
+  button {
+    min-height: 36px;
+    padding-inline: 10px;
+  }
+
+  .footer-stat,
+  .footer-command {
+    min-height: 24px;
+    padding: 2px 6px;
+  }
+
+  .game-footer .footer-stat,
+  .game-footer .footer-command {
+    min-height: 24px;
+    padding: 2px 6px;
+  }
+
+  .menu-panel {
+    inset: auto 8px 8px;
+    width: auto;
+    max-height: calc(100dvh - 16px);
+    transform: none;
+  }
+
+  .phone-drawer {
+    inset: 0;
+    width: 100vw;
+    transform: none;
+    border-radius: 0;
+  }
+
+  .phone-body {
+    grid-template-columns: clamp(150px, 34vw, 230px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .doing-panel {
+    grid-template-columns: 1fr;
+    min-height: min(520px, 68dvh);
+  }
+
+  .shop-panel {
+    grid-template-columns: 1fr;
+    min-height: min(560px, 70dvh);
+  }
+
+  .contacts-pane {
+    border-right: 1px solid var(--line-soft);
+    border-bottom: 0;
+  }
+}

@@ -9,11 +9,18 @@
     "dev:html": "pnpm --filter @story-mgr/html-client dev",
     "html": "pnpm dev:html",
     "build": "pnpm --filter @story-mgr/api build && pnpm --filter @story-mgr/web build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "validate:data": "tsx scripts/validate-data.mts",
+    "check:lines": "tsx scripts/check-source-lines.mts",
+    "check:comments": "tsx scripts/check-source-comments.mts",
+    "check": "pnpm check:lines && pnpm check:comments && pnpm typecheck && pnpm test && pnpm validate:data && pnpm build"
   },
   "devDependencies": {
     "@types/node": "^24.0.1",
     "concurrently": "^9.2.1",
-    "typescript": "^5.8.3"
+    "tsx": "^4.22.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
   }
 }

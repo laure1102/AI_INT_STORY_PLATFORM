@@ -1,0 +1,422 @@
+/* StoryEditorShell 的局部样式，只影响同名 Vue 组件。 */
+.page-shell--editor {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 10px 10px 0;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.editor-header__copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.editor-header__back {
+  color: var(--accent);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
+
+.editor-header__title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(1.1rem, 1.9vw, 1.45rem);
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.editor-header__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.editor-header__tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.editor-header__tool-button {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+}
+
+.editor-header :deep(.btn-primary),
+.editor-header :deep(.btn-secondary),
+.editor-main :deep(.btn-secondary) {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+}
+
+.editor-banner {
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(124, 227, 195, 0.4);
+  border-radius: 12px;
+  background: rgba(124, 227, 195, 0.12);
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+
+.editor-banner--error {
+  border-color: rgba(255, 139, 123, 0.45);
+  background: rgba(255, 139, 123, 0.14);
+}
+
+.editor-main {
+  display: grid;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.editor-workspace-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  margin: 0 0 6px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.editor-workspace-tabs__button {
+  min-height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.editor-workspace-tabs__button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.editor-workspace-tabs__button--active {
+  background: rgba(255, 180, 84, 0.9);
+  color: #1d1200;
+  font-weight: 700;
+}
+
+.editor-canvas-band {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+  margin: 4px 0 0;
+}
+
+.editor-event-tabs {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2px;
+  margin-bottom: 0;
+  padding: 8px 8px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+    rgba(5, 12, 20, 0.86);
+  flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.editor-event-tabs__tablist {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+.editor-event-tabs__button {
+  position: relative;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.editor-trigger-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px auto;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.editor-trigger-filter__label {
+  padding: 0 7px 0 9px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.editor-trigger-filter__button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.editor-trigger-filter__button:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.editor-trigger-filter__button--active {
+  color: #07121d;
+  background: rgba(124, 227, 195, 0.9);
+}
+
+.editor-event-tabs__button:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.editor-event-tabs__button--active {
+  color: var(--text-main);
+  border-color: rgba(124, 227, 195, 0.42);
+  background:
+    linear-gradient(180deg, rgba(124, 227, 195, 0.18), rgba(124, 227, 195, 0.08)),
+    rgba(8, 18, 29, 0.98);
+  transform: translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(124, 227, 195, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.editor-canvas-band :deep(.graph-panel),
+.editor-canvas-band :deep(.once-board),
+.editor-canvas-band :deep(.loop-board) {
+  border-top-left-radius: 0;
+  border-top-right-radius: 18px;
+  margin-top: -1px;
+}
+
+.editor-validation-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.editor-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 16px;
+}
+
+.editor-status__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.issues {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 16px;
+}
+
+.issues__head {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.issues__list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-right: 0;
+  white-space: nowrap;
+}
+
+.issues__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.issues__item--error {
+  border-color: rgba(255, 139, 123, 0.4);
+}
+
+.issues__item--warning {
+  border-color: rgba(255, 180, 84, 0.4);
+}
+
+.issues__item code {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.editor-main .section-title {
+  font-size: 0.92rem;
+  line-height: 1;
+}
+
+.editor-main .eyebrow {
+  gap: 6px;
+  font-size: 0.72rem;
+}
+
+.editor-main .eyebrow::before {
+  width: 22px;
+}
+
+.issues .muted {
+  margin: 0;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.editor-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  background: rgba(2, 8, 16, 0.72);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+}
+
+.editor-modal__panel {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: transparent;
+}
+
+.editor-modal__close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(7, 16, 26, 0.92);
+  color: var(--text);
+  font-size: 1.5rem;
+  line-height: 1;
+  z-index: 2;
+}
+
+@media (max-width: 1024px) {
+  .page-shell--editor {
+    width: 100%;
+    height: 100dvh;
+    margin: 0;
+    padding: 8px 6px 0;
+    padding-bottom: 0;
+  }
+
+  .editor-header,
+  .editor-header__actions,
+  .editor-status,
+  .editor-status__actions,
+  .editor-validation-row {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .editor-header__copy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .editor-header__title,
+  .editor-header__tools {
+    white-space: normal;
+  }
+
+  .editor-event-tabs {
+    flex-wrap: wrap;
+  }
+
+  .issues {
+    align-items: flex-start;
+  }
+
+  .issues__list {
+    width: 100%;
+  }
+}

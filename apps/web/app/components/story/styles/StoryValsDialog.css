@@ -1,0 +1,371 @@
+/* StoryValsDialog 的局部样式，只影响同名 Vue 组件。 */
+.vals-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 8, 16, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.vals-dialog__panel {
+  width: min(1200px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  padding: 20px;
+  overflow: auto;
+  border-radius: 22px;
+}
+
+.vals-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vals-dialog__title {
+  margin: 10px 0 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.4rem;
+  line-height: 1.1;
+}
+
+.vals-dialog__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vals-dialog__hint,
+.vals-dialog__warning {
+  margin: 10px 0 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.vals-dialog__warning {
+  color: var(--warning);
+}
+
+.vals-dialog__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.vals-dialog__tab {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.vals-dialog__tab--active {
+  border-color: rgba(255, 180, 84, 0.5);
+  background: rgba(255, 180, 84, 0.12);
+}
+
+.vals-dialog__tab-button,
+.vals-dialog__tab-remove {
+  min-height: 30px;
+  padding: 0 10px;
+  background: transparent;
+  color: inherit;
+}
+
+.vals-dialog__tab-button {
+  font-size: 0.82rem;
+}
+
+.vals-dialog__tab-remove {
+  padding-left: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.vals-dialog__add-tab,
+.vals-dialog__row-add,
+.vals-dialog__row-button {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.vals-dialog__body {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.vals-dialog__group-count {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.vals-dialog__group-meta {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.vals-dialog__table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.vals-dialog__table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.vals-dialog__table th,
+.vals-dialog__table td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+
+.vals-dialog__table th {
+  position: sticky;
+  top: 0;
+  background: rgba(9, 19, 30, 0.92);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.vals-dialog__cell-input {
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.vals-dialog__cell-input:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.vals-dialog__calc-value-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid rgba(124, 227, 195, 0.24);
+  border-radius: 12px;
+  background: rgba(124, 227, 195, 0.08);
+  color: var(--success);
+  font-family: "Space Grotesk", sans-serif;
+  line-height: 1.25;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  word-break: break-word;
+  cursor: pointer;
+}
+
+.vals-dialog__calc-value-link--error {
+  border-color: rgba(255, 139, 123, 0.28);
+  background: rgba(255, 139, 123, 0.08);
+  color: var(--warning);
+}
+
+.vals-dialog__calc-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 10, 18, 0.48);
+}
+
+.vals-dialog__calc-editor-panel {
+  width: min(720px, calc(100vw - 48px));
+  padding: 18px;
+  border-radius: 18px;
+}
+
+.vals-dialog__calc-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vals-dialog__calc-editor-title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.05rem;
+}
+
+.vals-dialog__calc-editor-subtitle {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.vals-dialog__calc-editor-close {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.vals-dialog__calc-editor-area {
+  min-height: 136px;
+}
+
+.vals-dialog__calc-editor-input-wrap {
+  position: relative;
+}
+
+.vals-dialog__calc-autocomplete {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 2;
+  width: min(100%, 360px);
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid rgba(186, 220, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(9, 19, 30, 0.98);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+.vals-dialog__calc-autocomplete-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(186, 220, 255, 0.08);
+  text-align: left;
+}
+
+.vals-dialog__calc-autocomplete-item:last-child {
+  border-bottom: 0;
+}
+
+.vals-dialog__calc-autocomplete-item--active {
+  background: rgba(255, 180, 84, 0.16);
+}
+
+.vals-dialog__calc-autocomplete-name {
+  font-size: 0.84rem;
+  color: var(--text);
+}
+
+.vals-dialog__calc-autocomplete-description {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.vals-dialog__calc-autocomplete-empty {
+  padding: 10px 12px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.vals-dialog__calc-preview {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(186, 220, 255, 0.12);
+}
+
+.vals-dialog__calc-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vals-dialog__calc-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid rgba(186, 220, 255, 0.2);
+}
+
+.vals-dialog__calc-preview-badge--ok {
+  border-color: rgba(124, 227, 195, 0.4);
+  color: var(--success);
+}
+
+.vals-dialog__calc-preview-badge--error {
+  border-color: rgba(255, 139, 123, 0.4);
+  color: var(--warning);
+}
+
+.vals-dialog__calc-preview-tip {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.vals-dialog__calc-preview-box {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: "Space Grotesk", sans-serif;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.vals-dialog__calc-preview-box--result {
+  border-color: rgba(124, 227, 195, 0.35);
+}
+
+.vals-dialog__calc-preview-box--error {
+  border-color: rgba(255, 139, 123, 0.35);
+  color: var(--warning);
+}
+
+.vals-dialog__actions-col {
+  width: 96px;
+}
+
+.vals-dialog__empty {
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.vals-dialog__footer {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.vals-dialog__actions--footer {
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .vals-dialog__header,
+  .vals-dialog__actions,
+  .vals-dialog__group-meta,
+  .vals-dialog__calc-editor-head,
+  .vals-dialog__calc-preview-head {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

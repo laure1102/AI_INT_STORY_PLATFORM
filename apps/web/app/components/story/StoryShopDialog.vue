@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 商城配置弹窗：管理货架分类和商品草稿，保存动作由父组件执行。 */
 import { computed, reactive, shallowRef, watch } from "vue"
 import type {
   StoryDocument,
@@ -14,21 +15,16 @@ import {
   formatStoryScriptValidationIssue,
   validateStoryScriptField
 } from "./storyScriptValidation"
-
-interface ShopCategoryDraft extends StoryShopCategory {
-  draftKey: string
-  sortOrderText: string
-}
-
-interface ShopProductDraft extends StoryShopProduct {
-  draftKey: string
-  priceText: string
-  quantityText: string
-  sortOrderText: string
-  giftFavorDeltaText: string
-  purchaseCooldownHoursText: string
-  giftCooldownHoursText: string
-}
+import {
+  normalizeNumberText,
+  normalizeText,
+  parseIntegerInput,
+  parseNonNegativeNumberInput,
+  parsePositiveIntegerInput,
+  sanitizeIdInput,
+  type ShopCategoryDraft,
+  type ShopProductDraft
+} from "./storyShopDraft"
 
 type PredicateField = "visible_expr" | "available_expr"
 type ValidationStatus = "idle" | "checking" | "passed" | "failed"
@@ -66,47 +62,16 @@ const EMPTY_VALIDATION_STATE: ValidationState = {
 }
 
 let draftKeySeed = 0
-
+/** 创建一份新的 `DraftKey` 数据。 @param prefix 调用方传入的 `prefix`。 @returns 计算、查找或构建后的结果。 */
 function createDraftKey(prefix: string) {
   draftKeySeed += 1
   return `${prefix}-${draftKeySeed}`
 }
-
-function normalizeText(value: unknown) {
-  return typeof value === "string" ? value : ""
-}
-
-function normalizeNumberText(value: unknown, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : String(fallback)
-}
-
-function sanitizeIdInput(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-}
-
-function parseIntegerInput(value: unknown, fallback = 0) {
-  const parsed = Number(String(value ?? "").trim())
-  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
-}
-
-function parseNonNegativeNumberInput(value: unknown, fallback = 0) {
-  const parsed = Number(String(value ?? "").trim())
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : fallback
-}
-
-function parsePositiveIntegerInput(value: unknown, fallback = 1) {
-  const parsed = parseIntegerInput(value, fallback)
-  return Math.max(1, parsed)
-}
-
+/** 读取或计算 `ValidationState`。 @param key 调用方传入的 `key`。 @returns 计算、查找或构建后的结果。 */
 function getValidationState(key: string) {
   return validationState[key] ?? EMPTY_VALIDATION_STATE
 }
-
+/** 执行 `ensureValidationState` 对应的局部业务逻辑。 @param key 调用方传入的 `key`。 @returns 计算、查找或构建后的结果。 */
 function ensureValidationState(key: string) {
   validationState[key] ??= {
     status: "idle",
@@ -114,25 +79,25 @@ function ensureValidationState(key: string) {
   }
   return validationState[key]
 }
-
+/** 重置或清理 `resetValidationState` 对应的临时状态。 @param key 调用方传入的 `key`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function resetValidationState(key: string) {
   delete validationState[key]
 }
-
+/** 重置或清理 `clearValidationStates` 对应的临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function clearValidationStates() {
   for (const key of Object.keys(validationState)) {
     delete validationState[key]
   }
 }
-
+/** 读取或计算 `ValidationButtonLabel`。 @param key 调用方传入的 `key`。 @returns 计算、查找或构建后的结果。 */
 function getValidationButtonLabel(key: string) {
   return getValidationState(key).status === "checking" ? "校验中" : "校验"
 }
-
+/** 读取或计算 `ValidationClass`。 @param key 调用方传入的 `key`。 @returns 计算、查找或构建后的结果。 */
 function getValidationClass(key: string) {
   return `shop-dialog__validation--${getValidationState(key).status}`
 }
-
+/** 读取或计算 `ValidationMessages`。 @param key 调用方传入的 `key`。 @param emptyMessage 调用方传入的 `emptyMessage`。 @param passedMessage 调用方传入的 `passedMessage`。 @returns 计算、查找或构建后的结果。 */
 function getValidationMessages(key: string, emptyMessage: string, passedMessage: string) {
   const state = getValidationState(key)
 
@@ -150,7 +115,7 @@ function getValidationMessages(key: string, emptyMessage: string, passedMessage:
 
   return state.issues
 }
-
+/** 执行 `sourceIsEmptyMessage` 对应的局部业务逻辑。 @param emptyMessage 调用方传入的 `emptyMessage`。 @param passedMessage 调用方传入的 `passedMessage`。 @returns 计算、查找或构建后的结果。 */
 function sourceIsEmptyMessage(emptyMessage: string, passedMessage: string) {
   return passedMessage || emptyMessage
 }
@@ -260,7 +225,7 @@ const hasInvalidDraft = computed(() => {
       || parseNonNegativeNumberInput(product.priceText, 0) < 0
     )
 })
-
+/** 复制 `Category`，避免共享可变引用。 @param category 调用方传入的 `category`。 @returns 计算、查找或构建后的结果。 */
 function cloneCategory(category: StoryShopCategory): ShopCategoryDraft {
   return {
     draftKey: createDraftKey("category"),
@@ -272,7 +237,7 @@ function cloneCategory(category: StoryShopCategory): ShopCategoryDraft {
     descr: normalizeText(category.descr)
   }
 }
-
+/** 复制 `Product`，避免共享可变引用。 @param product 调用方传入的 `product`。 @returns 计算、查找或构建后的结果。 */
 function cloneProduct(product: StoryShopProduct): ShopProductDraft {
   return {
     draftKey: createDraftKey("product"),
@@ -297,14 +262,14 @@ function cloneProduct(product: StoryShopProduct): ShopProductDraft {
     giftCooldownHoursText: normalizeNumberText(product.gift_cooldown_hours)
   }
 }
-
+/** 把外部或服务端数据同步到本地响应式状态。 @param shop 调用方传入的 `shop`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function syncDraft(shop: StoryShopFile) {
   draft.currencyValueKey = normalizeText(shop.currency_value_key) || "player.money"
   draft.categories = shop.categories.map(cloneCategory)
   draft.products = shop.products.map(cloneProduct)
   clearValidationStates()
 }
-
+/** 读取或计算 `NextDefaultCategoryId`。 @returns 计算、查找或构建后的结果。 */
 function getNextDefaultCategoryId() {
   const usedIds = new Set(draft.categories.map((category) => sanitizeIdInput(category.id)).filter(Boolean))
   let index = draft.categories.length + 1
@@ -317,7 +282,7 @@ function getNextDefaultCategoryId() {
 
   return candidate
 }
-
+/** 读取或计算 `NextDefaultProductId`。 @param itemId 调用方传入的 `itemId`。 @returns 计算、查找或构建后的结果。 */
 function getNextDefaultProductId(itemId = "") {
   const usedIds = new Set(draft.products.map((product) => sanitizeIdInput(product.id)).filter(Boolean))
   const base = sanitizeIdInput(itemId) ? `shop_${sanitizeIdInput(itemId)}` : `shop_product_${draft.products.length + 1}`
@@ -331,7 +296,7 @@ function getNextDefaultProductId(itemId = "") {
 
   return candidate
 }
-
+/** 新增一项 `Category` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addCategory() {
   const sortOrder = draft.categories.length > 0
     ? Math.max(...draft.categories.map((category) => parseIntegerInput(category.sortOrderText, 0))) + 10
@@ -348,7 +313,7 @@ function addCategory() {
   })
   activeTab.value = "categories"
 }
-
+/** 移除指定的 `Category` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeCategory(index: number) {
   const category = draft.categories[index]
   if (!category) return
@@ -365,7 +330,7 @@ function removeCategory(index: number) {
     }
   }
 }
-
+/** 新增一项 `Product` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addProduct() {
   if (draft.categories.length === 0) {
     addCategory()
@@ -396,20 +361,20 @@ function addProduct() {
   })
   activeTab.value = "products"
 }
-
+/** 移除指定的 `Product` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeProduct(index: number) {
   draft.products.splice(index, 1)
 }
-
+/** 读取或计算 `CategoryUsageCount`。 @param category 调用方传入的 `category`。 @returns 计算、查找或构建后的结果。 */
 function getCategoryUsageCount(category: ShopCategoryDraft) {
   const categoryId = sanitizeIdInput(category.id)
   return draft.products.filter((product) => sanitizeIdInput(product.category_id) === categoryId).length
 }
-
+/** 读取或计算 `ValidationKey`。 @param kind 调用方传入的 `kind`。 @param draftKey 调用方传入的 `draftKey`。 @param field 调用方传入的 `field`。 @returns 计算、查找或构建后的结果。 */
 function getValidationKey(kind: "category" | "product", draftKey: string, field: PredicateField) {
   return `${kind}:${draftKey}:${field}`
 }
-
+/** 校验 `PredicateField` 并整理错误信息。 @param key 调用方传入的 `key`。 @param source 调用方传入的 `source`。 @param emptyMessage 调用方传入的 `emptyMessage`。 @param passedMessage 调用方传入的 `passedMessage`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 async function validatePredicateField(
   key: string,
   source: string,
@@ -438,7 +403,7 @@ async function validatePredicateField(
     ? [source.trim() ? passedMessage : emptyMessage]
     : result.issues.map((issue) => formatStoryScriptValidationIssue(issue))
 }
-
+/** 校验 `CategoryVisible` 并整理错误信息。 @param category 调用方传入的 `category`。 @returns 计算、查找或构建后的结果。 */
 function validateCategoryVisible(category: ShopCategoryDraft) {
   return validatePredicateField(
     getValidationKey("category", category.draftKey, "visible_expr"),
@@ -447,7 +412,7 @@ function validateCategoryVisible(category: ShopCategoryDraft) {
     "显示条件可以执行。"
   )
 }
-
+/** 校验 `ProductAvailable` 并整理错误信息。 @param product 调用方传入的 `product`。 @returns 计算、查找或构建后的结果。 */
 function validateProductAvailable(product: ShopProductDraft) {
   return validatePredicateField(
     getValidationKey("product", product.draftKey, "available_expr"),
@@ -456,20 +421,20 @@ function validateProductAvailable(product: ShopProductDraft) {
     "展示条件可以执行。"
   )
 }
-
+/** 读取或计算 `ItemLabel`。 @param itemId 调用方传入的 `itemId`。 @returns 计算、查找或构建后的结果。 */
 function getItemLabel(itemId: string) {
   const item = itemById.value.get(itemId.trim())
   return item?.label ?? (itemId.trim() || "未选择物品")
 }
-
+/** 读取或计算 `ItemDescr`。 @param itemId 调用方传入的 `itemId`。 @returns 计算、查找或构建后的结果。 */
 function getItemDescr(itemId: string) {
   return itemById.value.get(itemId.trim())?.descr ?? ""
 }
-
+/** 打开 `StoryScriptHelp` 界面并初始化临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function openStoryScriptHelp() {
   openStoryScriptReferencePage()
 }
-
+/** 执行 `serializeCategory` 对应的局部业务逻辑。 @param category 调用方传入的 `category`。 @returns 计算、查找或构建后的结果。 */
 function serializeCategory(category: ShopCategoryDraft): StoryShopCategory {
   return {
     id: sanitizeIdInput(category.id),
@@ -479,7 +444,7 @@ function serializeCategory(category: ShopCategoryDraft): StoryShopCategory {
     descr: category.descr.trim()
   }
 }
-
+/** 执行 `serializeProduct` 对应的局部业务逻辑。 @param product 调用方传入的 `product`。 @returns 计算、查找或构建后的结果。 */
 function serializeProduct(product: ShopProductDraft): StoryShopProduct {
   return {
     id: sanitizeIdInput(product.id),
@@ -497,7 +462,7 @@ function serializeProduct(product: ShopProductDraft): StoryShopProduct {
     gift_cooldown_hours: Math.max(0, parseIntegerInput(product.giftCooldownHoursText, 0))
   }
 }
-
+/** 根据当前输入构建 `ShopFile` 结果。 @returns 计算、查找或构建后的结果。 */
 function buildShopFile(): StoryShopFile {
   return {
     currency_value_key: draft.currencyValueKey.trim() || "player.money",
@@ -505,7 +470,7 @@ function buildShopFile(): StoryShopFile {
     products: draft.products.map(serializeProduct)
   }
 }
-
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
   emit("save", buildShopFile())
 }
@@ -804,281 +769,4 @@ watch(
   </Teleport>
 </template>
 
-<style scoped>
-.shop-dialog {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  background: rgba(2, 8, 16, 0.72);
-}
-
-.shop-dialog__panel {
-  width: min(1680px, calc(100vw - 28px));
-  max-height: calc(100dvh - 28px);
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 14px;
-  padding: 18px;
-  overflow: hidden;
-  border-radius: 22px;
-}
-
-.shop-dialog__header,
-.shop-dialog__section-head,
-.shop-dialog__actions,
-.shop-dialog__tabs,
-.shop-dialog__field-actions {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.shop-dialog__actions,
-.shop-dialog__tabs,
-.shop-dialog__field-actions {
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.shop-dialog__title,
-.shop-dialog__section-title {
-  margin: 8px 0 0;
-  color: var(--text);
-  font-family: "Space Grotesk", sans-serif;
-  line-height: 1.1;
-}
-
-.shop-dialog__title {
-  font-size: 1.4rem;
-}
-
-.shop-dialog__section-title {
-  font-size: 1.04rem;
-}
-
-.shop-dialog__subtitle,
-.shop-dialog__section-note,
-.shop-dialog__label,
-.shop-dialog__item-descr,
-.shop-dialog__usage {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  line-height: 1.45;
-}
-
-.shop-dialog__success {
-  color: var(--accent);
-  font-size: 0.84rem;
-}
-
-.shop-dialog__warning {
-  color: var(--warning);
-  font-size: 0.82rem;
-}
-
-.shop-dialog__config {
-  display: grid;
-  grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
-  gap: 12px;
-  align-items: end;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.shop-dialog__field,
-.shop-dialog__mini-field,
-.shop-dialog__cell-stack,
-.shop-dialog__script-field {
-  display: grid;
-  gap: 6px;
-}
-
-.shop-dialog__mini-field span {
-  color: var(--text-muted);
-  font-size: 0.74rem;
-}
-
-.shop-dialog__tab {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.shop-dialog__tab--active {
-  color: #06121f;
-  border-color: transparent;
-  background: var(--accent);
-}
-
-.shop-dialog__section {
-  min-height: 0;
-  display: grid;
-  gap: 12px;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.shop-dialog__table-wrap {
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.shop-dialog__table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.shop-dialog__table--categories {
-  min-width: 1180px;
-}
-
-.shop-dialog__table--products {
-  min-width: 1480px;
-}
-
-.shop-dialog__table th,
-.shop-dialog__table td {
-  padding: 8px;
-  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
-  text-align: left;
-  vertical-align: top;
-}
-
-.shop-dialog__table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: rgba(9, 19, 30, 0.92);
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-.shop-dialog__cell-input,
-.shop-dialog__select,
-.shop-dialog__mini-input {
-  width: 100%;
-  min-width: 0;
-}
-
-.shop-dialog__mini-input {
-  max-width: 92px;
-}
-
-.shop-dialog__mini-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.shop-dialog__textarea {
-  min-height: 58px;
-  resize: vertical;
-}
-
-.shop-dialog__inline-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-.shop-dialog__help-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid rgba(255, 180, 84, 0.32);
-  border-radius: 999px;
-  background: rgba(255, 180, 84, 0.1);
-  color: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.shop-dialog__validate-button {
-  min-height: 26px;
-  padding: 0 9px;
-  border: 1px solid rgba(124, 227, 195, 0.24);
-  border-radius: 999px;
-  color: var(--accent);
-  background: rgba(124, 227, 195, 0.08);
-  font-size: 0.74rem;
-  white-space: nowrap;
-}
-
-.shop-dialog__validate-button:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-
-.shop-dialog__validation {
-  display: grid;
-  gap: 4px;
-  padding: 7px 9px;
-  border: 1px solid rgba(186, 220, 255, 0.12);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
-  font-size: 0.78rem;
-  line-height: 1.4;
-}
-
-.shop-dialog__validation--passed {
-  border-color: rgba(124, 227, 195, 0.3);
-  color: var(--accent);
-  background: rgba(124, 227, 195, 0.08);
-}
-
-.shop-dialog__validation--failed {
-  border-color: rgba(255, 139, 123, 0.36);
-  color: #ffb4a9;
-  background: rgba(255, 139, 123, 0.08);
-}
-
-.shop-dialog__validation--checking {
-  color: var(--text-muted);
-}
-
-.shop-dialog__validation-message {
-  overflow-wrap: anywhere;
-}
-
-.shop-dialog__row-button {
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-}
-
-.shop-dialog__empty {
-  padding: 16px;
-  color: var(--text-muted);
-  font-size: 0.84rem;
-}
-
-@media (max-width: 900px) {
-  .shop-dialog__header,
-  .shop-dialog__section-head,
-  .shop-dialog__actions,
-  .shop-dialog__config,
-  .shop-dialog__mini-grid {
-    grid-template-columns: 1fr;
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-</style>
+<style scoped src="./styles/StoryShopDialog.css"></style>

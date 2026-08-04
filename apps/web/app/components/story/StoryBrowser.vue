@@ -18,6 +18,7 @@ const isCreateDialogOpen = shallowRef(false)
 const isSettingsDialogOpen = shallowRef(false)
 const errorMessage = shallowRef<string | null>(null)
 
+/** 异步加载 `Stories` 数据并更新响应式状态。 @param preferredStoryId 调用方传入的 `preferredStoryId`。 @returns 同步或异步处理结果；失败时由异常或错误状态交给调用方处理。 */
 async function loadStories(preferredStoryId = selectedStoryId.value) {
   isLoading.value = true
   errorMessage.value = null
@@ -40,6 +41,7 @@ const selectedStory = computed(() => {
   return stories.value.find((story) => story.id === selectedStoryId.value) ?? null
 })
 
+/** 打开 `SettingsDialog` 界面并初始化临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function openSettingsDialog() {
   if (!appSettings.value) {
     return
@@ -48,14 +50,17 @@ function openSettingsDialog() {
   isSettingsDialogOpen.value = true
 }
 
+/** 关闭 `SettingsDialog` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function closeSettingsDialog() {
   isSettingsDialogOpen.value = false
 }
 
+/** 打开 `CreateDialog` 界面并初始化临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function openCreateDialog() {
   isCreateDialogOpen.value = true
 }
 
+/** 关闭 `CreateDialog` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function closeCreateDialog() {
   if (isCreatingStory.value) {
     return
@@ -64,6 +69,7 @@ function closeCreateDialog() {
   isCreateDialogOpen.value = false
 }
 
+/** 处理 `SaveSettings` 用户交互。 @param settings 调用方传入的 `settings`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 async function handleSaveSettings(settings: AppSettingsFile) {
   isSavingSettings.value = true
   errorMessage.value = null
@@ -78,6 +84,7 @@ async function handleSaveSettings(settings: AppSettingsFile) {
   }
 }
 
+/** 处理 `CreateStory` 用户交互。 @param payload 调用方传入的 `payload`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 async function handleCreateStory(payload: CreateStoryRequest) {
   isCreatingStory.value = true
   errorMessage.value = null

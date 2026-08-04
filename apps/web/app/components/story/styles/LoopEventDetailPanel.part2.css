@@ -1,0 +1,443 @@
+/* LoopEventDetailPanel 的第 2 个局部样式分区，只影响同名 Vue 组件。 */
+.detail-panel__param-remove {
+  min-width: 72px;
+  min-height: 34px;
+}
+
+.detail-panel__param-empty {
+  padding: 14px 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.detail-panel__script-wrap {
+  position: relative;
+}
+
+.detail-panel__script-editor {
+  position: relative;
+}
+
+.detail-panel__script-highlight,
+.detail-panel__script {
+  min-height: 118px;
+  max-height: 118px;
+  margin: 0;
+  overflow: auto;
+  font: inherit;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  tab-size: 2;
+}
+
+.detail-panel__script-highlight {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.86);
+  pointer-events: none;
+}
+
+.detail-panel__script-highlight code {
+  font: inherit;
+}
+
+.detail-panel__script-token--keyword {
+  color: #63a9ff;
+}
+
+.detail-panel__expression {
+  min-height: 128px;
+  max-height: 128px;
+}
+
+.detail-panel__autocomplete {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  max-height: 220px;
+  overflow-y: auto;
+  display: grid;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(10, 24, 37, 0.98);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+}
+
+.detail-panel__autocomplete--top {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.detail-panel__autocomplete-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.detail-panel__autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.detail-panel__autocomplete-item--active {
+  background: rgba(255, 180, 84, 0.12);
+}
+
+.detail-panel__autocomplete-name {
+  font-weight: 600;
+}
+
+.detail-panel__autocomplete-description {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.detail-panel__autocomplete-empty {
+  padding: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.detail-panel__autocomplete-detail {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  display: grid;
+  gap: 6px;
+}
+
+.detail-panel__autocomplete-detail-title {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.detail-panel__autocomplete-detail-list {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.detail-panel__script--overlay {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+
+.detail-panel__script--overlay::selection {
+  background: rgba(99, 169, 255, 0.28);
+}
+
+.detail-panel__script--overlay::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.detail-panel__script-hint {
+  display: none;
+}
+
+.dialogue-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.dialogue-list__table {
+  display: grid;
+  gap: 6px;
+}
+
+.dialogue-list__table-head,
+.dialogue-list__row {
+  display: grid;
+  grid-template-columns: 72px minmax(120px, 180px) minmax(0, 1fr) 88px;
+  gap: 10px;
+  align-items: center;
+}
+
+.dialogue-list__table-head {
+  padding: 0 10px 6px;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+}
+
+.dialogue-list__row {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.dialogue-list__sort {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dialogue-list__icon-btn {
+  min-width: 30px;
+  width: 30px;
+  min-height: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  font-size: 0.92rem;
+}
+
+.dialogue-list__icon-btn--danger {
+  color: rgba(255, 191, 182, 0.96);
+  background: rgba(255, 139, 123, 0.12);
+}
+
+.dialogue-list__speaker-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dialogue-list__content-button {
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dialogue-list__index {
+  font-weight: 700;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+
+.dialogue-list__speaker {
+  color: var(--accent);
+  font-size: 0.84rem;
+}
+
+.dialogue-list__content {
+  color: var(--text-muted);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.dialogue-list__actions {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.dialogue-list__icon {
+  width: 14px;
+  height: 14px;
+}
+
+.detail-panel__dialogue-modal,
+.detail-panel__dependency-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 8, 16, 0.72);
+}
+
+.detail-panel__dialogue-modal-panel,
+.detail-panel__dependency-modal-panel {
+  width: min(840px, calc(100vw - 40px));
+  padding: 20px;
+  border-radius: 22px;
+  display: grid;
+  gap: 16px;
+}
+
+.detail-panel__dependency-modal-panel {
+  max-height: min(680px, calc(100dvh - 40px));
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.detail-panel__dialogue-modal-head,
+.detail-panel__dependency-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-panel__dialogue-modal-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.dialogue-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dialogue-editor__content {
+  min-height: 220px;
+}
+
+.detail-panel__dialogue-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.detail-panel__dependency-modal-summary {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.detail-panel__dependency-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.detail-panel__dependency-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+}
+
+.detail-panel__dependency-option--active {
+  border-color: rgba(255, 180, 84, 0.42);
+  background: rgba(255, 180, 84, 0.12);
+}
+
+.detail-panel__dependency-checkbox {
+  margin: 0;
+}
+
+.detail-panel__dependency-option-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-panel__dependency-empty {
+  padding: 18px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.detail-panel__dependency-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dialogue-empty,
+.detail-panel__empty {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  border: 1px dashed var(--line);
+  border-radius: 18px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.detail-panel :deep(.text-input),
+.detail-panel :deep(.text-area),
+.detail-panel :deep(.select-input) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 1280px) {
+  .detail-panel__workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .detail-panel__main {
+    grid-template-rows: auto auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .detail-panel {
+    width: calc(100vw - 8px);
+    height: calc(100dvh - 8px);
+    padding: 10px;
+  }
+
+  .detail-panel__header,
+  .detail-panel__dialogue-head,
+  .detail-panel__dialogue-modal-head,
+  .detail-panel__dependency-modal-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .detail-panel__footer {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .detail-grid,
+  .dialogue-editor__grid,
+  .detail-panel__loop-row,
+  .detail-panel__schedule-order {
+    grid-template-columns: 1fr;
+  }
+
+  .dialogue-list__row {
+    grid-template-columns: 1fr;
+  }
+
+  .dialogue-list__table-head {
+    display: none;
+  }
+
+  .dialogue-list__sort,
+  .dialogue-list__actions {
+    justify-content: start;
+  }
+}

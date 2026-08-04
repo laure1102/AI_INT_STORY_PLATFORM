@@ -1,6 +1,6 @@
 ﻿# Story Manager Agent Guide
 
-Last updated: `2026-06-26`
+Last updated: `2026-08-03`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -48,6 +48,17 @@ It is becoming a full content-authoring plus runtime prototype stack:
 - `packages/compiler`: compiles a story document into runtime bundle JSON
 - `packages/file-store`: JSON5 persistence and local asset handling
 - `packages/shared`: cross-app request/response and shared transport types
+
+### Source map after the structural refactor
+
+- StoryScript keeps `packages/storyscript/src/index.ts` as the public doorway; parsing, execution, templates, validation, and compatibility transforms live in sibling modules.
+- Core keeps `schema.ts` and `validate.ts` as compatibility doorways; schemas are under `schema/`, and domain validators are under `validation/`.
+- Runtime keeps `session.ts` and `createStorySession` as the external API; session contracts and domain behavior are under `packages/runtime/src/session/`.
+- File Store keeps `createStoryFileStore` in `index.ts`; persistence, recovery, mutations, readers, and assets are separate modules beside it.
+- API story creation keeps `story-creation.ts` as a facade; contracts, context, normalization, validation, workflow, and apply logic live under `services/story-creation/`.
+- Nuxt story editor controllers use `useStory*` modules; large result and event regions are typed child components with props down and events up.
+- HTML client keeps `client-app.ts`, `server.ts`, `/故事ID/app.js`, and `styles.css` as compatibility entries; path, view, browser state, rendering, and CSS regions are separate files.
+- Run `pnpm check:lines` while refactoring: 500 lines are reported for attention, and production source over 800 lines fails without a legacy allowlist.
 
 ## 3. Story data layout
 

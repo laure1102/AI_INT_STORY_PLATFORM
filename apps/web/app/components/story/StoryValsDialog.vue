@@ -1,8 +1,8 @@
 <script setup lang="ts">
+/** 变量配置弹窗：维护变量组，并在保存前预览 calc 表达式。 */
 import type {
   StoryValDefinition,
   StoryValEntryDefinition,
-  StoryValValueType,
   StoryValsFile
 } from "@story-mgr/core"
 import {
@@ -11,22 +11,17 @@ import {
   formatStoryValInput,
   parseStoryValInput
 } from "@story-mgr/core"
-
-interface StoryValRowDraft {
-  draftKey: string
-  name: string
-  description: string
-  valueType: StoryValValueType
-  valueText: string
-  calcRule: string
-}
-
-interface StoryValGroupDraft {
-  draftKey: string
-  name: string
-  description: string
-  vals: StoryValRowDraft[]
-}
+import {
+  cloneStoryValGroup,
+  createEmptyStoryValGroup,
+  createEmptyStoryValRow,
+  normalizeStoryValText as normalizeText,
+  normalizeStoryValValueType as normalizeValueType,
+  type CalcEvaluationResult,
+  type CalcValueDisplay,
+  type StoryValGroupDraft,
+  type StoryValRowDraft
+} from "./storyValsDraft"
 
 const props = withDefaults(defineProps<{
   eyebrow?: string
@@ -64,19 +59,11 @@ const calcAutocompleteState = reactive({
 })
 
 const activeGroup = computed(() => draft.variables[activeTabIndex.value] ?? null)
-
-function normalizeText(value: unknown) {
-  return typeof value === "string" ? value : ""
-}
-
-function normalizeValueType(value: unknown): StoryValValueType {
-  return value === "calc" ? "calc" : "value"
-}
-
+/** 将 `RowName` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeRowName(value: unknown) {
   return normalizeText(value).trim()
 }
-
+/** 将 `GroupName` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeGroupName(value: unknown) {
   return normalizeText(value).trim()
 }
@@ -174,48 +161,24 @@ const hasInvalidDraft = computed(() => {
 })
 
 let draftKeySeed = 0
-
+/** 创建一份新的 `DraftKey` 数据。 @param prefix 调用方传入的 `prefix`。 @returns 计算、查找或构建后的结果。 */
 function createDraftKey(prefix: string) {
   draftKeySeed += 1
   return `${prefix}-${draftKeySeed}`
 }
-
+/** 创建一份新的 `EmptyRow` 数据。 @returns 计算、查找或构建后的结果。 */
 function createEmptyRow(): StoryValRowDraft {
-  return {
-    draftKey: createDraftKey("row"),
-    name: "",
-    description: "",
-    valueType: "value",
-    valueText: "",
-    calcRule: ""
-  }
+  return createEmptyStoryValRow(createDraftKey)
 }
-
+/** 创建一份新的 `EmptyGroup` 数据。 @param index 调用方传入的 `index`。 @returns 计算、查找或构建后的结果。 */
 function createEmptyGroup(index: number): StoryValGroupDraft {
-  return {
-    draftKey: createDraftKey("group"),
-    name: `\u53d8\u91cf\u7ec4${index}`,
-    description: "",
-    vals: []
-  }
+  return createEmptyStoryValGroup(index, createDraftKey)
 }
-
+/** 复制 `Group`，避免共享可变引用。 @param group 调用方传入的 `group`。 @returns 计算、查找或构建后的结果。 */
 function cloneGroup(group: StoryValDefinition): StoryValGroupDraft {
-  return {
-    draftKey: createDraftKey("group"),
-    name: normalizeText(group.name),
-    description: normalizeText(group.description),
-    vals: group.vals.map((row) => ({
-      draftKey: createDraftKey("row"),
-      name: normalizeText(row.name),
-      description: normalizeText(row.description),
-      valueType: normalizeValueType(row.value_type),
-      valueText: formatStoryValInput(row.value),
-      calcRule: normalizeText(row.calc_rule)
-    }))
-  }
+  return cloneStoryValGroup(group, createDraftKey)
 }
-
+/** 执行 `ensureGroupExists` 对应的局部业务逻辑。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function ensureGroupExists() {
   if (draft.variables.length === 0) {
     draft.variables.push(createEmptyGroup(1))
@@ -225,22 +188,22 @@ function ensureGroupExists() {
     activeTabIndex.value = draft.variables.length - 1
   }
 }
-
+/** 把外部或服务端数据同步到本地响应式状态。 @param vals 调用方传入的 `vals`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function syncDraft(vals: StoryValsFile) {
   draft.variables = vals.variables.map(cloneGroup)
   activeTabIndex.value = 0
   ensureGroupExists()
 }
-
+/** 更新 `ActiveTab` 对应的响应式值。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function setActiveTab(index: number) {
   activeTabIndex.value = index
 }
-
+/** 新增一项 `Group` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addGroup() {
   draft.variables.push(createEmptyGroup(draft.variables.length + 1))
   activeTabIndex.value = draft.variables.length - 1
 }
-
+/** 移除指定的 `Group` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeGroup(index: number) {
   const group = draft.variables[index]
 
@@ -264,23 +227,23 @@ function removeGroup(index: number) {
   draft.variables.splice(index, 1)
   ensureGroupExists()
 }
-
+/** 新增一项 `Row` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addRow() {
   activeGroup.value?.vals.push(createEmptyRow())
 }
-
+/** 移除指定的 `Row` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeRow(index: number) {
   activeGroup.value?.vals.splice(index, 1)
 }
-
+/** 读取或计算 `GroupLabel`。 @param group 调用方传入的 `group`。 @param index 调用方传入的 `index`。 @returns 计算、查找或构建后的结果。 */
 function getGroupLabel(group: StoryValGroupDraft, index: number) {
   return normalizeText(group.name).trim() || `\u672a\u547d\u540d\u5206\u7ec4 ${index + 1}`
 }
-
+/** 判断 `isValueMode` 对应的条件是否成立。 @param row 调用方传入的 `row`。 @returns 布尔判断结果。 */
 function isValueMode(row: StoryValRowDraft) {
   return normalizeValueType(row.valueType) === "value"
 }
-
+/** 打开 `CalcEditor` 界面并初始化临时状态。 @param group 调用方传入的 `group`。 @param row 调用方传入的 `row`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function openCalcEditor(group: StoryValGroupDraft, row: StoryValRowDraft) {
   if (isValueMode(row)) {
     return
@@ -290,13 +253,13 @@ function openCalcEditor(group: StoryValGroupDraft, row: StoryValRowDraft) {
   calcEditorState.groupKey = group.draftKey
   calcEditorState.rowKey = row.draftKey
 }
-
+/** 关闭 `CalcEditor` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function closeCalcEditor() {
   calcEditorState.groupKey = ""
   calcEditorState.rowKey = ""
   closeCalcAutocomplete()
 }
-
+/** 关闭 `CalcAutocomplete` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function closeCalcAutocomplete() {
   calcAutocompleteState.open = false
   calcAutocompleteState.query = ""
@@ -304,17 +267,17 @@ function closeCalcAutocomplete() {
   calcAutocompleteState.replaceEnd = 0
   calcAutocompleteState.activeIndex = 0
 }
-
+/** 读取或计算 `CalcRuleTextareaValue`。 @returns 计算、查找或构建后的结果。 */
 function getCalcRuleTextareaValue() {
   return editingCalcRow.value?.calcRule ?? ""
 }
-
+/** 更新 `CalcRuleTextareaValue` 对应的响应式值。 @param value 调用方传入的 `value`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function setCalcRuleTextareaValue(value: string) {
   if (editingCalcRow.value) {
     editingCalcRow.value.calcRule = value
   }
 }
-
+/** 执行 `updateCalcAutocompleteFromCaret` 对应的局部业务逻辑。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function updateCalcAutocompleteFromCaret() {
   const textarea = calcRuleTextarea.value
   const calcRule = getCalcRuleTextareaValue()
@@ -346,7 +309,7 @@ function updateCalcAutocompleteFromCaret() {
     calcAutocompleteState.activeIndex = 0
   }
 }
-
+/** 执行 `insertCalcAutocompleteItem` 对应的局部业务逻辑。 @param itemName 调用方传入的 `itemName`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function insertCalcAutocompleteItem(itemName: string) {
   const textarea = calcRuleTextarea.value
   const calcRule = getCalcRuleTextareaValue()
@@ -366,11 +329,11 @@ function insertCalcAutocompleteItem(itemName: string) {
     textarea?.setSelectionRange(nextCaret, nextCaret)
   })
 }
-
+/** 处理 `CalcRuleInput` 用户交互。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function onCalcRuleInput() {
   updateCalcAutocompleteFromCaret()
 }
-
+/** 处理 `CalcRuleKeydown` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function onCalcRuleKeydown(event: KeyboardEvent) {
   if (!isCalcAutocompleteOpen.value) {
     if (event.key === "{") {
@@ -410,19 +373,7 @@ function onCalcRuleKeydown(event: KeyboardEvent) {
     insertCalcAutocompleteItem(item.name)
   }
 }
-
-interface CalcEvaluationResult {
-  ok: boolean
-  expression: string
-  resultText: string
-}
-
-interface CalcValueDisplay {
-  ok: boolean
-  text: string
-  detail?: string
-}
-
+/** 根据当前输入构建 `CoreGroup` 结果。 @param group 调用方传入的 `group`。 @returns 计算、查找或构建后的结果。 */
 function buildCoreGroup(group: StoryValGroupDraft): StoryValDefinition {
   return {
     name: normalizeText(group.name).trim(),
@@ -430,7 +381,7 @@ function buildCoreGroup(group: StoryValGroupDraft): StoryValDefinition {
     vals: group.vals.map((row) => buildCoreRow(row))
   }
 }
-
+/** 根据当前输入构建 `CoreRow` 结果。 @param row 调用方传入的 `row`。 @returns 计算、查找或构建后的结果。 */
 function buildCoreRow(row: StoryValRowDraft): StoryValEntryDefinition {
   return {
     name: normalizeText(row.name).trim(),
@@ -440,7 +391,7 @@ function buildCoreRow(row: StoryValRowDraft): StoryValEntryDefinition {
     calc_rule: normalizeText(row.calcRule).trim()
   }
 }
-
+/** 根据当前输入构建 `CoreValsFile` 结果。 @returns 计算、查找或构建后的结果。 */
 function buildCoreValsFile(): StoryValsFile {
   return {
     variables: draft.variables.map((group) => buildCoreGroup(group))
@@ -496,7 +447,7 @@ const calcPreview = computed<CalcEvaluationResult>(() => {
     }
   }
 })
-
+/** 读取或计算 `RowCalcDisplay`。 @param group 调用方传入的 `group`。 @param row 调用方传入的 `row`。 @returns 计算、查找或构建后的结果。 */
 function getRowCalcDisplay(group: StoryValGroupDraft, row: StoryValRowDraft): CalcValueDisplay {
   const calcRule = normalizeText(row.calcRule).trim()
   const rowName = normalizeRowName(row.name)
@@ -529,7 +480,7 @@ function getRowCalcDisplay(group: StoryValGroupDraft, row: StoryValRowDraft): Ca
     }
   }
 }
-
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
   emit("save", {
     variables: draft.variables.map((group) => ({
@@ -836,375 +787,4 @@ watch(
   </Teleport>
 </template>
 
-<style scoped>
-.vals-dialog {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(2, 8, 16, 0.72);
-  backdrop-filter: blur(10px);
-}
-
-.vals-dialog__panel {
-  width: min(1200px, calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
-  padding: 20px;
-  overflow: auto;
-  border-radius: 22px;
-}
-
-.vals-dialog__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.vals-dialog__title {
-  margin: 10px 0 0;
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.4rem;
-  line-height: 1.1;
-}
-
-.vals-dialog__actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.vals-dialog__hint,
-.vals-dialog__warning {
-  margin: 10px 0 0;
-  font-size: 0.86rem;
-  color: var(--text-muted);
-}
-
-.vals-dialog__warning {
-  color: var(--warning);
-}
-
-.vals-dialog__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.vals-dialog__tab {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.vals-dialog__tab--active {
-  border-color: rgba(255, 180, 84, 0.5);
-  background: rgba(255, 180, 84, 0.12);
-}
-
-.vals-dialog__tab-button,
-.vals-dialog__tab-remove {
-  min-height: 30px;
-  padding: 0 10px;
-  background: transparent;
-  color: inherit;
-}
-
-.vals-dialog__tab-button {
-  font-size: 0.82rem;
-}
-
-.vals-dialog__tab-remove {
-  padding-left: 0;
-  font-size: 1rem;
-  line-height: 1;
-  color: var(--text-muted);
-}
-
-.vals-dialog__add-tab,
-.vals-dialog__row-add,
-.vals-dialog__row-button {
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-}
-
-.vals-dialog__body {
-  display: grid;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.vals-dialog__group-count {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-.vals-dialog__group-meta {
-  display: grid;
-  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
-  gap: 10px;
-}
-
-.vals-dialog__table-wrap {
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.vals-dialog__table {
-  width: 100%;
-  min-width: 980px;
-  border-collapse: collapse;
-}
-
-.vals-dialog__table th,
-.vals-dialog__table td {
-  padding: 8px;
-  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
-  text-align: left;
-  vertical-align: top;
-}
-
-.vals-dialog__table th {
-  position: sticky;
-  top: 0;
-  background: rgba(9, 19, 30, 0.92);
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
-
-.vals-dialog__cell-input {
-  min-width: 0;
-  padding: 8px 10px;
-}
-
-.vals-dialog__cell-input:disabled {
-  opacity: 0.48;
-  cursor: not-allowed;
-}
-
-.vals-dialog__calc-value-link {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  min-height: 36px;
-  padding: 8px 10px;
-  border: 1px solid rgba(124, 227, 195, 0.24);
-  border-radius: 12px;
-  background: rgba(124, 227, 195, 0.08);
-  color: var(--success);
-  font-family: "Space Grotesk", sans-serif;
-  line-height: 1.25;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  word-break: break-word;
-  cursor: pointer;
-}
-
-.vals-dialog__calc-value-link--error {
-  border-color: rgba(255, 139, 123, 0.28);
-  background: rgba(255, 139, 123, 0.08);
-  color: var(--warning);
-}
-
-.vals-dialog__calc-editor {
-  position: fixed;
-  inset: 0;
-  z-index: 61;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(4, 10, 18, 0.48);
-}
-
-.vals-dialog__calc-editor-panel {
-  width: min(720px, calc(100vw - 48px));
-  padding: 18px;
-  border-radius: 18px;
-}
-
-.vals-dialog__calc-editor-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.vals-dialog__calc-editor-title {
-  margin: 0;
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.05rem;
-}
-
-.vals-dialog__calc-editor-subtitle {
-  margin: 6px 0 0;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-.vals-dialog__calc-editor-close {
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-}
-
-.vals-dialog__calc-editor-area {
-  min-height: 136px;
-}
-
-.vals-dialog__calc-editor-input-wrap {
-  position: relative;
-}
-
-.vals-dialog__calc-autocomplete {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 2;
-  width: min(100%, 360px);
-  max-height: 220px;
-  overflow: auto;
-  border: 1px solid rgba(186, 220, 255, 0.18);
-  border-radius: 12px;
-  background: rgba(9, 19, 30, 0.98);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
-}
-
-.vals-dialog__calc-autocomplete-item {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid rgba(186, 220, 255, 0.08);
-  text-align: left;
-}
-
-.vals-dialog__calc-autocomplete-item:last-child {
-  border-bottom: 0;
-}
-
-.vals-dialog__calc-autocomplete-item--active {
-  background: rgba(255, 180, 84, 0.16);
-}
-
-.vals-dialog__calc-autocomplete-name {
-  font-size: 0.84rem;
-  color: var(--text);
-}
-
-.vals-dialog__calc-autocomplete-description {
-  font-size: 0.74rem;
-  color: var(--text-muted);
-}
-
-.vals-dialog__calc-autocomplete-empty {
-  padding: 10px 12px;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-}
-
-.vals-dialog__calc-preview {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(186, 220, 255, 0.12);
-}
-
-.vals-dialog__calc-preview-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.vals-dialog__calc-preview-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  border: 1px solid rgba(186, 220, 255, 0.2);
-}
-
-.vals-dialog__calc-preview-badge--ok {
-  border-color: rgba(124, 227, 195, 0.4);
-  color: var(--success);
-}
-
-.vals-dialog__calc-preview-badge--error {
-  border-color: rgba(255, 139, 123, 0.4);
-  color: var(--warning);
-}
-
-.vals-dialog__calc-preview-tip {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-.vals-dialog__calc-preview-box {
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
-  font-family: "Space Grotesk", sans-serif;
-  line-height: 1.45;
-  word-break: break-word;
-}
-
-.vals-dialog__calc-preview-box--result {
-  border-color: rgba(124, 227, 195, 0.35);
-}
-
-.vals-dialog__calc-preview-box--error {
-  border-color: rgba(255, 139, 123, 0.35);
-  color: var(--warning);
-}
-
-.vals-dialog__actions-col {
-  width: 96px;
-}
-
-.vals-dialog__empty {
-  padding: 16px;
-  color: var(--text-muted);
-  font-size: 0.84rem;
-}
-
-.vals-dialog__footer {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.vals-dialog__actions--footer {
-  margin-top: 16px;
-  justify-content: flex-end;
-}
-
-@media (max-width: 900px) {
-  .vals-dialog__header,
-  .vals-dialog__actions,
-  .vals-dialog__group-meta,
-  .vals-dialog__calc-editor-head,
-  .vals-dialog__calc-preview-head {
-    grid-template-columns: 1fr;
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-</style>
+<style scoped src="./styles/StoryValsDialog.css"></style>

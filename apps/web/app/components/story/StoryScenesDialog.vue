@@ -47,19 +47,23 @@ const assetStates = reactive<Record<string, SceneAssetState>>({})
 
 let draftKeySeed = 0
 
+/** 创建一份新的 `DraftKey` 数据。 @param prefix 调用方传入的 `prefix`。 @returns 计算、查找或构建后的结果。 */
 function createDraftKey(prefix: string) {
   draftKeySeed += 1
   return `${prefix}-${draftKeySeed}`
 }
 
+/** 将 `Text` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value : ""
 }
 
+/** 把 `LevelInput` 转换成界面可读文本。 @param level 调用方传入的 `level`。 @returns 计算、查找或构建后的结果。 */
 function formatLevelInput(level: unknown) {
   return typeof level === "number" && Number.isFinite(level) ? String(level) : ""
 }
 
+/** 解析 `LevelInput` 输入，并为非法值提供安全结果。 @param levelText 调用方传入的 `levelText`。 @returns 计算、查找或构建后的结果。 */
 function parseLevelInput(levelText: string) {
   const trimmed = levelText.trim()
   if (!/^\d+$/.test(trimmed)) return null
@@ -67,6 +71,7 @@ function parseLevelInput(levelText: string) {
   return Number.isInteger(parsed) && parsed >= 1 ? parsed : null
 }
 
+/** 解析 `CompressQualityInput` 输入，并为非法值提供安全结果。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function parseCompressQualityInput(value: unknown) {
   const trimmed = String(value ?? "").trim()
   if (!/^\d+$/.test(trimmed)) return null
@@ -74,6 +79,7 @@ function parseCompressQualityInput(value: unknown) {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 100 ? parsed : null
 }
 
+/** 创建一份新的 `EmptyAssetState` 数据。 @returns 计算、查找或构建后的结果。 */
 function createEmptyAssetState(): SceneAssetState {
   return {
     error: null,
@@ -82,29 +88,35 @@ function createEmptyAssetState(): SceneAssetState {
   }
 }
 
+/** 读取或计算 `AssetStateKey`。 @param draftKey 调用方传入的 `draftKey`。 @param variant 调用方传入的 `variant`。 @returns 计算、查找或构建后的结果。 */
 function getAssetStateKey(draftKey: string, variant: StorySceneBackgroundVariant) {
   return `${draftKey}:${variant}`
 }
 
+/** 执行 `initializeSceneAssetStates` 对应的局部业务逻辑。 @param scene 调用方传入的 `scene`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function initializeSceneAssetStates(scene: StorySceneDraft) {
   assetStates[getAssetStateKey(scene.draftKey, "day")] = createEmptyAssetState()
   assetStates[getAssetStateKey(scene.draftKey, "night")] = createEmptyAssetState()
 }
 
+/** 重置或清理 `resetAssetStates` 对应的临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function resetAssetStates() {
   for (const key of Object.keys(assetStates)) {
     delete assetStates[key]
   }
 }
 
+/** 读取或计算 `AssetState`。 @param scene 调用方传入的 `scene`。 @param variant 调用方传入的 `variant`。 @returns 计算、查找或构建后的结果。 */
 function getAssetState(scene: StorySceneDraft, variant: StorySceneBackgroundVariant) {
   return assetStates[getAssetStateKey(scene.draftKey, variant)]
 }
 
+/** 读取或计算 `SceneAssetPath`。 @param scene 调用方传入的 `scene`。 @param variant 调用方传入的 `variant`。 @returns 计算、查找或构建后的结果。 */
 function getSceneAssetPath(scene: StorySceneDraft, variant: StorySceneBackgroundVariant) {
   return variant === "day" ? scene.dayImg : scene.nightImg
 }
 
+/** 更新 `SceneAssetPath` 对应的响应式值。 @param scene 调用方传入的 `scene`。 @param variant 调用方传入的 `variant`。 @param assetPath 调用方传入的 `assetPath`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function setSceneAssetPath(
   scene: StorySceneDraft,
   variant: StorySceneBackgroundVariant,
@@ -118,11 +130,13 @@ function setSceneAssetPath(
   scene.nightImg = assetPath
 }
 
+/** 重置或清理 `clearSceneAssetState` 对应的临时状态。 @param scene 调用方传入的 `scene`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function clearSceneAssetState(scene: StorySceneDraft) {
   delete assetStates[getAssetStateKey(scene.draftKey, "day")]
   delete assetStates[getAssetStateKey(scene.draftKey, "night")]
 }
 
+/** 复制 `Scene`，避免共享可变引用。 @param scene 调用方传入的 `scene`。 @returns 计算、查找或构建后的结果。 */
 function cloneScene(scene: StorySceneDefinition): StorySceneDraft {
   const draftScene = {
     draftKey: createDraftKey("scene"),
@@ -137,6 +151,7 @@ function cloneScene(scene: StorySceneDefinition): StorySceneDraft {
   return draftScene
 }
 
+/** 读取或计算 `NextSceneLevel`。 @returns 计算、查找或构建后的结果。 */
 function getNextSceneLevel() {
   const levels = draft.scenes
     .map((scene) => parseLevelInput(scene.levelText))
@@ -145,6 +160,7 @@ function getNextSceneLevel() {
   return levels.length > 0 ? Math.max(...levels) + 1 : 1
 }
 
+/** 创建一份新的 `EmptyScene` 数据。 @returns 计算、查找或构建后的结果。 */
 function createEmptyScene(): StorySceneDraft {
   const draftScene = {
     draftKey: createDraftKey("scene"),
@@ -159,12 +175,14 @@ function createEmptyScene(): StorySceneDraft {
   return draftScene
 }
 
+/** 把 `Bytes` 转换成界面可读文本。 @param sizeBytes 调用方传入的 `sizeBytes`。 @returns 计算、查找或构建后的结果。 */
 function formatBytes(sizeBytes: number) {
   if (sizeBytes < 1024) return `${sizeBytes} B`
   if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`
   return `${(sizeBytes / 1024 / 1024).toFixed(2)} MB`
 }
 
+/** 把 `AssetMeta` 转换成界面可读文本。 @param meta 调用方传入的 `meta`。 @returns 计算、查找或构建后的结果。 */
 function formatAssetMeta(meta: StoryAssetMetadata | null) {
   if (!meta) return ""
 
@@ -176,6 +194,7 @@ function formatAssetMeta(meta: StoryAssetMetadata | null) {
   return `${dimensions} / ${formatBytes(meta.sizeBytes)}`
 }
 
+/** 把 `ErrorMessage` 转换成界面可读文本。 @param error 调用方传入的 `error`。 @param fallback 调用方传入的 `fallback`。 @returns 计算、查找或构建后的结果。 */
 function formatErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === "object") {
     const responseError = error as {
@@ -206,11 +225,13 @@ function formatErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
+/** 读取或计算 `AssetUrl`。 @param scene 调用方传入的 `scene`。 @param variant 调用方传入的 `variant`。 @returns 计算、查找或构建后的结果。 */
 function getAssetUrl(scene: StorySceneDraft, variant: StorySceneBackgroundVariant) {
   const assetPath = getSceneAssetPath(scene, variant).trim()
   return assetPath ? getStoryAssetUrl(props.storyId, assetPath) : ""
 }
 
+/** 异步加载 `AssetMeta` 数据并更新响应式状态。 @param scene 调用方传入的 `scene`。 @param variant 调用方传入的 `variant`。 @returns 同步或异步处理结果；失败时由异常或错误状态交给调用方处理。 */
 async function loadAssetMeta(scene: StorySceneDraft, variant: StorySceneBackgroundVariant) {
   const state = getAssetState(scene, variant)
   const assetPath = getSceneAssetPath(scene, variant).trim()
@@ -244,6 +265,7 @@ async function loadAssetMeta(scene: StorySceneDraft, variant: StorySceneBackgrou
   }
 }
 
+/** 执行 `hydrateAssetMeta` 对应的局部业务逻辑。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 async function hydrateAssetMeta() {
   const tasks = draft.scenes.flatMap((scene) => [
     loadAssetMeta(scene, "day"),
@@ -253,6 +275,7 @@ async function hydrateAssetMeta() {
   await Promise.allSettled(tasks)
 }
 
+/** 把外部或服务端数据同步到本地响应式状态。 @param scenes 调用方传入的 `scenes`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function syncDraft(scenes: StorySceneFile) {
   resetAssetStates()
   draft.compressQualityText = String(scenes.ai.compress_quality ?? 60)
@@ -266,10 +289,12 @@ const hasInvalidDraft = computed(() => {
     || draft.scenes.some((scene) => parseLevelInput(scene.levelText) === null)
 })
 
+/** 新增一项 `Scene` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addScene() {
   draft.scenes.push(createEmptyScene())
 }
 
+/** 移除指定的 `Scene` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeScene(index: number) {
   const removedScene = draft.scenes[index]
   if (!removedScene) return
@@ -277,6 +302,7 @@ function removeScene(index: number) {
   draft.scenes.splice(index, 1)
 }
 
+/** 处理 `AssetSelected` 用户交互。 @param scene 调用方传入的 `scene`。 @param variant 调用方传入的 `variant`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 async function handleAssetSelected(
   scene: StorySceneDraft,
   variant: StorySceneBackgroundVariant,
@@ -306,11 +332,13 @@ async function handleAssetSelected(
   }
 }
 
+/** 判断 `canCompress` 对应的条件是否成立。 @param scene 调用方传入的 `scene`。 @param variant 调用方传入的 `variant`。 @returns 布尔判断结果。 */
 function canCompress(scene: StorySceneDraft, variant: StorySceneBackgroundVariant) {
   return parseLevelInput(scene.levelText) !== null
     && getSceneAssetPath(scene, variant).trim().length > 0
 }
 
+/** 处理 `Compress` 用户交互。 @param scene 调用方传入的 `scene`。 @param variant 调用方传入的 `variant`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 async function handleCompress(scene: StorySceneDraft, variant: StorySceneBackgroundVariant) {
   const level = parseLevelInput(scene.levelText)
   const sourcePath = getSceneAssetPath(scene, variant).trim()
@@ -341,6 +369,7 @@ async function handleCompress(scene: StorySceneDraft, variant: StorySceneBackgro
   }
 }
 
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
   emit("save", {
     ai: {
@@ -588,222 +617,4 @@ watch(
   </Teleport>
 </template>
 
-<style scoped>
-.scenes-dialog {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(2, 8, 16, 0.72);
-  backdrop-filter: blur(10px);
-}
-
-.scenes-dialog__panel {
-  width: min(1360px, calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
-  padding: 20px;
-  overflow: auto;
-  border-radius: 22px;
-}
-
-.scenes-dialog__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.scenes-dialog__title {
-  margin: 10px 0 0;
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.4rem;
-  line-height: 1.1;
-}
-
-.scenes-dialog__actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.scenes-dialog__hint,
-.scenes-dialog__warning {
-  margin: 10px 0 0;
-  font-size: 0.86rem;
-  color: var(--text-muted);
-}
-
-.scenes-dialog__warning {
-  color: var(--warning);
-}
-
-.scenes-dialog__success {
-  margin: 10px 0 0;
-  font-size: 0.86rem;
-  color: var(--accent);
-}
-
-.scenes-dialog__body {
-  display: grid;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.scenes-dialog__config {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.scenes-dialog__field {
-  display: grid;
-  gap: 6px;
-}
-
-.scenes-dialog__label,
-.scenes-dialog__count {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-.scenes-dialog__table-wrap {
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.scenes-dialog__table {
-  width: 100%;
-  min-width: 1220px;
-  border-collapse: collapse;
-}
-
-.scenes-dialog__table th,
-.scenes-dialog__table td {
-  padding: 8px;
-  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
-  text-align: left;
-  vertical-align: top;
-}
-
-.scenes-dialog__table th {
-  position: sticky;
-  top: 0;
-  background: rgba(9, 19, 30, 0.92);
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
-
-.scenes-dialog__cell-input {
-  min-width: 0;
-  padding: 8px 10px;
-}
-
-.scenes-dialog__cell-input--level {
-  width: 96px;
-}
-
-.scenes-dialog__asset-cell {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.scenes-dialog__asset-button {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: fit-content;
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.scenes-dialog__file-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.scenes-dialog__asset-link,
-.scenes-dialog__asset-empty,
-.scenes-dialog__asset-meta,
-.scenes-dialog__asset-status,
-.scenes-dialog__asset-error {
-  min-width: 0;
-  font-size: 0.78rem;
-  line-height: 1.3;
-}
-
-.scenes-dialog__asset-link {
-  color: var(--accent);
-  text-decoration: none;
-  word-break: break-all;
-}
-
-.scenes-dialog__asset-empty,
-.scenes-dialog__asset-meta,
-.scenes-dialog__asset-status {
-  color: var(--text-muted);
-}
-
-.scenes-dialog__asset-error {
-  color: var(--warning);
-}
-
-.scenes-dialog__compress-actions {
-  display: grid;
-  gap: 6px;
-}
-
-.scenes-dialog__actions-col {
-  width: 96px;
-}
-
-.scenes-dialog__row-add,
-.scenes-dialog__row-button {
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-}
-
-.scenes-dialog__empty {
-  padding: 16px;
-  color: var(--text-muted);
-  font-size: 0.84rem;
-}
-
-.scenes-dialog__footer {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.scenes-dialog__actions--footer {
-  margin-top: 16px;
-  justify-content: flex-end;
-}
-
-@media (max-width: 900px) {
-  .scenes-dialog__header,
-  .scenes-dialog__actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-</style>
+<style scoped src="./styles/StoryScenesDialog.css"></style>

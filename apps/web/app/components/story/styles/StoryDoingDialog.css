@@ -1,0 +1,422 @@
+/* StoryDoingDialog 的局部样式，只影响同名 Vue 组件。 */
+.doing-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 8, 16, 0.72);
+}
+
+.doing-dialog--embedded {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.doing-dialog__panel {
+  width: min(1320px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.doing-dialog--embedded .doing-dialog__panel {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 18px;
+  border-bottom-right-radius: 18px;
+  border-bottom-left-radius: 18px;
+}
+
+.doing-dialog__header,
+.doing-dialog__section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.doing-dialog__copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.doing-dialog__title,
+.doing-dialog__section-title {
+  margin: 0;
+  color: var(--text);
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.doing-dialog__subtitle,
+.doing-dialog__section-note,
+.doing-dialog__success {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.doing-dialog__success {
+  color: var(--accent);
+}
+
+.doing-dialog__actions,
+.doing-dialog__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.doing-dialog__tab {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.doing-dialog__tab--active {
+  color: #06121f;
+  border-color: transparent;
+  background: var(--accent);
+}
+
+.doing-dialog__section {
+  min-height: 0;
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.doing-dialog__table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.doing-dialog__table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+}
+
+.doing-dialog__table th,
+.doing-dialog__table td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+
+.doing-dialog__table th {
+  position: sticky;
+  top: 0;
+  background: rgba(9, 19, 30, 0.92);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.doing-dialog__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.doing-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(124, 227, 195, 0.16);
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(124, 227, 195, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(8, 18, 29, 0.88);
+  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.18);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.doing-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(124, 227, 195, 0.34);
+}
+
+.doing-card--active {
+  border-color: rgba(124, 227, 195, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(124, 227, 195, 0.22),
+    0 16px 24px rgba(0, 0, 0, 0.22);
+}
+
+.doing-card__body {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doing-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.doing-card__kind,
+.doing-card__tag {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(124, 227, 195, 0.12);
+  color: rgba(174, 255, 229, 0.92);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+}
+
+.doing-card__tag {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doing-card__title {
+  color: #ecfff9;
+  font-size: 0.96rem;
+  line-height: 1.3;
+}
+
+.doing-card__id,
+.doing-card__status {
+  color: rgba(214, 222, 236, 0.72);
+  font-size: 0.74rem;
+}
+
+.doing-card__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+.doing-card__fact {
+  display: grid;
+  gap: 2px;
+}
+
+.doing-card__fact strong {
+  color: rgba(174, 255, 229, 0.72);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+}
+
+.doing-card__fact span {
+  color: rgba(242, 246, 255, 0.88);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.doing-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.doing-card__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.doing-card__button {
+  min-height: 28px;
+  padding: 5px 9px;
+  font-size: 0.78rem;
+}
+
+.doing-dialog__script-field {
+  display: grid;
+  gap: 6px;
+}
+
+.doing-dialog__field-actions,
+.doing-event-visible-config__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.doing-event-visible-config {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.doing-event-visible-config__tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.doing-dialog__validate-button {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid rgba(124, 227, 195, 0.24);
+  border-radius: 999px;
+  color: var(--accent);
+  background: rgba(124, 227, 195, 0.08);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.doing-dialog__validate-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.doing-dialog__help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(255, 180, 84, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 180, 84, 0.1);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.doing-dialog__validation {
+  display: grid;
+  gap: 4px;
+  padding: 7px 9px;
+  border: 1px solid rgba(186, 220, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.doing-dialog__validation--passed {
+  border-color: rgba(124, 227, 195, 0.3);
+  color: var(--accent);
+  background: rgba(124, 227, 195, 0.08);
+}
+
+.doing-dialog__validation--failed {
+  border-color: rgba(255, 139, 123, 0.36);
+  color: #ffb4a9;
+  background: rgba(255, 139, 123, 0.08);
+}
+
+.doing-dialog__validation--checking {
+  color: var(--text-muted);
+}
+
+.doing-dialog__validation-message {
+  overflow-wrap: anywhere;
+}
+
+.doing-dialog__cell-input,
+.doing-dialog__select,
+.doing-dialog__mini-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.doing-dialog__mini-input {
+  max-width: 92px;
+}
+
+.doing-dialog__textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.doing-dialog__textarea--cell {
+  min-height: 58px;
+}
+
+.doing-dialog__empty {
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.doing-editor-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(2, 8, 16, 0.74);
+  backdrop-filter: blur(10px);
+}
+
+.doing-event-base-extra {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 180px) minmax(120px, auto);
+  gap: 14px;
+  align-items: end;
+}
+
+.doing-event-base-extra__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .doing-dialog__header,
+  .doing-dialog__section-head,
+  .doing-dialog__actions,
+  .doing-card__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .doing-card__facts,
+  .doing-event-base-extra {
+    grid-template-columns: 1fr;
+  }
+}

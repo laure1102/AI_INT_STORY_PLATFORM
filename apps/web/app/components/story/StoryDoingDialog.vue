@@ -1,15 +1,13 @@
 <script setup lang="ts">
+/** 玩家“行动”配置弹窗：编排菜单与行动卡片，详情复用平面事件编辑器。 */
 import { computed, reactive, shallowRef, watch } from "vue"
 import type {
   StoryDocument,
   StoryDoingDefinition,
   StoryDoingFile,
   StoryDoingMenu,
-  StoryEventLocationFile,
-  StoryEventPresentation,
   StoryOnceEventFile,
   StoryRolesFile,
-  StorySceneFile,
   StoryValsFile
 } from "@story-mgr/core"
 import OnceEventDetailPanel from "./OnceEventDetailPanel.vue"
@@ -21,63 +19,26 @@ import {
   formatStoryScriptValidationIssue,
   validateStoryScriptField
 } from "./storyScriptValidation"
-
-interface DoingMenuDraft extends StoryDoingMenu {
-  draftKey: string
-  sortOrderText: string
-}
-
-interface DoingDraft extends StoryDoingDefinition {
-  draftKey: string
-  cooldownHoursText: string
-  isNew: boolean
-}
-
+import {
+  EMPTY_EVENT_LOCATIONS,
+  EMPTY_ROLES,
+  EMPTY_SCENES,
+  cloneDoingPresentation as clonePresentation,
+  createDoingDraft as createDoingDraftValue,
+  createDoingEditorEvent,
+  createDoingMenuDraft,
+  normalizeDoingNumberText as normalizeNumberText,
+  parseDoingInteger as parseIntegerInput,
+  sanitizeDoingId as sanitizeIdInput,
+  type DoingDraft,
+  type DoingMenuDraft
+} from "./storyDoingDraft"
 type DoingPredicateField = "visible_expr"
 type ScriptValidationStatus = "idle" | "checking" | "passed" | "failed"
-
 interface ScriptValidationState {
   status: ScriptValidationStatus
   issues: string[]
 }
-
-const EMPTY_ROLE_AI = {
-  width: 0,
-  height: 0,
-  global_prompt: "",
-  compress_quality_1: 0,
-  compress_quality_2: 0
-}
-
-const EMPTY_ROLES: StoryRolesFile = {
-  important: {
-    ai: EMPTY_ROLE_AI,
-    roles: []
-  },
-  normal: {
-    ai: EMPTY_ROLE_AI,
-    roles: []
-  }
-}
-
-const EMPTY_EVENT_LOCATIONS: StoryEventLocationFile = {
-  ai: {
-    width: 0,
-    height: 0,
-    global_prompt: "",
-    compress_quality_1: 0,
-    compress_quality_2: 0
-  },
-  assignments: []
-}
-
-const EMPTY_SCENES: StorySceneFile = {
-  ai: {
-    compress_quality: 0
-  },
-  scenes: []
-}
-
 const props = defineProps<{
   doing: StoryDoingFile
   embedded?: boolean
@@ -88,14 +49,12 @@ const props = defineProps<{
   story?: StoryDocument | null
   vals?: StoryValsFile
 }>()
-
 const emit = defineEmits<{
   close: []
   quickCreateLocation: [payload: StoryQuickCreateLocationPayload]
   quickCreateRole: [payload: StoryQuickCreateRolePayload]
   save: [doing: StoryDoingFile]
 }>()
-
 const activeTab = shallowRef<"menus" | "doings">("menus")
 const selectedDoingDraftKey = shallowRef<string | null>(null)
 const editingDoingDraftKey = shallowRef<string | null>(null)
@@ -113,16 +72,16 @@ const EMPTY_SCRIPT_VALIDATION_STATE: ScriptValidationState = {
 
 let draftKeySeed = 0
 let pendingEditingIdAfterSync: string | null = null
-
+/** 创建一份新的 `DraftKey` 数据。 @param prefix 调用方传入的 `prefix`。 @returns 计算、查找或构建后的结果。 */
 function createDraftKey(prefix: string) {
   draftKeySeed += 1
   return `${prefix}-${draftKeySeed}`
 }
-
+/** 读取或计算 `ValidationState`。 @param key 调用方传入的 `key`。 @returns 计算、查找或构建后的结果。 */
 function getValidationState(key: string) {
   return scriptValidationState[key] ?? EMPTY_SCRIPT_VALIDATION_STATE
 }
-
+/** 执行 `ensureValidationState` 对应的局部业务逻辑。 @param key 调用方传入的 `key`。 @returns 计算、查找或构建后的结果。 */
 function ensureValidationState(key: string) {
   scriptValidationState[key] ??= {
     status: "idle",
@@ -130,11 +89,11 @@ function ensureValidationState(key: string) {
   }
   return scriptValidationState[key]
 }
-
+/** 重置或清理 `resetValidationState` 对应的临时状态。 @param key 调用方传入的 `key`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function resetValidationState(key: string) {
   delete scriptValidationState[key]
 }
-
+/** 重置或清理 `clearValidationStates` 对应的临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function clearValidationStates() {
   for (const key of Object.keys(scriptValidationState)) {
     delete scriptValidationState[key]
@@ -201,23 +160,23 @@ const sortedDoingCards = computed(() => {
     index
   }))
 })
-
+/** 读取或计算 `MenuValidationKey`。 @param menu 调用方传入的 `menu`。 @param field 调用方传入的 `field`。 @returns 计算、查找或构建后的结果。 */
 function getMenuValidationKey(menu: DoingMenuDraft, field: DoingPredicateField) {
   return `menu:${menu.draftKey}:${field}`
 }
-
+/** 读取或计算 `DoingValidationKey`。 @param doing 调用方传入的 `doing`。 @param field 调用方传入的 `field`。 @returns 计算、查找或构建后的结果。 */
 function getDoingValidationKey(doing: DoingDraft, field: DoingPredicateField) {
   return `doing:${doing.draftKey}:${field}`
 }
-
+/** 读取或计算 `ValidationButtonLabel`。 @param key 调用方传入的 `key`。 @returns 计算、查找或构建后的结果。 */
 function getValidationButtonLabel(key: string) {
   return getValidationState(key).status === "checking" ? "校验中" : "校验"
 }
-
+/** 读取或计算 `ValidationClass`。 @param key 调用方传入的 `key`。 @returns 计算、查找或构建后的结果。 */
 function getValidationClass(key: string) {
   return `doing-dialog__validation--${getValidationState(key).status}`
 }
-
+/** 读取或计算 `ValidationMessages`。 @param key 调用方传入的 `key`。 @param emptyMessage 调用方传入的 `emptyMessage`。 @param passedMessage 调用方传入的 `passedMessage`。 @returns 计算、查找或构建后的结果。 */
 function getValidationMessages(key: string, emptyMessage: string, passedMessage: string) {
   const state = getValidationState(key)
 
@@ -235,11 +194,11 @@ function getValidationMessages(key: string, emptyMessage: string, passedMessage:
 
   return state.issues
 }
-
+/** 执行 `sourceIsEmptyMessage` 对应的局部业务逻辑。 @param emptyMessage 调用方传入的 `emptyMessage`。 @param passedMessage 调用方传入的 `passedMessage`。 @returns 计算、查找或构建后的结果。 */
 function sourceIsEmptyMessage(emptyMessage: string, passedMessage: string) {
   return passedMessage || emptyMessage
 }
-
+/** 校验 `ScriptSource` 并整理错误信息。 @param key 调用方传入的 `key`。 @param source 调用方传入的 `source`。 @param emptyMessage 调用方传入的 `emptyMessage`。 @param passedMessage 调用方传入的 `passedMessage`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 async function validateScriptSource(
   key: string,
   source: string,
@@ -268,7 +227,7 @@ async function validateScriptSource(
     ? [source.trim() ? passedMessage : emptyMessage]
     : result.issues.map((issue) => formatStoryScriptValidationIssue(issue))
 }
-
+/** 校验 `MenuField` 并整理错误信息。 @param menu 调用方传入的 `menu`。 @param field 调用方传入的 `field`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 async function validateMenuField(menu: DoingMenuDraft, field: DoingPredicateField) {
   await validateScriptSource(
     getMenuValidationKey(menu, field),
@@ -277,7 +236,7 @@ async function validateMenuField(menu: DoingMenuDraft, field: DoingPredicateFiel
     "条件可以执行。"
   )
 }
-
+/** 校验 `DoingMetaField` 并整理错误信息。 @param doing 调用方传入的 `doing`。 @param field 调用方传入的 `field`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 async function validateDoingMetaField(doing: DoingDraft, field: DoingPredicateField) {
   await validateScriptSource(
     getDoingValidationKey(doing, field),
@@ -286,109 +245,15 @@ async function validateDoingMetaField(doing: DoingDraft, field: DoingPredicateFi
     "条件可以执行。"
   )
 }
-
-function normalizeNumberText(value: unknown, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : String(fallback)
-}
-
-function sanitizeIdInput(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-}
-
-function parseIntegerInput(value: unknown, fallback = 0) {
-  const parsed = Number(String(value ?? "").trim())
-  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
-}
-
-function clonePresentation(presentation?: StoryEventPresentation): StoryEventPresentation {
-  if (!presentation) {
-    return {
-      type: "silent"
-    }
-  }
-
-  if (presentation.type === "message") {
-    return {
-      type: "message",
-      message: {
-        content: presentation.message.content,
-        duration_seconds: presentation.message.duration_seconds
-      }
-    }
-  }
-
-  if (presentation.type === "dialogue") {
-    return {
-      type: "dialogue",
-      dialogues: presentation.dialogues.map((dialogue) => ({
-        speaker_type: dialogue.speaker_type,
-        speaker_key: dialogue.speaker_key,
-        content: dialogue.content
-      }))
-    }
-  }
-
-  return {
-    type: "silent"
-  }
-}
-
+/** 创建一份新的 `MenuDraft` 数据。 @param menu 调用方传入的 `menu`。 @returns 计算、查找或构建后的结果。 */
 function createMenuDraft(menu: StoryDoingMenu): DoingMenuDraft {
-  return {
-    ...menu,
-    draftKey: createDraftKey("menu"),
-    sortOrderText: normalizeNumberText(menu.sort_order)
-  }
+  return createDoingMenuDraft(menu, createDraftKey)
 }
-
+/** 创建一份新的 `DoingDraft` 数据。 @param doing 调用方传入的 `doing`。 @param isNew 调用方传入的 `isNew`。 @returns 计算、查找或构建后的结果。 */
 function createDoingDraft(doing: StoryDoingDefinition, isNew = false): DoingDraft {
-  return {
-    id: doing.id,
-    title: doing.title,
-    menu_id: doing.menu_id,
-    descr: doing.descr,
-    visible_expr: doing.visible_expr,
-    cooldown_hours: doing.cooldown_hours,
-    once: doing.once,
-    init_script: doing.init_script,
-    object_keys: [...doing.object_keys],
-    presentation: clonePresentation(doing.presentation),
-    location: doing.location,
-    bgm: doing.bgm,
-    end_script: doing.end_script,
-    meta: doing.meta ? { ...doing.meta } : undefined,
-    draftKey: createDraftKey("doing"),
-    cooldownHoursText: normalizeNumberText(doing.cooldown_hours),
-    isNew
-  }
+  return createDoingDraftValue(doing, createDraftKey, isNew)
 }
-
-function createDoingEditorEvent(doing: DoingDraft): StoryOnceEventFile {
-  const event: StoryOnceEventFile = {
-    id: doing.id,
-    title: doing.title,
-    trigger_mode: "default",
-    trigger_expr: "",
-    invoke_params: [],
-    init_script: doing.init_script,
-    object_keys: [...doing.object_keys],
-    presentation: clonePresentation(doing.presentation),
-    location: doing.location,
-    bgm: doing.bgm,
-    end_script: doing.end_script
-  }
-
-  if (doing.meta) {
-    event.meta = { ...doing.meta }
-  }
-
-  return event
-}
-
+/** 查找 `DoingDraftKeyById` 对应的数据。 @param doingId 调用方传入的 `doingId`。 @returns 计算、查找或构建后的结果。 */
 function findDoingDraftKeyById(doingId: string | null) {
   if (!doingId) {
     return null
@@ -396,7 +261,7 @@ function findDoingDraftKeyById(doingId: string | null) {
 
   return draft.doings.find((doing) => doing.id === doingId)?.draftKey ?? null
 }
-
+/** 把外部或服务端数据同步到本地响应式状态。 @param doing 调用方传入的 `doing`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function syncFromDoing(doing: StoryDoingFile) {
   const previousSelectedId = selectedDoing.value?.id ?? null
   const previousEditingId = pendingEditingIdAfterSync ?? editingDoing.value?.id ?? null
@@ -419,17 +284,17 @@ watch(
   (nextDoing) => syncFromDoing(nextDoing),
   { immediate: true, deep: true }
 )
-
+/** 读取或计算 `ParentMenuOptions`。 @param menu 调用方传入的 `menu`。 @returns 计算、查找或构建后的结果。 */
 function getParentMenuOptions(menu: DoingMenuDraft) {
   return menuOptions.value.filter((option) => option.value !== menu.id)
 }
-
+/** 读取或计算 `DoingMenuLabel`。 @param doing 调用方传入的 `doing`。 @returns 计算、查找或构建后的结果。 */
 function getDoingMenuLabel(doing: DoingDraft) {
   return doing.menu_id.trim()
     ? menuLabelMap.value.get(doing.menu_id) ?? doing.menu_id
     : "未选择菜单"
 }
-
+/** 执行 `summarizeCondition` 对应的局部业务逻辑。 @param source 调用方传入的 `source`。 @returns 计算、查找或构建后的结果。 */
 function summarizeCondition(source: string) {
   const trimmed = source.trim()
   if (!trimmed) {
@@ -438,7 +303,7 @@ function summarizeCondition(source: string) {
 
   return trimmed.length > 56 ? `${trimmed.slice(0, 56)}...` : trimmed
 }
-
+/** 执行 `summarizePresentation` 对应的局部业务逻辑。 @param doing 调用方传入的 `doing`。 @returns 计算、查找或构建后的结果。 */
 function summarizePresentation(doing: DoingDraft) {
   if (doing.presentation.type === "silent") {
     return "静默"
@@ -450,11 +315,11 @@ function summarizePresentation(doing: DoingDraft) {
 
   return `${doing.presentation.dialogues.length} 条对白`
 }
-
+/** 打开 `StoryScriptHelp` 界面并初始化临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function openStoryScriptHelp() {
   openStoryScriptReferencePage()
 }
-
+/** 执行 `nextUniqueId` 对应的局部业务逻辑。 @param base 调用方传入的 `base`。 @param usedIds 调用方传入的 `usedIds`。 @returns 计算、查找或构建后的结果。 */
 function nextUniqueId(base: string, usedIds: Set<string>) {
   const normalizedBase = sanitizeIdInput(base) || "doing"
   let candidate = normalizedBase
@@ -465,7 +330,7 @@ function nextUniqueId(base: string, usedIds: Set<string>) {
   }
   return candidate
 }
-
+/** 新增一项 `Menu` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addMenu() {
   const usedIds = new Set(draft.menus.map((menu) => menu.id))
   const id = nextUniqueId(`menu_${draft.menus.length + 1}`, usedIds)
@@ -481,7 +346,7 @@ function addMenu() {
   })
   activeTab.value = "menus"
 }
-
+/** 移除指定的 `Menu` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeMenu(index: number) {
   const menu = draft.menus[index]
   if (!menu) return
@@ -504,7 +369,7 @@ function removeMenu(index: number) {
     }
   }
 }
-
+/** 创建一份新的 `EmptyDoingDefinition` 数据。 @param id 调用方传入的 `id`。 @returns 计算、查找或构建后的结果。 */
 function createEmptyDoingDefinition(id: string): StoryDoingDefinition {
   return {
     id,
@@ -524,7 +389,7 @@ function createEmptyDoingDefinition(id: string): StoryDoingDefinition {
     end_script: ""
   }
 }
-
+/** 新增一项 `Doing` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addDoing() {
   const usedIds = new Set(draft.doings.map((doing) => doing.id))
   const id = nextUniqueId(`doing_${draft.doings.length + 1}`, usedIds)
@@ -535,7 +400,7 @@ function addDoing() {
   editingDoingDraftKey.value = nextDoing.draftKey
   activeTab.value = "doings"
 }
-
+/** 移除指定的 `Doing` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeDoing(index: number) {
   const doing = draft.doings[index]
   if (!doing) {
@@ -554,16 +419,16 @@ function removeDoing(index: number) {
     editingDoingDraftKey.value = null
   }
 }
-
+/** 打开 `DoingEditor` 界面并初始化临时状态。 @param doing 调用方传入的 `doing`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function openDoingEditor(doing: DoingDraft) {
   selectedDoingDraftKey.value = doing.draftKey
   editingDoingDraftKey.value = doing.draftKey
 }
-
+/** 关闭 `DoingEditor` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function closeDoingEditor() {
   editingDoingDraftKey.value = null
 }
-
+/** 执行 `mergeEventIntoDoing` 对应的局部业务逻辑。 @param doing 调用方传入的 `doing`。 @param event 调用方传入的 `event`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function mergeEventIntoDoing(doing: DoingDraft, event: StoryOnceEventFile) {
   doing.id = event.id
   doing.title = event.title
@@ -575,7 +440,7 @@ function mergeEventIntoDoing(doing: DoingDraft, event: StoryOnceEventFile) {
   doing.end_script = event.end_script
   doing.meta = event.meta ? { ...event.meta } : undefined
 }
-
+/** 执行 `serializeDoing` 对应的局部业务逻辑。 @param doing 调用方传入的 `doing`。 @returns 计算、查找或构建后的结果。 */
 function serializeDoing(doing: DoingDraft): StoryDoingDefinition {
   const next: StoryDoingDefinition = {
     id: doing.id.trim(),
@@ -599,7 +464,7 @@ function serializeDoing(doing: DoingDraft): StoryDoingDefinition {
 
   return next
 }
-
+/** 根据当前输入构建 `DoingFile` 结果。 @returns 计算、查找或构建后的结果。 */
 function buildDoingFile(): StoryDoingFile {
   return {
     menus: draft.menus.map((menu) => ({
@@ -613,12 +478,12 @@ function buildDoingFile(): StoryDoingFile {
     doings: draft.doings.map(serializeDoing)
   }
 }
-
+/** 处理 `Save` 用户交互。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleSave() {
   pendingEditingIdAfterSync = editingDoing.value?.id ?? null
   emit("save", buildDoingFile())
 }
-
+/** 处理 `SaveDoingEvent` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleSaveDoingEvent(event: StoryOnceEventFile) {
   const target = editingDoing.value
   if (!target) {
@@ -629,11 +494,11 @@ function handleSaveDoingEvent(event: StoryOnceEventFile) {
   pendingEditingIdAfterSync = event.id
   emit("save", buildDoingFile())
 }
-
+/** 处理 `QuickCreateLocation` 用户交互。 @param payload 调用方传入的 `payload`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleQuickCreateLocation(payload: StoryQuickCreateLocationPayload) {
   emit("quickCreateLocation", payload)
 }
-
+/** 处理 `QuickCreateRole` 用户交互。 @param payload 调用方传入的 `payload`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleQuickCreateRole(payload: StoryQuickCreateRolePayload) {
   emit("quickCreateRole", payload)
 }
@@ -931,426 +796,4 @@ function handleQuickCreateRole(payload: StoryQuickCreateRolePayload) {
   </div>
 </template>
 
-<style scoped>
-.doing-dialog {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(2, 8, 16, 0.72);
-}
-
-.doing-dialog--embedded {
-  position: relative;
-  inset: auto;
-  z-index: auto;
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  padding: 0;
-  background: transparent;
-  overflow: hidden;
-}
-
-.doing-dialog__panel {
-  width: min(1320px, calc(100vw - 40px));
-  max-height: calc(100dvh - 40px);
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 14px;
-  padding: 18px;
-  overflow: hidden;
-  border-radius: 20px;
-}
-
-.doing-dialog--embedded .doing-dialog__panel {
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  border-top-left-radius: 0;
-  border-top-right-radius: 18px;
-  border-bottom-right-radius: 18px;
-  border-bottom-left-radius: 18px;
-}
-
-.doing-dialog__header,
-.doing-dialog__section-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.doing-dialog__copy {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.doing-dialog__title,
-.doing-dialog__section-title {
-  margin: 0;
-  color: var(--text);
-  font-family: "Space Grotesk", sans-serif;
-}
-
-.doing-dialog__subtitle,
-.doing-dialog__section-note,
-.doing-dialog__success {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.86rem;
-  line-height: 1.5;
-}
-
-.doing-dialog__success {
-  color: var(--accent);
-}
-
-.doing-dialog__actions,
-.doing-dialog__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.doing-dialog__tab {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 8px 12px;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.doing-dialog__tab--active {
-  color: #06121f;
-  border-color: transparent;
-  background: var(--accent);
-}
-
-.doing-dialog__section {
-  min-height: 0;
-  display: grid;
-  gap: 14px;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.doing-dialog__table-wrap {
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.doing-dialog__table {
-  width: 100%;
-  min-width: 1180px;
-  border-collapse: collapse;
-}
-
-.doing-dialog__table th,
-.doing-dialog__table td {
-  padding: 8px;
-  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
-  text-align: left;
-  vertical-align: top;
-}
-
-.doing-dialog__table th {
-  position: sticky;
-  top: 0;
-  background: rgba(9, 19, 30, 0.92);
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-.doing-dialog__cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.doing-card {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid rgba(124, 227, 195, 0.16);
-  border-radius: 14px;
-  background:
-    linear-gradient(145deg, rgba(124, 227, 195, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(8, 18, 29, 0.88);
-  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.18);
-  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
-}
-
-.doing-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(124, 227, 195, 0.34);
-}
-
-.doing-card--active {
-  border-color: rgba(124, 227, 195, 0.62);
-  box-shadow:
-    0 0 0 1px rgba(124, 227, 195, 0.22),
-    0 16px 24px rgba(0, 0, 0, 0.22);
-}
-
-.doing-card__body {
-  display: grid;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.doing-card__meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.doing-card__kind,
-.doing-card__tag {
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(124, 227, 195, 0.12);
-  color: rgba(174, 255, 229, 0.92);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-}
-
-.doing-card__tag {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.doing-card__title {
-  color: #ecfff9;
-  font-size: 0.96rem;
-  line-height: 1.3;
-}
-
-.doing-card__id,
-.doing-card__status {
-  color: rgba(214, 222, 236, 0.72);
-  font-size: 0.74rem;
-}
-
-.doing-card__facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 10px;
-}
-
-.doing-card__fact {
-  display: grid;
-  gap: 2px;
-}
-
-.doing-card__fact strong {
-  color: rgba(174, 255, 229, 0.72);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-}
-
-.doing-card__fact span {
-  color: rgba(242, 246, 255, 0.88);
-  font-size: 0.82rem;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.doing-card__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.doing-card__actions {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.doing-card__button {
-  min-height: 28px;
-  padding: 5px 9px;
-  font-size: 0.78rem;
-}
-
-.doing-dialog__script-field {
-  display: grid;
-  gap: 6px;
-}
-
-.doing-dialog__field-actions,
-.doing-event-visible-config__label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.doing-event-visible-config {
-  display: grid;
-  gap: 8px;
-  align-content: start;
-}
-
-.doing-event-visible-config__tools {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.doing-dialog__validate-button {
-  min-height: 26px;
-  padding: 0 9px;
-  border: 1px solid rgba(124, 227, 195, 0.24);
-  border-radius: 999px;
-  color: var(--accent);
-  background: rgba(124, 227, 195, 0.08);
-  font-size: 0.74rem;
-  white-space: nowrap;
-}
-
-.doing-dialog__validate-button:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-
-.doing-dialog__help-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid rgba(255, 180, 84, 0.32);
-  border-radius: 999px;
-  background: rgba(255, 180, 84, 0.1);
-  color: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.doing-dialog__validation {
-  display: grid;
-  gap: 4px;
-  padding: 7px 9px;
-  border: 1px solid rgba(186, 220, 255, 0.12);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
-  font-size: 0.78rem;
-  line-height: 1.4;
-}
-
-.doing-dialog__validation--passed {
-  border-color: rgba(124, 227, 195, 0.3);
-  color: var(--accent);
-  background: rgba(124, 227, 195, 0.08);
-}
-
-.doing-dialog__validation--failed {
-  border-color: rgba(255, 139, 123, 0.36);
-  color: #ffb4a9;
-  background: rgba(255, 139, 123, 0.08);
-}
-
-.doing-dialog__validation--checking {
-  color: var(--text-muted);
-}
-
-.doing-dialog__validation-message {
-  overflow-wrap: anywhere;
-}
-
-.doing-dialog__cell-input,
-.doing-dialog__select,
-.doing-dialog__mini-input {
-  width: 100%;
-  min-width: 0;
-}
-
-.doing-dialog__mini-input {
-  max-width: 92px;
-}
-
-.doing-dialog__textarea {
-  min-height: 72px;
-  resize: vertical;
-}
-
-.doing-dialog__textarea--cell {
-  min-height: 58px;
-}
-
-.doing-dialog__empty {
-  border: 1px dashed var(--line);
-  border-radius: 14px;
-  padding: 24px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.doing-editor-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  display: grid;
-  place-items: center;
-  padding: 12px;
-  background: rgba(2, 8, 16, 0.74);
-  backdrop-filter: blur(10px);
-}
-
-.doing-event-base-extra {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(140px, 180px) minmax(120px, auto);
-  gap: 14px;
-  align-items: end;
-}
-
-.doing-event-base-extra__check {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  color: var(--text-muted);
-  font-size: 0.86rem;
-  white-space: nowrap;
-}
-
-@media (max-width: 960px) {
-  .doing-dialog__header,
-  .doing-dialog__section-head,
-  .doing-dialog__actions,
-  .doing-card__footer {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .doing-card__facts,
-  .doing-event-base-extra {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+<style scoped src="./styles/StoryDoingDialog.css"></style>

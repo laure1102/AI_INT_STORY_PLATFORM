@@ -139,4 +139,368 @@
     trigger_expr: '',
     trigger_mode: 'default',
   },
+  {
+    end_script: '// 规则目的：记录玩家采用“高调撒钱”招聘口径，形成后续助理对玩家的第一层预判，并把应聘反馈延后到次日出现。\n// 读取变量：${player.team_recruit_attention} 作为当前关注度基线。\n// 计算规则：高调路线会提升招聘关注度，也更容易让应聘者先入为主地觉得玩家像暴发户老板，因此 first_impression 先写为 -1。\n// 写回变量：style=1，attention 增加，first_impression 设为偏负面但可被后续聊天修正；阶段保持为已发布，并标记已发布招聘；应聘消息改为次日触发，同时开放后续查看入口。\n${player.team_recruit_style} = 1\n${player.team_recruit_attention} = ${player.team_recruit_attention} + 2\n${player.team_zhuli_first_impression} = -1\n${player.team_recruit_stage} = 1\n${player.team_recruit_posted} = true\ndoing_unlock("do_recruit_zhuli_followup")\ninvoke_once pool recruit_zhuli_application delay_days=1',
+    id: 'recruit_post_style_high',
+    init_script: '',
+    invoke_params: [],
+    location: 'job_agency_linh',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '“高薪急招助理，效率第一，待遇不设上限，能立刻到岗最好。”',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '这话一发出去，像是在招人，也像是在告诉全县——${term.player.self_proud}有钱，而且很急着把摊子铺开。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '招聘口径：高调撒钱',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '// 规则目的：记录玩家采用“务实正规”招聘口径，让助理后续更容易把玩家视为靠谱雇主，并把应聘反馈延后到次日出现。\n// 读取变量：${player.team_recruit_attention} 作为当前关注度基线。\n// 计算规则：务实路线关注度适中，能给应聘者较稳定、较专业的第一感受，因此 first_impression 先写为 1。\n// 写回变量：style=2，attention 小幅增加，first_impression 设为偏正面，并标记已发布招聘；应聘消息改为次日触发，同时开放后续查看入口。\n${player.team_recruit_style} = 2\n${player.team_recruit_attention} = ${player.team_recruit_attention} + 1\n${player.team_zhuli_first_impression} = 1\n${player.team_recruit_stage} = 1\n${player.team_recruit_posted} = true\ndoing_unlock("do_recruit_zhuli_followup")\ninvoke_once pool recruit_zhuli_application delay_days=1',
+    id: 'recruit_post_style_regular',
+    init_script: '',
+    invoke_params: [],
+    location: 'job_agency_linh',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '“招聘助理一名，负责日程、对接、资料整理与事务跟进。薪资面议，流程规范，能长期配合优先。”',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '这份文案不花哨，但看起来像真准备做事。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '招聘口径：务实正规',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '// 规则目的：记录玩家采用“低调试水”招聘口径，保留谨慎起步的团队搭建风格，并把应聘反馈延后到次日出现。\n// 读取变量：${player.team_recruit_attention} 当前关注度基线。\n// 计算规则：低调路线外界关注度最低，但也会让优秀应聘者怀疑岗位稳定性，因此 first_impression 先写为 0，表示中性偏观望。\n// 写回变量：style=3，attention 不增加，first_impression 设为中性；阶段保持已发布，并标记已发布招聘；应聘消息改为次日触发，同时开放后续查看入口。\n${player.team_recruit_style} = 3\n${player.team_recruit_attention} = ${player.team_recruit_attention} + 0\n${player.team_zhuli_first_impression} = 0\n${player.team_recruit_stage} = 1\n${player.team_recruit_posted} = true\ndoing_unlock("do_recruit_zhuli_followup")\ninvoke_once pool recruit_zhuli_application delay_days=1',
+    id: 'recruit_post_style_lowkey',
+    init_script: '',
+    invoke_params: [],
+    location: 'job_agency_linh',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '“短期招聘一位事务协助，工作弹性，先合作看看，合适再长期安排。”',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '这种写法很稳，不容易招来太多闲话，但也容易让人觉得你还没想明白要做什么。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '招聘口径：低调试水',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '// 规则目的：玩家选择立刻沟通，体现效率导向，并调度初聊节点。\n// 读取变量：${player.team_recruit_stage} 用于确认流程已进入收到应聘阶段。\n// 计算规则：response_style 约定为 1立刻沟通、2先看履历、3暂缓处理。立刻沟通会让助理觉得玩家执行快。\n// 写回变量：写入 response_style=1，并直接调度初聊事件。\n${player.team_recruit_response_style} = 1\n${player.team_recruit_stage} = Math.max(${player.team_recruit_stage}, 2)\ninvoke_once chain recruit_zhuli_first_chat',
+    id: 'recruit_zhuli_reply_now',
+    init_script: '',
+    invoke_params: [],
+    location: 'job_agency_linh',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '你没多想，直接点开对话框。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '“可以，现在聊。”',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '立刻沟通',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '// 规则目的：玩家先看履历再沟通，体现谨慎与专业感，并调度初聊节点。\n// 读取变量：${player.team_zhuli_first_impression} 允许被轻度修正；${player.team_recruit_stage} 用于确认流程阶段。\n// 计算规则：先看履历会让助理感到玩家不是乱招人，因此若初始印象偏负，可轻微拉回；同时进入初聊节点。\n// 写回变量：response_style=2；若 first_impression 小于 1，则加 1；随后调度初聊。\n${player.team_recruit_response_style} = 2\n${player.team_recruit_stage} = Math.max(${player.team_recruit_stage}, 2)\nif (${player.team_zhuli_first_impression} < 1) {\n  ${player.team_zhuli_first_impression} = ${player.team_zhuli_first_impression} + 1\n}\ninvoke_once chain recruit_zhuli_first_chat',
+    id: 'recruit_zhuli_check_resume',
+    init_script: '',
+    invoke_params: [],
+    location: 'job_agency_linh',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '你先把她的履历从头到尾看了一遍。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '做过前台，也跟过小项目，最重要的是，字里行间透着一股会办事的利索劲。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '看完之后，你才回了她一句。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '先看履历',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '// 规则目的：允许玩家暂缓处理，不把招聘链路强制推到底，同时保留后续再次联系空间。\n// 读取变量：${player.team_recruit_stage} 当前阶段；${player.team_zhuli_application_received} 记录候选人已出现。\n// 写回变量：response_style=3，阶段仍保持在已收到应聘，不录用也不丢失线索。\n${player.team_recruit_response_style} = 3\n${player.team_recruit_stage} = Math.max(${player.team_recruit_stage}, 2)',
+    id: 'recruit_zhuli_hold',
+    init_script: '',
+    invoke_params: [],
+    location: 'job_agency_linh',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '你把这条应聘消息先搁在一边。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '人就在这儿，不急着今天拍板。真想做事的人，不会因为几个小时就跑。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '暂缓处理',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '',
+    id: 'recruit_zhuli_first_chat',
+    init_script: '// 规则目的：进入与助理的第一次正式沟通，根据此前招聘口径提供不同现实质感的第一印象承接。\n// 读取变量：${player.team_recruit_style}、${player.team_zhuli_first_impression}、${player.team_recruit_response_style}。\n// 计算规则：本节点主要负责承接前序选择，不直接锁定录用结果；管理姿态影响交给后续分支决定。\n// 写回变量：本节点不写回持久化结果。',
+    invoke_params: [],
+    location: 'office_interview_room',
+    next: [
+      'recruit_zhuli_chat_bold',
+      'recruit_zhuli_chat_rules',
+      'recruit_zhuli_chat_trial',
+    ],
+    node_type: 'event',
+    object_keys: [
+      'player',
+      'important:zhuli',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '视频一接通，对面的女孩先看了你两秒，像是在判断你到底是认真招人，还是一时兴起。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '“我先说明白，我来应聘助理，不是来陪老板演戏的。”',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+        {
+          content: '“如果你真有事要做，我能跟；如果只是砸钱找人围着你转，那我不合适。”',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '和助理线上初聊',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '// 规则目的：玩家在初聊里采取“爽快拍板”姿态，强化老板气场，但专业感略弱。\n// 读取变量：${player.team_zhuli_first_impression} 当前第一印象值。\n// 计算规则：该姿态会提高对方对玩家执行力的感受，但若前期口径过高调，也可能只把负面印象拉回到中性。\n// 写回变量：记录 manage_style=1，并将 first_impression 提升 1 点；随后进入录用判断节点。\n${player.team_manage_style} = 1\n${player.team_zhuli_first_impression} = ${player.team_zhuli_first_impression} + 1\n${player.team_recruit_stage} = Math.max(${player.team_recruit_stage}, 3)\ninvoke_once chain recruit_zhuli_hire_decision',
+    id: 'recruit_zhuli_chat_bold',
+    init_script: '',
+    invoke_params: [],
+    location: 'office_interview_room',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+      'important:zhuli',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '“我不跟你兜圈子。人我要，事我也真要做。你来，待遇不会差。”',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '“听着像个痛快老板。”',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+        {
+          content: '“但痛快和靠谱，不是一个词。”',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '沟通姿态：爽快拍板',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '// 规则目的：玩家在初聊里采取“讲清规则”姿态，建立更稳定的职业化印象。\n// 读取变量：${player.team_zhuli_first_impression} 当前第一印象值。\n// 计算规则：规则清晰会显著提高专业信任，因此 first_impression 增加 2；后续初始 favor 更高。\n// 写回变量：记录 manage_style=2，提升 first_impression，并进入录用判断节点。\n${player.team_manage_style} = 2\n${player.team_zhuli_first_impression} = ${player.team_zhuli_first_impression} + 2\n${player.team_recruit_stage} = Math.max(${player.team_recruit_stage}, 3)\ninvoke_once chain recruit_zhuli_hire_decision',
+    id: 'recruit_zhuli_chat_rules',
+    init_script: '',
+    invoke_params: [],
+    location: 'office_interview_room',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+      'important:zhuli',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '“岗位职责、工作节奏、报酬和边界，我都可以现在讲清楚。”',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '“我需要的是能对接、能筛信息、能替我挡住杂音的人，不是摆设。”',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '她那边明显安静了一下。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '“行，这样聊，我能听进去。”',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '沟通姿态：讲清规则',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '// 规则目的：玩家采取“先试用一天”姿态，体现风险控制，不把关系一次性写满。\n// 读取变量：${player.team_zhuli_first_impression} 当前第一印象值。\n// 计算规则：试用会让对方觉得你谨慎，也让双方都保留退路，因此印象小幅提升 1。\n// 写回变量：记录 manage_style=3，轻微提升印象，进入录用判断节点。\n${player.team_manage_style} = 3\n${player.team_zhuli_first_impression} = ${player.team_zhuli_first_impression} + 1\n${player.team_recruit_stage} = Math.max(${player.team_recruit_stage}, 3)\ninvoke_once chain recruit_zhuli_hire_decision',
+    id: 'recruit_zhuli_chat_trial',
+    init_script: '',
+    invoke_params: [],
+    location: 'office_interview_room',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+      'important:zhuli',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '“我不喜欢空口定终身。先试一天，彼此都看看。”',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '“这个说法，反而像真的。”',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '沟通姿态：先试用一天',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
+  {
+    end_script: '// 规则目的：把录用判断明确落地为一个分流节点，避免前序分支调度到不存在的事件，同时继续保留玩家选择空间。\n// 读取变量：${player.team_manage_style}、${player.team_zhuli_first_impression}、${player.team_recruit_stage}。\n// 计算规则：此节点只记录流程来到“待决定”阶段，不直接写死录用或拒绝；真正结果留给后续补充分支。\n// 写回变量：把招聘阶段推进到 4，表示已经进入录用判断环节。\n${player.team_recruit_stage} = Math.max(${player.team_recruit_stage}, 4)',
+    id: 'recruit_zhuli_hire_decision',
+    init_script: '',
+    invoke_params: [],
+    location: 'office_interview_room',
+    next: [],
+    node_type: 'event',
+    object_keys: [
+      'player',
+      'important:zhuli',
+    ],
+    presentation: {
+      dialogues: [
+        {
+          content: '你把话题停在这里，没有马上把结果说死。',
+          speaker_key: 'player',
+          speaker_type: 'player',
+        },
+        {
+          content: '对面也没催，只是等着你把这份合作到底当成临时帮手，还是认真搭班子，想清楚再开口。',
+          speaker_key: 'important:zhuli',
+          speaker_type: 'object',
+        },
+      ],
+      type: 'dialogue',
+    },
+    title: '录用判断',
+    trigger_expr: '',
+    trigger_mode: 'invoke',
+  },
 ]

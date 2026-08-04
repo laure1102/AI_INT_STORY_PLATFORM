@@ -1,0 +1,240 @@
+/* StoryPlayerOverrideValsDialog 的局部样式，只影响同名 Vue 组件。 */
+.player-override-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 8, 16, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.player-override-dialog__panel {
+  width: min(1280px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  padding: 20px;
+  overflow: auto;
+  border-radius: 22px;
+}
+
+.player-override-dialog__option-panel {
+  position: fixed;
+  inset: auto 20px 20px auto;
+  z-index: 1;
+  width: min(720px, calc(100vw - 40px));
+  max-height: min(620px, calc(100vh - 40px));
+  padding: 18px;
+  overflow: auto;
+  border-radius: 20px;
+  box-shadow: 0 22px 80px rgba(0, 0, 0, 0.42);
+}
+
+.player-override-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.player-override-dialog__title {
+  margin: 10px 0 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.4rem;
+  line-height: 1.1;
+}
+
+.player-override-dialog__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.player-override-dialog__hint,
+.player-override-dialog__warning {
+  margin: 10px 0 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.player-override-dialog__warning {
+  color: var(--warning);
+}
+
+.player-override-dialog__table-wrap {
+  margin-top: 16px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.player-override-dialog__table {
+  width: 100%;
+  min-width: 1260px;
+  border-collapse: collapse;
+}
+
+.player-override-dialog__option-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+}
+
+.player-override-dialog__table th,
+.player-override-dialog__table td,
+.player-override-dialog__option-table th,
+.player-override-dialog__option-table td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+
+.player-override-dialog__table th,
+.player-override-dialog__option-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(9, 19, 30, 0.92);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.player-override-dialog__order-col {
+  width: 76px;
+}
+
+.player-override-dialog__checkbox-col {
+  width: 132px;
+}
+
+.player-override-dialog__input-type-col {
+  width: 150px;
+}
+
+.player-override-dialog__group-col {
+  width: 124px;
+}
+
+.player-override-dialog__action-col {
+  width: 96px;
+}
+
+.player-override-dialog__order-cell,
+.player-override-dialog__checkbox-cell,
+.player-override-dialog__action-cell {
+  white-space: nowrap;
+}
+
+.player-override-dialog__order-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.player-override-dialog__icon-button {
+  width: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 10px;
+}
+
+.player-override-dialog__cell-input,
+.player-override-dialog__group-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.player-override-dialog__cell-input--invalid {
+  border-color: var(--warning);
+}
+
+.player-override-dialog__input-type-field {
+  display: grid;
+  gap: 8px;
+}
+
+.player-override-dialog__options-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+}
+
+.player-override-dialog__checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.player-override-dialog__tips-input {
+  min-height: 72px;
+}
+
+.player-override-dialog__row-delete {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+}
+
+.player-override-dialog__group-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.player-override-dialog__help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(186, 220, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.player-override-dialog__help-popover {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--text-main);
+  font-weight: 400;
+}
+
+.player-override-dialog__empty {
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.player-override-dialog__option-table-wrap {
+  margin-top: 16px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.player-override-dialog__footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .player-override-dialog__header,
+  .player-override-dialog__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .player-override-dialog__option-panel {
+    inset: auto 12px 12px;
+    width: calc(100vw - 24px);
+  }
+}

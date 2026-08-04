@@ -40,28 +40,34 @@ const editingOptionsRowKey = ref<string | null>(null)
 
 let draftKeySeed = 0
 
+/** 创建一份新的 `DraftKey` 数据。 @returns 计算、查找或构建后的结果。 */
 function createDraftKey() {
   draftKeySeed += 1
   return `player-override-${draftKeySeed}`
 }
 
+/** 创建一份新的 `OptionDraftKey` 数据。 @returns 计算、查找或构建后的结果。 */
 function createOptionDraftKey() {
   draftKeySeed += 1
   return `player-override-option-${draftKeySeed}`
 }
 
+/** 将 `Text` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value : ""
 }
 
+/** 将 `InputType` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeInputType(value: unknown): StoryPlayerOverrideInputType {
   return value === "select" ? "select" : "text"
 }
 
+/** 将 `GroupNo` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeGroupNo(value: unknown) {
   return Number.isInteger(value) && Number(value) >= 1 ? String(value) : "1"
 }
 
+/** 创建一份新的 `OptionDraft` 数据。 @param option 调用方传入的 `option`。 @returns 计算、查找或构建后的结果。 */
 function createOptionDraft(option?: Partial<StoryPlayerOverrideInputOption>): PlayerOverrideOptionDraft {
   return {
     draftKey: createOptionDraftKey(),
@@ -70,6 +76,7 @@ function createOptionDraft(option?: Partial<StoryPlayerOverrideInputOption>): Pl
   }
 }
 
+/** 复制 `Options`，避免共享可变引用。 @param options 调用方传入的 `options`。 @returns 计算、查找或构建后的结果。 */
 function cloneOptions(options: StoryPlayerOverrideInputOption[] | undefined): PlayerOverrideOptionDraft[] {
   if (!Array.isArray(options)) {
     return []
@@ -78,6 +85,7 @@ function cloneOptions(options: StoryPlayerOverrideInputOption[] | undefined): Pl
   return options.map((option) => createOptionDraft(option))
 }
 
+/** 清理 `GroupNoInput` 输入中的非法字符或范围。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function sanitizeGroupNoInput(value: string) {
   const digitsOnly = value.replace(/[^\d]/g, "")
   if (!digitsOnly) {
@@ -88,6 +96,7 @@ function sanitizeGroupNoInput(value: string) {
   return String(parsedValue >= 1 ? parsedValue : 1)
 }
 
+/** 创建一份新的 `EmptyRow` 数据。 @returns 计算、查找或构建后的结果。 */
 function createEmptyRow(): PlayerOverrideRowDraft {
   return {
     draftKey: createDraftKey(),
@@ -100,6 +109,7 @@ function createEmptyRow(): PlayerOverrideRowDraft {
   }
 }
 
+/** 复制 `Entry`，避免共享可变引用。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function cloneEntry(entry: StoryPlayerOverrideValEntry): PlayerOverrideRowDraft {
   return {
     draftKey: createDraftKey(),
@@ -161,10 +171,12 @@ const hasDuplicateVarKey = computed(() => {
   return false
 })
 
+/** 读取或计算 `NormalizedOptionValues`。 @param row 调用方传入的 `row`。 @returns 计算、查找或构建后的结果。 */
 function getNormalizedOptionValues(row: PlayerOverrideRowDraft) {
   return row.options.map((option) => option.value.trim()).filter(Boolean)
 }
 
+/** 判断 `hasDuplicateOptionValues` 对应的条件是否成立。 @param row 调用方传入的 `row`。 @returns 布尔判断结果。 */
 function hasDuplicateOptionValues(row: PlayerOverrideRowDraft) {
   const seen = new Set<string>()
 
@@ -179,6 +191,7 @@ function hasDuplicateOptionValues(row: PlayerOverrideRowDraft) {
   return false
 }
 
+/** 判断 `isOptionValueDuplicated` 对应的条件是否成立。 @param row 调用方传入的 `row`。 @param value 调用方传入的 `value`。 @returns 布尔判断结果。 */
 function isOptionValueDuplicated(row: PlayerOverrideRowDraft, value: string) {
   const normalizedValue = value.trim()
   if (!normalizedValue) {
@@ -204,15 +217,18 @@ const editingOptionsRow = computed(() => {
   return draftRows.value.find((row) => row.draftKey === editingOptionsRowKey.value) ?? null
 })
 
+/** 把外部或服务端数据同步到本地响应式状态。 @param file 调用方传入的 `file`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function syncDraft(file: StoryPlayerOverrideValsFile) {
   draftRows.value = file.entries.map(cloneEntry)
   editingOptionsRowKey.value = null
 }
 
+/** 新增一项 `Row` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addRow() {
   draftRows.value.push(createEmptyRow())
 }
 
+/** 移除指定的 `Row` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeRow(index: number) {
   if (draftRows.value[index]?.draftKey === editingOptionsRowKey.value) {
     editingOptionsRowKey.value = null
@@ -221,6 +237,7 @@ function removeRow(index: number) {
   draftRows.value.splice(index, 1)
 }
 
+/** 调整 `RowUp` 在列表中的顺序。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function moveRowUp(index: number) {
   if (index <= 0) {
     return
@@ -232,6 +249,7 @@ function moveRowUp(index: number) {
   draftRows.value = nextRows
 }
 
+/** 调整 `RowDown` 在列表中的顺序。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function moveRowDown(index: number) {
   if (index >= draftRows.value.length - 1) {
     return
@@ -243,22 +261,26 @@ function moveRowDown(index: number) {
   draftRows.value = nextRows
 }
 
+/** 根据当前输入构建 `SelectOptions` 结果。 @param rowDraft 调用方传入的 `rowDraft`。 @returns 计算、查找或构建后的结果。 */
 function buildSelectOptions(rowDraft: PlayerOverrideRowDraft) {
   return globalValOptions.value.filter((option) => {
     return option.value === rowDraft.varKey || !selectedVarKeySet.value.has(option.value)
   })
 }
 
+/** 执行 `updateGroupNo` 对应的局部业务逻辑。 @param row 调用方传入的 `row`。 @param value 调用方传入的 `value`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function updateGroupNo(row: PlayerOverrideRowDraft, value: string) {
   row.groupNoText = sanitizeGroupNoInput(value)
 }
 
+/** 处理 `GroupNoInput` 用户交互。 @param row 调用方传入的 `row`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleGroupNoInput(row: PlayerOverrideRowDraft, event: Event) {
   const target = event.target
   const nextValue = target instanceof HTMLInputElement ? target.value : "1"
   updateGroupNo(row, nextValue)
 }
 
+/** 处理 `InputTypeChange` 用户交互。 @param row 调用方传入的 `row`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleInputTypeChange(row: PlayerOverrideRowDraft, event: Event) {
   const target = event.target
   row.inputType = normalizeInputType(target instanceof HTMLSelectElement ? target.value : "text")
@@ -268,6 +290,7 @@ function handleInputTypeChange(row: PlayerOverrideRowDraft, event: Event) {
   }
 }
 
+/** 打开 `OptionsEditor` 界面并初始化临时状态。 @param row 调用方传入的 `row`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function openOptionsEditor(row: PlayerOverrideRowDraft) {
   if (row.inputType === "select" && row.options.length === 0) {
     row.options.push(createOptionDraft())
@@ -276,18 +299,22 @@ function openOptionsEditor(row: PlayerOverrideRowDraft) {
   editingOptionsRowKey.value = row.draftKey
 }
 
+/** 关闭 `OptionsEditor` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function closeOptionsEditor() {
   editingOptionsRowKey.value = null
 }
 
+/** 新增一项 `Option` 草稿。 @param row 调用方传入的 `row`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function addOption(row: PlayerOverrideRowDraft) {
   row.options.push(createOptionDraft())
 }
 
+/** 移除指定的 `Option` 数据。 @param row 调用方传入的 `row`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function removeOption(row: PlayerOverrideRowDraft, index: number) {
   row.options.splice(index, 1)
 }
 
+/** 调整 `OptionUp` 在列表中的顺序。 @param row 调用方传入的 `row`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function moveOptionUp(row: PlayerOverrideRowDraft, index: number) {
   if (index <= 0) {
     return
@@ -297,6 +324,7 @@ function moveOptionUp(row: PlayerOverrideRowDraft, index: number) {
   row.options.splice(index - 1, 0, targetOption!)
 }
 
+/** 调整 `OptionDown` 在列表中的顺序。 @param row 调用方传入的 `row`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function moveOptionDown(row: PlayerOverrideRowDraft, index: number) {
   if (index >= row.options.length - 1) {
     return
@@ -306,6 +334,7 @@ function moveOptionDown(row: PlayerOverrideRowDraft, index: number) {
   row.options.splice(index + 1, 0, targetOption!)
 }
 
+/** 将 `OutputOptions` 输入清洗为内部统一格式。 @param row 调用方传入的 `row`。 @returns 计算、查找或构建后的结果。 */
 function normalizeOutputOptions(row: PlayerOverrideRowDraft): StoryPlayerOverrideInputOption[] {
   if (row.inputType !== "select") {
     return []
@@ -322,6 +351,7 @@ function normalizeOutputOptions(row: PlayerOverrideRowDraft): StoryPlayerOverrid
   })
 }
 
+/** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
   emit("save", {
     entries: draftRows.value.map((row) => ({
@@ -608,244 +638,4 @@ watch(
   </Teleport>
 </template>
 
-<style scoped>
-.player-override-dialog {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(2, 8, 16, 0.72);
-  backdrop-filter: blur(10px);
-}
-
-.player-override-dialog__panel {
-  width: min(1280px, calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
-  padding: 20px;
-  overflow: auto;
-  border-radius: 22px;
-}
-
-.player-override-dialog__option-panel {
-  position: fixed;
-  inset: auto 20px 20px auto;
-  z-index: 1;
-  width: min(720px, calc(100vw - 40px));
-  max-height: min(620px, calc(100vh - 40px));
-  padding: 18px;
-  overflow: auto;
-  border-radius: 20px;
-  box-shadow: 0 22px 80px rgba(0, 0, 0, 0.42);
-}
-
-.player-override-dialog__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.player-override-dialog__title {
-  margin: 10px 0 0;
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.4rem;
-  line-height: 1.1;
-}
-
-.player-override-dialog__actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.player-override-dialog__hint,
-.player-override-dialog__warning {
-  margin: 10px 0 0;
-  font-size: 0.86rem;
-  color: var(--text-muted);
-}
-
-.player-override-dialog__warning {
-  color: var(--warning);
-}
-
-.player-override-dialog__table-wrap {
-  margin-top: 16px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.player-override-dialog__table {
-  width: 100%;
-  min-width: 1260px;
-  border-collapse: collapse;
-}
-
-.player-override-dialog__option-table {
-  width: 100%;
-  min-width: 640px;
-  border-collapse: collapse;
-}
-
-.player-override-dialog__table th,
-.player-override-dialog__table td,
-.player-override-dialog__option-table th,
-.player-override-dialog__option-table td {
-  padding: 8px;
-  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
-  text-align: left;
-  vertical-align: top;
-}
-
-.player-override-dialog__table th,
-.player-override-dialog__option-table th {
-  position: sticky;
-  top: 0;
-  background: rgba(9, 19, 30, 0.92);
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
-
-.player-override-dialog__order-col {
-  width: 76px;
-}
-
-.player-override-dialog__checkbox-col {
-  width: 132px;
-}
-
-.player-override-dialog__input-type-col {
-  width: 150px;
-}
-
-.player-override-dialog__group-col {
-  width: 124px;
-}
-
-.player-override-dialog__action-col {
-  width: 96px;
-}
-
-.player-override-dialog__order-cell,
-.player-override-dialog__checkbox-cell,
-.player-override-dialog__action-cell {
-  white-space: nowrap;
-}
-
-.player-override-dialog__order-buttons {
-  display: flex;
-  gap: 6px;
-}
-
-.player-override-dialog__icon-button {
-  width: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 0;
-  border-radius: 10px;
-}
-
-.player-override-dialog__cell-input,
-.player-override-dialog__group-input {
-  min-width: 0;
-  width: 100%;
-}
-
-.player-override-dialog__cell-input--invalid {
-  border-color: var(--warning);
-}
-
-.player-override-dialog__input-type-field {
-  display: grid;
-  gap: 8px;
-}
-
-.player-override-dialog__options-button {
-  min-height: 32px;
-  padding: 0 10px;
-  border-radius: 10px;
-}
-
-.player-override-dialog__checkbox-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-}
-
-.player-override-dialog__tips-input {
-  min-height: 72px;
-}
-
-.player-override-dialog__row-delete {
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 10px;
-}
-
-.player-override-dialog__group-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.player-override-dialog__help-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 1px solid rgba(186, 220, 255, 0.3);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.player-override-dialog__help-popover {
-  display: block;
-  margin-top: 6px;
-  font-size: 0.76rem;
-  line-height: 1.4;
-  color: var(--text-main);
-  font-weight: 400;
-}
-
-.player-override-dialog__empty {
-  padding: 16px;
-  color: var(--text-muted);
-  font-size: 0.84rem;
-}
-
-.player-override-dialog__option-table-wrap {
-  margin-top: 16px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.player-override-dialog__footer {
-  display: flex;
-  justify-content: flex-start;
-  margin-top: 16px;
-}
-
-@media (max-width: 900px) {
-  .player-override-dialog__header,
-  .player-override-dialog__actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .player-override-dialog__option-panel {
-    inset: auto 12px 12px;
-    width: calc(100vw - 24px);
-  }
-}
-</style>
+<style scoped src="./styles/StoryPlayerOverrideValsDialog.css"></style>

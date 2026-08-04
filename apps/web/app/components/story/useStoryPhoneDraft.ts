@@ -132,7 +132,8 @@ export interface PhoneContactProfileDraft {
   roleKey: string
 }
 
-interface PhoneDraftState {
+/** 手机配置弹窗在保存前使用的可编辑草稿。 */
+export interface PhoneDraftState {
   actions: PhoneActionDraft[]
   contactProfiles: PhoneContactProfileDraft[]
   fallbackReplies: PhoneTagRepliesDraft[]
@@ -145,10 +146,12 @@ interface PhoneDraftState {
 
 const AVAILABLE_CONTACT_TRACK_IDS: StoryPhoneContactTrackId[] = ["romance", "official", "social"]
 
+/** 复制 `Plain`，避免共享可变引用。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function clonePlain<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+/** 执行 `splitCsvText` 对应的局部业务逻辑。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function splitCsvText(value: string) {
   return value
     .split(/[,\n，、]/g)
@@ -156,6 +159,7 @@ function splitCsvText(value: string) {
     .filter(Boolean)
 }
 
+/** 执行 `splitLinesText` 对应的局部业务逻辑。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function splitLinesText(value: string) {
   return value
     .split(/\n+/g)
@@ -163,6 +167,7 @@ function splitLinesText(value: string) {
     .filter(Boolean)
 }
 
+/** 解析 `IntegerText` 输入，并为非法值提供安全结果。 @param value 调用方传入的 `value`。 @param fallback 调用方传入的 `fallback`。 @returns 计算、查找或构建后的结果。 */
 function parseIntegerText(value: unknown, fallback: number) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? Math.trunc(value) : fallback
@@ -176,6 +181,7 @@ function parseIntegerText(value: unknown, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+/** 解析 `NumberText` 输入，并为非法值提供安全结果。 @param value 调用方传入的 `value`。 @param fallback 调用方传入的 `fallback`。 @returns 计算、查找或构建后的结果。 */
 function parseNumberText(value: unknown, fallback: number) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : fallback
@@ -189,10 +195,12 @@ function parseNumberText(value: unknown, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+/** 执行 `clampFavor` 对应的局部业务逻辑。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function clampFavor(value: number) {
   return Math.max(0, Math.min(100, Math.trunc(value)))
 }
 
+/** 创建一份新的 `ScopeDraft` 数据。 @param scope 调用方传入的 `scope`。 @returns 计算、查找或构建后的结果。 */
 function createScopeDraft(
   scope?: Partial<StoryPhoneTalkLibraryEntry["scope"]>
 ): PhoneScopeDraft {
@@ -205,6 +213,7 @@ function createScopeDraft(
   }
 }
 
+/** 创建一份新的 `InvokeDraft` 数据。 @param invoke 调用方传入的 `invoke`。 @returns 计算、查找或构建后的结果。 */
 function createInvokeDraft(
   invoke?: Partial<NonNullable<StoryPhoneTalkLibraryEntry["invoke"]>>
 ): PhoneInvokeDraft {
@@ -218,6 +227,7 @@ function createInvokeDraft(
   }
 }
 
+/** 创建一份新的 `StageDraft` 数据。 @param stage 调用方传入的 `stage`。 @returns 计算、查找或构建后的结果。 */
 function createStageDraft(stage?: Partial<StoryPhoneRelationshipStage>): PhoneTrackStageDraft {
   return {
     allowContact: stage?.allow_contact ?? true,
@@ -234,6 +244,7 @@ function createStageDraft(stage?: Partial<StoryPhoneRelationshipStage>): PhoneTr
   }
 }
 
+/** 创建一份新的 `TalkDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function createTalkDraft(entry?: Partial<StoryPhoneTalkLibraryEntry>): PhoneTalkDraft {
   return {
     baseFavorDeltaText: String(entry?.base_favor_delta ?? 0),
@@ -247,6 +258,7 @@ function createTalkDraft(entry?: Partial<StoryPhoneTalkLibraryEntry>): PhoneTalk
   }
 }
 
+/** 创建一份新的 `ActionDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function createActionDraft(entry?: Partial<StoryPhoneActionLibraryEntry>): PhoneActionDraft {
   return {
     baseFavorDeltaText: String(entry?.base_favor_delta ?? 0),
@@ -265,6 +277,7 @@ function createActionDraft(entry?: Partial<StoryPhoneActionLibraryEntry>): Phone
   }
 }
 
+/** 创建一份新的 `ReplyDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function createReplyDraft(entry?: Partial<StoryPhoneReplyLibraryEntry>): PhoneReplyDraft {
   return {
     draftKey: createDraftKey("reply"),
@@ -275,6 +288,7 @@ function createReplyDraft(entry?: Partial<StoryPhoneReplyLibraryEntry>): PhoneRe
   }
 }
 
+/** 创建一份新的 `QuickMessageDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function createQuickMessageDraft(entry?: Partial<StoryPhoneQuickMessage>): PhoneQuickMessageDraft {
   return {
     availableRoleKeysText: Array.isArray(entry?.available_role_keys) ? entry.available_role_keys.join(", ") : "",
@@ -288,6 +302,7 @@ function createQuickMessageDraft(entry?: Partial<StoryPhoneQuickMessage>): Phone
   }
 }
 
+/** 创建一份新的 `TagRepliesDraft` 数据。 @param tag 调用方传入的 `tag`。 @param replies 调用方传入的 `replies`。 @returns 计算、查找或构建后的结果。 */
 function createTagRepliesDraft(tag = "", replies: string[] = []): PhoneTagRepliesDraft {
   return {
     draftKey: createDraftKey("tag-replies"),
@@ -296,10 +311,12 @@ function createTagRepliesDraft(tag = "", replies: string[] = []): PhoneTagReplie
   }
 }
 
+/** 创建一份新的 `TagRepliesDrafts` 数据。 @param replyMap 调用方传入的 `replyMap`。 @returns 计算、查找或构建后的结果。 */
 function createTagRepliesDrafts(replyMap?: Record<string, string[]>): PhoneTagRepliesDraft[] {
   return Object.entries(replyMap ?? {}).map(([tag, replies]) => createTagRepliesDraft(tag, replies))
 }
 
+/** 创建一份新的 `ProactiveMessageDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function createProactiveMessageDraft(
   entry?: Partial<StoryPhoneProactiveMessageRule>
 ): PhoneProactiveMessageDraft {
@@ -317,6 +334,7 @@ function createProactiveMessageDraft(
   }
 }
 
+/** 创建一份新的 `ContactProfileDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function createContactProfileDraft(entry?: Partial<StoryPhoneContactProfile>): PhoneContactProfileDraft {
   return {
     autoAdd: entry?.auto_add ?? true,
@@ -332,11 +350,13 @@ function createContactProfileDraft(entry?: Partial<StoryPhoneContactProfile>): P
 
 let draftKeySeed = 0
 
+/** 创建一份新的 `DraftKey` 数据。 @param prefix 调用方传入的 `prefix`。 @returns 计算、查找或构建后的结果。 */
 function createDraftKey(prefix: string) {
   draftKeySeed += 1
   return `${prefix}-${draftKeySeed}`
 }
 
+/** 创建一份新的 `EmptyDraftState` 数据。 @returns 计算、查找或构建后的结果。 */
 function createEmptyDraftState(): PhoneDraftState {
   return {
     actions: [],
@@ -350,6 +370,7 @@ function createEmptyDraftState(): PhoneDraftState {
   }
 }
 
+/** 创建一份新的 `DefaultTrackDraft` 数据。 @param trackId 调用方传入的 `trackId`。 @returns 计算、查找或构建后的结果。 */
 function createDefaultTrackDraft(trackId: StoryPhoneContactTrackId): PhoneTrackDraft {
   return {
     descr: "",
@@ -360,6 +381,7 @@ function createDefaultTrackDraft(trackId: StoryPhoneContactTrackId): PhoneTrackD
   }
 }
 
+/** 根据当前输入构建 `ScopePayload` 结果。 @param scope 调用方传入的 `scope`。 @returns 计算、查找或构建后的结果。 */
 function buildScopePayload(scope: PhoneScopeDraft) {
   return {
     contact_tracks: Array.from(new Set(scope.contact_tracks.filter((trackId) => trackId !== "none"))),
@@ -372,6 +394,7 @@ function buildScopePayload(scope: PhoneScopeDraft) {
   }
 }
 
+/** 根据当前输入构建 `InvokePayload` 结果。 @param invoke 调用方传入的 `invoke`。 @returns 计算、查找或构建后的结果。 */
 function buildInvokePayload(invoke: PhoneInvokeDraft) {
   if (!invoke.enabled || !invoke.eventId.trim()) {
     return undefined
@@ -392,6 +415,7 @@ function buildInvokePayload(invoke: PhoneInvokeDraft) {
   return payload
 }
 
+/** 根据当前输入构建 `TrackPayload` 结果。 @param track 调用方传入的 `track`。 @returns 计算、查找或构建后的结果。 */
 function buildTrackPayload(track: PhoneTrackDraft): StoryPhoneRelationshipTrack {
   return {
     descr: track.descr.trim(),
@@ -410,6 +434,7 @@ function buildTrackPayload(track: PhoneTrackDraft): StoryPhoneRelationshipTrack 
   }
 }
 
+/** 根据当前输入构建 `TalkPayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function buildTalkPayload(entry: PhoneTalkDraft): StoryPhoneTalkLibraryEntry {
   return {
     base_favor_delta: parseIntegerText(entry.baseFavorDeltaText, 0),
@@ -422,6 +447,7 @@ function buildTalkPayload(entry: PhoneTalkDraft): StoryPhoneTalkLibraryEntry {
   }
 }
 
+/** 根据当前输入构建 `ActionPayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function buildActionPayload(entry: PhoneActionDraft): StoryPhoneActionLibraryEntry {
   return {
     base_favor_delta: parseIntegerText(entry.baseFavorDeltaText, 0),
@@ -450,6 +476,7 @@ function buildActionPayload(entry: PhoneActionDraft): StoryPhoneActionLibraryEnt
   }
 }
 
+/** 根据当前输入构建 `ReplyPayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function buildReplyPayload(entry: PhoneReplyDraft): StoryPhoneReplyLibraryEntry {
   return {
     id: entry.id.trim(),
@@ -459,6 +486,7 @@ function buildReplyPayload(entry: PhoneReplyDraft): StoryPhoneReplyLibraryEntry 
   }
 }
 
+/** 根据当前输入构建 `QuickMessagePayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function buildQuickMessagePayload(entry: PhoneQuickMessageDraft): StoryPhoneQuickMessage {
   return {
     available_role_keys: Array.from(new Set(splitCsvText(entry.availableRoleKeysText))),
@@ -471,6 +499,7 @@ function buildQuickMessagePayload(entry: PhoneQuickMessageDraft): StoryPhoneQuic
   }
 }
 
+/** 根据当前输入构建 `RepliesRecordPayload` 结果。 @param entries 调用方传入的 `entries`。 @returns 计算、查找或构建后的结果。 */
 function buildRepliesRecordPayload(entries: PhoneTagRepliesDraft[]) {
   const replyMap: Record<string, string[]> = {}
 
@@ -487,6 +516,7 @@ function buildRepliesRecordPayload(entries: PhoneTagRepliesDraft[]) {
   return replyMap
 }
 
+/** 根据当前输入构建 `ProactiveMessagePayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function buildProactiveMessagePayload(entry: PhoneProactiveMessageDraft): StoryPhoneProactiveMessageRule {
   return {
     cooldown_hours: Math.max(1, parseIntegerText(entry.cooldownHoursText, 24)),
@@ -499,6 +529,7 @@ function buildProactiveMessagePayload(entry: PhoneProactiveMessageDraft): StoryP
   }
 }
 
+/** 根据当前输入构建 `ContactProfilePayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function buildContactProfilePayload(entry: PhoneContactProfileDraft): StoryPhoneContactProfile {
   return {
     auto_add: entry.autoAdd,
@@ -511,9 +542,11 @@ function buildContactProfilePayload(entry: PhoneContactProfileDraft): StoryPhone
   }
 }
 
+/** 组合 `StoryPhoneDraft` 的响应式状态、派生值和操作方法。 @param source 调用方传入的 `source`。 @returns 响应式状态、派生值和操作函数组成的 API 对象。 */
 export function useStoryPhoneDraft(source: StoryPhoneFile) {
   const draft = reactive(createEmptyDraftState())
 
+  /** 把外部或服务端数据同步到本地响应式状态。 @param phone 调用方传入的 `phone`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function syncFromPhone(phone: StoryPhoneFile) {
     draft.tracks = (phone.relationship_tracks ?? []).map((track) => ({
       descr: track.descr,
@@ -539,6 +572,7 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
     draft.fallbackReplies = createTagRepliesDrafts(phone.fallback_replies)
   }
 
+  /** 根据当前输入构建 `PhoneFile` 结果。 @returns 计算、查找或构建后的结果。 */
   function buildPhoneFile(): StoryPhoneFile {
     return {
       action_library: draft.actions.map((entry) => buildActionPayload(entry)),
@@ -557,6 +591,7 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
     }
   }
 
+  /** 新增一项 `Track` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addTrack() {
     const existingIds = new Set(draft.tracks.map((track) => track.id))
     const nextTrackId = AVAILABLE_CONTACT_TRACK_IDS.find((trackId) => !existingIds.has(trackId))
@@ -567,18 +602,22 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
     draft.tracks.push(createDefaultTrackDraft(nextTrackId))
   }
 
+  /** 移除指定的 `Track` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeTrack(index: number) {
     draft.tracks.splice(index, 1)
   }
 
+  /** 新增一项 `TrackStage` 草稿。 @param track 调用方传入的 `track`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addTrackStage(track: PhoneTrackDraft) {
     track.stages.push(createStageDraft())
   }
 
+  /** 移除指定的 `TrackStage` 数据。 @param track 调用方传入的 `track`。 @param stageIndex 调用方传入的 `stageIndex`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeTrackStage(track: PhoneTrackDraft, stageIndex: number) {
     track.stages.splice(stageIndex, 1)
   }
 
+  /** 新增一项 `Personality` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addPersonality() {
     draft.personalities.push({
       descr: "",
@@ -589,70 +628,87 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
     })
   }
 
+  /** 移除指定的 `Personality` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removePersonality(index: number) {
     draft.personalities.splice(index, 1)
   }
 
+  /** 新增一项 `Talk` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addTalk() {
     draft.talks.push(createTalkDraft())
   }
 
+  /** 移除指定的 `Talk` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeTalk(index: number) {
     draft.talks.splice(index, 1)
   }
 
+  /** 新增一项 `Action` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addAction() {
     draft.actions.push(createActionDraft())
   }
 
+  /** 移除指定的 `Action` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeAction(index: number) {
     draft.actions.splice(index, 1)
   }
 
+  /** 新增一项 `Reply` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addReply() {
     draft.replies.push(createReplyDraft())
   }
 
+  /** 移除指定的 `Reply` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeReply(index: number) {
     draft.replies.splice(index, 1)
   }
 
+  /** 新增一项 `QuickMessage` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addQuickMessage() {
     draft.quickMessages.push(createQuickMessageDraft())
   }
 
+  /** 移除指定的 `QuickMessage` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeQuickMessage(index: number) {
     draft.quickMessages.splice(index, 1)
   }
 
+  /** 新增一项 `ContactProfile` 草稿。 @param roleKey 调用方传入的 `roleKey`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addContactProfile(roleKey = "") {
     draft.contactProfiles.push(createContactProfileDraft({ role_key: roleKey }))
   }
 
+  /** 移除指定的 `ContactProfile` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeContactProfile(index: number) {
     draft.contactProfiles.splice(index, 1)
   }
 
+  /** 新增一项 `ContactReply` 草稿。 @param profile 调用方传入的 `profile`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addContactReply(profile: PhoneContactProfileDraft) {
     profile.replyByTag.push(createTagRepliesDraft())
   }
 
+  /** 移除指定的 `ContactReply` 数据。 @param profile 调用方传入的 `profile`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeContactReply(profile: PhoneContactProfileDraft, index: number) {
     profile.replyByTag.splice(index, 1)
   }
 
+  /** 新增一项 `ProactiveMessage` 草稿。 @param profile 调用方传入的 `profile`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addProactiveMessage(profile: PhoneContactProfileDraft) {
     profile.proactiveMessages.push(createProactiveMessageDraft())
   }
 
+  /** 移除指定的 `ProactiveMessage` 数据。 @param profile 调用方传入的 `profile`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeProactiveMessage(profile: PhoneContactProfileDraft, index: number) {
     profile.proactiveMessages.splice(index, 1)
   }
 
+  /** 新增一项 `FallbackReply` 草稿。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function addFallbackReply() {
     draft.fallbackReplies.push(createTagRepliesDraft())
   }
 
+  /** 移除指定的 `FallbackReply` 数据。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
   function removeFallbackReply(index: number) {
     draft.fallbackReplies.splice(index, 1)
   }

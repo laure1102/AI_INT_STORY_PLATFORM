@@ -35,6 +35,14 @@ export interface HealthResponse {
   ok: true
 }
 
+export interface StoryRevisionRequest {
+  expectedRevision: number
+}
+
+export interface StoryRevisionResponse {
+  revision: number
+}
+
 export interface StoryListResponse {
   stories: StorySummary[]
 }
@@ -46,28 +54,30 @@ export interface CreateStoryRequest {
   tags?: string[]
 }
 
-export interface CreateStoryResponse {
+export interface CreateStoryResponse extends StoryRevisionResponse {
   story: StoryDocument
   summary: StorySummary
 }
 
-export interface StoryDocumentResponse {
+export interface StoryDocumentResponse extends StoryRevisionResponse {
   story: StoryDocument
 }
 
 export interface StoryMetaResponse {
   story: StoryMetaFile
+  revision?: number
 }
 
-export interface SaveStoryMetaRequest {
+export interface SaveStoryMetaRequest extends StoryRevisionRequest {
   story: StoryMetaFile
 }
 
 export interface StoryBibleResponse {
   storyBible: StoryBibleFile
+  revision?: number
 }
 
-export interface SaveStoryBibleRequest {
+export interface SaveStoryBibleRequest extends StoryRevisionRequest {
   storyBible: StoryBibleFile
 }
 
@@ -246,6 +256,60 @@ export interface RunStoryCreationAgentResponse {
   logs: StoryCreationAgentLog[]
 }
 
+export type StoryCreationJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled"
+
+export interface StoryCreationJobTokenUsage {
+  inputTokens: number | null
+  outputTokens: number | null
+  totalTokens: number | null
+}
+
+export interface StoryCreationJobNodeLog extends StoryCreationAgentLog {
+  id: string
+  status: "running" | "completed" | "failed" | "cancelled"
+  model: string
+  startedAt: string
+  completedAt?: string
+  durationMs?: number
+  retryCount: number
+  tokenUsage: StoryCreationJobTokenUsage
+  errorCode?: string
+}
+
+export interface StoryCreationJob {
+  id: string
+  storyId: string
+  threadId: string
+  status: StoryCreationJobStatus
+  instruction: string
+  createdAt: string
+  updatedAt: string
+  startedAt?: string
+  completedAt?: string
+  currentRole?: StoryCreationAgentRole
+  logs: StoryCreationJobNodeLog[]
+  result?: RunStoryCreationAgentResponse
+  error?: {
+    code: string
+    message: string
+  }
+}
+
+export type CreateStoryCreationJobRequest = RunStoryCreationAgentRequest
+
+export interface StoryCreationJobResponse {
+  job: StoryCreationJob
+}
+
+export interface StoryCreationJobListResponse {
+  jobs: StoryCreationJob[]
+}
+
+export type StoryCreationJobStreamEvent =
+  | { type: "snapshot"; job: StoryCreationJob }
+  | { type: "log"; log: StoryCreationJobNodeLog }
+  | { type: "status"; job: StoryCreationJob }
+
 export type StoryCreationHistoryTurnMode = "new" | "feedback"
 export type StoryCreationHistoryTurnStatus = "running" | "done" | "failed" | "cancelled"
 export type StoryCreationHistorySessionStatus = "running" | "draft" | "applied" | "failed" | "cancelled"
@@ -290,18 +354,20 @@ export interface StoryCreationHistoryResponse {
   history: StoryCreationHistoryFile
 }
 
-export interface SaveStoryCreationHistorySessionRequest {
+export interface SaveStoryCreationHistorySessionRequest extends StoryRevisionRequest {
   session: StoryCreationHistorySession
 }
 
 export interface SaveStoryCreationHistorySessionResponse {
   session: StoryCreationHistorySession
   history: StoryCreationHistoryFile
+  revision: number
 }
 
 export interface DeleteStoryCreationHistorySessionResponse {
   deletedId: string
   history: StoryCreationHistoryFile
+  revision: number
 }
 
 export interface ApplyStoryCreationDraftSelection {
@@ -326,7 +392,7 @@ export interface ApplyStoryCreationDraftSelection {
   variables?: string[]
 }
 
-export interface ApplyStoryCreationDraftRequest {
+export interface ApplyStoryCreationDraftRequest extends StoryRevisionRequest {
   draft: StoryCreationDraft
   selection: ApplyStoryCreationDraftSelection
 }
@@ -352,114 +418,129 @@ export interface ApplyStoryCreationDraftResponse {
     shopProducts: number
   }
   warnings: string[]
+  revision: number
 }
 
 export interface StoryEventResponse {
   event: StoryAnyEventFile
+  revision?: number
 }
 
 export interface StoryDeleteEventResponse {
   ok: true
+  revision: number
 }
 
-export interface SaveEventRequest {
+export interface SaveEventRequest extends StoryRevisionRequest {
   collectionType: StoryEventCollectionType
   event: StoryAnyEventFile
 }
 
 export interface StoryValsResponse {
   vals: StoryValsFile
+  revision?: number
 }
 
-export interface SaveValsRequest {
+export interface SaveValsRequest extends StoryRevisionRequest {
   vals: StoryValsFile
 }
 
 export interface StorySystemValsResponse {
   systemVals: StoryValsFile
+  revision?: number
 }
 
-export interface SaveSystemValsRequest {
+export interface SaveSystemValsRequest extends StoryRevisionRequest {
   systemVals: StoryValsFile
 }
 
 export interface StoryPlayerOverrideValsResponse {
   playerOverrideVals: StoryPlayerOverrideValsFile
+  revision?: number
 }
 
-export interface SavePlayerOverrideValsRequest {
+export interface SavePlayerOverrideValsRequest extends StoryRevisionRequest {
   playerOverrideVals: StoryPlayerOverrideValsFile
 }
 
 export interface StoryScenesResponse {
   scenes: StorySceneFile
+  revision?: number
 }
 
-export interface SaveScenesRequest {
+export interface SaveScenesRequest extends StoryRevisionRequest {
   scenes: StorySceneFile
 }
 
 export interface StoryRolesResponse {
   roles: StoryRolesFile
+  revision?: number
 }
 
-export interface SaveRolesRequest {
+export interface SaveRolesRequest extends StoryRevisionRequest {
   roles: StoryRolesFile
 }
 
 export interface StoryEventLocationsResponse {
   eventLocations: StoryEventLocationFile
+  revision?: number
 }
 
-export interface SaveEventLocationsRequest {
+export interface SaveEventLocationsRequest extends StoryRevisionRequest {
   eventLocations: StoryEventLocationFile
 }
 
 export interface StoryItemsResponse {
   items: StoryItemsFile
+  revision?: number
 }
 
-export interface SaveStoryItemsRequest {
+export interface SaveStoryItemsRequest extends StoryRevisionRequest {
   items: StoryItemsFile
 }
 
 export interface StoryShopResponse {
   shop: StoryShopFile
+  revision?: number
 }
 
-export interface SaveStoryShopRequest {
+export interface SaveStoryShopRequest extends StoryRevisionRequest {
   shop: StoryShopFile
 }
 
 export interface StoryPhoneResponse {
   phone: StoryPhoneFile
+  revision?: number
 }
 
-export interface SaveStoryPhoneRequest {
+export interface SaveStoryPhoneRequest extends StoryRevisionRequest {
   phone: StoryPhoneFile
 }
 
 export interface StoryPhoneConversationsResponse {
   phoneConversations: StoryPhoneConversationsFile
+  revision?: number
 }
 
-export interface SaveStoryPhoneConversationsRequest {
+export interface SaveStoryPhoneConversationsRequest extends StoryRevisionRequest {
   phoneConversations: StoryPhoneConversationsFile
 }
 
 export interface StoryReferResponse {
   refer: StoryReferFile
+  revision?: number
 }
 
-export interface SaveStoryReferRequest {
+export interface SaveStoryReferRequest extends StoryRevisionRequest {
   refer: StoryReferFile
 }
 
 export interface StoryDoingResponse {
   doing: StoryDoingFile
+  revision?: number
 }
 
-export interface SaveStoryDoingRequest {
+export interface SaveStoryDoingRequest extends StoryRevisionRequest {
   doing: StoryDoingFile
 }
 
@@ -482,9 +563,10 @@ export interface StoryAssetMetadata {
 
 export interface StoryAssetResponse {
   asset: StoryAssetMetadata
+  revision?: number
 }
 
-export interface CompressSceneBackgroundRequest {
+export interface CompressSceneBackgroundRequest extends StoryRevisionRequest {
   sourcePath: string
   level: number
   variant: StorySceneBackgroundVariant
@@ -505,7 +587,7 @@ export interface GenerateRolePromptResponse {
   prompt: string
 }
 
-export interface GenerateRoleImageRequest {
+export interface GenerateRoleImageRequest extends StoryRevisionRequest {
   gender: "common" | "male" | "female"
   globalPrompt: string
   width: number
@@ -516,9 +598,10 @@ export interface GenerateRoleImageRequest {
 
 export interface GenerateRoleImageResponse {
   asset: StoryAssetMetadata
+  revision: number
 }
 
-export interface CompressRoleImageRequest {
+export interface CompressRoleImageRequest extends StoryRevisionRequest {
   sourcePath: string
   targetName: string
   quality: number
@@ -535,7 +618,7 @@ export interface GenerateLocationPromptResponse {
   prompt: string
 }
 
-export interface GenerateLocationImageRequest {
+export interface GenerateLocationImageRequest extends StoryRevisionRequest {
   globalPrompt: string
   width: number
   height: number
@@ -545,9 +628,10 @@ export interface GenerateLocationImageRequest {
 
 export interface GenerateLocationImageResponse {
   asset: StoryAssetMetadata
+  revision: number
 }
 
-export interface CompressLocationImageRequest {
+export interface CompressLocationImageRequest extends StoryRevisionRequest {
   sourcePath: string
   targetName: string
   quality: number
@@ -565,7 +649,7 @@ export interface GenerateItemPromptResponse {
   prompt: string
 }
 
-export interface GenerateItemImageRequest {
+export interface GenerateItemImageRequest extends StoryRevisionRequest {
   globalPrompt: string
   width: number
   height: number
@@ -575,9 +659,10 @@ export interface GenerateItemImageRequest {
 
 export interface GenerateItemImageResponse {
   asset: StoryAssetMetadata
+  revision: number
 }
 
-export interface CompressItemImageRequest {
+export interface CompressItemImageRequest extends StoryRevisionRequest {
   sourcePath: string
   targetName: string
   quality: number
@@ -597,7 +682,9 @@ export interface ExportResponse {
 export interface ApiErrorResponse {
   error: {
     message: string
-    code?: string
+    code: string
+    requestId: string
+    details?: unknown
   }
 }
 

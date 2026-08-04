@@ -8,12 +8,14 @@ type StoryScriptDocBlock =
   | { id: string; text: string; type: "paragraph" }
   | { id: string; type: "divider" }
 
+/** 解析 `StoryScriptMarkdown` 输入，并为非法值提供安全结果。 @param markdown 调用方传入的 `markdown`。 @returns 计算、查找或构建后的结果。 */
 function parseStoryScriptMarkdown(markdown: string) {
   const blocks: StoryScriptDocBlock[] = []
   const lines = markdown.split(/\r?\n/)
   let index = 0
   let blockId = 0
 
+  /** 执行 `nextId` 对应的局部业务逻辑。 @returns 计算、查找或构建后的结果。 */
   function nextId() {
     blockId += 1
     return `story-script-block-${blockId}`

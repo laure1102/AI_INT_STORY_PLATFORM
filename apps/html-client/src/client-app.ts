@@ -1,13 +1,11 @@
 ﻿import { existsSync } from "node:fs"
 import type { Dirent } from "node:fs"
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
+import { readdir } from "node:fs/promises"
 import path from "node:path"
 import { compileStory } from "@story-mgr/compiler"
 import { createStoryFileStore } from "@story-mgr/file-store"
-import JSON5 from "json5"
 import {
   createStorySession,
-  type RuntimePlayerProfileSetup,
   type RuntimeProfileCustomFile,
   type RuntimeStoryBundle,
   type RuntimeStorySaveState,
@@ -15,570 +13,68 @@ import {
   type RuntimeStorySessionAction,
   type RuntimeStoryViewModel
 } from "@story-mgr/runtime"
-import type { StoryPlayerOverrideValEntry } from "@story-mgr/core"
+
 import type {
-  StoryPlayerOverrideInputOption,
-  StoryPlayerOverrideInputType
-} from "@story-mgr/core"
+  HtmlClientStage,
+  HtmlClientPaths,
+  HtmlProfileSummary,
+  HtmlSaveSlotSummary,
+  HtmlClientAppState,
+  CreateHtmlProfileInput,
+  HtmlPlayerOverridePrompt,
+  CreateHtmlClientAppOptions,
+  HtmlClientApp
+} from "./client-contracts"
+export type {
+  HtmlClientStage,
+  HtmlClientPaths,
+  HtmlProfileSummary,
+  HtmlSaveSlotSummary,
+  HtmlClientAppState,
+  CreateHtmlProfileInput,
+  HtmlPlayerOverridePrompt,
+  CreateHtmlClientAppOptions,
+  HtmlClientApp
+} from "./client-contracts"
+import {
+  buildPlayerDisplayName,
+  createNowFactory,
+  createProfileId,
+  resolveHtmlPaths,
+  resolveProfilePaths,
+  resolveSaveFile,
+  sanitizeSegment
+} from "./client-paths"
+import {
+  buildHtmlPlayerOverridePrompts,
+  buildLocationLabel,
+  buildPlayerCustomValues,
+  buildPlayerSetupFromCustomValues,
+  buildProfileNameFromCustomValues,
+  clonePlayerSetup,
+  normalizePlayerSetup
+} from "./client-profile"
+import {
+  ensureDirectory,
+  readDirectoryNames,
+  readJson5File,
+  readJsonFile,
+  readOptionalJson5File,
+  writeJson5File,
+  writeJsonFile
+} from "./client-storage"
 
-export type HtmlClientStage =
-  | "boot"
-  | "sync-story-bundle"
-  | "select-or-create-profile"
-  | "load-profile-custom"
-  | "select-save-or-new-game"
-  | "create-session"
-  | "enter-game"
-
-export interface HtmlClientPaths {
-  dataDir: string
-  runtimeDir: string
-  storyDir: string
-  bundleFile: string
-  profilesDir: string
-}
-
-export interface HtmlProfileSummary {
-  profileId: string
-  profileName: string
-  createdAt: string
-  filePath: string
-  customValueCount: number
-  playerSetup: RuntimePlayerProfileSetup | null
-  locationLabel: string | null
-}
-
-export interface HtmlSaveSlotSummary {
-  slotId: string
-  savedAt: string
-  filePath: string
-  activeEventId: string | null
-}
-
-export interface HtmlClientAppState {
-  stage: HtmlClientStage
-  storyId: string
-  paths: HtmlClientPaths
-  bundle: RuntimeStoryBundle | null
-  profiles: HtmlProfileSummary[]
-  profile: RuntimeProfileCustomFile | null
-  saveSlots: HtmlSaveSlotSummary[]
-  session: RuntimeStorySession | null
-  view: RuntimeStoryViewModel | null
-  notifications: string[]
-}
-
-export interface CreateHtmlProfileInput {
-  profileId?: string
-  profileName: string
-  playerSetup?: RuntimePlayerProfileSetup
-  customValues?: Record<string, unknown>
-}
-
-export interface HtmlPlayerOverridePrompt {
-  varKey: string
-  label: string
-  tips: string
-  required: boolean
-  groupNo: number
-  inputType: StoryPlayerOverrideInputType
-  options: StoryPlayerOverrideInputOption[]
-}
-
-export interface CreateHtmlClientAppOptions {
-  storyId: string
-  dataDir?: string
-  runtimeDir?: string
-  now?: Date
-  profileId?: string
-  slotId?: string
-  autoStartNewGame?: boolean
-}
-
-export interface HtmlClientApp {
-  getState(): HtmlClientAppState
-  bootstrap(): Promise<HtmlClientAppState>
-  syncStoryBundle(): Promise<RuntimeStoryBundle>
-  listProfiles(): Promise<HtmlProfileSummary[]>
-  listPlayerOverridePrompts(): Promise<HtmlPlayerOverridePrompt[]>
-  createProfile(input: CreateHtmlProfileInput): Promise<RuntimeProfileCustomFile>
-  selectProfile(profileId: string): Promise<RuntimeProfileCustomFile>
-  listSaveSlots(): Promise<HtmlSaveSlotSummary[]>
-  startNewGame(): Promise<RuntimeStorySession>
-  loadSave(slotId: string): Promise<RuntimeStorySession>
-  saveToSlot(slotId: string): Promise<RuntimeStorySaveState>
-  dispatch(action: RuntimeStorySessionAction): void
-  tick(deltaMs: number): void
-  setTimePause(paused: boolean): void
-  setTimeSpeed(speed: number): void
-}
+export { buildHtmlPlayerOverridePrompts } from "./client-profile"
 
 class HtmlClientError extends Error {
+  /** @param message 面向调用方的客户端流程错误说明。 @returns 带固定错误名的 Error 实例。 */
   constructor(message: string) {
     super(message)
     this.name = "HtmlClientError"
   }
 }
 
-const PLAYER_NAME_TOKENS = [
-  "player.name",
-  "system.player_name",
-  "system.role_name",
-  "system.player_display_name"
-] as const
-
-const PLAYER_SURNAME_TOKENS = [
-  "player.name_xing",
-  "system.player_surname"
-] as const
-
-const PLAYER_GIVEN_NAME_TOKENS = [
-  "player.name_ming",
-  "system.player_given_name"
-] as const
-
-const COUNTY_NAME_TOKENS = [
-  "county.name_full",
-  "system.county_name",
-  "system.county_full_name"
-] as const
-
-const COUNTY_SHORT_NAME_TOKENS = [
-  "county.name_short",
-  "system.county_short_name"
-] as const
-
-const CITY_NAME_TOKENS = [
-  "county.parent_city",
-  "system.city_name",
-  "system.parent_city"
-] as const
-
-const PROVINCE_NAME_TOKENS = [
-  "county.province",
-  "system.province_name"
-] as const
-
-// 从当前目录向上寻找工作区根目录，避免在子包里启动时找错 data 目录。
-function findWorkspaceRoot(startDirectory: string) {
-  let currentDirectory = path.resolve(startDirectory)
-
-  while (true) {
-    if (existsSync(path.join(currentDirectory, "pnpm-workspace.yaml"))) {
-      return currentDirectory
-    }
-
-    const parentDirectory = path.dirname(currentDirectory)
-    if (parentDirectory === currentDirectory) {
-      return path.resolve(startDirectory)
-    }
-
-    currentDirectory = parentDirectory
-  }
-}
-
-// 统一解析 HTML 客户端的本地运行目录结构。
-function resolveHtmlPaths(storyId: string, dataDir?: string, runtimeDir?: string): HtmlClientPaths {
-  const workspaceRoot = findWorkspaceRoot(process.cwd())
-  const resolvedDataDir = path.resolve(dataDir ?? path.join(workspaceRoot, "data"))
-  const resolvedRuntimeDir = path.resolve(runtimeDir ?? path.join(workspaceRoot, ".html-client"))
-  const storyDir = path.join(resolvedRuntimeDir, "stories", storyId)
-
-  return {
-    dataDir: resolvedDataDir,
-    runtimeDir: resolvedRuntimeDir,
-    storyDir,
-    bundleFile: path.join(storyDir, "bundle.json"),
-    profilesDir: path.join(storyDir, "profiles")
-  }
-}
-
-function resolveProfilePaths(paths: HtmlClientPaths, profileId: string) {
-  const profileDir = path.join(paths.profilesDir, profileId)
-
-  return {
-    profileDir,
-    customFile: path.join(profileDir, "custom.json5"),
-    savesDir: path.join(profileDir, "saves")
-  }
-}
-
-function resolveSaveFile(paths: HtmlClientPaths, profileId: string, slotId: string) {
-  return path.join(resolveProfilePaths(paths, profileId).savesDir, `${slotId}.json5`)
-}
-
-function createNowFactory(fixedNow?: Date) {
-  return () => (fixedNow ? new Date(fixedNow) : new Date())
-}
-
-// 本地标识只保留安全字符，方便直接映射为目录名与文件名。
-function sanitizeSegment(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "")
-}
-
-function createProfileId(input: CreateHtmlProfileInput) {
-  const preferredId = sanitizeSegment(input.profileId ?? "")
-  if (preferredId) {
-    return preferredId
-  }
-
-  const sourceName = input.profileName.trim() || buildPlayerDisplayName(input.playerSetup ?? {
-    player_surname: "",
-    player_given_name: "",
-    player_name: ""
-  }) || ""
-  const nameSlug = sanitizeSegment(sourceName)
-  return nameSlug || `profile-${Date.now().toString(36)}`
-}
-
-function deriveCountyShortName(countyName: string) {
-  const trimmedCountyName = countyName.trim()
-  return Array.from(trimmedCountyName)[0] ?? ""
-}
-
-function clonePlayerSetup(playerSetup: RuntimePlayerProfileSetup): RuntimePlayerProfileSetup {
-  return {
-    player_surname: playerSetup.player_surname ?? "",
-    player_given_name: playerSetup.player_given_name ?? "",
-    player_name: playerSetup.player_name ?? "",
-    county_name: playerSetup.county_name,
-    county_short_name: playerSetup.county_short_name,
-    city_name: playerSetup.city_name,
-    province_name: playerSetup.province_name
-  }
-}
-
-function getRecordStringValue(source: Record<string, unknown>, keys: readonly string[]) {
-  for (const key of keys) {
-    const value = source[key]
-    if (typeof value === "string" && value.trim()) {
-      return value.trim()
-    }
-  }
-
-  return ""
-}
-
-function getCustomStringValue(source: Record<string, unknown>, key: string) {
-  const value = source[key]
-  return typeof value === "string" ? value.trim() : ""
-}
-
-function findPlayerOverrideEntry(
-  bundle: RuntimeStoryBundle,
-  token: string
-): StoryPlayerOverrideValEntry | null {
-  return bundle.playerOverrideVals.entries.find(
-    (entry: StoryPlayerOverrideValEntry) => entry.var_key.trim() === token.trim()
-  ) ?? null
-}
-
-function findBundleVarLabel(bundle: RuntimeStoryBundle, token: string) {
-  const [groupName, rowName] = token.split(".")
-
-  if (!groupName || !rowName) {
-    return token
-  }
-
-  const matchedGroup = bundle.vals.variables.find((group) => group.name.trim() === groupName.trim())
-  const matchedRow = matchedGroup?.vals.find((row) => row.name.trim() === rowName.trim())
-  const rowDescription = matchedRow?.description?.trim() ?? ""
-
-  return rowDescription ? `${token} - ${rowDescription}` : token
-}
-
-function buildLocationLabel(playerSetup: RuntimePlayerProfileSetup | null) {
-  if (!playerSetup) {
-    return null
-  }
-
-  const locationParts = [
-    playerSetup.province_name.trim(),
-    playerSetup.city_name.trim(),
-    playerSetup.county_name.trim()
-  ].filter(Boolean)
-
-  return locationParts.length > 0 ? locationParts.join("/") : null
-}
-
-function buildPlayerDisplayName(playerSetup: Pick<RuntimePlayerProfileSetup, "player_surname" | "player_given_name" | "player_name">) {
-  const playerSurname = typeof playerSetup.player_surname === "string"
-    ? playerSetup.player_surname.trim()
-    : ""
-  const playerGivenName = typeof playerSetup.player_given_name === "string"
-    ? playerSetup.player_given_name.trim()
-    : ""
-  const playerName = typeof playerSetup.player_name === "string"
-    ? playerSetup.player_name.trim()
-    : ""
-  const fullName = `${playerSurname}${playerGivenName}`
-
-  return fullName || playerName
-}
-
-function normalizePlayerSetup(profile: RuntimeProfileCustomFile) {
-  if (profile.player_setup) {
-    const normalizedPlayerSetup = clonePlayerSetup(profile.player_setup)
-    const playerName = buildPlayerDisplayName(normalizedPlayerSetup)
-
-    return {
-      ...normalizedPlayerSetup,
-      player_name: playerName
-    }
-  }
-
-  const explicitPlayerName = getRecordStringValue(profile.custom_values, PLAYER_NAME_TOKENS)
-  const explicitPlayerSurname = getRecordStringValue(profile.custom_values, PLAYER_SURNAME_TOKENS)
-  const explicitPlayerGivenName = getRecordStringValue(profile.custom_values, PLAYER_GIVEN_NAME_TOKENS)
-  const countyName = getRecordStringValue(profile.custom_values, COUNTY_NAME_TOKENS)
-  const countyShortName =
-    getRecordStringValue(profile.custom_values, COUNTY_SHORT_NAME_TOKENS)
-    || deriveCountyShortName(countyName)
-  const cityName = getRecordStringValue(profile.custom_values, CITY_NAME_TOKENS)
-  const provinceName = getRecordStringValue(profile.custom_values, PROVINCE_NAME_TOKENS)
-  const hasStructuredValue = Boolean(
-    explicitPlayerName || countyName || countyShortName || cityName || provinceName
-  )
-
-  if (!hasStructuredValue) {
-    return null
-  }
-
-  const playerName = `${explicitPlayerSurname}${explicitPlayerGivenName}` || explicitPlayerName || profile.profile_name
-
-  return {
-    player_surname: explicitPlayerSurname,
-    player_given_name: explicitPlayerGivenName,
-    player_name: playerName,
-    county_name: countyName,
-    county_short_name: countyShortName,
-    city_name: cityName,
-    province_name: provinceName
-  } satisfies RuntimePlayerProfileSetup
-}
-
-function buildPlayerSetupFromCustomValues(customValues: Record<string, unknown>) {
-  const explicitPlayerName = getRecordStringValue(customValues, PLAYER_NAME_TOKENS)
-  const explicitPlayerSurname = getRecordStringValue(customValues, PLAYER_SURNAME_TOKENS)
-  const explicitPlayerGivenName = getRecordStringValue(customValues, PLAYER_GIVEN_NAME_TOKENS)
-  const countyName = getRecordStringValue(customValues, COUNTY_NAME_TOKENS)
-  const countyShortName =
-    getRecordStringValue(customValues, COUNTY_SHORT_NAME_TOKENS)
-    || deriveCountyShortName(countyName)
-  const cityName = getRecordStringValue(customValues, CITY_NAME_TOKENS)
-  const provinceName = getRecordStringValue(customValues, PROVINCE_NAME_TOKENS)
-  const hasStructuredValue = Boolean(
-    explicitPlayerName || countyName || countyShortName || cityName || provinceName
-  )
-
-  if (!hasStructuredValue) {
-    return null
-  }
-
-  const playerName = `${explicitPlayerSurname}${explicitPlayerGivenName}` || explicitPlayerName
-
-  return {
-    player_surname: explicitPlayerSurname,
-    player_given_name: explicitPlayerGivenName,
-    player_name: playerName,
-    county_name: countyName,
-    county_short_name: countyShortName,
-    city_name: cityName,
-    province_name: provinceName
-  } satisfies RuntimePlayerProfileSetup
-}
-
-async function ensureDirectory(directory: string) {
-  await mkdir(directory, { recursive: true })
-}
-
-async function readJson5File<T>(filePath: string): Promise<T> {
-  const raw = await readFile(filePath, "utf8")
-  return JSON5.parse(raw) as T
-}
-
-async function readOptionalJson5File<T>(filePath: string): Promise<T | null> {
-  try {
-    return await readJson5File<T>(filePath)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return null
-    }
-
-    throw error
-  }
-}
-
-async function writeJson5File(filePath: string, value: unknown) {
-  await ensureDirectory(path.dirname(filePath))
-  await writeFile(filePath, `${JSON5.stringify(value, null, 2)}\n`, "utf8")
-}
-
-async function writeJsonFile(filePath: string, value: unknown) {
-  await ensureDirectory(path.dirname(filePath))
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8")
-}
-
-async function readJsonFile<T>(filePath: string): Promise<T> {
-  const raw = await readFile(filePath, "utf8")
-  return JSON.parse(raw) as T
-}
-
-async function readDirectoryNames(directory: string) {
-  try {
-    const entries = await readdir(directory, { withFileTypes: true, encoding: "utf8" })
-    return entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .sort((left, right) => left.localeCompare(right))
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return []
-    }
-
-    throw error
-  }
-}
-
-function collectBundleVariableTokens(bundle: RuntimeStoryBundle) {
-  const tokens = new Set<string>()
-
-  for (const valsFile of [bundle.vals, bundle.systemVals]) {
-    for (const group of valsFile.variables) {
-      const groupName = group.name.trim()
-
-      for (const row of group.vals) {
-        const rowName = row.name.trim()
-        if (groupName && rowName) {
-          tokens.add(`${groupName}.${rowName}`)
-        }
-      }
-    }
-  }
-
-  return tokens
-}
-
-function buildProfileNameFromCustomValues(
-  bundle: RuntimeStoryBundle,
-  customValues: Record<string, unknown>
-) {
-  const playerSetup = buildPlayerSetupFromCustomValues(customValues)
-  if (playerSetup) {
-    const displayName = buildPlayerDisplayName(playerSetup)
-    if (displayName) {
-      return displayName
-    }
-  }
-
-  for (const entry of bundle.playerOverrideVals.entries) {
-    const value = getCustomStringValue(customValues, entry.var_key)
-    if (value) {
-      return value
-    }
-  }
-
-  return ""
-}
-
-function normalizePlayerOverrideInputType(value: unknown): StoryPlayerOverrideInputType {
-  return value === "select" ? "select" : "text"
-}
-
-function normalizePlayerOverrideInputOptions(
-  value: unknown
-): StoryPlayerOverrideInputOption[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value
-    .map((option) => {
-      if (!option || typeof option !== "object") {
-        return null
-      }
-
-      const record = option as Record<string, unknown>
-      const optionValue = typeof record.value === "string" ? record.value.trim() : ""
-      const optionLabel = typeof record.label === "string" ? record.label.trim() : ""
-
-      if (!optionValue) {
-        return null
-      }
-
-      return {
-        label: optionLabel || optionValue,
-        value: optionValue
-      }
-    })
-    .filter((option): option is StoryPlayerOverrideInputOption => option !== null)
-}
-
-export function buildHtmlPlayerOverridePrompts(bundle: RuntimeStoryBundle): HtmlPlayerOverridePrompt[] {
-  return bundle.playerOverrideVals.entries
-    .filter((entry: StoryPlayerOverrideValEntry) => entry.need_player_override)
-    .map((entry: StoryPlayerOverrideValEntry) => {
-      const normalizedVarKey = entry.var_key.trim()
-      const matchedEntry = findPlayerOverrideEntry(bundle, normalizedVarKey)
-      const inputType = normalizePlayerOverrideInputType(matchedEntry?.input_type ?? entry.input_type)
-      return {
-        varKey: normalizedVarKey,
-        label: findBundleVarLabel(bundle, normalizedVarKey),
-        tips: (matchedEntry?.tips ?? entry.tips).trim(),
-        required: normalizedVarKey !== "county.name_short",
-        groupNo: Number.isInteger(entry.group_no) && entry.group_no >= 1 ? entry.group_no : 1,
-        inputType,
-        options: inputType === "select"
-          ? normalizePlayerOverrideInputOptions(matchedEntry?.input_options ?? entry.input_options)
-          : []
-      }
-    })
-}
-
-function applyCustomTokenValues(
-  customValues: Record<string, unknown>,
-  tokens: Set<string>,
-  candidates: readonly string[],
-  value: string
-) {
-  const trimmedValue = value.trim()
-
-  if (!trimmedValue) {
-    return
-  }
-
-  for (const candidate of candidates) {
-    if (tokens.has(candidate)) {
-      customValues[candidate] = trimmedValue
-    }
-  }
-}
-
-// 建角向导的字段会先映射成标准 custom_values，再由运行时叠加到 bundle 上。
-function buildPlayerCustomValues(
-  bundle: RuntimeStoryBundle,
-  playerSetup: RuntimePlayerProfileSetup
-) {
-  const customValues: Record<string, unknown> = {}
-  const tokens = collectBundleVariableTokens(bundle)
-  const playerDisplayName = buildPlayerDisplayName(playerSetup)
-
-  applyCustomTokenValues(customValues, tokens, PLAYER_NAME_TOKENS, playerDisplayName)
-  applyCustomTokenValues(customValues, tokens, PLAYER_SURNAME_TOKENS, playerSetup.player_surname)
-  applyCustomTokenValues(customValues, tokens, PLAYER_GIVEN_NAME_TOKENS, playerSetup.player_given_name)
-  applyCustomTokenValues(customValues, tokens, COUNTY_NAME_TOKENS, playerSetup.county_name)
-  applyCustomTokenValues(customValues, tokens, COUNTY_SHORT_NAME_TOKENS, playerSetup.county_short_name)
-  applyCustomTokenValues(customValues, tokens, CITY_NAME_TOKENS, playerSetup.city_name)
-  applyCustomTokenValues(customValues, tokens, PROVINCE_NAME_TOKENS, playerSetup.province_name)
-
-  return customValues
-}
-
+/** @param bundle 可能尚未加载的 bundle。 @returns 已确认存在的 bundle。 @throws 尚未同步故事时抛出客户端错误。 */
 function assertBundle(bundle: RuntimeStoryBundle | null): RuntimeStoryBundle {
   if (!bundle) {
     throw new HtmlClientError("The story bundle has not been synced yet.")
@@ -587,6 +83,7 @@ function assertBundle(bundle: RuntimeStoryBundle | null): RuntimeStoryBundle {
   return bundle
 }
 
+/** @param profile 当前选择档案。 @returns 已确认存在的档案。 @throws 尚未选择档案时抛错。 */
 function assertProfile(profile: RuntimeProfileCustomFile | null): RuntimeProfileCustomFile {
   if (!profile) {
     throw new HtmlClientError("No profile is selected.")
@@ -595,6 +92,7 @@ function assertProfile(profile: RuntimeProfileCustomFile | null): RuntimeProfile
   return profile
 }
 
+/** @param session 当前 Runtime Session。 @returns 已确认存在的会话。 @throws 尚未开始或加载游戏时抛错。 */
 function assertSession(session: RuntimeStorySession | null): RuntimeStorySession {
   if (!session) {
     throw new HtmlClientError("No runtime session is active.")
@@ -603,6 +101,7 @@ function assertSession(session: RuntimeStorySession | null): RuntimeStorySession
   return session
 }
 
+/** @param state 应用内部状态。 @returns 顶层及列表字段复制后的状态，防止外部直接 push/pop 内部数组。 */
 function cloneState(state: HtmlClientAppState): HtmlClientAppState {
   return {
     ...state,
@@ -612,6 +111,11 @@ function cloneState(state: HtmlClientAppState): HtmlClientAppState {
   }
 }
 
+/**
+ * 创建一个故事专用的 HTML 客户端应用门面。
+ * @param options 故事 id、数据/运行目录、固定时间以及可选自动载入档案和存档。
+ * @returns 管理 bundle、档案、存档和 Runtime Session 的异步应用对象；创建时本身不读磁盘。
+ */
 export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlClientApp {
   const paths = resolveHtmlPaths(options.storyId, options.dataDir, options.runtimeDir)
   const getNow = createNowFactory(options.now)
@@ -628,15 +132,21 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     notifications: []
   }
 
-  function transition(stage: HtmlClientStage) {
+  /** @param stage 新启动阶段。 @returns 无返回值；同步更新内部状态，供浏览器显示进度。 */
+  function transition(stage: HtmlClientStage): void {
     state.stage = stage
   }
 
-  function pushNotification(message: string) {
+  /** @param message 要展示的提示文本。 @returns 无返回值；按发生顺序追加到通知列表。 */
+  function pushNotification(message: string): void {
     state.notifications.push(message)
   }
 
-  // bundle 只在首次需要时读取，后续都复用内存中的结果。
+  /**
+   * 确保运行时 bundle 已载入内存。
+   * @returns 已缓存或从 bundle.json 读取的 bundle。 @throws 文件缺失或 JSON 损坏时抛错。
+   * 首次读取后复用同一对象，避免每个档案操作重复访问磁盘。
+   */
   async function ensureBundleLoaded() {
     if (state.bundle) {
       return state.bundle
@@ -647,6 +157,11 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     return bundle
   }
 
+  /**
+   * 扫描当前故事的全部本地档案。
+   * @returns 已按目录名稳定排序的档案摘要，同时替换 state.profiles。
+   * 缺少 custom.json5 的残留目录会被跳过，旧档案通过 normalizePlayerSetup 兼容转换。
+   */
   async function loadProfilesFromDisk() {
     await ensureDirectory(paths.profilesDir)
     const profileIds = await readDirectoryNames(paths.profilesDir)
@@ -677,7 +192,10 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     return state.profiles
   }
 
-  // 存档列表按时间倒序，方便继续游戏时优先看到最近一次保存。
+  /**
+   * 读取一个档案下的所有存档摘要。
+   * @param profileId 档案 id。 @returns 按 saved_at 从新到旧排序的存档列表，并写入 state.saveSlots。
+   */
   async function loadSaveSlotsFromDisk(profileId: string) {
     const profilePaths = resolveProfilePaths(paths, profileId)
     await ensureDirectory(profilePaths.savesDir)
@@ -718,7 +236,11 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     return saveSlots
   }
 
-  // 会话统一从这里创建，确保 bundle、custom、save 三层覆盖顺序固定。
+  /**
+   * 使用当前档案创建新会话或恢复存档。
+   * @param saveState 可选存档；省略表示新游戏。 @returns 已进入游戏阶段的 Runtime Session。
+   * 所有入口都走这里，确保 bundle → 档案覆盖 → 存档恢复的优先级一致。
+   */
   async function createSessionFromSelection(saveState?: RuntimeStorySaveState | null) {
     const bundle = await ensureBundleLoaded()
     const profile = assertProfile(state.profile)
@@ -743,9 +265,14 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
   }
 
   return {
+    /** @returns 当前应用状态的安全浅拷贝；列表字段不会与内部数组共享引用。 */
     getState() {
       return cloneState(state)
     },
+    /**
+     * 执行客户端启动流程。
+     * @returns 同步 bundle、加载档案，并按 options 可选自动选择/载入后的应用状态。
+     */
     async bootstrap() {
       transition("sync-story-bundle")
       await this.syncStoryBundle()
@@ -765,6 +292,10 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
 
       return this.getState()
     },
+    /**
+     * 从编辑器源文件重新编译并写入 HTML 客户端 bundle。
+     * @returns 新编译的 RuntimeStoryBundle；校验问题写入通知但仍保存可诊断 bundle。
+     */
     async syncStoryBundle() {
       // HTML 客户端不直接消费原始编辑器文件，而是先编译成运行时 bundle。
       const store = createStoryFileStore(paths.dataDir)
@@ -783,15 +314,22 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
 
       return bundle
     },
+    /** @returns 刷新后的本地档案摘要列表，并追加数量通知。 */
     async listProfiles() {
       const profiles = await loadProfilesFromDisk()
       pushNotification(`Found ${profiles.length} local profiles.`)
       return profiles
     },
+    /** @returns 当前故事要求玩家填写的建角字段；会按需加载 bundle。 */
     async listPlayerOverridePrompts() {
       const bundle = await ensureBundleLoaded()
       return buildHtmlPlayerOverridePrompts(bundle)
     },
+    /**
+     * 创建并立即选中一个本地角色档案。
+     * @param input 档案 id/名称、结构化玩家资料和自定义变量。 @returns 写盘后的档案文件。
+     * @throws 同 id 档案已存在时抛错；所有值先在内存合并，最后一次写入 custom.json5。
+     */
     async createProfile(input) {
       const profileId = createProfileId(input)
       const profilePaths = resolveProfilePaths(paths, profileId)
@@ -851,6 +389,7 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
 
       return nextProfile
     },
+    /** @param profileId 要选择的档案 id。 @returns 读取到的完整档案，并刷新其存档列表。 @throws 档案不存在时抛错。 */
     async selectProfile(profileId) {
       transition("load-profile-custom")
       const profilePaths = resolveProfilePaths(paths, profileId)
@@ -868,15 +407,18 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
 
       return profile
     },
+    /** @returns 当前所选档案按时间倒序的存档摘要。 @throws 尚未选择档案时抛错。 */
     async listSaveSlots() {
       const profile = assertProfile(state.profile)
       const saveSlots = await loadSaveSlotsFromDisk(profile.profile_id)
       pushNotification(`角色 "${profile.profile_name}" 共有 ${saveSlots.length} 个存档。`)
       return saveSlots
     },
+    /** @returns 使用当前档案创建的全新 Runtime Session。 */
     async startNewGame() {
       return createSessionFromSelection()
     },
+    /** @param slotId 存档槽 id。 @returns 从该 v1/v2 存档恢复的 Runtime Session。 @throws 槽不存在时抛错。 */
     async loadSave(slotId) {
       const profile = assertProfile(state.profile)
       const saveFile = resolveSaveFile(paths, profile.profile_id, slotId)
@@ -888,6 +430,11 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
 
       return createSessionFromSelection(saveState)
     },
+    /**
+     * 保存当前会话到指定槽位。
+     * @param slotId 用户输入槽名。 @returns 写入的 v2 存档对象。 @throws 没有档案/会话时抛错。
+     * 同时保存领域快照、播放游标和 bundle contentHash，随后刷新存档列表。
+     */
     async saveToSlot(slotId) {
       const profile = assertProfile(state.profile)
       const session = assertSession(state.session)
@@ -895,11 +442,13 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
       // 存档记录 bundle 版本，后面做兼容或迁移时可以据此判断。
       const normalizedSlotId = sanitizeSegment(slotId) || "slot-1"
       const saveState: RuntimeStorySaveState = {
+        schema_version: 2,
         slot_id: normalizedSlotId,
         story_id: options.storyId,
         profile_id: profile.profile_id,
-        bundle_version: bundle.generatedAt,
+        bundle_content_hash: bundle.contentHash ?? bundle.generatedAt,
         saved_at: getNow().toISOString(),
+        playback: session.getPlaybackState(),
         session_state: session.getSnapshot()
       }
 
@@ -913,22 +462,26 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
 
       return saveState
     },
+    /** @param action Runtime 交互动作。 @returns 无返回值；派发后立即重新构建 view。 */
     dispatch(action) {
       const session = assertSession(state.session)
       session.dispatch(action)
       // 每次动作派发后立即刷新视图模型，保持 UI 壳层尽量薄。
       state.view = session.getViewModel()
     },
+    /** @param deltaMs 本帧真实毫秒数。 @returns 无返回值；推进确定性运行时并刷新 view。 */
     tick(deltaMs) {
       const session = assertSession(state.session)
       session.tick(deltaMs)
       state.view = session.getViewModel()
     },
+    /** @param paused 是否手动暂停游戏时钟。 @returns 无返回值；设置后刷新 view。 */
     setTimePause(paused) {
       const session = assertSession(state.session)
       session.setTimePause(paused)
       state.view = session.getViewModel()
     },
+    /** @param speed 游戏时间倍率。 @returns 无返回值；交给 Runtime 规范并刷新 view。 */
     setTimeSpeed(speed) {
       const session = assertSession(state.session)
       session.setTimeSpeed(speed)
@@ -936,4 +489,3 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     }
   }
 }
-

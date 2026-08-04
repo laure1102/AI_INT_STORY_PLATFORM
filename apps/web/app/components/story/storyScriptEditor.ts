@@ -120,6 +120,7 @@ const STORY_SCRIPT_HIGHLIGHT_PATTERN =
 export const STORY_SCRIPT_TEMPLATE_PLACEHOLDER =
   "例如：今天是第 ${system.now_day} 天，账上还有 ${player.money}。"
 
+/** 打开 `StoryScriptReferencePage` 界面并初始化临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 export function openStoryScriptReferencePage() {
   if (typeof document === "undefined") {
     return
@@ -136,10 +137,12 @@ export function openStoryScriptReferencePage() {
   link.remove()
 }
 
+/** 将 `StoryScriptAutocompleteText` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 export function normalizeStoryScriptAutocompleteText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+/** 将 `StoryScriptAutocompleteDetailLines` 输入清洗为内部统一格式。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function normalizeStoryScriptAutocompleteDetailLines(value: unknown) {
   if (!Array.isArray(value)) {
     return []
@@ -150,6 +153,7 @@ function normalizeStoryScriptAutocompleteDetailLines(value: unknown) {
     .filter(Boolean)
 }
 
+/** 根据当前输入构建 `StoryScriptValAutocompleteItems` 结果。 @param vals 调用方传入的 `vals`。 @returns 计算、查找或构建后的结果。 */
 export function buildStoryScriptValAutocompleteItems(vals: StoryValsFile) {
   const seen = new Set<string>()
 
@@ -186,6 +190,7 @@ export function buildStoryScriptValAutocompleteItems(vals: StoryValsFile) {
   })
 }
 
+/** 根据当前输入构建 `StoryReferAutocompleteItems` 结果。 @param storyOrRefer 调用方传入的 `storyOrRefer`。 @returns 计算、查找或构建后的结果。 */
 export function buildStoryReferAutocompleteItems(
   storyOrRefer: Pick<StoryDocument, "refer"> | StoryReferFile | null | undefined
 ) {
@@ -221,6 +226,7 @@ export function buildStoryReferAutocompleteItems(
   })
 }
 
+/** 根据当前输入构建 `StoryPhoneConversationAutocompleteItems` 结果。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
 export function buildStoryPhoneConversationAutocompleteItems(
   story: Pick<StoryDocument, "phoneConversations"> | null | undefined
 ) {
@@ -248,10 +254,12 @@ export function buildStoryPhoneConversationAutocompleteItems(
   })
 }
 
+/** 根据当前输入构建 `StoryScriptBuiltinAutocompleteItems` 结果。 @returns 计算、查找或构建后的结果。 */
 export function buildStoryScriptBuiltinAutocompleteItems() {
   return STORY_SCRIPT_BUILTIN_AUTOCOMPLETE_ITEMS.map((item) => ({ ...item }))
 }
 
+/** 根据当前输入构建 `InvokeTargetParams` 结果。 @param event 调用方传入的 `event`。 @returns 计算、查找或构建后的结果。 */
 function buildInvokeTargetParams(
   event: Pick<StoryEventFile | StoryOnceEventFile | StoryLoopEventFile, "invoke_params">
 ) {
@@ -263,6 +271,7 @@ function buildInvokeTargetParams(
     .filter((param) => param.name)
 }
 
+/** 根据当前输入构建 `InvokeTargetOption` 结果。 @param type 调用方传入的 `type`。 @param event 调用方传入的 `event`。 @returns 计算、查找或构建后的结果。 */
 function buildInvokeTargetOption(
   type: "chain" | "pool" | "schedule",
   event: Pick<StoryEventFile | StoryOnceEventFile | StoryLoopEventFile, "id" | "title" | "invoke_params">
@@ -275,6 +284,7 @@ function buildInvokeTargetOption(
   }
 }
 
+/** 根据当前输入构建 `StoryScriptInvokeAutocompleteContext` 结果。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
 export function buildStoryScriptInvokeAutocompleteContext(
   story: StoryDocument | null | undefined
 ): StoryScriptInvokeAutocompleteContext {
@@ -303,6 +313,7 @@ export function buildStoryScriptInvokeAutocompleteContext(
   }
 }
 
+/** 执行 `mergeStoryScriptAutocompleteItems` 对应的局部业务逻辑。 @param itemGroups 调用方传入的 `itemGroups`。 @returns 计算、查找或构建后的结果。 */
 export function mergeStoryScriptAutocompleteItems(
   ...itemGroups: Array<StoryScriptAutocompleteItem[] | undefined>
 ) {
@@ -353,6 +364,7 @@ export function mergeStoryScriptAutocompleteItems(
   return mergedItems
 }
 
+/** 执行 `filterStoryScriptAutocompleteItems` 对应的局部业务逻辑。 @param queryText 调用方传入的 `queryText`。 @param sourceItems 调用方传入的 `sourceItems`。 @returns 计算、查找或构建后的结果。 */
 export function filterStoryScriptAutocompleteItems(
   queryText: string,
   sourceItems: StoryScriptAutocompleteItem[]
@@ -375,6 +387,7 @@ export function filterStoryScriptAutocompleteItems(
   })
 }
 
+/** 查找 `StoryScriptPlaceholderAutocompleteState` 对应的数据。 @param source 调用方传入的 `source`。 @param caret 调用方传入的 `caret`。 @returns 计算、查找或构建后的结果。 */
 function findStoryScriptPlaceholderAutocompleteState(source: string, caret: number): StoryScriptCommandAutocompleteState | null {
   const beforeCaret = source.slice(0, caret)
   const openPlaceholderIndex = beforeCaret.lastIndexOf("${")
@@ -395,6 +408,7 @@ function findStoryScriptPlaceholderAutocompleteState(source: string, caret: numb
   }
 }
 
+/** 根据当前输入构建 `InvokeTargetAutocompleteItems` 结果。 @param context 调用方传入的 `context`。 @param targetType 调用方传入的 `targetType`。 @returns 计算、查找或构建后的结果。 */
 function buildInvokeTargetAutocompleteItems(
   context: StoryScriptInvokeAutocompleteContext,
   targetType: string
@@ -419,6 +433,7 @@ function buildInvokeTargetAutocompleteItems(
     }))
 }
 
+/** 根据当前输入构建 `InvokeDelayAutocompleteItems` 结果。 @param targetType 调用方传入的 `targetType`。 @param eventId 调用方传入的 `eventId`。 @returns 计算、查找或构建后的结果。 */
 function buildInvokeDelayAutocompleteItems(
   targetType: string,
   eventId: string
@@ -469,6 +484,7 @@ function buildInvokeDelayAutocompleteItems(
   ]
 }
 
+/** 根据当前输入构建 `InvokeArgumentAutocompleteItems` 结果。 @param context 调用方传入的 `context`。 @param targetType 调用方传入的 `targetType`。 @param eventId 调用方传入的 `eventId`。 @returns 计算、查找或构建后的结果。 */
 function buildInvokeArgumentAutocompleteItems(
   context: StoryScriptInvokeAutocompleteContext,
   targetType: string,
@@ -495,6 +511,7 @@ function buildInvokeArgumentAutocompleteItems(
   )
 }
 
+/** 查找 `StoryScriptInvokeAutocompleteState` 对应的数据。 @param source 调用方传入的 `source`。 @param caret 调用方传入的 `caret`。 @param context 调用方传入的 `context`。 @returns 计算、查找或构建后的结果。 */
 function findStoryScriptInvokeAutocompleteState(
   source: string,
   caret: number,
@@ -568,6 +585,7 @@ function findStoryScriptInvokeAutocompleteState(
   }
 }
 
+/** 根据当前上下文解析 `StoryScriptCommandAutocomplete`。 @param source 调用方传入的 `source`。 @param caret 调用方传入的 `caret`。 @param options 调用方传入的 `options`。 @returns 计算、查找或构建后的结果。 */
 export function resolveStoryScriptCommandAutocomplete(
   source: string,
   caret: number,
@@ -591,6 +609,7 @@ export function resolveStoryScriptCommandAutocomplete(
   return findStoryScriptInvokeAutocompleteState(source, caret, invokeContext)
 }
 
+/** 执行 `escapeStoryScriptHighlightHtml` 对应的局部业务逻辑。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function escapeStoryScriptHighlightHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -598,6 +617,7 @@ function escapeStoryScriptHighlightHtml(value: string) {
     .replaceAll(">", "&gt;")
 }
 
+/** 执行 `pushStoryScriptPlainHighlightToken` 对应的局部业务逻辑。 @param tokens 调用方传入的 `tokens`。 @param text 调用方传入的 `text`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function pushStoryScriptPlainHighlightToken(
   tokens: StoryScriptHighlightToken[],
   text: string
@@ -612,6 +632,7 @@ function pushStoryScriptPlainHighlightToken(
   })
 }
 
+/** 执行 `pushStoryScriptCodeHighlightTokens` 对应的局部业务逻辑。 @param tokens 调用方传入的 `tokens`。 @param text 调用方传入的 `text`。 @returns 无返回值；函数通过响应式状态或副作用完成工作。 */
 function pushStoryScriptCodeHighlightTokens(
   tokens: StoryScriptHighlightToken[],
   text: string
@@ -639,6 +660,7 @@ function pushStoryScriptCodeHighlightTokens(
   pushStoryScriptPlainHighlightToken(tokens, text.slice(lastIndex))
 }
 
+/** 根据当前输入构建 `StoryScriptHighlightTokens` 结果。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 export function buildStoryScriptHighlightTokens(value: string): StoryScriptHighlightToken[] {
   const tokens: StoryScriptHighlightToken[] = []
   let segmentStart = 0
@@ -732,6 +754,7 @@ export function buildStoryScriptHighlightTokens(value: string): StoryScriptHighl
   return tokens
 }
 
+/** 根据当前上下文解析 `StoryScriptAutocompletePlacement`。 @param element 调用方传入的 `element`。 @returns 计算、查找或构建后的结果。 */
 export function resolveStoryScriptAutocompletePlacement(element: HTMLElement | null) {
   if (!element || typeof window === "undefined") {
     return "bottom" as const

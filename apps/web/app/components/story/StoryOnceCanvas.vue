@@ -17,6 +17,7 @@ const selectedEvent = computed(() => {
   return props.events.find((event) => event.id === props.selectedEventId) ?? null
 })
 
+/** 执行 `summarizeTrigger` 对应的局部业务逻辑。 @param event 调用方传入的 `event`。 @returns 计算、查找或构建后的结果。 */
 function summarizeTrigger(event: StoryOnceEventFile) {
   const mode = event.trigger_mode ?? "default"
 
@@ -41,6 +42,7 @@ function summarizeTrigger(event: StoryOnceEventFile) {
   return `${trimmed.slice(0, 56)}...`
 }
 
+/** 执行 `summarizePresentation` 对应的局部业务逻辑。 @param event 调用方传入的 `event`。 @returns 计算、查找或构建后的结果。 */
 function summarizePresentation(event: StoryOnceEventFile) {
   if (event.presentation.type === "silent") {
     return "静默"
@@ -53,11 +55,13 @@ function summarizePresentation(event: StoryOnceEventFile) {
   return `${event.presentation.dialogues.length} 条对白`
 }
 
+/** 处理 `Edit` 用户交互。 @param eventId 调用方传入的 `eventId`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleEdit(eventId: string) {
   emit("select", eventId)
   emit("edit", eventId)
 }
 
+/** 处理 `Delete` 用户交互。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleDelete(event: StoryOnceEventFile) {
   const label = event.title.trim() || event.id
   const confirmed =

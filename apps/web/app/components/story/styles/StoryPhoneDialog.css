@@ -1,0 +1,388 @@
+/* StoryPhoneDialog 的局部样式，只影响同名 Vue 组件。 */
+.phone-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 8, 16, 0.82);
+}
+
+.phone-dialog__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1420px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  padding: 18px;
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+.phone-dialog__body {
+  display: grid;
+  gap: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.phone-dialog__header,
+.phone-dialog__section-head,
+.phone-dialog__card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.phone-dialog__header-copy,
+.phone-dialog__card-title-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.phone-dialog__title,
+.phone-dialog__section-title,
+.phone-dialog__card-title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.phone-dialog__title {
+  font-size: 1.35rem;
+}
+
+.phone-dialog__section-title {
+  font-size: 1rem;
+}
+
+.phone-dialog__section-title--small {
+  font-size: 0.92rem;
+}
+
+.phone-dialog__subtitle,
+.phone-dialog__section-note,
+.phone-dialog__card-note,
+.phone-dialog__success {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.phone-dialog__success {
+  color: var(--accent);
+}
+
+.phone-dialog__header-actions,
+.phone-dialog__tabs,
+.phone-dialog__scope-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.phone-dialog__scope-checks--dense {
+  gap: 8px;
+}
+
+.phone-dialog__section-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.phone-dialog__tabs {
+  margin-top: 18px;
+}
+
+.phone-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid rgba(186, 220, 255, 0.12);
+}
+
+.phone-dialog__tab,
+.phone-dialog__action,
+.phone-dialog__card-remove {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 0.84rem;
+}
+
+.phone-dialog__tab {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+}
+
+.phone-dialog__tab--active {
+  border-color: rgba(125, 211, 252, 0.35);
+  background: rgba(125, 211, 252, 0.12);
+  color: var(--text-main);
+}
+
+.phone-dialog__section {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.phone-dialog__stack {
+  display: grid;
+  gap: 14px;
+}
+
+.phone-dialog__stack--compact {
+  gap: 10px;
+}
+
+.phone-dialog__card,
+.phone-dialog__nested-card,
+.phone-dialog__table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.phone-dialog__card,
+.phone-dialog__nested-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.phone-dialog__nested-card {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.phone-dialog__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.phone-dialog__grid--track,
+.phone-dialog__grid--invoke {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.phone-dialog__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.phone-dialog__field--wide {
+  grid-column: span 2;
+}
+
+.phone-dialog__label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.phone-dialog__textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.phone-dialog__textarea--cell {
+  min-height: 54px;
+}
+
+.phone-dialog__search {
+  width: min(360px, 100%);
+}
+
+.phone-dialog__result-count {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.phone-dialog__subsection {
+  display: grid;
+  gap: 8px;
+}
+
+.phone-dialog__hint {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.phone-dialog__helper-block {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px dashed rgba(186, 220, 255, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.phone-dialog__helper-summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.phone-dialog__helper-grid,
+.phone-dialog__helper-group {
+  display: grid;
+  gap: 8px;
+}
+
+.phone-dialog__helper-label {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.phone-dialog__chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.phone-dialog__chip {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(186, 220, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  text-align: left;
+}
+
+.phone-dialog__chip:hover {
+  color: var(--text-main);
+  border-color: rgba(125, 211, 252, 0.28);
+  background: rgba(125, 211, 252, 0.08);
+}
+
+.phone-dialog__inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.phone-dialog__chip-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(186, 220, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.phone-dialog__chip-check input {
+  margin: 0;
+}
+
+.phone-dialog__chip-check--active {
+  color: var(--text-main);
+  border-color: rgba(125, 211, 252, 0.28);
+  background: rgba(125, 211, 252, 0.1);
+}
+
+.phone-dialog__table-wrap {
+  overflow: auto;
+}
+
+.phone-dialog__table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.phone-dialog__table--compact {
+  min-width: 720px;
+}
+
+.phone-dialog__table th,
+.phone-dialog__table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(186, 220, 255, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+
+.phone-dialog__table th {
+  position: sticky;
+  top: 0;
+  background: rgba(9, 19, 30, 0.92);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.phone-dialog__cell-input,
+.phone-dialog__select,
+.phone-dialog__mini-input {
+  min-width: 0;
+}
+
+.phone-dialog__range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.phone-dialog__mini-input {
+  width: 82px;
+}
+
+.phone-dialog__range-sep {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.phone-dialog__actions-col {
+  width: 88px;
+}
+
+.phone-dialog__empty {
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.phone-dialog__empty--compact {
+  padding: 10px 0;
+}
+
+@media (max-width: 1080px) {
+  .phone-dialog__header,
+  .phone-dialog__section-head,
+  .phone-dialog__card-head,
+  .phone-dialog__header-actions,
+  .phone-dialog__section-tools {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .phone-dialog__grid,
+  .phone-dialog__grid--track,
+  .phone-dialog__grid--invoke {
+    grid-template-columns: 1fr;
+  }
+
+  .phone-dialog__field--wide {
+    grid-column: span 1;
+  }
+}
