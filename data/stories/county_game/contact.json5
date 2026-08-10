@@ -1,4 +1,13 @@
 {
+  default_channel_id: 'phone',
+  channels: [
+    {
+      id: 'phone',
+      name: '手机',
+      preset: 'phone',
+      labels: {},
+    },
+  ],
   action_library: [
     {
       base_favor_delta: 2,
@@ -57,7 +66,7 @@
           unit: 'hours',
           value: 5,
         },
-        event_id: 'phone_chulian_evening_walk',
+        event_id: 'contact_chulian_evening_walk',
         target_type: 'pool',
       },
       label: '约出去坐坐',
@@ -88,7 +97,7 @@
           unit: 'days',
           value: 1,
         },
-        event_id: 'phone_xianzhang_private_dinner',
+        event_id: 'contact_xianzhang_private_dinner',
         target_type: 'pool',
       },
       label: '私下请吃饭',
@@ -119,7 +128,7 @@
           unit: 'hours',
           value: 3,
         },
-        event_id: 'phone_zhuli_night_snack',
+        event_id: 'contact_zhuli_night_snack',
         target_type: 'pool',
       },
       label: '约夜宵复盘',
@@ -147,7 +156,7 @@
       cost_money: 300,
       id: 'action_xianzhang_office_visit',
       invoke: {
-        event_id: 'phone_xianzhang_office_visit',
+        event_id: 'contact_xianzhang_office_visit',
         target_type: 'pool',
       },
       label: '去县里拜访',
@@ -178,7 +187,7 @@
           unit: 'hours',
           value: 2,
         },
-        event_id: 'phone_yule_dama_book_room',
+        event_id: 'contact_yule_dama_book_room',
         target_type: 'pool',
       },
       label: '让她留个包厢',
@@ -228,7 +237,7 @@
             'zhuli_take_action',
             'thanks',
           ],
-          trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && phone_favor("important:zhuli") >= 20',
+          trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && contact_favor("important:zhuli") >= 20',
         },
       ],
       reply_by_tag: {
@@ -280,7 +289,7 @@
             'xianzhang_schedule_meet',
             'xianzhang_send_notes',
           ],
-          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 10 && ${system.now_hour} <= 20 && phone_favor("important:xianzhang") >= 20',
+          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 10 && ${system.now_hour} <= 20 && contact_favor("important:xianzhang") >= 20',
         },
       ],
       reply_by_tag: {
@@ -324,7 +333,7 @@
             'care',
             'meetup',
           ],
-          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 19 && ${system.now_hour} <= 23 && phone_favor("important:chulian") >= 35',
+          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 19 && ${system.now_hour} <= 23 && contact_favor("important:chulian") >= 35',
         },
       ],
       reply_by_tag: {
@@ -371,7 +380,7 @@
             'meetup',
             'greet',
           ],
-          trigger_expr: '${system.now_hour} >= 20 && ${system.now_hour} <= 23 && phone_favor("normal:yule_dama") >= 15',
+          trigger_expr: '${system.now_hour} >= 20 && ${system.now_hour} <= 23 && contact_favor("normal:yule_dama") >= 15',
         },
       ],
       reply_by_tag: {

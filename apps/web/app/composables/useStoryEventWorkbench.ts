@@ -11,7 +11,7 @@ import type {
 import type { ShallowRef } from "vue"
 
 export type EventCanvasTab = Extract<StoryEventCollectionType, "chain" | "pool" | "schedule">
-export type EventWorkbenchTab = EventCanvasTab | "doing" | "phone-conversations"
+export type EventWorkbenchTab = EventCanvasTab | "doing" | "contact-conversations"
 export type EventTriggerFilter = "all" | "normal" | "invoke"
 
 /** 组合 `StoryEventWorkbench` 的响应式状态、派生值和操作方法。 @param storyDocument 调用方传入的 `storyDocument`。 @returns 响应式状态、派生值和操作函数组成的 API 对象。 */
@@ -23,7 +23,7 @@ export function useStoryEventWorkbench(storyDocument: ShallowRef<StoryDocument |
     { key: "pool", label: "平面事件池" },
     { key: "schedule", label: "定时规则事件" },
     { key: "doing", label: "行动" },
-    { key: "phone-conversations", label: "手机剧情" }
+    { key: "contact-conversations", label: "联系人剧情" }
   ]
   const eventTriggerFilterOptions: Array<{ key: EventTriggerFilter; label: string }> = [
     { key: "all", label: "全部" },

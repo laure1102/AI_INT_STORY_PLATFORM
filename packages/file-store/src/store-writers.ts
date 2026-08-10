@@ -14,8 +14,8 @@ import {
   storyInitialBagsSchema,
   storyItemsSchema,
   storyMetaSchema,
-  storyPhoneConversationsSchema,
-  storyPhoneSchema,
+  storyContactConversationsSchema,
+  storyContactSchema,
   storyPlayerOverrideValsSchema,
   storyReferSchema,
   storyRolesSchema,
@@ -31,8 +31,8 @@ import {
   type StoryItemsFile,
   type StoryMetaFile,
   type StoryNormalRolesDataFile,
-  type StoryPhoneConversationsFile,
-  type StoryPhoneFile,
+  type StoryContactConversationsFile,
+  type StoryContactFile,
   type StoryPlayerOverrideValsFile,
   type StoryReferFile,
   type StoryRolesFile,
@@ -154,20 +154,20 @@ export function createStoryWriterOperations(dataDir: string) {
     return parsed
   }
 
-  /** @param storyId 故事 id。 @param value 普通手机配置。 @returns 写入后的配置。 */
-  async function writePhone(storyId: string, value: StoryPhoneFile): Promise<StoryPhoneFile> {
-    const parsed = storyPhoneSchema.parse(value)
-    await writeJson5File(createStoryPaths(dataDir, storyId).phoneFile, parsed satisfies StoryPhoneFile)
+  /** @param storyId 故事 id。 @param value 联系人配置。 @returns 写入后的配置。 */
+  async function writeContact(storyId: string, value: StoryContactFile): Promise<StoryContactFile> {
+    const parsed = storyContactSchema.parse(value)
+    await writeJson5File(createStoryPaths(dataDir, storyId).contactFile, parsed satisfies StoryContactFile)
     return parsed
   }
 
-  /** @param storyId 故事 id。 @param value 连续手机剧情。 @returns 写入后的会话文件。 */
-  async function writePhoneConversations(
+  /** @param storyId 故事 id。 @param value 连续联系人剧情。 @returns 写入后的会话文件。 */
+  async function writeContactConversations(
     storyId: string,
-    value: StoryPhoneConversationsFile
-  ): Promise<StoryPhoneConversationsFile> {
-    const parsed = storyPhoneConversationsSchema.parse(value)
-    await writeJson5File(createStoryPaths(dataDir, storyId).phoneConversationsFile, parsed satisfies StoryPhoneConversationsFile)
+    value: StoryContactConversationsFile
+  ): Promise<StoryContactConversationsFile> {
+    const parsed = storyContactConversationsSchema.parse(value)
+    await writeJson5File(createStoryPaths(dataDir, storyId).contactConversationsFile, parsed satisfies StoryContactConversationsFile)
     return parsed
   }
 
@@ -199,8 +199,8 @@ export function createStoryWriterOperations(dataDir: string) {
     writeEventLocations,
     writeInitialBags,
     writeItems,
-    writePhone,
-    writePhoneConversations,
+    writeContact,
+    writeContactConversations,
     writePlayerOverrideVals,
     writeRefer,
     writeRoles,

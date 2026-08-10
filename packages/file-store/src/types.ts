@@ -23,8 +23,8 @@ import {
   storyInitialBagsSchema,
   storyItemsSchema,
   storyLoopEventSchema,
-  storyPhoneConversationsSchema,
-  storyPhoneSchema,
+  storyContactConversationsSchema,
+  storyContactSchema,
   storyReferSchema,
   storyScheduleEventsSchema,
   storyShopSchema,
@@ -55,8 +55,8 @@ import {
   type StoryOnceEventFile,
   type StoryOnceEventsFile,
   type StoryPoolEventsFile,
-  type StoryPhoneFile,
-  type StoryPhoneConversationsFile,
+  type StoryContactFile,
+  type StoryContactConversationsFile,
   type StoryPlayerOverrideValsFile,
   type StoryReferFile,
   type StoryImportantRolesDataFile,
@@ -86,7 +86,7 @@ export interface StoryFileStore {
     expectedRevision: number
   ): Promise<StoryMutationResult<StoryDocument>>
   readStoryBible(storyId: string): Promise<StoryBibleFile>
-  readPhoneConversations(storyId: string): Promise<StoryPhoneConversationsFile>
+  readContactConversations(storyId: string): Promise<StoryContactConversationsFile>
   writeStoryMeta(storyId: string, story: StoryMetaFile): Promise<StoryMetaFile>
   readEvent(
     storyId: string,
@@ -114,8 +114,8 @@ export interface StoryFileStore {
   writeItems(storyId: string, items: StoryItemsFile): Promise<StoryItemsFile>
   writeShop(storyId: string, shop: StoryShopFile): Promise<StoryShopFile>
   writeInitialBags(storyId: string, initialBags: StoryInitialBagsFile): Promise<StoryInitialBagsFile>
-  writePhone(storyId: string, phone: StoryPhoneFile): Promise<StoryPhoneFile>
-  writePhoneConversations(storyId: string, phoneConversations: StoryPhoneConversationsFile): Promise<StoryPhoneConversationsFile>
+  writeContact(storyId: string, contact: StoryContactFile): Promise<StoryContactFile>
+  writeContactConversations(storyId: string, contactConversations: StoryContactConversationsFile): Promise<StoryContactConversationsFile>
   writeRefer(storyId: string, refer: StoryReferFile): Promise<StoryReferFile>
   writeDoing(storyId: string, doing: StoryDoingFile): Promise<StoryDoingFile>
   writeVals(storyId: string, vals: StoryValsFile): Promise<StoryValsFile>

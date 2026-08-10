@@ -17,14 +17,14 @@ import type {
   StoryDoingFile,
   StoryEventFile,
   StoryEventLocationFile,
-  StoryPhoneFile,
+  StoryContactFile,
   StoryReferFile,
   StoryItemsFile,
   StoryLoopEventFile,
   StoryMetaFile,
   StoryOnceEventFile,
   StoryPlayerOverrideValsFile,
-  StoryPhoneConversationsFile,
+  StoryContactConversationsFile,
   StoryRolesFile,
   StorySceneFile,
   StoryShopFile,
@@ -90,8 +90,8 @@ const {
   saveStoryMeta,
   saveStoryCreationHistorySession,
   saveItems,
-  savePhone,
-  savePhoneConversations,
+  saveContact,
+  saveContactConversations,
   saveRefer,
   saveShop,
   savePlayerOverrideVals,
@@ -166,7 +166,7 @@ const {
   isLocationsDialogOpen,
   isItemsDialogOpen,
   isShopDialogOpen,
-  isPhoneDialogOpen,
+  isContactDialogOpen,
   isReferDialogOpen,
   isRolesDialogOpen,
   isSettingsDialogOpen,
@@ -176,9 +176,9 @@ const scenesSaveSuccessMessage = shallowRef<string | null>(null)
 const locationsSaveSuccessMessage = shallowRef<string | null>(null)
 const itemsSaveSuccessMessage = shallowRef<string | null>(null)
 const shopSaveSuccessMessage = shallowRef<string | null>(null)
-const phoneSaveSuccessMessage = shallowRef<string | null>(null)
-const phoneConversationsSaveErrorMessage = shallowRef<string | null>(null)
-const phoneConversationsSaveSuccessMessage = shallowRef<string | null>(null)
+const contactSaveSuccessMessage = shallowRef<string | null>(null)
+const contactConversationsSaveErrorMessage = shallowRef<string | null>(null)
+const contactConversationsSaveSuccessMessage = shallowRef<string | null>(null)
 const referSaveSuccessMessage = shallowRef<string | null>(null)
 const doingSaveSuccessMessage = shallowRef<string | null>(null)
 const rolesSaveSuccessMessage = shallowRef<string | null>(null)
@@ -294,7 +294,7 @@ const storyScriptItemIds = computed(() => {
   return storyDocument.value?.items.items.map((item) => item.id) ?? []
 })
 
-const phoneInvokeEventOptions = computed(() => {
+const contactInvokeEventOptions = computed(() => {
   if (!storyDocument.value) {
     return []
   }
@@ -524,17 +524,17 @@ function removeEventFromDocument(
     creationAgentRunMode, creationAgentError, creationApplyMessage, creationApplyWarnings,
     creationHistory, activeCreationHistorySessionId, editingEventId, creatingFromEventId,
     creatingEventDraft, scenesSaveSuccessMessage, locationsSaveSuccessMessage, itemsSaveSuccessMessage,
-    shopSaveSuccessMessage, phoneSaveSuccessMessage, phoneConversationsSaveErrorMessage, phoneConversationsSaveSuccessMessage,
+    shopSaveSuccessMessage, contactSaveSuccessMessage, contactConversationsSaveErrorMessage, contactConversationsSaveSuccessMessage,
     referSaveSuccessMessage, doingSaveSuccessMessage, rolesSaveSuccessMessage, activeWorkspaceTab,
     workspaceTabOptions, selectedEventId, selectedEvent, editingEvent,
     activeDraftEvent, activeGraphParentNodeId, activeGraphDraftEvent, activeGraphDraftAction,
-    graphNodeOptions, storyScriptVals, storyScriptItemIds, phoneInvokeEventOptions,
+    graphNodeOptions, storyScriptVals, storyScriptItemIds, contactInvokeEventOptions,
     buildGraphEventBranchAutocompleteItemsFromActions, activeGraphBranchAutocompleteItems, isCreateMode, replaceEventInDocument,
     removeEventFromDocument, applyStoryCreationDraft, deleteEvent, exportStory,
     getAppSettings, getStoryCreationHistory, getStory, deleteStoryCreationHistorySession,
     saveAppSettings, saveEvent, saveEventLocations, saveDoing,
-    saveStoryMeta, saveStoryCreationHistorySession, saveItems, savePhone,
-    savePhoneConversations, saveRefer, saveShop, savePlayerOverrideVals,
+    saveStoryMeta, saveStoryCreationHistorySession, saveItems, saveContact,
+    saveContactConversations, saveRefer, saveShop, savePlayerOverrideVals,
     saveRoles, saveScenes, saveStoryBible, saveSystemVals,
     saveVals, validateStory, creationJob, cancelCreationTask,
     resumeCreationTask, runCreationTask, appSettings, errorMessage,
@@ -546,7 +546,7 @@ function removeEventFromDocument(
     getGraphNodes, isEventCanvasTab, isGraphActionNode, isGraphEventNode,
     normalizeEventTriggerMode, closeAllTools, isValsDialogOpen, isPlayerOverrideValsDialogOpen,
     isSystemValsDialogOpen, isScenesDialogOpen, isLocationsDialogOpen, isItemsDialogOpen,
-    isShopDialogOpen, isPhoneDialogOpen, isReferDialogOpen, isRolesDialogOpen,
+    isShopDialogOpen, isContactDialogOpen, isReferDialogOpen, isRolesDialogOpen,
     isSettingsDialogOpen, isGameSettingsDialogOpen
   }
 }

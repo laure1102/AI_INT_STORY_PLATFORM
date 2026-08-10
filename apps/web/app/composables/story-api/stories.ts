@@ -11,8 +11,8 @@ import type {
   StoryEventLocationFile,
   StoryItemsFile,
   StoryMetaFile,
-  StoryPhoneConversationsFile,
-  StoryPhoneFile,
+  StoryContactConversationsFile,
+  StoryContactFile,
   StoryPlayerOverrideValsFile,
   StoryReferFile,
   StoryRolesFile,
@@ -31,8 +31,8 @@ import type {
   SaveStoryDoingRequest,
   SaveStoryItemsRequest,
   SaveStoryMetaRequest,
-  SaveStoryPhoneConversationsRequest,
-  SaveStoryPhoneRequest,
+  SaveStoryContactConversationsRequest,
+  SaveStoryContactRequest,
   SaveStoryReferRequest,
   SaveStoryShopRequest,
   SaveSystemValsRequest,
@@ -44,8 +44,8 @@ import type {
   StoryItemsResponse,
   StoryListResponse,
   StoryMetaResponse,
-  StoryPhoneConversationsResponse,
-  StoryPhoneResponse,
+  StoryContactConversationsResponse,
+  StoryContactResponse,
   StoryPlayerOverrideValsResponse,
   StoryReferResponse,
   StoryRolesResponse,
@@ -196,29 +196,29 @@ export function createStoryDocumentApi(context: StoryApiContext) {
     return response.shop
   }
 
-  /** 保存 `Phone` 数据并同步界面状态。 @param storyId 调用方传入的 `storyId`。 @param phone 调用方传入的 `phone`。 @returns 同步或异步处理结果；失败时由异常或错误状态交给调用方处理。 */
-  async function savePhone(storyId: string, phone: StoryPhoneFile) {
+  /** 保存 `Contact` 数据并同步界面状态。 @param storyId 调用方传入的 `storyId`。 @param contact 调用方传入的 `contact`。 @returns 同步或异步处理结果；失败时由异常或错误状态交给调用方处理。 */
+  async function saveContact(storyId: string, contact: StoryContactFile) {
     const response = await runStoryMutation(storyId, (expectedRevision) =>
-      $fetch<StoryPhoneResponse>(`${apiBase}/stories/${storyId}/phone`, {
+      $fetch<StoryContactResponse>(`${apiBase}/stories/${storyId}/contact`, {
         method: "PUT",
-        body: { phone, expectedRevision } satisfies SaveStoryPhoneRequest
+        body: { contact, expectedRevision } satisfies SaveStoryContactRequest
       })
     )
-    return response.phone
+    return response.contact
   }
 
-  /** 保存 `PhoneConversations` 数据并同步界面状态。 @param storyId 调用方传入的 `storyId`。 @param phoneConversations 调用方传入的 `phoneConversations`。 @returns 同步或异步处理结果；失败时由异常或错误状态交给调用方处理。 */
-  async function savePhoneConversations(
+  /** 保存 `ContactConversations` 数据并同步界面状态。 @param storyId 调用方传入的 `storyId`。 @param contactConversations 调用方传入的 `contactConversations`。 @returns 同步或异步处理结果；失败时由异常或错误状态交给调用方处理。 */
+  async function saveContactConversations(
     storyId: string,
-    phoneConversations: StoryPhoneConversationsFile
+    contactConversations: StoryContactConversationsFile
   ) {
     const response = await runStoryMutation(storyId, (expectedRevision) =>
-      $fetch<StoryPhoneConversationsResponse>(`${apiBase}/stories/${storyId}/phone-conversations`, {
+      $fetch<StoryContactConversationsResponse>(`${apiBase}/stories/${storyId}/contact-conversations`, {
         method: "PUT",
-        body: { phoneConversations, expectedRevision } satisfies SaveStoryPhoneConversationsRequest
+        body: { contactConversations, expectedRevision } satisfies SaveStoryContactConversationsRequest
       })
     )
-    return response.phoneConversations
+    return response.contactConversations
   }
 
   /** 保存 `Refer` 数据并同步界面状态。 @param storyId 调用方传入的 `storyId`。 @param refer 调用方传入的 `refer`。 @returns 同步或异步处理结果；失败时由异常或错误状态交给调用方处理。 */
@@ -250,8 +250,8 @@ export function createStoryDocumentApi(context: StoryApiContext) {
     saveDoing,
     saveEventLocations,
     saveItems,
-    savePhone,
-    savePhoneConversations,
+    saveContact,
+    saveContactConversations,
     savePlayerOverrideVals,
     saveRefer,
     saveRoles,

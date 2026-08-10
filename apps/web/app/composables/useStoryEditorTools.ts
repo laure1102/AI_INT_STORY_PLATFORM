@@ -6,7 +6,7 @@ export type StoryEditorTool =
   | "locations"
   | "items"
   | "shop"
-  | "phone"
+  | "contact"
   | "refer"
   | "roles"
   | "settings"
@@ -45,7 +45,7 @@ export function useStoryEditorTools() {
     isLocationsDialogOpen: toolState("locations"),
     isItemsDialogOpen: toolState("items"),
     isShopDialogOpen: toolState("shop"),
-    isPhoneDialogOpen: toolState("phone"),
+    isContactDialogOpen: toolState("contact"),
     isReferDialogOpen: toolState("refer"),
     isRolesDialogOpen: toolState("roles"),
     isSettingsDialogOpen: toolState("settings"),

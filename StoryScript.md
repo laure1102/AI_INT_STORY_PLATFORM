@@ -21,13 +21,13 @@ StoryScript 适用于以下字段：
 - `doing.doings[].visible_expr`
 - `shop.categories[].visible_expr`
 - `shop.products[].available_expr`
-- `phone_conversations.json5.conversations[].trigger_expr`
-- `phone_conversations.json5.conversations[].nodes[].player_options[].visible_expr`
+- `contact_conversations.json5.conversations[].trigger_expr`
+- `contact_conversations.json5.conversations[].nodes[].player_options[].visible_expr`
 - `init_script`
 - `end_script`
 - `action.exec_script`
-- `phone_conversations.json5.conversations[].nodes[].player_options[].script`
-- `phone_conversations.json5.conversations[].nodes[].end_script`
+- `contact_conversations.json5.conversations[].nodes[].player_options[].script`
+- `contact_conversations.json5.conversations[].nodes[].end_script`
 - 对白与其他模板文本中的变量插值
 
 ---
@@ -92,8 +92,8 @@ return false
 
 - 对白内容
 - 消息提示内容
-- 手机联系人短句、动作文本、主动消息、特配回复、兜底回复
-- 手机剧情对话的 NPC 消息与玩家回复选项
+- 联系人短句、动作文本、主动消息、特配回复、兜底回复
+- 联系人剧情的 NPC 消息与玩家回复选项
 - 其他文本模板字段
 
 规则：
@@ -134,10 +134,10 @@ ${term.player.respect}
 县城等级已经达到 ${county.level} 级。
 ```
 
-过程脚本中的字符串字面量也支持 `${...}` 插值，适合传给手机消息、提示消息等文本函数。
+过程脚本中的字符串字面量也支持 `${...}` 插值，适合传给联系人消息、提示消息等文本函数。
 
 ```ts
-phone_send_from_contact("important:zhuli", "${player.name_xing}${player.name_ming}，今天的材料我已经整理好了。")
+contact_send_from("important:zhuli", "${player.name_xing}${player.name_ming}，今天的材料我已经整理好了。")
 ```
 
 ## 4. 变量空间与权限
@@ -233,7 +233,7 @@ ${term.xxx}
 - `refer.json5.gender_aliases` 定义哪些性别值按男/女处理
 - `refer.json5.terms[]` 定义每个称谓在男、女和兜底情况下的文本
 - 称谓变量可读，不可写
-- 对白、消息提示、手机短句、主动消息、脚本发送的手机消息都可以使用 `${term.xxx}`
+- 对白、消息提示、联系人短句、主动消息、脚本发送的联系人消息都可以使用 `${term.xxx}`
 - 条件脚本和过程脚本中也可读取 `${term.xxx}` 作为文本值，但不建议用它承载业务判断
 - 涉及玩家性别差异的称呼、自称、代词，优先使用称谓变量，不要在对白里硬编码“先生/女士/少爷/小姐”
 
@@ -339,7 +339,7 @@ ${player.money} += 100 // 行尾注释
 - 条件脚本只读，不允许修改全局变量、系统变量、分支变量、调用参数
 - 条件脚本不允许使用 `invoke_once`
 - 条件脚本只开放只读背包函数：`bag_count`、`bag_has`
-- 条件脚本只开放只读手机函数：`phone_has_contact`、`phone_favor`、`phone_unread_count`
+- 条件脚本只开放只读联系人函数：`contact_has`、`contact_favor`、`contact_unread_count`
 - 条件脚本只开放只读行动函数：`doing_has`、`doing_used_count`、`doing_cooldown_left`
 - 条件脚本只开放只读商城函数：`shop_can_buy`、`shop_purchase_cooldown_left`、`shop_gift_cooldown_left`
 
@@ -441,9 +441,9 @@ bag_remove("player", "item_id", 1)
 - `init_script`、`end_script`、`action.exec_script` 可以使用四个背包函数
 - 静态校验会检查字面量 `item_id` 是否存在；动态 `item_id` 在运行时检查
 
-### 6.6 手机联系人函数
+### 6.6 联系人函数
 
-运行时手机联系人是玩家存档数据，角色 key 必须来自故事角色库，格式固定为：
+运行时联系人是玩家存档数据，角色 key 必须来自故事角色库，格式固定为：
 
 ```txt
 important:role_id
@@ -453,50 +453,50 @@ normal:role_id
 只读函数：
 
 ```ts
-phone_has_contact("important:zhuli")
-phone_favor("important:zhuli")
-phone_unread_count("important:zhuli")
+contact_has("important:zhuli")
+contact_favor("important:zhuli")
+contact_unread_count("important:zhuli")
 ```
 
 可写函数：
 
 ```ts
-phone_add_contact("important:zhuli")
-phone_remove_contact("important:zhuli")
-phone_set_favor("important:zhuli", 50)
-phone_add_favor("important:zhuli", 3)
-phone_send_from_contact("important:zhuli", "今晚有空吗？")
-phone_send_to_contact("important:zhuli", "我现在过去。")
-phone_mark_read("important:zhuli")
-phone_start_conversation("debt_collect_phone")
+contact_add("important:zhuli")
+contact_remove("important:zhuli")
+contact_set_favor("important:zhuli", 50)
+contact_add_favor("important:zhuli", 3)
+contact_send_from("important:zhuli", "今晚有空吗？")
+contact_send_to("important:zhuli", "我现在过去。")
+contact_mark_read("important:zhuli")
+contact_start_conversation("debt_collect_contact")
 ```
 
 规则：
 
 - 联系人好感度范围固定为 `0 ~ 100`
-- `phone_has_contact` 返回 `boolean`
-- `phone_favor` 返回当前好感度；未加入联系人时返回 `0`
-- `phone_unread_count` 返回该联系人当前未读消息数
-- `phone_add_contact` 会在未存在时创建联系人，并返回 `true`
-- `phone_remove_contact` 会移除联系人及其聊天线程
-- `phone_set_favor` 会直接写入好感度，结果会自动截断到 `0 ~ 100`
-- `phone_add_favor` 会在当前好感度基础上增减，结果会自动截断到 `0 ~ 100`
-- `phone_send_from_contact` 用于让 NPC 主动发消息给玩家
-- `phone_send_to_contact` 用于脚本直接让主角发消息
-- `phone_mark_read` 会把该联系人的 NPC 来信标记为已读
-- `phone_start_conversation` 用于启动 `phone_conversations.json5` 中预设的一段连续剧情手机对话
-- `trigger_expr` 只允许使用三个只读手机函数
-- `init_script`、`end_script`、`action.exec_script` 可以使用全部手机函数
-- 同一时间只允许存在一段进行中的剧情手机对话
-- 剧情手机对话进行中，如果该对话开启 `lock_normal_chat`，该联系人的普通闲聊和普通动作会暂时锁定
-- `phone_conversations.json5` 的 `contact_messages[].content`、`player_options[].text` 都按模板文本渲染，可以使用 `${player.xxx}`、`${term.xxx}` 等变量
-- `phone_conversations.json5` 的结束节点可以配置 `invoke`，用于在对话结束后立即或延迟调用一个 `trigger_mode: "invoke"` 的事件
+- `contact_has` 返回 `boolean`
+- `contact_favor` 返回当前好感度；未加入联系人时返回 `0`
+- `contact_unread_count` 返回该联系人当前未读消息数
+- `contact_add` 会在未存在时创建联系人，并返回 `true`
+- `contact_remove` 会移除联系人及其聊天线程
+- `contact_set_favor` 会直接写入好感度，结果会自动截断到 `0 ~ 100`
+- `contact_add_favor` 会在当前好感度基础上增减，结果会自动截断到 `0 ~ 100`
+- `contact_send_from` 用于让 NPC 主动发消息给玩家
+- `contact_send_to` 用于脚本直接让主角发消息
+- `contact_mark_read` 会把该联系人的 NPC 来信标记为已读
+- `contact_start_conversation` 用于启动 `contact_conversations.json5` 中预设的一段连续联系人剧情
+- `trigger_expr` 只允许使用三个只读联系人函数
+- `init_script`、`end_script`、`action.exec_script` 可以使用全部联系人函数
+- 同一时间只允许存在一段进行中的联系人剧情
+- 联系人剧情进行中，如果该对话开启 `lock_normal_chat`，该联系人的普通闲聊和普通动作会暂时锁定
+- `contact_conversations.json5` 的 `contact_messages[].content`、`player_options[].text` 都按模板文本渲染，可以使用 `${player.xxx}`、`${term.xxx}` 等变量
+- `contact_conversations.json5` 的结束节点可以配置 `invoke`，用于在对话结束后立即或延迟调用一个 `trigger_mode: "invoke"` 的事件
 - 静态校验会检查字面量 `role_key` 是否存在；动态 `role_key` 在运行时检查
-- 静态校验会检查字面量 `phone conversation id` 是否存在；动态 id 在运行时检查
-- `phone.json5` 中每个联系人还可以配置 `proactive_messages`
+- 静态校验会检查字面量 `contact conversation id` 是否存在；动态 id 在运行时检查
+- `contact.json5` 中每个联系人还可以配置 `proactive_messages`
 - `proactive_messages[].trigger_expr` 使用与事件 `trigger_expr` 相同的条件脚本规则
 - 当 `trigger_expr` 为 `true` 且冷却时间满足时，运行时会自动让该联系人发送一条预设消息
-- `phone.json5` 里的短句、动作文本、主动消息、特配回复、兜底回复都按模板文本渲染，可以使用 `${player.xxx}`、`${term.xxx}` 等变量
+- `contact.json5` 里的短句、动作文本、主动消息、特配回复、兜底回复都按模板文本渲染，可以使用 `${player.xxx}`、`${term.xxx}` 等变量
 - `proactive_messages[].reply_quick_message_ids` 可指定这条来信优先展示的短句回复
 - 普通主动闲聊短句使用 `talk_library`；运行时会按联系人关系轨道、性格、好感度、角色范围筛选
 - `player_quick_messages` 只作为 NPC 主动消息的推荐回复库使用，必须由 `proactive_messages[].reply_quick_message_ids` 显式引用才会显示
@@ -565,7 +565,7 @@ shop_gift("shop_local_specialty_gift_box", "important:zhuli")
 - `trigger_expr`、doing 可见条件、shop 分类/商品条件只允许使用三个只读商城函数
 - `init_script`、`end_script`、`action.exec_script` 可以使用全部商城函数
 - 静态校验会检查字面量 `shop product id` 是否存在；动态商品 id 在运行时检查
-- `shop_gift` 的角色 key 使用手机联系人相同格式：`important:role_id` 或 `normal:role_id`
+- `shop_gift` 的角色 key 使用联系人相同格式：`important:role_id` 或 `normal:role_id`
 
 ---
 
@@ -673,31 +673,31 @@ if (!bag_has("player", "population_flow_report", 1)) {
 }
 ```
 
-### 7.7 手机联系人
+### 7.7 联系人
 
 ```ts
-if (!phone_has_contact("important:zhuli")) {
-  phone_add_contact("important:zhuli")
+if (!contact_has("important:zhuli")) {
+  contact_add("important:zhuli")
 }
 
-phone_add_favor("important:zhuli", 2)
-phone_send_from_contact("important:zhuli", "老板，今天的材料我已经整理好了。")
+contact_add_favor("important:zhuli", 2)
+contact_send_from("important:zhuli", "老板，今天的材料我已经整理好了。")
 ```
 
-启动一段连续剧情手机对话：
+启动一段连续联系人剧情：
 
 ```ts
-phone_start_conversation("debt_collect_phone")
+contact_start_conversation("debt_collect_contact")
 ```
 
-`phone_conversations.json5` 简化示例：
+`contact_conversations.json5` 简化示例：
 
 ```json5
 {
   conversations: [
     {
-      id: "debt_collect_phone",
-      title: "债主催债手机对话",
+      id: "debt_collect_contact",
+      title: "债主催债往来",
       role_key: "important:biaoge",
       enabled: true,
       once: true,
@@ -757,13 +757,13 @@ phone_start_conversation("debt_collect_phone")
 }
 ```
 
-`phone.json5` 里的主动消息规则示例：
+`contact.json5` 里的主动消息规则示例：
 
 ```json5
 {
   id: "daytime_checkin",
   enabled: true,
-  trigger_expr: '${system.now_hour} >= 9 && ${system.now_hour} <= 18 && phone_favor("important:zhuli") >= 20',
+  trigger_expr: '${system.now_hour} >= 9 && ${system.now_hour} <= 18 && contact_favor("important:zhuli") >= 20',
   cooldown_hours: 24,
   favor_delta: 0,
   messages: ["老板，今天的行程我已经帮您排好了。"]
@@ -878,17 +878,17 @@ ${county.level} >= 2 && shop_purchase_cooldown_left("shop_business_sedan") <= 0
 - `bag_has`
 - `bag_add`
 - `bag_remove`
-- `phone_has_contact`
-- `phone_favor`
-- `phone_unread_count`
-- `phone_add_contact`
-- `phone_remove_contact`
-- `phone_set_favor`
-- `phone_add_favor`
-- `phone_send_from_contact`
-- `phone_send_to_contact`
-- `phone_mark_read`
-- `phone_start_conversation`
+- `contact_has`
+- `contact_favor`
+- `contact_unread_count`
+- `contact_add`
+- `contact_remove`
+- `contact_set_favor`
+- `contact_add_favor`
+- `contact_send_from`
+- `contact_send_to`
+- `contact_mark_read`
+- `contact_start_conversation`
 - `doing_has`
 - `doing_used_count`
 - `doing_cooldown_left`

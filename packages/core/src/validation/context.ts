@@ -36,7 +36,7 @@ export type {
   StoryScriptValidationBagMode,
   StoryScriptValidationContextOptions,
   StoryScriptValidationDoingMode,
-  StoryScriptValidationPhoneMode,
+  StoryScriptValidationContactMode,
   StoryScriptValidationShopMode
 } from "./script-domain-context"
 export type { StoryScriptValidationIssue } from "@story-mgr/storyscript"
@@ -81,7 +81,7 @@ function buildCombinedStoryScriptVals(document: StoryDocument): StoryValsFile {
 }
 
 /**
- * 收集可在脚本和手机中引用的规范角色 key。
+ * 收集可在脚本和联系人模块中引用的规范角色 key。
  * @param document 完整故事。 @returns 去空白、忽略空 id 的 Set。
  */
 function collectValidationRoleKeys(document: StoryDocument) {
@@ -124,9 +124,9 @@ function collectValidationShopProductIds(document: StoryDocument) {
   return document.shop.products.map((product) => product.id)
 }
 
-/** @param document 完整故事。 @returns 连续手机剧情 id 数组。 */
-function collectValidationPhoneConversationIds(document: StoryDocument) {
-  return document.phoneConversations.conversations.map((conversation) => conversation.id)
+/** @param document 完整故事。 @returns 连续联系人剧情 id 数组。 */
+function collectValidationContactConversationIds(document: StoryDocument) {
+  return document.contactConversations.conversations.map((conversation) => conversation.id)
 }
 
 /**
@@ -179,9 +179,9 @@ export function buildValidationScriptContext(
     roleKeys: collectValidationRoleKeys(document),
     doingIds: collectValidationDoingIds(document),
     shopProductIds: collectValidationShopProductIds(document),
-    phoneConversationIds: collectValidationPhoneConversationIds(document),
+    contactConversationIds: collectValidationContactConversationIds(document),
     bagMode: "write",
-    phoneMode: "write",
+    contactMode: "write",
     doingMode: "write",
     shopMode: "write"
   })
@@ -200,9 +200,9 @@ export function buildValidationReadableContext(document: StoryDocument): StorySc
     roleKeys: collectValidationRoleKeys(document),
     doingIds: collectValidationDoingIds(document),
     shopProductIds: collectValidationShopProductIds(document),
-    phoneConversationIds: collectValidationPhoneConversationIds(document),
+    contactConversationIds: collectValidationContactConversationIds(document),
     bagMode: "read",
-    phoneMode: "read",
+    contactMode: "read",
     doingMode: "read",
     shopMode: "read"
   })

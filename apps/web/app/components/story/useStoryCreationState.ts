@@ -79,12 +79,13 @@ const selectedLocationIds = shallowRef<string[]>([])
 const selectedRoleKeys = shallowRef<string[]>([])
 const selectedItemIds = shallowRef<string[]>([])
 const selectedVariableKeys = shallowRef<string[]>([])
-const selectedPhonePersonalityIds = shallowRef<string[]>([])
-const selectedPhoneTalkIds = shallowRef<string[]>([])
-const selectedPhoneActionIds = shallowRef<string[]>([])
-const selectedPhoneReplyIds = shallowRef<string[]>([])
-const selectedPhoneContactProfileKeys = shallowRef<string[]>([])
-const selectedPhoneConversationIds = shallowRef<string[]>([])
+const selectedContactChannelIds = shallowRef<string[]>([])
+const selectedContactPersonalityIds = shallowRef<string[]>([])
+const selectedContactTalkIds = shallowRef<string[]>([])
+const selectedContactActionIds = shallowRef<string[]>([])
+const selectedContactReplyIds = shallowRef<string[]>([])
+const selectedContactProfileKeys = shallowRef<string[]>([])
+const selectedContactConversationIds = shallowRef<string[]>([])
 const selectedDoingMenuIds = shallowRef<string[]>([])
 const selectedDoingIds = shallowRef<string[]>([])
 const selectedShopCategoryIds = shallowRef<string[]>([])
@@ -282,22 +283,23 @@ const eventTypeSummary = computed(() => {
   }
 })
 
-const phoneDraftCount = computed(() => {
-  const phone = draftPreview.value?.phone
+const contactDraftCount = computed(() => {
+  const contact = draftPreview.value?.contact
 
-  if (!phone) {
+  if (!contact) {
     return 0
   }
 
-  return phone.personality_library.length
-    + phone.talk_library.length
-    + phone.action_library.length
-    + phone.reply_library.length
-    + phone.contact_profiles.length
+  return contact.personality_library.length
+    + contact.channels.length
+    + contact.talk_library.length
+    + contact.action_library.length
+    + contact.reply_library.length
+    + contact.contact_profiles.length
 })
 
-const phoneConversationDraftCount = computed(() => {
-  return draftPreview.value?.phoneConversations?.conversations.length ?? 0
+const contactConversationDraftCount = computed(() => {
+  return draftPreview.value?.contactConversations?.conversations.length ?? 0
 })
 
 const doingDraftCount = computed(() => {
@@ -326,12 +328,13 @@ const selectedApplyCount = computed(() => {
     + selectedRoleKeys.value.length
     + selectedItemIds.value.length
     + selectedVariableKeys.value.length
-    + selectedPhonePersonalityIds.value.length
-    + selectedPhoneTalkIds.value.length
-    + selectedPhoneActionIds.value.length
-    + selectedPhoneReplyIds.value.length
-    + selectedPhoneContactProfileKeys.value.length
-    + selectedPhoneConversationIds.value.length
+    + selectedContactChannelIds.value.length
+    + selectedContactPersonalityIds.value.length
+    + selectedContactTalkIds.value.length
+    + selectedContactActionIds.value.length
+    + selectedContactReplyIds.value.length
+    + selectedContactProfileKeys.value.length
+    + selectedContactConversationIds.value.length
     + selectedDoingMenuIds.value.length
     + selectedDoingIds.value.length
     + selectedShopCategoryIds.value.length
@@ -383,28 +386,32 @@ const existingVariableKeys = computed(() => {
   )
 })
 
-const existingPhonePersonalityIds = computed(() => {
-  return new Set(props.story.phone.personality_library.map((personality) => personality.id))
+const existingContactPersonalityIds = computed(() => {
+  return new Set(props.story.contact.personality_library.map((personality) => personality.id))
 })
 
-const existingPhoneTalkIds = computed(() => {
-  return new Set(props.story.phone.talk_library.map((entry) => entry.id))
+const existingContactChannelIds = computed(() => {
+  return new Set(props.story.contact.channels.map((channel) => channel.id))
 })
 
-const existingPhoneActionIds = computed(() => {
-  return new Set(props.story.phone.action_library.map((entry) => entry.id))
+const existingContactTalkIds = computed(() => {
+  return new Set(props.story.contact.talk_library.map((entry) => entry.id))
 })
 
-const existingPhoneReplyIds = computed(() => {
-  return new Set(props.story.phone.reply_library.map((entry) => entry.id))
+const existingContactActionIds = computed(() => {
+  return new Set(props.story.contact.action_library.map((entry) => entry.id))
 })
 
-const existingPhoneContactProfileKeys = computed(() => {
-  return new Set(props.story.phone.contact_profiles.map((profile) => profile.role_key))
+const existingContactReplyIds = computed(() => {
+  return new Set(props.story.contact.reply_library.map((entry) => entry.id))
 })
 
-const existingPhoneConversationIds = computed(() => {
-  return new Set(props.story.phoneConversations.conversations.map((conversation) => conversation.id))
+const existingContactProfileKeys = computed(() => {
+  return new Set(props.story.contact.contact_profiles.map((profile) => profile.role_key))
+})
+
+const existingContactConversationIds = computed(() => {
+  return new Set(props.story.contactConversations.conversations.map((conversation) => conversation.id))
 })
 
 const existingDoingMenuIds = computed(() => {
@@ -493,19 +500,20 @@ const availableShopCategoryIdsForApply = computed(() => {
     commandText, feedbackText, newCreationExpanded, creationHistoryExpanded,
     feedbackSeq, activeFeedbackId, activeBibleField, selectedEventKeys,
     selectedLocationIds, selectedRoleKeys, selectedItemIds, selectedVariableKeys,
-    selectedPhonePersonalityIds, selectedPhoneTalkIds, selectedPhoneActionIds, selectedPhoneReplyIds,
-    selectedPhoneContactProfileKeys, selectedPhoneConversationIds, selectedDoingMenuIds, selectedDoingIds,
+    selectedContactChannelIds,
+    selectedContactPersonalityIds, selectedContactTalkIds, selectedContactActionIds, selectedContactReplyIds,
+    selectedContactProfileKeys, selectedContactConversationIds, selectedDoingMenuIds, selectedDoingIds,
     selectedShopCategoryIds, selectedShopProductIds, feedbackHistory, editableDraft,
     draftApplied, draft, bibleFields, pipelineSteps,
     activeBibleFieldConfig, agentModelSummary, filledBibleFieldCount, canRunAgent,
     canRefineDraft, isFeedbackRunning, isNewCreationRunning, abortAgentLabel,
     activeFeedbackItem, historySessions, historySessionCount, showNewCreationForm,
     runStatus, agentLogs, loggedRoles, activeAgentRole,
-    draftPreview, eventTypeSummary, phoneDraftCount, phoneConversationDraftCount,
+    draftPreview, eventTypeSummary, contactDraftCount, contactConversationDraftCount,
     doingDraftCount, shopDraftCount, selectedApplyCount, canApplyDraft,
     applyButtonLabel, existingLocationIds, existingRoleKeys, existingItemIds,
-    existingItemCategoryIds, existingVariableKeys, existingPhonePersonalityIds, existingPhoneTalkIds,
-    existingPhoneActionIds, existingPhoneReplyIds, existingPhoneContactProfileKeys, existingPhoneConversationIds,
+    existingItemCategoryIds, existingVariableKeys, existingContactChannelIds, existingContactPersonalityIds, existingContactTalkIds,
+    existingContactActionIds, existingContactReplyIds, existingContactProfileKeys, existingContactConversationIds,
     existingDoingMenuIds, existingDoingIds, existingShopCategoryIds, existingShopProductIds,
     existingChainIds, existingEventKeys, selectedDraftChainIds, availableLocationIdsForApply,
     availableRoleKeysForApply, availableChainIdsForApply, availableDoingMenuIdsForApply, availableItemIdsForApply,

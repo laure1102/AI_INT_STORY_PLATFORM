@@ -10,14 +10,14 @@ import type {
   StoryDoingFile,
   StoryEventFile,
   StoryEventLocationFile,
-  StoryPhoneFile,
+  StoryContactFile,
   StoryReferFile,
   StoryItemsFile,
   StoryLoopEventFile,
   StoryMetaFile,
   StoryOnceEventFile,
   StoryPlayerOverrideValsFile,
-  StoryPhoneConversationsFile,
+  StoryContactConversationsFile,
   StoryRolesFile,
   StorySceneFile,
   StoryShopFile,
@@ -71,17 +71,17 @@ export function useStoryEditorShell(props: Readonly<StoryEditorShellProps>) {
     creationAgentRunMode, creationAgentError, creationApplyMessage, creationApplyWarnings,
     creationHistory, activeCreationHistorySessionId, editingEventId, creatingFromEventId,
     creatingEventDraft, scenesSaveSuccessMessage, locationsSaveSuccessMessage, itemsSaveSuccessMessage,
-    shopSaveSuccessMessage, phoneSaveSuccessMessage, phoneConversationsSaveErrorMessage, phoneConversationsSaveSuccessMessage,
+    shopSaveSuccessMessage, contactSaveSuccessMessage, contactConversationsSaveErrorMessage, contactConversationsSaveSuccessMessage,
     referSaveSuccessMessage, doingSaveSuccessMessage, rolesSaveSuccessMessage, activeWorkspaceTab,
     workspaceTabOptions, selectedEventId, selectedEvent, editingEvent,
     activeDraftEvent, activeGraphParentNodeId, activeGraphDraftEvent, activeGraphDraftAction,
-    graphNodeOptions, storyScriptVals, storyScriptItemIds, phoneInvokeEventOptions,
+    graphNodeOptions, storyScriptVals, storyScriptItemIds, contactInvokeEventOptions,
     buildGraphEventBranchAutocompleteItemsFromActions, activeGraphBranchAutocompleteItems, isCreateMode, replaceEventInDocument,
     removeEventFromDocument, applyStoryCreationDraft, deleteEvent, exportStory,
     getAppSettings, getStoryCreationHistory, getStory, deleteStoryCreationHistorySession,
     saveAppSettings, saveEvent, saveEventLocations, saveDoing,
-    saveStoryMeta, saveStoryCreationHistorySession, saveItems, savePhone,
-    savePhoneConversations, saveRefer, saveShop, savePlayerOverrideVals,
+    saveStoryMeta, saveStoryCreationHistorySession, saveItems, saveContact,
+    saveContactConversations, saveRefer, saveShop, savePlayerOverrideVals,
     saveRoles, saveScenes, saveStoryBible, saveSystemVals,
     saveVals, validateStory, creationJob, cancelCreationTask,
     resumeCreationTask, runCreationTask, appSettings, errorMessage,
@@ -93,7 +93,7 @@ export function useStoryEditorShell(props: Readonly<StoryEditorShellProps>) {
     getGraphNodes, isEventCanvasTab, isGraphActionNode, isGraphEventNode,
     normalizeEventTriggerMode, closeAllTools, isValsDialogOpen, isPlayerOverrideValsDialogOpen,
     isSystemValsDialogOpen, isScenesDialogOpen, isLocationsDialogOpen, isItemsDialogOpen,
-    isShopDialogOpen, isPhoneDialogOpen, isReferDialogOpen, isRolesDialogOpen,
+    isShopDialogOpen, isContactDialogOpen, isReferDialogOpen, isRolesDialogOpen,
     isSettingsDialogOpen, isGameSettingsDialogOpen
   } = state
   const lifecycle = useStoryEditorLifecycle(state)
@@ -102,7 +102,7 @@ export function useStoryEditorShell(props: Readonly<StoryEditorShellProps>) {
     openPlayerOverrideValsDialog, closePlayerOverrideValsDialog, openSystemValsDialog, closeSystemValsDialog,
     openScenesDialog, closeScenesDialog, openLocationsDialog, closeLocationsDialog,
     openItemsDialog, closeItemsDialog, openShopDialog, closeShopDialog,
-    openPhoneDialog, closePhoneDialog, openReferDialog, closeReferDialog,
+    openContactDialog, closeContactDialog, openReferDialog, closeReferDialog,
     openRolesDialog, closeRolesDialog, openSettingsDialog, closeSettingsDialog,
     openGameSettingsDialog, closeGameSettingsDialog, createHistoryId, getActiveCreationHistorySession,
     upsertLocalCreationHistorySession, persistCreationHistorySession, createCreationHistorySession, handleRestoreCreationHistorySession,
@@ -120,8 +120,8 @@ export function useStoryEditorShell(props: Readonly<StoryEditorShellProps>) {
   const assetActions = useStoryEditorAssetActions(actionContext)
   const {
     handleSaveVals, handleSaveSystemVals, handleSavePlayerOverrideVals, handleSaveScenes,
-    handleSaveEventLocations, handleSaveItems, handleSaveShop, handleSavePhone,
-    handleSavePhoneConversations, handleSaveRefer, handleSaveDoing, handleSaveRoles,
+    handleSaveEventLocations, handleSaveItems, handleSaveShop, handleSaveContact,
+    handleSaveContactConversations, handleSaveRefer, handleSaveDoing, handleSaveRoles,
     handleQuickCreateRole, handleQuickCreateLocation, handleSaveStoryBible, handleSaveAppSettings,
     handleSaveStoryMeta, handleExport
   } = assetActions
@@ -145,7 +145,7 @@ async function loadStory() {
   activeCreationHistorySessionId.value = null
   referSaveSuccessMessage.value = null
   doingSaveSuccessMessage.value = null
-  phoneConversationsSaveErrorMessage.value = null
+  contactConversationsSaveErrorMessage.value = null
 
   try {
     const [story, settings, history] = await Promise.all([
@@ -210,9 +210,9 @@ watch(
     locationsSaveSuccessMessage.value = null
     itemsSaveSuccessMessage.value = null
     shopSaveSuccessMessage.value = null
-    phoneSaveSuccessMessage.value = null
-    phoneConversationsSaveErrorMessage.value = null
-    phoneConversationsSaveSuccessMessage.value = null
+    contactSaveSuccessMessage.value = null
+    contactConversationsSaveErrorMessage.value = null
+    contactConversationsSaveSuccessMessage.value = null
     referSaveSuccessMessage.value = null
     doingSaveSuccessMessage.value = null
     rolesSaveSuccessMessage.value = null
@@ -226,17 +226,17 @@ watch(
     creationAgentRunMode, creationAgentError, creationApplyMessage, creationApplyWarnings,
     creationHistory, activeCreationHistorySessionId, editingEventId, creatingFromEventId,
     creatingEventDraft, scenesSaveSuccessMessage, locationsSaveSuccessMessage, itemsSaveSuccessMessage,
-    shopSaveSuccessMessage, phoneSaveSuccessMessage, phoneConversationsSaveErrorMessage, phoneConversationsSaveSuccessMessage,
+    shopSaveSuccessMessage, contactSaveSuccessMessage, contactConversationsSaveErrorMessage, contactConversationsSaveSuccessMessage,
     referSaveSuccessMessage, doingSaveSuccessMessage, rolesSaveSuccessMessage, activeWorkspaceTab,
     workspaceTabOptions, selectedEventId, selectedEvent, editingEvent,
     activeDraftEvent, activeGraphParentNodeId, activeGraphDraftEvent, activeGraphDraftAction,
-    graphNodeOptions, storyScriptVals, storyScriptItemIds, phoneInvokeEventOptions,
+    graphNodeOptions, storyScriptVals, storyScriptItemIds, contactInvokeEventOptions,
     buildGraphEventBranchAutocompleteItemsFromActions, activeGraphBranchAutocompleteItems, isCreateMode, replaceEventInDocument,
     removeEventFromDocument, refreshValidation, closeEditor, openValsDialog,
     closeValsDialog, openPlayerOverrideValsDialog, closePlayerOverrideValsDialog, openSystemValsDialog,
     closeSystemValsDialog, openScenesDialog, closeScenesDialog, openLocationsDialog,
     closeLocationsDialog, openItemsDialog, closeItemsDialog, openShopDialog,
-    closeShopDialog, openPhoneDialog, closePhoneDialog, openReferDialog,
+    closeShopDialog, openContactDialog, closeContactDialog, openReferDialog,
     closeReferDialog, openRolesDialog, closeRolesDialog, openSettingsDialog,
     closeSettingsDialog, openGameSettingsDialog, closeGameSettingsDialog, createHistoryId,
     getActiveCreationHistorySession, upsertLocalCreationHistorySession, persistCreationHistorySession, createCreationHistorySession,
@@ -247,7 +247,7 @@ watch(
     handleCreateGraphRootEvent, handleCreateStandaloneEvent, handleSwitchEventTab, handleSwitchWorkspaceTab,
     handleDeleteGraphNode, handleSaveEvent, handleDeleteEvent, handleSaveVals,
     handleSaveSystemVals, handleSavePlayerOverrideVals, handleSaveScenes, handleSaveEventLocations,
-    handleSaveItems, handleSaveShop, handleSavePhone, handleSavePhoneConversations,
+    handleSaveItems, handleSaveShop, handleSaveContact, handleSaveContactConversations,
     handleSaveRefer, handleSaveDoing, handleSaveRoles, handleQuickCreateRole,
     handleQuickCreateLocation, handleSaveStoryBible, handleRunCreationAgent, resumePendingCreationTask,
     handleAbortCreationAgent, isAbortError, selectAppliedEvent, handleApplyCreationDraft,
@@ -255,8 +255,8 @@ watch(
     issueKey, applyStoryCreationDraft, deleteEvent, exportStory,
     getAppSettings, getStoryCreationHistory, getStory, deleteStoryCreationHistorySession,
     saveAppSettings, saveEvent, saveEventLocations, saveDoing,
-    saveStoryMeta, saveStoryCreationHistorySession, saveItems, savePhone,
-    savePhoneConversations, saveRefer, saveShop, savePlayerOverrideVals,
+    saveStoryMeta, saveStoryCreationHistorySession, saveItems, saveContact,
+    saveContactConversations, saveRefer, saveShop, savePlayerOverrideVals,
     saveRoles, saveScenes, saveStoryBible, saveSystemVals,
     saveVals, validateStory, creationJob, cancelCreationTask,
     resumeCreationTask, runCreationTask, appSettings, errorMessage,
@@ -268,7 +268,7 @@ watch(
     getGraphNodes, isEventCanvasTab, isGraphActionNode, isGraphEventNode,
     normalizeEventTriggerMode, closeAllTools, isValsDialogOpen, isPlayerOverrideValsDialogOpen,
     isSystemValsDialogOpen, isScenesDialogOpen, isLocationsDialogOpen, isItemsDialogOpen,
-    isShopDialogOpen, isPhoneDialogOpen, isReferDialogOpen, isRolesDialogOpen,
+    isShopDialogOpen, isContactDialogOpen, isReferDialogOpen, isRolesDialogOpen,
     isSettingsDialogOpen, isGameSettingsDialogOpen
   }
 }

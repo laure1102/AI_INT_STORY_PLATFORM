@@ -10,8 +10,8 @@ import type {
   StoryCreationDraft,
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
-  StoryCreationDraftPhone,
-  StoryCreationDraftPhoneConversations,
+  StoryCreationDraftContact,
+  StoryCreationDraftContactConversations,
   StoryCreationHistoryFile,
   StoryCreationHistorySession,
   StoryCreationJob,
@@ -91,19 +91,20 @@ const {
   commandText, feedbackText, newCreationExpanded, creationHistoryExpanded,
   feedbackSeq, activeFeedbackId, activeBibleField, selectedEventKeys,
   selectedLocationIds, selectedRoleKeys, selectedItemIds, selectedVariableKeys,
-  selectedPhonePersonalityIds, selectedPhoneTalkIds, selectedPhoneActionIds, selectedPhoneReplyIds,
-  selectedPhoneContactProfileKeys, selectedPhoneConversationIds, selectedDoingMenuIds, selectedDoingIds,
+  selectedContactChannelIds,
+  selectedContactPersonalityIds, selectedContactTalkIds, selectedContactActionIds, selectedContactReplyIds,
+  selectedContactProfileKeys, selectedContactConversationIds, selectedDoingMenuIds, selectedDoingIds,
   selectedShopCategoryIds, selectedShopProductIds, feedbackHistory, editableDraft,
   draftApplied, draft, bibleFields, pipelineSteps,
   activeBibleFieldConfig, agentModelSummary, filledBibleFieldCount, canRunAgent,
   canRefineDraft, isFeedbackRunning, isNewCreationRunning, abortAgentLabel,
   activeFeedbackItem, historySessions, historySessionCount, showNewCreationForm,
   runStatus, agentLogs, loggedRoles, activeAgentRole,
-  draftPreview, eventTypeSummary, phoneDraftCount, phoneConversationDraftCount,
+  draftPreview, eventTypeSummary, contactDraftCount, contactConversationDraftCount,
   doingDraftCount, shopDraftCount, selectedApplyCount, canApplyDraft,
   applyButtonLabel, existingLocationIds, existingRoleKeys, existingItemIds,
-  existingItemCategoryIds, existingVariableKeys, existingPhonePersonalityIds, existingPhoneTalkIds,
-  existingPhoneActionIds, existingPhoneReplyIds, existingPhoneContactProfileKeys, existingPhoneConversationIds,
+  existingItemCategoryIds, existingVariableKeys, existingContactChannelIds, existingContactPersonalityIds, existingContactTalkIds,
+  existingContactActionIds, existingContactReplyIds, existingContactProfileKeys, existingContactConversationIds,
   existingDoingMenuIds, existingDoingIds, existingShopCategoryIds, existingShopProductIds,
   existingChainIds, existingEventKeys, selectedDraftChainIds, availableLocationIdsForApply,
   availableRoleKeysForApply, availableChainIdsForApply, availableDoingMenuIdsForApply, availableItemIdsForApply,
@@ -158,39 +159,45 @@ const selectedImpactSummary = computed(() => {
     }
   }
 
-  for (const personality of draft.phone?.personality_library ?? []) {
-    if (selectedPhonePersonalityIds.value.includes(personality.id)) {
-      addImpact(getPhonePersonalityImpact(personality))
+  for (const personality of draft.contact?.personality_library ?? []) {
+    if (selectedContactPersonalityIds.value.includes(personality.id)) {
+      addImpact(getContactPersonalityImpact(personality))
     }
   }
 
-  for (const entry of draft.phone?.talk_library ?? []) {
-    if (selectedPhoneTalkIds.value.includes(entry.id)) {
-      addImpact(getPhoneTalkImpact(entry))
+  for (const channel of draft.contact?.channels ?? []) {
+    if (selectedContactChannelIds.value.includes(channel.id)) {
+      addImpact(getContactChannelImpact(channel))
     }
   }
 
-  for (const entry of draft.phone?.action_library ?? []) {
-    if (selectedPhoneActionIds.value.includes(entry.id)) {
-      addImpact(getPhoneActionImpact(entry))
+  for (const entry of draft.contact?.talk_library ?? []) {
+    if (selectedContactTalkIds.value.includes(entry.id)) {
+      addImpact(getContactTalkImpact(entry))
     }
   }
 
-  for (const entry of draft.phone?.reply_library ?? []) {
-    if (selectedPhoneReplyIds.value.includes(entry.id)) {
-      addImpact(getPhoneReplyImpact(entry))
+  for (const entry of draft.contact?.action_library ?? []) {
+    if (selectedContactActionIds.value.includes(entry.id)) {
+      addImpact(getContactActionImpact(entry))
     }
   }
 
-  for (const profile of draft.phone?.contact_profiles ?? []) {
-    if (selectedPhoneContactProfileKeys.value.includes(profile.role_key)) {
-      addImpact(getPhoneContactProfileImpact(profile))
+  for (const entry of draft.contact?.reply_library ?? []) {
+    if (selectedContactReplyIds.value.includes(entry.id)) {
+      addImpact(getContactReplyImpact(entry))
     }
   }
 
-  for (const conversation of draft.phoneConversations?.conversations ?? []) {
-    if (selectedPhoneConversationIds.value.includes(conversation.id)) {
-      addImpact(getPhoneConversationImpact(conversation))
+  for (const profile of draft.contact?.contact_profiles ?? []) {
+    if (selectedContactProfileKeys.value.includes(profile.role_key)) {
+      addImpact(getContactProfileImpact(profile))
+    }
+  }
+
+  for (const conversation of draft.contactConversations?.conversations ?? []) {
+    if (selectedContactConversationIds.value.includes(conversation.id)) {
+      addImpact(getContactConversationImpact(conversation))
     }
   }
 
@@ -233,7 +240,7 @@ const applyPreviewMessage = computed(() => {
   ].filter(Boolean)
 
   if (parts.length === 0) {
-    return "确认后会写入所选地点、角色、物品、变量、事件、手机联系人资产、剧情手机对话、行动资产和商城资产。"
+    return "确认后会写入所选地点、角色、物品、变量、事件、联系人资产、联系人剧情、行动资产和商城资产。"
   }
 
   return `确认后将${parts.join("、")}。`
@@ -444,15 +451,16 @@ function deleteHistorySession(session: StoryCreationHistorySession) {
 function cloneCreationDraft(draft: StoryCreationDraft): StoryCreationDraft {
   const cloned = JSON.parse(JSON.stringify(toRaw(draft))) as StoryCreationDraft
   cloned.items = cloned.items ?? []
-  cloned.phone = {
-    personality_library: cloned.phone?.personality_library ?? [],
-    talk_library: cloned.phone?.talk_library ?? [],
-    action_library: cloned.phone?.action_library ?? [],
-    reply_library: cloned.phone?.reply_library ?? [],
-    contact_profiles: cloned.phone?.contact_profiles ?? []
+  cloned.contact = {
+    channels: cloned.contact?.channels ?? [],
+    personality_library: cloned.contact?.personality_library ?? [],
+    talk_library: cloned.contact?.talk_library ?? [],
+    action_library: cloned.contact?.action_library ?? [],
+    reply_library: cloned.contact?.reply_library ?? [],
+    contact_profiles: cloned.contact?.contact_profiles ?? []
   }
-  cloned.phoneConversations = {
-    conversations: cloned.phoneConversations?.conversations ?? []
+  cloned.contactConversations = {
+    conversations: cloned.contactConversations?.conversations ?? []
   }
   cloned.doing = {
     menus: cloned.doing?.menus ?? [],
@@ -481,12 +489,13 @@ function syncApplySelection(draft: StoryCreationDraft | null) {
   selectedRoleKeys.value = draft?.roles.map(getRoleKey) ?? []
   selectedItemIds.value = draft?.items.map((item) => item.id) ?? []
   selectedVariableKeys.value = draft?.variables.map(getVariableKey) ?? []
-  selectedPhonePersonalityIds.value = draft?.phone?.personality_library.map((personality) => personality.id) ?? []
-  selectedPhoneTalkIds.value = draft?.phone?.talk_library.map((entry) => entry.id) ?? []
-  selectedPhoneActionIds.value = draft?.phone?.action_library.map((entry) => entry.id) ?? []
-  selectedPhoneReplyIds.value = draft?.phone?.reply_library.map((entry) => entry.id) ?? []
-  selectedPhoneContactProfileKeys.value = draft?.phone?.contact_profiles.map((profile) => profile.role_key) ?? []
-  selectedPhoneConversationIds.value = draft?.phoneConversations?.conversations.map((conversation) => conversation.id) ?? []
+  selectedContactChannelIds.value = draft?.contact?.channels.map((channel) => channel.id) ?? []
+  selectedContactPersonalityIds.value = draft?.contact?.personality_library.map((personality) => personality.id) ?? []
+  selectedContactTalkIds.value = draft?.contact?.talk_library.map((entry) => entry.id) ?? []
+  selectedContactActionIds.value = draft?.contact?.action_library.map((entry) => entry.id) ?? []
+  selectedContactReplyIds.value = draft?.contact?.reply_library.map((entry) => entry.id) ?? []
+  selectedContactProfileKeys.value = draft?.contact?.contact_profiles.map((profile) => profile.role_key) ?? []
+  selectedContactConversationIds.value = draft?.contactConversations?.conversations.map((conversation) => conversation.id) ?? []
   selectedDoingMenuIds.value = draft?.doing?.menus.map((menu) => menu.id) ?? []
   selectedDoingIds.value = draft?.doing?.doings.map((doing) => doing.id) ?? []
   selectedShopCategoryIds.value = draft?.shop?.categories.map((category) => category.id) ?? []
@@ -526,38 +535,42 @@ function setVariableSelected(variable: StoryCreationDraftVariable, checked: bool
     checked
   )
 }
-/** 更新 `PhonePersonalitySelected` 对应的响应式值。 @param personalityId 调用方传入的 `personalityId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhonePersonalitySelected(personalityId: string, checked: boolean) {
-  selectedPhonePersonalityIds.value = toggleStringSelection(
-    selectedPhonePersonalityIds.value,
+/** 更新 `ContactPersonalitySelected` 对应的响应式值。 @param personalityId 调用方传入的 `personalityId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactPersonalitySelected(personalityId: string, checked: boolean) {
+  selectedContactPersonalityIds.value = toggleStringSelection(
+    selectedContactPersonalityIds.value,
     personalityId,
     checked
   )
 }
-/** 更新 `PhoneTalkSelected` 对应的响应式值。 @param talkId 调用方传入的 `talkId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneTalkSelected(talkId: string, checked: boolean) {
-  selectedPhoneTalkIds.value = toggleStringSelection(selectedPhoneTalkIds.value, talkId, checked)
+/** 更新联系媒介的草稿选择状态。 */
+function setContactChannelSelected(channelId: string, checked: boolean) {
+  selectedContactChannelIds.value = toggleStringSelection(selectedContactChannelIds.value, channelId, checked)
 }
-/** 更新 `PhoneActionSelected` 对应的响应式值。 @param actionId 调用方传入的 `actionId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneActionSelected(actionId: string, checked: boolean) {
-  selectedPhoneActionIds.value = toggleStringSelection(selectedPhoneActionIds.value, actionId, checked)
+/** 更新 `ContactTalkSelected` 对应的响应式值。 @param talkId 调用方传入的 `talkId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactTalkSelected(talkId: string, checked: boolean) {
+  selectedContactTalkIds.value = toggleStringSelection(selectedContactTalkIds.value, talkId, checked)
 }
-/** 更新 `PhoneReplySelected` 对应的响应式值。 @param replyId 调用方传入的 `replyId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneReplySelected(replyId: string, checked: boolean) {
-  selectedPhoneReplyIds.value = toggleStringSelection(selectedPhoneReplyIds.value, replyId, checked)
+/** 更新 `ContactActionSelected` 对应的响应式值。 @param actionId 调用方传入的 `actionId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactActionSelected(actionId: string, checked: boolean) {
+  selectedContactActionIds.value = toggleStringSelection(selectedContactActionIds.value, actionId, checked)
 }
-/** 更新 `PhoneContactProfileSelected` 对应的响应式值。 @param roleKey 调用方传入的 `roleKey`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneContactProfileSelected(roleKey: string, checked: boolean) {
-  selectedPhoneContactProfileKeys.value = toggleStringSelection(
-    selectedPhoneContactProfileKeys.value,
+/** 更新 `ContactReplySelected` 对应的响应式值。 @param replyId 调用方传入的 `replyId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactReplySelected(replyId: string, checked: boolean) {
+  selectedContactReplyIds.value = toggleStringSelection(selectedContactReplyIds.value, replyId, checked)
+}
+/** 更新 `ContactProfileSelected` 对应的响应式值。 @param roleKey 调用方传入的 `roleKey`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactProfileSelected(roleKey: string, checked: boolean) {
+  selectedContactProfileKeys.value = toggleStringSelection(
+    selectedContactProfileKeys.value,
     roleKey,
     checked
   )
 }
-/** 更新 `PhoneConversationSelected` 对应的响应式值。 @param conversationId 调用方传入的 `conversationId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneConversationSelected(conversationId: string, checked: boolean) {
-  selectedPhoneConversationIds.value = toggleStringSelection(
-    selectedPhoneConversationIds.value,
+/** 更新 `ContactConversationSelected` 对应的响应式值。 @param conversationId 调用方传入的 `conversationId`。 @param checked 调用方传入的 `checked`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactConversationSelected(conversationId: string, checked: boolean) {
+  selectedContactConversationIds.value = toggleStringSelection(
+    selectedContactConversationIds.value,
     conversationId,
     checked
   )
@@ -602,29 +615,33 @@ function handleVariableSelectionChange(variable: StoryCreationDraftVariable, eve
 function handleEventSelectionChange(draftEvent: StoryCreationDraftEvent, event: Event) {
   setEventSelected(draftEvent, getCheckboxChecked(event))
 }
-/** 处理 `PhonePersonalitySelectionChange` 用户交互。 @param personalityId 调用方传入的 `personalityId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function handlePhonePersonalitySelectionChange(personalityId: string, event: Event) {
-  setPhonePersonalitySelected(personalityId, getCheckboxChecked(event))
+/** 处理 `ContactPersonalitySelectionChange` 用户交互。 @param personalityId 调用方传入的 `personalityId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function handleContactPersonalitySelectionChange(personalityId: string, event: Event) {
+  setContactPersonalitySelected(personalityId, getCheckboxChecked(event))
 }
-/** 处理 `PhoneTalkSelectionChange` 用户交互。 @param talkId 调用方传入的 `talkId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function handlePhoneTalkSelectionChange(talkId: string, event: Event) {
-  setPhoneTalkSelected(talkId, getCheckboxChecked(event))
+/** 根据复选框事件更新联系媒介选择。 */
+function handleContactChannelSelectionChange(channelId: string, event: Event) {
+  setContactChannelSelected(channelId, getCheckboxChecked(event))
 }
-/** 处理 `PhoneActionSelectionChange` 用户交互。 @param actionId 调用方传入的 `actionId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function handlePhoneActionSelectionChange(actionId: string, event: Event) {
-  setPhoneActionSelected(actionId, getCheckboxChecked(event))
+/** 处理 `ContactTalkSelectionChange` 用户交互。 @param talkId 调用方传入的 `talkId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function handleContactTalkSelectionChange(talkId: string, event: Event) {
+  setContactTalkSelected(talkId, getCheckboxChecked(event))
 }
-/** 处理 `PhoneReplySelectionChange` 用户交互。 @param replyId 调用方传入的 `replyId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function handlePhoneReplySelectionChange(replyId: string, event: Event) {
-  setPhoneReplySelected(replyId, getCheckboxChecked(event))
+/** 处理 `ContactActionSelectionChange` 用户交互。 @param actionId 调用方传入的 `actionId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function handleContactActionSelectionChange(actionId: string, event: Event) {
+  setContactActionSelected(actionId, getCheckboxChecked(event))
 }
-/** 处理 `PhoneContactProfileSelectionChange` 用户交互。 @param roleKey 调用方传入的 `roleKey`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function handlePhoneContactProfileSelectionChange(roleKey: string, event: Event) {
-  setPhoneContactProfileSelected(roleKey, getCheckboxChecked(event))
+/** 处理 `ContactReplySelectionChange` 用户交互。 @param replyId 调用方传入的 `replyId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function handleContactReplySelectionChange(replyId: string, event: Event) {
+  setContactReplySelected(replyId, getCheckboxChecked(event))
 }
-/** 处理 `PhoneConversationSelectionChange` 用户交互。 @param conversationId 调用方传入的 `conversationId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function handlePhoneConversationSelectionChange(conversationId: string, event: Event) {
-  setPhoneConversationSelected(conversationId, getCheckboxChecked(event))
+/** 处理 `ContactProfileSelectionChange` 用户交互。 @param roleKey 调用方传入的 `roleKey`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function handleContactProfileSelectionChange(roleKey: string, event: Event) {
+  setContactProfileSelected(roleKey, getCheckboxChecked(event))
+}
+/** 处理 `ContactConversationSelectionChange` 用户交互。 @param conversationId 调用方传入的 `conversationId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function handleContactConversationSelectionChange(conversationId: string, event: Event) {
+  setContactConversationSelected(conversationId, getCheckboxChecked(event))
 }
 /** 处理 `DoingMenuSelectionChange` 用户交互。 @param menuId 调用方传入的 `menuId`。 @param event 调用方传入的 `event`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function handleDoingMenuSelectionChange(menuId: string, event: Event) {
@@ -654,12 +671,13 @@ function applyDraft() {
     roleKeys: selectedRoleKeys.value,
     itemIds: selectedItemIds.value,
     variableKeys: selectedVariableKeys.value,
-    phonePersonalityIds: selectedPhonePersonalityIds.value,
-    phoneTalkIds: selectedPhoneTalkIds.value,
-    phoneActionIds: selectedPhoneActionIds.value,
-    phoneReplyIds: selectedPhoneReplyIds.value,
-    phoneContactProfileKeys: selectedPhoneContactProfileKeys.value,
-    phoneConversationIds: selectedPhoneConversationIds.value,
+    contactChannelIds: selectedContactChannelIds.value,
+    contactPersonalityIds: selectedContactPersonalityIds.value,
+    contactTalkIds: selectedContactTalkIds.value,
+    contactActionIds: selectedContactActionIds.value,
+    contactReplyIds: selectedContactReplyIds.value,
+    contactProfileKeys: selectedContactProfileKeys.value,
+    contactConversationIds: selectedContactConversationIds.value,
     doingMenuIds: selectedDoingMenuIds.value,
     doingIds: selectedDoingIds.value,
     shopCategoryIds: selectedShopCategoryIds.value,
@@ -671,14 +689,14 @@ const creationDraftPreview = useStoryCreationDraftPreview(props, creationState)
 const {
   variableValueLabel, setVariableValueFromInput, createImpact, getLocationImpact,
   getRoleImpact, getItemImpact, getVariableImpact, getEventImpact,
-  getPhonePersonalityImpact, getPhoneTalkImpact, getPhoneActionImpact, getPhoneReplyImpact,
-  getPhoneContactProfileImpact, getPhoneConversationImpact, getDoingMenuImpact, getDoingImpact,
+  getContactChannelImpact, getContactPersonalityImpact, getContactTalkImpact, getContactActionImpact, getContactReplyImpact,
+  getContactProfileImpact, getContactConversationImpact, getDoingMenuImpact, getDoingImpact,
   getShopCategoryImpact, getShopProductImpact, getDraftPresentationDialogues, getPresentationLabel,
   getImpactClass, getItemCategoryName, getDraftOrExistingItemName, getDraftOrExistingShopCategoryName,
-  getItemTagsText, splitListInput, setItemTagsText, getPhoneScopeText,
-  getStringListText, setStringListText, setPhonePersonalityTags, setPhoneTalkTags,
-  setPhoneActionTags, setPhoneReplyTags, setPhoneContactPreferredTags, getPhoneCostItemsText,
-  getPhoneRepliesText, setPhoneRepliesText, getContactProfileSummary, getDoingPresentationSummary,
+  getItemTagsText, splitListInput, setItemTagsText, getContactScopeText,
+  getStringListText, setStringListText, setContactPersonalityTags, setContactTalkTags,
+  setContactActionTags, setContactReplyTags, setContactPreferredTags, getContactCostItemsText,
+  getContactRepliesText, setContactRepliesText, getContactProfileSummary, getDoingPresentationSummary,
   setItemMaxStackFromInput, ensureScheduleLoop, getScheduleAt, setScheduleAt,
   getSchedulePriority, setSchedulePriority, getScheduleAfterText, setScheduleAfterText,
   getEventApplyWarnings, collectionTypeLabel, triggerModeLabel
@@ -729,19 +747,20 @@ watch(
     commandText, feedbackText, newCreationExpanded, creationHistoryExpanded,
     feedbackSeq, activeFeedbackId, activeBibleField, selectedEventKeys,
     selectedLocationIds, selectedRoleKeys, selectedItemIds, selectedVariableKeys,
-    selectedPhonePersonalityIds, selectedPhoneTalkIds, selectedPhoneActionIds, selectedPhoneReplyIds,
-    selectedPhoneContactProfileKeys, selectedPhoneConversationIds, selectedDoingMenuIds, selectedDoingIds,
+    selectedContactChannelIds,
+    selectedContactPersonalityIds, selectedContactTalkIds, selectedContactActionIds, selectedContactReplyIds,
+    selectedContactProfileKeys, selectedContactConversationIds, selectedDoingMenuIds, selectedDoingIds,
     selectedShopCategoryIds, selectedShopProductIds, feedbackHistory, editableDraft,
     draftApplied, draft, bibleFields, pipelineSteps,
     activeBibleFieldConfig, agentModelSummary, filledBibleFieldCount, canRunAgent,
     canRefineDraft, isFeedbackRunning, isNewCreationRunning, abortAgentLabel,
     activeFeedbackItem, historySessions, historySessionCount, showNewCreationForm,
     runStatus, agentLogs, loggedRoles, activeAgentRole,
-    draftPreview, eventTypeSummary, phoneDraftCount, phoneConversationDraftCount,
+    draftPreview, eventTypeSummary, contactDraftCount, contactConversationDraftCount,
     doingDraftCount, shopDraftCount, selectedApplyCount, canApplyDraft,
     applyButtonLabel, existingLocationIds, existingRoleKeys, existingItemIds,
-    existingItemCategoryIds, existingVariableKeys, existingPhonePersonalityIds, existingPhoneTalkIds,
-    existingPhoneActionIds, existingPhoneReplyIds, existingPhoneContactProfileKeys, existingPhoneConversationIds,
+    existingItemCategoryIds, existingVariableKeys, existingContactChannelIds, existingContactPersonalityIds, existingContactTalkIds,
+    existingContactActionIds, existingContactReplyIds, existingContactProfileKeys, existingContactConversationIds,
     existingDoingMenuIds, existingDoingIds, existingShopCategoryIds, existingShopProductIds,
     existingChainIds, existingEventKeys, selectedDraftChainIds, availableLocationIdsForApply,
     availableRoleKeysForApply, availableChainIdsForApply, availableDoingMenuIdsForApply, availableItemIdsForApply,
@@ -753,23 +772,23 @@ watch(
     getEventKey, getRoleKey, getVariableKey, cloneCreationDraft,
     syncEditableDraft, resetEditableDraft, syncApplySelection, toggleStringSelection,
     setEventSelected, setLocationSelected, setRoleSelected, setItemSelected,
-    setVariableSelected, setPhonePersonalitySelected, setPhoneTalkSelected, setPhoneActionSelected,
-    setPhoneReplySelected, setPhoneContactProfileSelected, setPhoneConversationSelected, setDoingMenuSelected,
+    setVariableSelected, setContactChannelSelected, setContactPersonalitySelected, setContactTalkSelected, setContactActionSelected,
+    setContactReplySelected, setContactProfileSelected, setContactConversationSelected, setDoingMenuSelected,
     setDoingSelected, setShopCategorySelected, setShopProductSelected, getCheckboxChecked,
     handleLocationSelectionChange, handleRoleSelectionChange, handleItemSelectionChange, handleVariableSelectionChange,
-    handleEventSelectionChange, handlePhonePersonalitySelectionChange, handlePhoneTalkSelectionChange, handlePhoneActionSelectionChange,
-    handlePhoneReplySelectionChange, handlePhoneContactProfileSelectionChange, handlePhoneConversationSelectionChange, handleDoingMenuSelectionChange,
+    handleEventSelectionChange, handleContactChannelSelectionChange, handleContactPersonalitySelectionChange, handleContactTalkSelectionChange, handleContactActionSelectionChange,
+    handleContactReplySelectionChange, handleContactProfileSelectionChange, handleContactConversationSelectionChange, handleDoingMenuSelectionChange,
     handleDoingSelectionChange, handleShopCategorySelectionChange, handleShopProductSelectionChange, applyDraft,
     variableValueLabel, setVariableValueFromInput, createImpact, getLocationImpact,
     getRoleImpact, getItemImpact, getVariableImpact, getEventImpact,
-    getPhonePersonalityImpact, getPhoneTalkImpact, getPhoneActionImpact, getPhoneReplyImpact,
-    getPhoneContactProfileImpact, getPhoneConversationImpact, getDoingMenuImpact, getDoingImpact,
+    getContactChannelImpact, getContactPersonalityImpact, getContactTalkImpact, getContactActionImpact, getContactReplyImpact,
+    getContactProfileImpact, getContactConversationImpact, getDoingMenuImpact, getDoingImpact,
     getShopCategoryImpact, getShopProductImpact, getDraftPresentationDialogues, getPresentationLabel,
     getImpactClass, getItemCategoryName, getDraftOrExistingItemName, getDraftOrExistingShopCategoryName,
-    getItemTagsText, splitListInput, setItemTagsText, getPhoneScopeText,
-    getStringListText, setStringListText, setPhonePersonalityTags, setPhoneTalkTags,
-    setPhoneActionTags, setPhoneReplyTags, setPhoneContactPreferredTags, getPhoneCostItemsText,
-    getPhoneRepliesText, setPhoneRepliesText, getContactProfileSummary, getDoingPresentationSummary,
+    getItemTagsText, splitListInput, setItemTagsText, getContactScopeText,
+    getStringListText, setStringListText, setContactPersonalityTags, setContactTalkTags,
+    setContactActionTags, setContactReplyTags, setContactPreferredTags, getContactCostItemsText,
+    getContactRepliesText, setContactRepliesText, getContactProfileSummary, getDoingPresentationSummary,
     setItemMaxStackFromInput, ensureScheduleLoop, getScheduleAt, setScheduleAt,
     getSchedulePriority, setSchedulePriority, getScheduleAfterText, setScheduleAfterText,
     getEventApplyWarnings, collectionTypeLabel, triggerModeLabel

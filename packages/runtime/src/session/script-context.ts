@@ -52,12 +52,12 @@ import type {
 import type { RuntimeStoryReferFile, RuntimeStoryReferTerm, RuntimeStorySessionSnapshot } from "./contracts-core"
 import type { RuntimePlayableEvent, RuntimeState, RuntimeStoryBundle } from "./contracts-view"
 import { assertRuntimeDoingId, assertRuntimeShopProductId, buyShopProduct, canBuyShopProduct, ensureDoingRecord, findDoingRecord, getBundleItemIds, getDoingCooldownLeftHours, getShopGiftCooldownLeftHours, getShopPurchaseCooldownLeftHours, giftShopProduct } from "./doing-shop"
-import { sendPhoneMessageFromContact, sendPhoneMessageToContact } from "./phone-actions"
-import { startPhoneConversation } from "./phone-conversations"
-import { assertRuntimePhoneRoleKey, ensurePhoneContact, findRoleLabel, getBundleLocations, getPhoneContact, getPhoneUnreadCount, isRuntimeStandaloneEvent, markPhoneThreadRead } from "./phone-threads"
+import { sendContactMessageFromContact, sendContactMessageToContact } from "./contact-actions"
+import { startContactConversation } from "./contact-conversations"
+import { assertRuntimeContactRoleKey, ensureContact, findRoleLabel, getBundleLocations, getContact, getContactUnreadCount, isRuntimeStandaloneEvent, markContactThreadRead } from "./contact-threads"
 import { getCurrentGameMinute } from "./schedule-clock"
 import { normalizeClockState } from "./state-scheduler"
-import { clampPhoneFavor, cloneValue, createCombinedValsFile, createDefaultReferConfig, normalizeBagQuantity, normalizeBagsState, normalizeDoingState, normalizeItemId, normalizeOwnerId, normalizePhoneState, normalizeText, readValEntryValue } from "./state-values"
+import { clampContactFavor, cloneValue, createCombinedValsFile, createDefaultReferConfig, normalizeBagQuantity, normalizeBagsState, normalizeDoingState, normalizeItemId, normalizeOwnerId, normalizeContactState, normalizeText, readValEntryValue } from "./state-values"
 
 /** @param bundle 编译后的故事。 @param locationId 地点 id。 @returns 地点显示名；id 为空或不存在时返回 null。 */
 export function findLocationLabel(bundle: RuntimeStoryBundle, locationId: string) {
@@ -242,7 +242,7 @@ export function buildRuntimeContextValues(
     random: () => nextRuntimeRandom(snapshot.rng),
     functions: {
       ...createRuntimeBagReadableFunctions(bundle, snapshot),
-      ...createRuntimePhoneReadableFunctions(bundle, snapshot),
+      ...createRuntimeContactReadableFunctions(bundle, snapshot),
       ...createRuntimeDoingReadableFunctions(bundle, snapshot),
       ...createRuntimeShopReadableFunctions(bundle, snapshot)
     }
@@ -420,110 +420,110 @@ export function createRuntimeBagScriptFunctions(
   }
 }
 
-/** @param bundle 编译故事。 @param snapshot 手机状态。 @returns 查询联系人、好感度和未读数的只读脚本函数。 */
-export function createRuntimePhoneReadableFunctions(
+/** @param bundle 编译故事。 @param snapshot 联系人状态。 @returns 查询联系人、好感度和未读数的只读脚本函数。 */
+export function createRuntimeContactReadableFunctions(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot
 ) {
   return {
-    /** @param roleKey 角色键。 @returns 该角色是否已加入手机联系人。 */
-    phone_has_contact(roleKey: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-      return Boolean(getPhoneContact(snapshot, normalizedRoleKey))
+    /** @param roleKey 角色键。 @returns 该角色是否已加入联系人。 */
+    contact_has(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+      return Boolean(getContact(snapshot, normalizedRoleKey))
     },
     /** @param roleKey 角色键。 @returns 当前好感度，未添加联系人时为 0。 */
-    phone_favor(roleKey: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-      return getPhoneContact(snapshot, normalizedRoleKey)?.favor ?? 0
+    contact_favor(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+      return getContact(snapshot, normalizedRoleKey)?.favor ?? 0
     },
     /** @param roleKey 角色键。 @returns 该联系人的未读消息数量。 */
-    phone_unread_count(roleKey: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-      return getPhoneUnreadCount(snapshot, normalizedRoleKey)
+    contact_unread_count(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+      return getContactUnreadCount(snapshot, normalizedRoleKey)
     }
   }
 }
 
 /**
- * 创建手机领域的可写 StoryScript 函数。
+ * 创建联系人领域的可写 StoryScript 函数。
  * @param bundle 编译故事。 @param runtimeState 内部会话状态。 @param notifications 收集给 UI 的提示。
  * @returns 联系人、好感、消息、会话及只读查询函数；所有写操作会更新可存档快照。
  */
-export function createRuntimePhoneScriptFunctions(
+export function createRuntimeContactScriptFunctions(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
   notifications: string[]
 ) {
   const snapshot = runtimeState.snapshot
-  const readableFunctions = createRuntimePhoneReadableFunctions(bundle, snapshot)
+  const readableFunctions = createRuntimeContactReadableFunctions(bundle, snapshot)
 
   return {
     /** @param roleKey 角色键。 @returns true；首次添加时还会产生 UI 通知。 */
-    phone_add_contact(roleKey: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-      const existed = Boolean(getPhoneContact(snapshot, normalizedRoleKey))
-      ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+    contact_add(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+      const existed = Boolean(getContact(snapshot, normalizedRoleKey))
+      ensureContact(bundle, snapshot, normalizedRoleKey)
       if (!existed) {
-        notifications.push(`手机已新增联系人：${findRoleLabel(bundle, normalizedRoleKey)}`)
+        notifications.push(`已新增联系人：${findRoleLabel(bundle, normalizedRoleKey)}`)
       }
       return true
     },
     /** @param roleKey 角色键。 @returns 是否实际移除了联系人；同时删除其消息线程。 */
-    phone_remove_contact(roleKey: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-      normalizePhoneState(snapshot)
-      const nextContacts = snapshot.phone.contacts.filter((contact) => contact.role_key !== normalizedRoleKey)
-      const nextThreads = snapshot.phone.threads.filter((thread) => thread.role_key !== normalizedRoleKey)
-      const removed = nextContacts.length !== snapshot.phone.contacts.length
-      snapshot.phone.contacts = nextContacts
-      snapshot.phone.threads = nextThreads
+    contact_remove(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+      normalizeContactState(snapshot)
+      const nextContacts = snapshot.contact.contacts.filter((contact) => contact.role_key !== normalizedRoleKey)
+      const nextThreads = snapshot.contact.threads.filter((thread) => thread.role_key !== normalizedRoleKey)
+      const removed = nextContacts.length !== snapshot.contact.contacts.length
+      snapshot.contact.contacts = nextContacts
+      snapshot.contact.threads = nextThreads
       return removed
     },
     /** @param roleKey 角色键。 @param favor 目标好感度。 @returns 限制在 0–100 的新好感度。 */
-    phone_set_favor(roleKey: unknown, favor: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-      const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-      contact.favor = clampPhoneFavor(favor, contact.favor)
+    contact_set_favor(roleKey: unknown, favor: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+      const contact = ensureContact(bundle, snapshot, normalizedRoleKey)
+      contact.favor = clampContactFavor(favor, contact.favor)
       return contact.favor
     },
     /** @param roleKey 角色键。 @param delta 好感变化量。 @returns 限制后的新好感度。 */
-    phone_add_favor(roleKey: unknown, delta: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-      const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
+    contact_add_favor(roleKey: unknown, delta: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+      const contact = ensureContact(bundle, snapshot, normalizedRoleKey)
       const normalizedDelta = typeof delta === "number" && Number.isFinite(delta)
         ? Math.trunc(delta)
         : 0
-      contact.favor = clampPhoneFavor(contact.favor + normalizedDelta, contact.favor)
+      contact.favor = clampContactFavor(contact.favor + normalizedDelta, contact.favor)
       return contact.favor
     },
     /** @param roleKey 发送者角色键。 @param content 消息文本。 @returns 规范文本；空文本抛错并会产生未读通知。 */
-    phone_send_from_contact(roleKey: unknown, content: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+    contact_send_from(roleKey: unknown, content: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
       const normalizedContent = normalizeText(content)
       if (!normalizedContent) {
-        throw new Error("phone message content is required.")
+        throw new Error("contact message content is required.")
       }
-      sendPhoneMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, normalizedContent)
+      sendContactMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, normalizedContent)
       return normalizedContent
     },
     /** @param roleKey 接收者角色键。 @param content 玩家消息文本。 @returns 规范文本；空文本抛错。 */
-    phone_send_to_contact(roleKey: unknown, content: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+    contact_send_to(roleKey: unknown, content: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
       const normalizedContent = normalizeText(content)
       if (!normalizedContent) {
-        throw new Error("phone message content is required.")
+        throw new Error("contact message content is required.")
       }
-      sendPhoneMessageToContact(bundle, snapshot, normalizedRoleKey, normalizedContent)
+      sendContactMessageToContact(bundle, snapshot, normalizedRoleKey, normalizedContent)
       return normalizedContent
     },
     /** @param roleKey 角色键。 @returns 本次从未读改为已读的消息数。 */
-    phone_mark_read(roleKey: unknown) {
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-      return markPhoneThreadRead(snapshot, normalizedRoleKey)
+    contact_mark_read(roleKey: unknown) {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+      return markContactThreadRead(snapshot, normalizedRoleKey)
     },
     /** @param conversationId 结构化会话 id。 @returns 启动后的会话状态；不满足条件时由下层抛错。 */
-    phone_start_conversation(conversationId: unknown) {
-      return startPhoneConversation(bundle, runtimeState, notifications, conversationId)
+    contact_start_conversation(conversationId: unknown) {
+      return startContactConversation(bundle, runtimeState, notifications, conversationId)
     },
     ...readableFunctions
   }
@@ -574,7 +574,7 @@ export function createRuntimeShopReadableFunctions(
     /** @param productId 商品 id。 @param roleKey 收礼角色键。 @returns 该组合剩余赠礼冷却小时数。 */
     shop_gift_cooldown_left(productId: unknown, roleKey: unknown) {
       const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
       return getShopGiftCooldownLeftHours(snapshot, normalizedProductId, normalizedRoleKey)
     }
   }
@@ -640,7 +640,7 @@ export function createRuntimeShopScriptFunctions(
     /** @param productId 商品 id。 @param roleKey 收礼角色键。 @returns 赠礼结果；成功时扣款并直接送出，不进入背包。 */
     shop_gift(productId: unknown, roleKey: unknown) {
       const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
-      const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+      const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
       return giftShopProduct(bundle, snapshot, notifications, normalizedProductId, normalizedRoleKey)
     },
     ...readableFunctions

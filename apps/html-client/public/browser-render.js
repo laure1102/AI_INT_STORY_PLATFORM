@@ -3,7 +3,7 @@
  * 用户操作仍由 app.js 统一绑定，避免模板函数直接发起网络请求。
  */
 import {
-  getActivePhoneConversation,
+  getActiveContactConversation,
   getDoingView,
   getSelectedDoingMenu,
   getSelectedShopCategory,
@@ -12,7 +12,7 @@ import {
   route,
   ui
 } from "./browser-state.js"
-import { renderBagGiftPanel, renderPhoneGiftPanel } from "./browser-gifts.js"
+import { renderBagGiftPanel, renderContactGiftPanel } from "./browser-gifts.js"
 
 /** @param profile 档案摘要。 @returns 地点、自定义变量数和创建时间组成的单行说明。 */
 function profileMeta(profile) {
@@ -383,7 +383,7 @@ function renderMenuPanelBody(panelId) {
     const selectedProducts = selectedCategoryId
       ? products.filter((product) => product.categoryId === selectedCategoryId)
       : []
-    const contacts = Array.isArray(ui.data?.phoneContacts) ? ui.data.phoneContacts : []
+    const contacts = Array.isArray(ui.data?.contacts) ? ui.data.contacts : []
 
     body = `
       <div class="shop-panel">
@@ -417,7 +417,7 @@ function renderMenuPanelBody(panelId) {
               : product.disabled
                 ? product.disabledReason || "当前无法购买赠礼"
                 : contacts.length === 0
-                  ? "暂无可赠送好友"
+                  ? "暂无可赠送联系人"
                   : "购买后直接赠送，不进入背包"
             const giftOpen = canOpenGift && ui.selectedShopGiftProductId === product.id
             const selectedGiftRoleKey = ui.shopGiftSelectedRoleKeys[product.id] ?? ""
@@ -447,7 +447,7 @@ function renderMenuPanelBody(panelId) {
                   data-shop-gift-search-text="${h(searchText)}"
                 >
                   <span class="item-title">${h(contact.label ?? contact.roleKey)}</span>
-                  <span class="item-meta">${h(contact.relationStageLabel ?? "好友")} · 好感 ${h(contact.favor ?? 0)}/100</span>
+                  <span class="item-meta">${h(contact.relationStageLabel ?? "联系人")} · 好感 ${h(contact.favor ?? 0)}/100</span>
                 </button>
               `
             }).join("")
@@ -482,7 +482,7 @@ function renderMenuPanelBody(panelId) {
                         id="shop-gift-search-${h(product.id)}"
                         type="search"
                         value="${h(giftQuery)}"
-                        placeholder="选择或搜索好友"
+                        placeholder="选择或搜索联系人"
                         autocomplete="off"
                         role="combobox"
                         aria-autocomplete="list"
@@ -492,7 +492,7 @@ function renderMenuPanelBody(panelId) {
                       >
                       <div class="shop-gift-options" id="${h(giftOptionsId)}" role="listbox">
                         ${giftOptions}
-                        <div class="shop-gift-empty" ${visibleGiftTargetCount > 0 ? "hidden" : ""} data-shop-gift-empty>没有匹配的好友</div>
+                        <div class="shop-gift-empty" ${visibleGiftTargetCount > 0 ? "hidden" : ""} data-shop-gift-empty>没有匹配的联系人</div>
                       </div>
                     </div>
                     <button
@@ -570,9 +570,9 @@ export function renderGameHeader(summary, data, view) {
   `
 }
 
-/** @param summary 时间/状态摘要。 @param data 服务端状态。 @returns 含工具入口、存档和手机未读提示的页脚 HTML。 */
+/** @param summary 时间/状态摘要。 @param data 服务端状态。 @returns 含工具入口、存档和联系人未读提示的页脚 HTML。 */
 export function renderGameFooter(summary, data) {
-  const phoneClass = data?.phoneUnreadCount > 0 ? "footer-stat phone-unread" : "footer-stat"
+  const contactClass = data?.contactUnreadCount > 0 ? "footer-stat contact-unread" : "footer-stat"
 
   return `
     <footer class="game-footer">
@@ -580,7 +580,7 @@ export function renderGameFooter(summary, data) {
         <div class="footer-status-left">
           <span class="footer-stat strong">${h(summary.playerName || "未命名")}</span>
           <span class="footer-stat">资金 ${h(summary.moneyLabel)}</span>
-          <button class="${phoneClass}" data-action="open-phone">手机 ${h(data?.phoneUnreadCount ?? 0)}</button>
+          <button class="${contactClass}" data-action="open-contact">C 联系人 ${h(data?.contactUnreadCount ?? 0)}</button>
         </div>
         <div class="footer-status-right">
           <button class="footer-command" data-menu-panel="doing">D 行动</button>
@@ -602,7 +602,7 @@ export function renderGameFooter(summary, data) {
   `
 }
 
-/** @returns 当前完整游戏页 HTML，包括头部、剧情、交互、上下文、菜单、手机和页脚。 */
+/** @returns 当前完整游戏页 HTML，包括头部、剧情、交互、上下文、菜单、联系人和页脚。 */
 export function renderGame() {
   const data = ui.data
   const view = data?.view
@@ -625,12 +625,12 @@ export function renderGame() {
       ${renderGameFooter(summary, data)}
     </main>
     ${renderMenuPanel()}
-    ${renderPhoneDrawer()}
+    ${renderContactDrawer()}
   `
 }
 
-/** @param action 手机互动动作视图。 @returns 金钱和物品成本的短文本；无成本时为“免费”。 */
-function formatPhoneCost(action) {
+/** @param action 联系人互动动作视图。 @returns 金钱和物品成本的短文本；无成本时为“免费”。 */
+function formatContactCost(action) {
   const parts = []
   if (action.costMoney > 0) {
     parts.push(`${action.costMoney}元`)
@@ -641,21 +641,21 @@ function formatPhoneCost(action) {
   return parts.length > 0 ? parts.join(" + ") : "无消耗"
 }
 
-/** @param conversation 活动结构化手机会话。 @returns 当前节点可见玩家回复按钮 HTML。 */
-function renderPhoneConversationActions(conversation) {
+/** @param conversation 活动结构化联系人会话。 @param labels 当前媒介文案。 @returns 当前节点可见玩家回复按钮 HTML。 */
+function renderContactConversationActions(conversation, labels) {
   const replies = (conversation?.replies ?? []).filter((reply) => reply.visible)
 
   return `
-    <div class="phone-conversation-panel">
-      <div class="phone-conversation-title">
-        <strong>${h(conversation.title || "剧情手机对话")}</strong>
+    <div class="contact-conversation-panel">
+      <div class="contact-conversation-title">
+        <strong>${h(conversation.title || labels.conversation)}</strong>
         <span class="item-meta">节点 ${h(conversation.nodeIndex)}/${h(conversation.nodeTotal)} · ${h(conversation.nodeTitle || conversation.nodeId)}</span>
       </div>
-      <div class="quick-grid phone-conversation-replies" data-phone-options-scroll="${h(`${conversation.roleKey}:conversation:${conversation.nodeId}`)}">
+      <div class="quick-grid contact-conversation-replies" data-contact-options-scroll="${h(`${conversation.roleKey}:conversation:${conversation.nodeId}`)}">
         ${replies.length === 0 ? `<div class="empty">当前剧情对话没有可选回复。</div>` : replies.map((reply, index) => `
-          <button class="option-button" data-phone-conversation-reply="${h(reply.id)}">
+          <button class="option-button" data-contact-conversation-reply="${h(reply.id)}">
             ${index + 1}. ${h(reply.text)}
-            <span class="item-meta">剧情回复</span>
+            <span class="item-meta">${h(labels.reply)}</span>
           </button>
         `).join("")}
       </div>
@@ -663,85 +663,105 @@ function renderPhoneConversationActions(conversation) {
   `
 }
 
+/** @param messages 往来消息。 @param preset 展示预设。 @returns 对应媒介布局的消息 HTML。 */
+function renderContactMessages(messages, preset) {
+  return messages.map((message) => `
+    <article class="contact-message contact-message--${preset} ${h(message.sender)}" data-contact-message="${h(message.id)}">
+      <div class="bubble-meta">${h(message.senderLabel)} · ${h(message.gameMinuteLabel ?? message.gameMinute)}</div>
+      <div class="contact-message__content">${h(message.content)}</div>
+    </article>
+  `).join("")
+}
+
 /**
- * 渲染联系人列表、消息线程和话题/动作选择组成的手机抽屉。
- * @returns 手机关闭时为空串，否则为完整抽屉 HTML；所有服务端文本在插入前经过 h 转义。
+ * 渲染联系人列表、消息线程和话题/动作选择组成的联系人抽屉。
+ * @returns 联系人抽屉关闭时为空串，否则为完整 HTML；所有服务端文本在插入前经过 h 转义。
  */
-function renderPhoneDrawer() {
-  if (!ui.phoneOpen) {
+function renderContactDrawer() {
+  if (!ui.contactOpen) {
     return ""
   }
 
-  const contacts = ui.data?.phoneContacts ?? []
-  const activeConversation = getActivePhoneConversation()
+  const contacts = ui.data?.contacts ?? []
+  const activeConversation = getActiveContactConversation()
   if (!ui.selectedRoleKey && activeConversation?.roleKey) {
     ui.selectedRoleKey = activeConversation.roleKey
   }
   const selected = contacts.find((contact) => contact.roleKey === ui.selectedRoleKey) ?? null
   const thread = ui.thread
   const messages = thread?.messages ?? []
-  const options = ui.phoneMode === "talk"
+  const options = ui.contactMode === "talk"
     ? (thread?.talks ?? [])
-    : ui.phoneMode === "action"
+    : ui.contactMode === "action"
       ? (thread?.actions ?? [])
       : []
   const selectedConversation = selected && activeConversation?.roleKey === selected.roleKey
     ? activeConversation
     : null
+  const presetValues = ["generic", "phone", "letter", "transmission"]
+  const channelPreset = presetValues.includes(thread?.channelPreset)
+    ? thread.channelPreset
+    : presetValues.includes(selected?.channelPreset)
+      ? selected.channelPreset
+      : "generic"
+  const channelLabels = thread?.channelLabels ?? selected?.channelLabels ?? {
+    message: "消息",
+    conversation: "联系人剧情",
+    talk: "闲聊",
+    action: "动作",
+    gift: "赠礼",
+    send: "发送",
+    reply: "回复"
+  }
 
   return `
-    <div class="drawer-backdrop" data-action="close-phone"></div>
-    <aside class="phone-drawer">
-      <div class="phone-header">
+    <div class="drawer-backdrop" data-action="close-contact"></div>
+    <aside class="contact-drawer">
+      <div class="contact-header">
         <div>
-          <strong>手机联系人</strong>
-          <div class="item-meta">未读 ${h(ui.data?.phoneUnreadCount ?? 0)}</div>
+          <strong>联系人</strong>
+          <div class="item-meta">未读 ${h(ui.data?.contactUnreadCount ?? 0)}</div>
         </div>
-        <button data-action="close-phone">关闭</button>
+        <button data-action="close-contact">关闭</button>
       </div>
-      <div class="phone-body">
+      <div class="contact-body">
         <div class="contacts-pane">
           <div class="list">
             ${contacts.length === 0 ? `<div class="empty">还没有联系人。</div>` : contacts.map((contact) => `
-              <button class="list-item ${contact.roleKey === ui.selectedRoleKey ? "active" : ""}" data-phone-contact="${h(contact.roleKey)}">
+              <button class="list-item ${contact.roleKey === ui.selectedRoleKey ? "active" : ""}" data-contact-contact="${h(contact.roleKey)}">
                 <span class="item-title">${h(contact.label)}${contact.unreadCount > 0 ? ` · 未读 ${contact.unreadCount}` : ""}${activeConversation?.roleKey === contact.roleKey ? " · 剧情中" : ""}</span>
-                <span class="item-meta">${h(contact.relationStageLabel)} · 好感 ${h(contact.favor)}/100 · ${h(contact.personalityLabel)}${contact.canContact ? "" : ` · ${contact.lockMessage ?? "不可联系"}`}</span>
+                <span class="item-meta">${h(contact.channelName)} · ${h(contact.relationStageLabel)} · 好感 ${h(contact.favor)}/100 · ${h(contact.personalityLabel)}${contact.canContact ? "" : ` · ${contact.lockMessage ?? "不可联系"}`}</span>
                 ${contact.lastMessagePreview ? `<span class="item-meta">${h(contact.lastMessagePreview)}</span>` : ""}
               </button>
             `).join("")}
           </div>
         </div>
         <div class="thread-pane">
-          <div class="message-list" data-phone-thread-scroll="${h(selected?.roleKey ?? "")}">
+          <div class="message-list contact-thread contact-thread--${channelPreset}" data-contact-thread-scroll="${h(selected?.roleKey ?? "")}" data-contact-preset="${channelPreset}">
             ${selected ? `
-              <div class="item-meta">${h(selected.label)} · ${h(selected.relationTrackLabel)} / ${h(selected.relationStageLabel)} · 好感 ${h(selected.favor)}/100</div>
-              ${messages.length === 0 ? `<div class="empty">还没有往来消息。</div>` : messages.map((message) => `
-                <div class="bubble ${h(message.sender)}">
-                  <div class="bubble-meta">${h(message.senderLabel)} · ${h(message.gameMinuteLabel ?? message.gameMinute)}</div>
-                  <div>${h(message.content)}</div>
-                </div>
-              `).join("")}
+              <div class="contact-thread__heading">${h(selected.label)} · ${h(selected.channelName)} · ${h(selected.relationTrackLabel)} / ${h(selected.relationStageLabel)} · 好感 ${h(selected.favor)}/100</div>
+              ${messages.length === 0 ? `<div class="empty">还没有${h(channelLabels.message)}。</div>` : renderContactMessages(messages, channelPreset)}
             ` : `<div class="empty">选择左侧联系人查看消息。</div>`}
           </div>
-          <div class="phone-actions">
+          <div class="contact-actions">
             ${selected ? `
-              ${selectedConversation ? renderPhoneConversationActions(selectedConversation) : `
+              ${selectedConversation ? renderContactConversationActions(selectedConversation, channelLabels) : `
                 <div class="segment">
-                  <button class="${ui.phoneMode === "talk" ? "active" : ""}" data-phone-mode="talk">说话</button>
-                  <button class="${ui.phoneMode === "action" ? "active" : ""}" data-phone-mode="action">动作</button>
-                  <button class="${ui.phoneMode === "gift" ? "active" : ""}" data-phone-mode="gift">赠礼</button>
+                  <button class="${ui.contactMode === "talk" ? "active" : ""}" data-contact-mode="talk">${h(channelLabels.talk)}</button>
+                  <button class="${ui.contactMode === "action" ? "active" : ""}" data-contact-mode="action">${h(channelLabels.action)}</button>
+                  <button class="${ui.contactMode === "gift" ? "active" : ""}" data-contact-mode="gift">${h(channelLabels.gift)}</button>
                 </div>
-                ${ui.phoneMode === "gift" ? renderPhoneGiftPanel(selected) : `<div class="quick-grid" data-phone-options-scroll="${h(`${selected.roleKey}:${ui.phoneMode}`)}">
+                ${ui.contactMode === "gift" ? renderContactGiftPanel(selected) : `<div class="quick-grid" data-contact-options-scroll="${h(`${selected.roleKey}:${ui.contactMode}`)}">
                   ${thread?.canContact === false ? `<div class="empty">${h(thread.lockMessage ?? "对方现在不想理我。")}</div>` : ""}
-                  ${options.length === 0 ? `<div class="empty">当前没有可用${ui.phoneMode === "talk" ? "短句" : "动作"}。</div>` : options.map((option) => {
-                    const disabled = ui.phoneMode === "action" && option.disabled
-                    const meta = ui.phoneMode === "action"
-                      ? `${formatPhoneCost(option)}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.disabledReason ? ` · ${option.disabledReason}` : ""}`
+                  ${options.length === 0 ? `<div class="empty">当前没有可用${ui.contactMode === "talk" ? "短句" : "动作"}。</div>` : options.map((option) => {
+                    const disabled = ui.contactMode === "action" && option.disabled
+                    const meta = ui.contactMode === "action"
+                      ? `${formatContactCost(option)}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.disabledReason ? ` · ${option.disabledReason}` : ""}`
                       : `${option.tags?.slice(0, 2).join("/") || "闲聊"}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.suggested ? " · 推荐" : ""}`
                     return `
-                      <button class="option-button" ${disabled ? "disabled" : ""} data-phone-${ui.phoneMode}="${h(option.id)}">
-                        ${h(ui.phoneMode === "action" ? option.label : option.text)}
-                        <span class="item-meta">${h(meta)}</span>
+                      <button class="option-button" ${disabled ? "disabled" : ""} data-contact-${ui.contactMode}="${h(option.id)}">
+                        ${h(ui.contactMode === "action" ? option.label : option.text)}
+                        <span class="item-meta">${h(channelLabels.send)} · ${h(meta)}</span>
                       </button>
                     `
                   }).join("")}

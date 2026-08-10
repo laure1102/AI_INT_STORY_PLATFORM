@@ -1,5 +1,5 @@
-/* 手机抽屉、联系人、会话和操作按钮。 */
-.phone-drawer {
+/* 联系人抽屉、媒介会话和操作按钮。 */
+.contact-drawer {
   position: fixed;
   top: max(18px, 4dvh);
   left: 50%;
@@ -16,7 +16,7 @@
   overflow: hidden;
 }
 
-.phone-drawer::before {
+.contact-drawer::before {
   content: none;
 }
 
@@ -27,7 +27,7 @@
   background: rgba(0, 0, 0, 0.46);
 }
 
-.phone-header {
+.contact-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -38,12 +38,12 @@
   background: #121a11;
 }
 
-.phone-header strong {
+.contact-header strong {
   color: var(--cyan);
   font-family: var(--mono);
 }
 
-.phone-body {
+.contact-body {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(230px, 30%) minmax(0, 1fr);
@@ -81,7 +81,18 @@
   overflow: auto;
 }
 
-.bubble {
+.contact-thread__heading {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font: 12px/1.4 var(--mono);
+}
+
+.contact-message {
+  width: min(100%, 760px);
+  overflow-wrap: anywhere;
+}
+
+.contact-message--phone {
   max-width: 84%;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
@@ -91,21 +102,105 @@
   overflow-wrap: anywhere;
 }
 
-.bubble.player {
+.contact-message--phone.player {
   align-self: flex-end;
   color: #06110f;
   border-color: var(--cyan);
   background: var(--cyan);
 }
 
-.bubble.contact {
+.contact-message--phone.contact {
   align-self: flex-start;
 }
 
-.bubble.system {
+.contact-message--phone.system {
   align-self: center;
   color: var(--muted);
   background: #0d130c;
+}
+
+.contact-thread--generic {
+  position: relative;
+  padding-left: 28px;
+}
+
+.contact-thread--generic::before {
+  position: absolute;
+  top: 46px;
+  bottom: 18px;
+  left: 17px;
+  width: 1px;
+  content: "";
+  background: var(--line);
+}
+
+.contact-message--generic {
+  position: relative;
+  align-self: stretch;
+  border-bottom: 1px solid var(--line-soft);
+  padding: 7px 10px 10px;
+  background: #10160f;
+  line-height: 1.55;
+}
+
+.contact-message--generic::before {
+  position: absolute;
+  top: 13px;
+  left: -17px;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--cyan);
+  border-radius: 50%;
+  content: "";
+  background: #0b100a;
+}
+
+.contact-message--generic.player::before {
+  border-color: var(--gold);
+}
+
+.contact-message--letter {
+  align-self: flex-start;
+  max-width: 92%;
+  border: 1px solid #8e8063;
+  border-radius: 3px;
+  padding: 14px 16px;
+  color: #211d15;
+  background: #ded6bf;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.2);
+  line-height: 1.7;
+}
+
+.contact-message--letter.player {
+  align-self: flex-end;
+  background: #e8e0c9;
+}
+
+.contact-message--letter .bubble-meta {
+  color: #5e5543;
+  opacity: 1;
+}
+
+.contact-message--transmission {
+  align-self: stretch;
+  border-left: 2px solid #8fc6c9;
+  padding: 8px 12px;
+  color: #d8f1ef;
+  background: #0c1717;
+  font-family: var(--mono);
+  line-height: 1.55;
+}
+
+.contact-message--transmission.player {
+  border-left-color: var(--gold);
+  color: #f2e6bd;
+  background: #18160d;
+}
+
+.contact-message--transmission.system,
+.contact-message--generic.system,
+.contact-message--letter.system {
+  align-self: center;
 }
 
 .bubble-meta {
@@ -114,7 +209,7 @@
   font: 11px/1.3 var(--mono);
 }
 
-.phone-actions {
+.contact-actions {
   border-top: 1px solid var(--line-soft);
   padding: 10px 12px;
   background: #121a11;
@@ -147,12 +242,12 @@
   overflow: auto;
 }
 
-.phone-conversation-panel {
+.contact-conversation-panel {
   display: grid;
   gap: 10px;
 }
 
-.phone-conversation-title {
+.contact-conversation-title {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -164,12 +259,12 @@
   background: #1a180d;
 }
 
-.phone-conversation-title strong {
+.contact-conversation-title strong {
   color: var(--gold);
   font-family: var(--mono);
 }
 
-.phone-conversation-replies {
+.contact-conversation-replies {
   margin-top: 0;
 }
 

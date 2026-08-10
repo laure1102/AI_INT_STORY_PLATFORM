@@ -1,5 +1,5 @@
 /**
- * 背包、行动、商城、手机和总视图模型。
+ * 背包、行动、商城、联系人和总视图模型。
  *
  * 本文件由原 session.ts 按顶层声明依赖拆出；它只负责本领域，不提供新的外部入口。
  */
@@ -50,16 +50,16 @@ import type {
   StoryValsFile
 } from "../types"
 import type { RuntimeStorySessionSnapshot } from "./contracts-core"
-import type { RuntimeBagItemView, RuntimeBagSummary, RuntimeDoingActionView, RuntimeDoingMenuView, RuntimeDoingView, RuntimeInteraction, RuntimePhoneContactView, RuntimePhoneThreadView, RuntimeRuntimePhoneConversationReplyView, RuntimeRuntimePhoneConversationView, RuntimeShopCategoryView, RuntimeShopProductView, RuntimeShopView, RuntimeState, RuntimeStoryBundle, RuntimeStoryViewModel } from "./contracts-view"
+import type { RuntimeBagItemView, RuntimeBagSummary, RuntimeDoingActionView, RuntimeDoingMenuView, RuntimeDoingView, RuntimeInteraction, RuntimeContactView, RuntimeContactThreadView, RuntimeRuntimeContactConversationReplyView, RuntimeRuntimeContactConversationView, RuntimeShopCategoryView, RuntimeShopProductView, RuntimeShopView, RuntimeState, RuntimeStoryBundle, RuntimeStoryViewModel } from "./contracts-view"
 import { resolveBagGiftEntryState } from "./bag-gifts"
 import { buildRuntimeDoingMenuState, findDoingRecord, getBundleDoingConfig, getBundleShopConfig, getDoingCooldownLeftHours, getRuntimeShopVisibleCategoryIds, getShopPurchaseCooldownLeftHours, resolveDoingAvailability, resolveShopProductDisabledReason } from "./doing-shop"
-import { buildRuntimePhoneContactMeta, findBundlePhoneConversation, findPhoneConversationNode, getBundleItemNameMap } from "./phone-config"
-import { getActivePhoneConversationState, isPhoneConversationOptionVisible } from "./phone-conversations"
-import { findRoleLabel, getBundleGraphNode, getCurrentPlayableEvent, getLatestPhoneMessagePreview, getPhoneContact, getPhoneThread, getPhoneUnreadCount, isCompiledAction, resolvePhoneActionOptionsForContact, resolvePhoneTalkOptionsForContact } from "./phone-threads"
+import { buildRuntimeContactMeta, findBundleContactConversation, findContactConversationNode, getBundleItemNameMap } from "./contact-config"
+import { getActiveContactConversationState, isContactConversationOptionVisible } from "./contact-conversations"
+import { findRoleLabel, getBundleGraphNode, getCurrentPlayableEvent, getLatestContactMessagePreview, getContact, getContactThread, getContactUnreadCount, isCompiledAction, resolveContactActionOptionsForContact, resolveContactTalkOptionsForContact } from "./contact-threads"
 import { getCurrentEventState } from "./playback-entry"
 import { renderDialogueContent } from "./playback-render"
 import { findBagEntry } from "./script-context"
-import { clampInteger, formatValueSummary, normalizeBagsState, normalizeDoingState, normalizeItemId, normalizeOwnerId, normalizePhoneRoleKey, normalizePhoneState, normalizeShopState, normalizeText } from "./state-values"
+import { clampInteger, formatValueSummary, normalizeBagsState, normalizeDoingState, normalizeItemId, normalizeOwnerId, normalizeContactRoleKey, normalizeContactState, normalizeShopState, normalizeText } from "./state-values"
 
 /**
  * 将内部背包状态转换成按所有者分组的只读展示数据。
@@ -285,17 +285,17 @@ export function buildRuntimeShopView(
   }
 }
 
-/** @param bundle 编译故事。 @param snapshot 手机状态。 @returns 含角色资料、关系阶段、最后消息和未读数的联系人列表。 */
-export function buildRuntimePhoneContacts(
+/** @param bundle 编译故事。 @param snapshot 联系人状态。 @returns 含角色资料、关系阶段、最后消息和未读数的联系人列表。 */
+export function buildRuntimeContacts(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot
-): RuntimePhoneContactView[] {
-  normalizePhoneState(snapshot)
+): RuntimeContactView[] {
+  normalizeContactState(snapshot)
 
-  return snapshot.phone.contacts
+  return snapshot.contact.contacts
     .map((contact) => {
-      const latest = getLatestPhoneMessagePreview(snapshot, contact.role_key)
-      const meta = buildRuntimePhoneContactMeta(bundle, contact.role_key, contact.favor)
+      const latest = getLatestContactMessagePreview(snapshot, contact.role_key)
+      const meta = buildRuntimeContactMeta(bundle, contact.role_key, contact.favor)
 
       return {
         roleKey: contact.role_key,
@@ -309,12 +309,16 @@ export function buildRuntimePhoneContacts(
         lockMessage: meta.lockMessage,
         personalityId: meta.personalityId,
         personalityLabel: meta.personalityLabel,
-        unreadCount: getPhoneUnreadCount(snapshot, contact.role_key),
+        unreadCount: getContactUnreadCount(snapshot, contact.role_key),
         unlockedAtDay: contact.unlocked_at_day,
         lastMessageGameMinute: latest.gameMinute,
         lastMessagePreview: latest.preview,
-        messageCount: latest.messageCount
-      } satisfies RuntimePhoneContactView
+        messageCount: latest.messageCount,
+        channelId: meta.channelId,
+        channelName: meta.channelName,
+        channelPreset: meta.channelPreset,
+        channelLabels: meta.channelLabels
+      } satisfies RuntimeContactView
     })
     .sort((left, right) => {
       const rightMinute = right.lastMessageGameMinute ?? -1
@@ -334,29 +338,29 @@ export function buildRuntimePhoneContacts(
 
 /**
  * 构建单个联系人的完整聊天界面模型。
- * @param bundle 编译故事。 @param snapshot 手机状态。 @param roleKey 联系人键。 @returns 联系人、消息、话题和动作选项；无效角色返回 null。
+ * @param bundle 编译故事。 @param snapshot 联系人状态。 @param roleKey 联系人键。 @returns 联系人、消息、话题和动作选项；无效角色返回 null。
  */
-export function buildRuntimePhoneThreadView(
+export function buildRuntimeContactThreadView(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   roleKey: string
-): RuntimePhoneThreadView | null {
-  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+): RuntimeContactThreadView | null {
+  const normalizedRoleKey = normalizeContactRoleKey(roleKey)
   if (!normalizedRoleKey) {
     return null
   }
 
-  normalizePhoneState(snapshot)
-  const contact = getPhoneContact(snapshot, normalizedRoleKey)
+  normalizeContactState(snapshot)
+  const contact = getContact(snapshot, normalizedRoleKey)
   if (!contact) {
     return null
   }
 
-  const thread = getPhoneThread(snapshot, normalizedRoleKey)
+  const thread = getContactThread(snapshot, normalizedRoleKey)
   const messages = thread?.messages ?? []
-  const meta = buildRuntimePhoneContactMeta(bundle, normalizedRoleKey, contact.favor)
-  const talks = resolvePhoneTalkOptionsForContact(bundle, normalizedRoleKey, snapshot)
-  const actions = resolvePhoneActionOptionsForContact(bundle, normalizedRoleKey, snapshot)
+  const meta = buildRuntimeContactMeta(bundle, normalizedRoleKey, contact.favor)
+  const talks = resolveContactTalkOptionsForContact(bundle, normalizedRoleKey, snapshot)
+  const actions = resolveContactActionOptionsForContact(bundle, normalizedRoleKey, snapshot)
 
   return {
     roleKey: normalizedRoleKey,
@@ -370,7 +374,11 @@ export function buildRuntimePhoneThreadView(
     lockMessage: meta.lockMessage,
     personalityId: meta.personalityId,
     personalityLabel: meta.personalityLabel,
-    unreadCount: getPhoneUnreadCount(snapshot, normalizedRoleKey),
+    channelId: meta.channelId,
+    channelName: meta.channelName,
+    channelPreset: meta.channelPreset,
+    channelLabels: meta.channelLabels,
+    unreadCount: getContactUnreadCount(snapshot, normalizedRoleKey),
     messages: messages.map((message) => ({
       id: message.id,
       sender: message.sender,
@@ -419,22 +427,22 @@ export function buildRuntimePhoneThreadView(
   }
 }
 
-/** @param bundle 编译故事。 @param snapshot 会话快照。 @returns 当前结构化手机剧情的节点、消息和可见回复视图；没有活动会话时为 null。 */
-export function buildRuntimePhoneConversationView(
+/** @param bundle 编译故事。 @param snapshot 会话快照。 @returns 当前结构化联系人剧情的节点、消息和可见回复视图；没有活动会话时为 null。 */
+export function buildRuntimeContactConversationView(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot
-): RuntimeRuntimePhoneConversationView | null {
-  const activeState = getActivePhoneConversationState(snapshot)
+): RuntimeRuntimeContactConversationView | null {
+  const activeState = getActiveContactConversationState(snapshot)
   if (!activeState) {
     return null
   }
 
-  const conversation = findBundlePhoneConversation(bundle, activeState.conversation_id)
+  const conversation = findBundleContactConversation(bundle, activeState.conversation_id)
   if (!conversation) {
     return null
   }
 
-  const node = findPhoneConversationNode(conversation, activeState.node_id)
+  const node = findContactConversationNode(conversation, activeState.node_id)
   if (!node) {
     return null
   }
@@ -442,12 +450,12 @@ export function buildRuntimePhoneConversationView(
   const roleLabel = findRoleLabel(bundle, activeState.role_key)
   const nodeIndex = Math.max(0, conversation.nodes.findIndex((item) => item.id === node.id))
   const replies = node.player_options.map((option) => {
-    const visible = isPhoneConversationOptionVisible(bundle, snapshot, option)
+    const visible = isContactConversationOptionVisible(bundle, snapshot, option)
     return {
       id: option.id,
       text: renderDialogueContent(bundle, snapshot, option.text, {}),
       visible
-    } satisfies RuntimeRuntimePhoneConversationReplyView
+    } satisfies RuntimeRuntimeContactConversationReplyView
   })
 
   return {
@@ -475,7 +483,7 @@ export function buildRuntimePhoneConversationView(
 /**
  * 汇总一次客户端渲染所需的完整运行时视图。
  * @param bundle 编译故事。 @param runtimeState 会话内部状态。 @param screen 当前主界面。 @param notifications 本轮通知。
- * @returns 当前事件/对白/动作、时钟、背包、手机、行动、商店和通知组成的不可持久化视图模型。
+ * @returns 当前事件/对白/动作、时钟、背包、联系人、行动、商店和通知组成的不可持久化视图模型。
  * 视图从 snapshot 派生，不作为存档事实来源；客户端下一次操作后可以重新构建。
  */
 export function buildViewModel(
@@ -542,7 +550,7 @@ export function buildViewModel(
   const bagSummary = buildRuntimeBagSummary(bundle, runtimeState.snapshot)
   const doing = buildRuntimeDoingView(bundle, runtimeState.snapshot)
   const shop = buildRuntimeShopView(bundle, runtimeState.snapshot)
-  const phoneConversation = buildRuntimePhoneConversationView(bundle, runtimeState.snapshot)
+  const contactConversation = buildRuntimeContactConversationView(bundle, runtimeState.snapshot)
 
   const availableBranches = (currentEventState?.availableActions ?? []).flatMap((actionState) => {
     const actionNode = getBundleGraphNode(bundle, actionState.nodeId)
@@ -574,7 +582,7 @@ export function buildViewModel(
     currentSceneLevel: null,
     currentMessage,
     currentDialogue,
-    phoneConversation,
+    contactConversation,
     availableBranches,
     branchContextSummary,
     bagSummary,

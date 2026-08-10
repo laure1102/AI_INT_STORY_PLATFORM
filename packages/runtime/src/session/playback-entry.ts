@@ -12,8 +12,8 @@ import { executeStoryScript } from "../vals"
 import type { RuntimeScheduledEvent, RuntimeStorySessionSnapshot } from "./contracts-core"
 import type { RuntimeDialogueNodeState, RuntimeEnterEventOptions, RuntimeState, RuntimeStoryBundle } from "./contracts-view"
 import { DEFAULT_MAX_CALC_NESTING_DEPTH } from "./contracts-view"
-import { autoRegisterPhoneContactsFromEvent } from "./phone-actions"
-import { createStandaloneEvent, getBundleGraphNode, getCurrentPlayableEvent, isCompiledAction, isCompiledEvent } from "./phone-threads"
+import { autoRegisterContactsFromEvent } from "./contact-actions"
+import { createStandaloneEvent, getBundleGraphNode, getCurrentPlayableEvent, isCompiledAction, isCompiledEvent } from "./contact-threads"
 import { buildDialogueView, buildMessageView, canEnterEvent, completeActiveScheduledEvent, completeScheduledChain, getPresentationDialogues, moveToEvent, pickFirstEnterableNextEventId, resolveEventActions, settlePassiveEvents } from "./playback-render"
 import { appendSchedulerAudit, calculateNextLoopDueGameMinute, enqueueReadyEvent, getCurrentGameMinute, getLoopSchedulerState } from "./schedule-clock"
 import { clearCurrentEventState, getBundleScheduleEvents, reconcileScheduler } from "./schedule-queue"
@@ -245,7 +245,7 @@ export function enterCurrentEventResolved(
     callValues
   )
 
-  autoRegisterPhoneContactsFromEvent(bundle, runtimeState.snapshot, currentNode, notifications)
+  autoRegisterContactsFromEvent(bundle, runtimeState.snapshot, currentNode, notifications)
 
   appendHistory(runtimeState.snapshot, {
     type: "event",

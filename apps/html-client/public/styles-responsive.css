@@ -109,14 +109,14 @@
     transform: none;
   }
 
-  .phone-drawer {
+  .contact-drawer {
     inset: 0;
     width: 100vw;
     transform: none;
     border-radius: 0;
   }
 
-  .phone-body {
+  .contact-body {
     grid-template-columns: clamp(150px, 34vw, 230px) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }

@@ -1,5 +1,5 @@
 /**
- * 故事变量、场景、角色、地点、物品、手机、行动和商城等领域文件路由。
+ * 故事变量、场景、角色、地点、物品、联系人、行动和商城等领域文件路由。
  *
  * 每个 PUT 端点遵循同一安全顺序：校验 storyId → 用 Zod 解析 body → 在 expectedRevision 锁内写入
  * 单个领域 → 返回服务端值和新 revision。即使这些数据分属不同 JSON5 文件，也不能绕过并发检查。
@@ -9,8 +9,8 @@ import type { StoryFileStore } from "@story-mgr/file-store"
 import type {
   StoryDoingResponse,
   StoryItemsResponse,
-  StoryPhoneConversationsResponse,
-  StoryPhoneResponse,
+  StoryContactConversationsResponse,
+  StoryContactResponse,
   StoryPlayerOverrideValsResponse,
   StoryReferResponse,
   StoryRolesResponse,
@@ -171,55 +171,55 @@ function createStoryDomainRouteHandlers(store: StoryFileStore) {
   }
 
   /**
-   * 保存普通手机关系、话术、动作、回复和联系人配置。
+   * 保存联系人关系、媒介、话术、动作、回复和角色配置。
    *
-   * @param context body 提供 phone 与 expectedRevision。
-   * @returns Promise；响应包含 phone 和新 revision。
+   * @param context body 提供 contact 与 expectedRevision。
+   * @returns Promise；响应包含 contact 和新 revision。
    * @throws 角色/事件/物品引用非法或 revision 冲突时抛错。
    */
-  async function savePhone(context: Router.RouterContext) {
+  async function saveContact(context: Router.RouterContext) {
     const storyId = requireParam(context.params.storyId, "storyId")
-    const body = parseRequestBody(context, requestSchemas.savePhone)
+    const body = parseRequestBody(context, requestSchemas.saveContact)
     const result = await store.withStoryMutation(storyId, body.expectedRevision, () =>
-      store.writePhone(storyId, body.phone)
+      store.writeContact(storyId, body.contact)
     )
     context.body = {
-      phone: result.value,
+      contact: result.value,
       revision: result.revision
-    } satisfies StoryPhoneResponse
+    } satisfies StoryContactResponse
   }
 
   /**
-   * 读取连续剧情手机对话文件。
+   * 读取连续联系人剧情文件。
    *
    * @param context path 参数 storyId 指定故事。
-   * @returns Promise；响应包含 phoneConversations。
+   * @returns Promise；响应包含 contactConversations。
    * @throws 故事不存在或文件内容损坏时抛 File Store 错误。
    */
-  async function getPhoneConversations(context: Router.RouterContext) {
+  async function getContactConversations(context: Router.RouterContext) {
     const storyId = requireParam(context.params.storyId, "storyId")
     context.body = {
-      phoneConversations: await store.readPhoneConversations(storyId)
-    } satisfies StoryPhoneConversationsResponse
+      contactConversations: await store.readContactConversations(storyId)
+    } satisfies StoryContactConversationsResponse
   }
 
   /**
-   * 保存连续剧情手机对话。
+   * 保存连续联系人剧情。
    *
-   * @param context body 提供 phoneConversations 与 expectedRevision。
+   * @param context body 提供 contactConversations 与 expectedRevision。
    * @returns Promise；返回保存后的对话文件和新 revision。
    * @throws 节点、入口、角色或调用引用非法时拒绝保存。
    */
-  async function savePhoneConversations(context: Router.RouterContext) {
+  async function saveContactConversations(context: Router.RouterContext) {
     const storyId = requireParam(context.params.storyId, "storyId")
-    const body = parseRequestBody(context, requestSchemas.savePhoneConversations)
+    const body = parseRequestBody(context, requestSchemas.saveContactConversations)
     const result = await store.withStoryMutation(storyId, body.expectedRevision, () =>
-      store.writePhoneConversations(storyId, body.phoneConversations)
+      store.writeContactConversations(storyId, body.contactConversations)
     )
     context.body = {
-      phoneConversations: result.value,
+      contactConversations: result.value,
       revision: result.revision
-    } satisfies StoryPhoneConversationsResponse
+    } satisfies StoryContactConversationsResponse
   }
 
   /**
@@ -261,12 +261,12 @@ function createStoryDomainRouteHandlers(store: StoryFileStore) {
   }
 
   return {
-    getPhoneConversations,
+    getContactConversations,
     saveDoing,
     saveEventLocations,
     saveItems,
-    savePhone,
-    savePhoneConversations,
+    saveContact,
+    saveContactConversations,
     savePlayerOverrideVals,
     saveRefer,
     saveRoles,
@@ -295,9 +295,9 @@ export function registerStoryDomainRoutes(router: Router, store: StoryFileStore)
   router.put("/stories/:storyId/event-locations", handlers.saveEventLocations)
   router.put("/stories/:storyId/items", handlers.saveItems)
   router.put("/stories/:storyId/shop", handlers.saveShop)
-  router.put("/stories/:storyId/phone", handlers.savePhone)
-  router.get("/stories/:storyId/phone-conversations", handlers.getPhoneConversations)
-  router.put("/stories/:storyId/phone-conversations", handlers.savePhoneConversations)
+  router.put("/stories/:storyId/contact", handlers.saveContact)
+  router.get("/stories/:storyId/contact-conversations", handlers.getContactConversations)
+  router.put("/stories/:storyId/contact-conversations", handlers.saveContactConversations)
   router.put("/stories/:storyId/refer", handlers.saveRefer)
   router.put("/stories/:storyId/doing", handlers.saveDoing)
 }

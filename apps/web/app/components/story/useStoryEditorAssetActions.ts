@@ -1,5 +1,5 @@
 /**
- * 集中处理变量、资产、手机、设置和导出的保存副作用。
+ * 集中处理变量、资产、联系人、设置和导出的保存副作用。
  *
  * 各弹窗通过 typed emits 把完整编辑结果传回 StoryEditorShell，Shell 再调用这里的方法。子组件不会
  * 直接请求 API 或修改父 props；保存成功后，本模块使用服务端返回值替换共享 storyDocument 的对应
@@ -17,8 +17,8 @@ import type {
   StoryItemsFile,
   StoryMetaFile,
   StoryPlayerOverrideValsFile,
-  StoryPhoneConversationsFile,
-  StoryPhoneFile,
+  StoryContactConversationsFile,
+  StoryContactFile,
   StoryReferFile,
   StoryRolesFile,
   StorySceneFile,
@@ -46,17 +46,17 @@ export function useStoryEditorAssetActions(context: StoryEditorActionContext) {
     creationAgentRunMode, creationAgentError, creationApplyMessage, creationApplyWarnings,
     creationHistory, activeCreationHistorySessionId, editingEventId, creatingFromEventId,
     creatingEventDraft, scenesSaveSuccessMessage, locationsSaveSuccessMessage, itemsSaveSuccessMessage,
-    shopSaveSuccessMessage, phoneSaveSuccessMessage, phoneConversationsSaveErrorMessage, phoneConversationsSaveSuccessMessage,
+    shopSaveSuccessMessage, contactSaveSuccessMessage, contactConversationsSaveErrorMessage, contactConversationsSaveSuccessMessage,
     referSaveSuccessMessage, doingSaveSuccessMessage, rolesSaveSuccessMessage, activeWorkspaceTab,
     workspaceTabOptions, selectedEventId, selectedEvent, editingEvent,
     activeDraftEvent, activeGraphParentNodeId, activeGraphDraftEvent, activeGraphDraftAction,
-    graphNodeOptions, storyScriptVals, storyScriptItemIds, phoneInvokeEventOptions,
+    graphNodeOptions, storyScriptVals, storyScriptItemIds, contactInvokeEventOptions,
     buildGraphEventBranchAutocompleteItemsFromActions, activeGraphBranchAutocompleteItems, isCreateMode, replaceEventInDocument,
     removeEventFromDocument, applyStoryCreationDraft, deleteEvent, exportStory,
     getAppSettings, getStoryCreationHistory, getStory, deleteStoryCreationHistorySession,
     saveAppSettings, saveEvent, saveEventLocations, saveDoing,
-    saveStoryMeta, saveStoryCreationHistorySession, saveItems, savePhone,
-    savePhoneConversations, saveRefer, saveShop, savePlayerOverrideVals,
+    saveStoryMeta, saveStoryCreationHistorySession, saveItems, saveContact,
+    saveContactConversations, saveRefer, saveShop, savePlayerOverrideVals,
     saveRoles, saveScenes, saveStoryBible, saveSystemVals,
     saveVals, validateStory, creationJob, cancelCreationTask,
     resumeCreationTask, runCreationTask, appSettings, errorMessage,
@@ -68,12 +68,12 @@ export function useStoryEditorAssetActions(context: StoryEditorActionContext) {
     getGraphNodes, isEventCanvasTab, isGraphActionNode, isGraphEventNode,
     normalizeEventTriggerMode, closeAllTools, isValsDialogOpen, isPlayerOverrideValsDialogOpen,
     isSystemValsDialogOpen, isScenesDialogOpen, isLocationsDialogOpen, isItemsDialogOpen,
-    isShopDialogOpen, isPhoneDialogOpen, isReferDialogOpen, isRolesDialogOpen,
+    isShopDialogOpen, isContactDialogOpen, isReferDialogOpen, isRolesDialogOpen,
     isSettingsDialogOpen, isGameSettingsDialogOpen, refreshValidation, closeEditor,
     openValsDialog, closeValsDialog, openPlayerOverrideValsDialog, closePlayerOverrideValsDialog,
     openSystemValsDialog, closeSystemValsDialog, openScenesDialog, closeScenesDialog,
     openLocationsDialog, closeLocationsDialog, openItemsDialog, closeItemsDialog,
-    openShopDialog, closeShopDialog, openPhoneDialog, closePhoneDialog,
+    openShopDialog, closeShopDialog, openContactDialog, closeContactDialog,
     openReferDialog, closeReferDialog, openRolesDialog, closeRolesDialog,
     openSettingsDialog, closeSettingsDialog, openGameSettingsDialog, closeGameSettingsDialog,
     createHistoryId, getActiveCreationHistorySession, upsertLocalCreationHistorySession, persistCreationHistorySession,
@@ -157,7 +157,7 @@ async function handleSavePlayerOverrideVals(playerOverrideVals: StoryPlayerOverr
   }
 }
 
-// 场景、地点、物品、商城、手机、称谓、行动和角色都使用上面的统一保存协议。
+// 场景、地点、物品、商城、联系人、称谓、行动和角色都使用上面的统一保存协议。
 // 各自保留独立 success ref，是为了让当前弹窗显示自己的结果，不把“物品已保存”显示到角色弹窗。
 /** 处理 `SaveScenes` 用户交互。 @param scenes 调用方传入的 `scenes`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 async function handleSaveScenes(scenes: StorySceneFile) {
@@ -259,53 +259,53 @@ async function handleSaveShop(shop: StoryShopFile) {
   }
 }
 
-/** 处理 `SavePhone` 用户交互。 @param phone 调用方传入的 `phone`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-async function handleSavePhone(phone: StoryPhoneFile) {
+/** 处理 `SaveContact` 用户交互。 @param contact 调用方传入的 `contact`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+async function handleSaveContact(contact: StoryContactFile) {
   if (!storyDocument.value) {
     return
   }
 
   isSaving.value = true
   errorMessage.value = null
-  phoneSaveSuccessMessage.value = null
+  contactSaveSuccessMessage.value = null
 
   try {
-    const savedPhone = await savePhone(props.storyId, phone)
+    const savedContact = await saveContact(props.storyId, contact)
     storyDocument.value = {
       ...storyDocument.value,
-      phone: savedPhone
+      contact: savedContact
     }
-    phoneSaveSuccessMessage.value = "已保存"
+    contactSaveSuccessMessage.value = "已保存"
     await refreshValidation()
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "保存手机联系人配置失败。"
+    errorMessage.value = error instanceof Error ? error.message : "保存联系人配置失败。"
   } finally {
     isSaving.value = false
   }
 }
 
-/** 处理 `SavePhoneConversations` 用户交互。 @param phoneConversations 调用方传入的 `phoneConversations`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-async function handleSavePhoneConversations(phoneConversations: StoryPhoneConversationsFile) {
+/** 处理 `SaveContactConversations` 用户交互。 @param contactConversations 调用方传入的 `contactConversations`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+async function handleSaveContactConversations(contactConversations: StoryContactConversationsFile) {
   if (!storyDocument.value) {
     return
   }
 
   isSaving.value = true
   errorMessage.value = null
-  phoneConversationsSaveErrorMessage.value = null
-  phoneConversationsSaveSuccessMessage.value = null
+  contactConversationsSaveErrorMessage.value = null
+  contactConversationsSaveSuccessMessage.value = null
 
   try {
-    const savedPhoneConversations = await savePhoneConversations(props.storyId, phoneConversations)
+    const savedContactConversations = await saveContactConversations(props.storyId, contactConversations)
     storyDocument.value = {
       ...storyDocument.value,
-      phoneConversations: savedPhoneConversations
+      contactConversations: savedContactConversations
     }
-    phoneConversationsSaveSuccessMessage.value = "已保存"
+    contactConversationsSaveSuccessMessage.value = "已保存"
     await refreshValidation()
   } catch (error) {
-    const message = error instanceof Error ? error.message : "保存手机剧情对话失败。"
-    phoneConversationsSaveErrorMessage.value = message
+    const message = error instanceof Error ? error.message : "保存联系人剧情失败。"
+    contactConversationsSaveErrorMessage.value = message
     errorMessage.value = message
   } finally {
     isSaving.value = false
@@ -493,8 +493,8 @@ async function handleExport() {
 
   return {
     handleSaveVals, handleSaveSystemVals, handleSavePlayerOverrideVals, handleSaveScenes,
-    handleSaveEventLocations, handleSaveItems, handleSaveShop, handleSavePhone,
-    handleSavePhoneConversations, handleSaveRefer, handleSaveDoing, handleSaveRoles,
+    handleSaveEventLocations, handleSaveItems, handleSaveShop, handleSaveContact,
+    handleSaveContactConversations, handleSaveRefer, handleSaveDoing, handleSaveRoles,
     handleQuickCreateRole, handleQuickCreateLocation, handleSaveStoryBible, handleSaveAppSettings,
     handleSaveStoryMeta, handleExport
   }

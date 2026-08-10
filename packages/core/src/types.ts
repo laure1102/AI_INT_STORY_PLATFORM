@@ -1,3 +1,7 @@
+import type { StoryContactConversationsFile, StoryContactFile } from "./types-contact"
+
+export * from "./types-contact"
+
 export interface StoryGameSettings {
   start_time: string
 }
@@ -96,11 +100,11 @@ export interface StoryRoleAiConfig {
   compress_quality_2: number
 }
 
-export type StoryPhoneContactTrackId = "none" | "romance" | "official" | "social"
+export type StoryContactTrackId = "none" | "romance" | "official" | "social"
 
 export interface StoryRoleContactMetadata {
   contact_enabled: boolean
-  contact_track: StoryPhoneContactTrackId
+  contact_track: StoryContactTrackId
   contact_initial_favor: number
   xingge_id: string
   xingge_note: string
@@ -258,226 +262,6 @@ export interface StoryInitialBagDefinition {
 export interface StoryInitialBagsFile {
   player: StoryInitialBagDefinition
   [ownerId: string]: StoryInitialBagDefinition
-}
-
-export interface StoryPhoneLibraryScope {
-  role_keys: string[]
-  contact_tracks: StoryPhoneContactTrackId[]
-  personality_ids: string[]
-  min_favor: number
-  max_favor: number
-}
-
-export type StoryPhoneInvokeDelayUnit = "hours" | "days" | "months" | "years"
-
-export interface StoryPhoneInvokeDelay {
-  unit: StoryPhoneInvokeDelayUnit
-  value: number
-}
-
-export interface StoryPhoneEventInvocation {
-  target_type: StoryCanonicalEventCollectionType
-  event_id: string
-  delay?: StoryPhoneInvokeDelay
-}
-
-export interface StoryPhoneRelationshipStage {
-  id: string
-  name: string
-  descr: string
-  min_favor: number
-  max_favor: number
-  allow_contact: boolean
-  lock_message: string
-  unlock_action_tags: string[]
-}
-
-export interface StoryPhoneRelationshipTrack {
-  id: StoryPhoneContactTrackId
-  name: string
-  descr: string
-  stages: StoryPhoneRelationshipStage[]
-}
-
-export interface StoryPhonePersonalityDefinition {
-  id: string
-  name: string
-  descr: string
-  style_tags: string[]
-}
-
-export interface StoryPhoneQuickMessage {
-  id: string
-  text: string
-  tags: string[]
-  base_favor_delta: number
-  cooldown_hours: number
-  visibility: "always" | "suggested-only"
-  available_role_keys: string[]
-}
-
-export interface StoryPhoneProactiveMessageRule {
-  id: string
-  enabled: boolean
-  trigger_expr: string
-  cooldown_hours: number
-  favor_delta: number
-  messages: string[]
-  reply_quick_message_ids: string[]
-}
-
-export interface StoryPhoneContactProfile {
-  role_key: string
-  enabled: boolean
-  auto_add: boolean
-  initial_favor: number
-  preferred_tags: string[]
-  reply_by_tag: Record<string, string[]>
-  proactive_messages: StoryPhoneProactiveMessageRule[]
-}
-
-export interface StoryPhoneTalkLibraryEntry {
-  id: string
-  text: string
-  tags: string[]
-  scope: StoryPhoneLibraryScope
-  base_favor_delta: number
-  cooldown_hours: number
-  invoke?: StoryPhoneEventInvocation
-}
-
-export interface StoryPhoneActionCostItem {
-  item_id: string
-  quantity: number
-}
-
-export interface StoryPhoneActionLibraryEntry {
-  id: string
-  label: string
-  text: string
-  tags: string[]
-  scope: StoryPhoneLibraryScope
-  base_favor_delta: number
-  cooldown_hours: number
-  cost_money: number
-  cost_items: StoryPhoneActionCostItem[]
-  invoke?: StoryPhoneEventInvocation
-}
-
-export interface StoryPhoneReplyLibraryEntry {
-  id: string
-  tags: string[]
-  scope: StoryPhoneLibraryScope
-  replies: string[]
-}
-
-export interface StoryPhoneFile {
-  relationship_tracks: StoryPhoneRelationshipTrack[]
-  personality_library: StoryPhonePersonalityDefinition[]
-  talk_library: StoryPhoneTalkLibraryEntry[]
-  action_library: StoryPhoneActionLibraryEntry[]
-  reply_library: StoryPhoneReplyLibraryEntry[]
-  player_quick_messages: StoryPhoneQuickMessage[]
-  contact_profiles: StoryPhoneContactProfile[]
-  fallback_replies: Record<string, string[]>
-}
-
-export interface StoryPhoneConversationMessage {
-  content: string
-}
-
-export interface StoryPhoneConversationReminder {
-  enabled: boolean
-  interval_minutes: number
-}
-
-export interface StoryPhoneConversationOption {
-  id: string
-  text: string
-  visible_expr: string
-  script: string
-  next_node_id: string
-}
-
-export interface StoryPhoneConversationNode {
-  id: string
-  contact_messages: StoryPhoneConversationMessage[]
-  player_options: StoryPhoneConversationOption[]
-  reminder: StoryPhoneConversationReminder
-  end: boolean
-  end_script: string
-  invoke?: StoryPhoneEventInvocation
-}
-
-export interface StoryPhoneConversationDefinition {
-  id: string
-  title: string
-  role_key: string
-  enabled: boolean
-  once: boolean
-  lock_normal_chat: boolean
-  trigger_expr: string
-  entry_node_id: string
-  nodes: StoryPhoneConversationNode[]
-}
-
-export interface StoryPhoneConversationsFile {
-  conversations: StoryPhoneConversationDefinition[]
-}
-
-export interface StoryPhoneConversationState {
-  conversation_id: string
-  role_key: string
-  node_id: string
-  option_id?: string | null
-  finished: boolean
-}
-
-export interface StoryPhoneConversationOptionInput {
-  id: string
-  text: string
-  visible_expr: string
-  script: string
-  next_node_id: string
-}
-
-export interface StoryPhoneConversationMessageInput {
-  content: string
-}
-
-export interface StoryPhoneConversationReminderInput {
-  enabled: boolean
-  interval_minutes: number
-}
-
-export interface StoryPhoneConversationNodeInput {
-  id: string
-  contact_messages: StoryPhoneConversationMessageInput[]
-  player_options: StoryPhoneConversationOptionInput[]
-  reminder: StoryPhoneConversationReminderInput
-  end: boolean
-  end_script: string
-  invoke?: StoryPhoneEventInvocation
-}
-
-export interface StoryPhoneConversationInput {
-  id: string
-  title: string
-  role_key: string
-  enabled: boolean
-  once: boolean
-  lock_normal_chat: boolean
-  trigger_expr: string
-  entry_node_id: string
-  nodes: StoryPhoneConversationNodeInput[]
-}
-
-export interface StoryPhoneConversationsResponse {
-  phoneConversations: StoryPhoneConversationsFile
-}
-
-export interface SaveStoryPhoneConversationsRequest {
-  phoneConversations: StoryPhoneConversationsFile
 }
 
 export interface StoryDoingMenu {
@@ -708,8 +492,8 @@ export interface StoryDocument {
   items: StoryItemsFile
   shop: StoryShopFile
   initialBags: StoryInitialBagsFile
-  phone: StoryPhoneFile
-  phoneConversations: StoryPhoneConversationsFile
+  contact: StoryContactFile
+  contactConversations: StoryContactConversationsFile
   doing: StoryDoingFile
   chainEvents: StoryChainEventsFile
   poolEvents: StoryPoolEventsFile
@@ -779,8 +563,8 @@ export interface CompiledStory {
   items: StoryItemsFile
   shop: StoryShopFile
   initialBags: StoryInitialBagsFile
-  phone: StoryPhoneFile
-  phoneConversations: StoryPhoneConversationsFile
+  contact: StoryContactFile
+  contactConversations: StoryContactConversationsFile
   doing: StoryDoingFile
   chainEvents: Record<string, CompiledEvent | CompiledAction>
   poolEvents: StoryPoolEventsFile

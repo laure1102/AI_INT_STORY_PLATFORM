@@ -53,7 +53,7 @@
                       "duration_seconds": 2
                     }
                   },
-                  "init_script": "// 规则目的：激活“花都旧债追到老家”的短链入口，只在未结清时建立一次催债状态。\n// 读取变量：${player.debt_huadu_active} 表示旧债线是否已激活；${player.debt_huadu_cleared} 表示是否已结清；${player.debt_huadu_amount} 表示剩余债务金额。\n// 设计说明：如果旧债尚未激活，就在这里补齐初始状态，保证后续链路可重复读取；若已激活则不覆盖玩家已有进度。\n// 写回目标：初始化旧债激活状态、剩余金额、预约状态与态度记录。注意这里只写普通 value 变量，不写 system/calc/call。\nif (!${player.debt_huadu_active} && !${player.debt_huadu_cleared}) {\n  ${player.debt_huadu_active} = true\n  ${player.debt_huadu_amount} = 100000\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_tone} = 0\n}\n\n// 规则目的：把催债消息缓存为已触发，供后续条件与联系人主动消息规则读取。\n${player.debt_huadu_msg_sent} = true\n${player.debt_huadu_last_pressure} = 1\n\n// 运行时消息：直接把收债人来信写进手机记录，形成结构化手机体验。\nphone_send_from_contact(\"normal:debt_collector\", \"欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。\")\n\n// 规则目的：首次被旧账追上时，形成一点现实压力与安保焦虑。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 2)",
+                  "init_script": "// 规则目的：激活“花都旧债追到老家”的短链入口，只在未结清时建立一次催债状态。\n// 读取变量：${player.debt_huadu_active} 表示旧债线是否已激活；${player.debt_huadu_cleared} 表示是否已结清；${player.debt_huadu_amount} 表示剩余债务金额。\n// 设计说明：如果旧债尚未激活，就在这里补齐初始状态，保证后续链路可重复读取；若已激活则不覆盖玩家已有进度。\n// 写回目标：初始化旧债激活状态、剩余金额、预约状态与态度记录。注意这里只写普通 value 变量，不写 system/calc/call。\nif (!${player.debt_huadu_active} && !${player.debt_huadu_cleared}) {\n  ${player.debt_huadu_active} = true\n  ${player.debt_huadu_amount} = 100000\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_tone} = 0\n}\n\n// 规则目的：把催债消息缓存为已触发，供后续条件与联系人主动消息规则读取。\n${player.debt_huadu_msg_sent} = true\n${player.debt_huadu_last_pressure} = 1\n\n// 运行时消息：直接把收债人来信写进手机记录，形成结构化手机体验。\ncontact_send_from(\"normal:debt_collector\", \"欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。\")\n\n// 规则目的：首次被旧账追上时，形成一点现实压力与安保焦虑。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 2)",
                   "end_script": "",
                   "next": [],
                   "bgm": ""
@@ -91,7 +91,7 @@
                     ]
                   },
                   "init_script": "",
-                  "end_script": "// 规则目的：本节点是玩家的‘正面稳住’回应分支。玩家承诺人在临河、对方到了就给钱。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount} 用于确认债务仍有效。\n// 写回目标：记录已约定来临河收账、记录本次回应口气为 1（偏稳），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 1\n  ${player.debt_huadu_last_pressure} = 1\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把玩家与对方的关键对话直接写入手机记录。\nphone_send_to_contact(\"normal:debt_collector\", \"我已经回临河了。你要收钱就来，我在老家等你，到了我就给。\")\nphone_send_from_contact(\"normal:debt_collector\", \"行，你在临河等着。明天我过去，到了车站给你打电话。\")",
+                  "end_script": "// 规则目的：本节点是玩家的‘正面稳住’回应分支。玩家承诺人在临河、对方到了就给钱。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount} 用于确认债务仍有效。\n// 写回目标：记录已约定来临河收账、记录本次回应口气为 1（偏稳），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 1\n  ${player.debt_huadu_last_pressure} = 1\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把玩家与对方的关键对话直接写入手机记录。\ncontact_send_to(\"normal:debt_collector\", \"我已经回临河了。你要收钱就来，我在老家等你，到了我就给。\")\ncontact_send_from(\"normal:debt_collector\", \"行，你在临河等着。明天我过去，到了车站给你打电话。\")",
                   "next": [],
                   "bgm": ""
                 },
@@ -128,7 +128,7 @@
                     ]
                   },
                   "init_script": "",
-                  "end_script": "// 规则目的：本节点是玩家的‘先稳住、明天见面谈’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 2（偏谈判/拖字诀），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 2\n  ${player.debt_huadu_last_pressure} = 2\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：写入双方确认“明天临河见”的手机记录，便于玩家回看。\nphone_send_to_contact(\"normal:debt_collector\", \"我人在老家，别急，明天你过来，当面把这事了了。\")\nphone_send_from_contact(\"normal:debt_collector\", \"少给我绕。行，明天我到临河车站，你别再换地方。\")",
+                  "end_script": "// 规则目的：本节点是玩家的‘先稳住、明天见面谈’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 2（偏谈判/拖字诀），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 2\n  ${player.debt_huadu_last_pressure} = 2\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：写入双方确认“明天临河见”的手机记录，便于玩家回看。\ncontact_send_to(\"normal:debt_collector\", \"我人在老家，别急，明天你过来，当面把这事了了。\")\ncontact_send_from(\"normal:debt_collector\", \"少给我绕。行，明天我到临河车站，你别再换地方。\")",
                   "next": [],
                   "bgm": ""
                 },
@@ -165,7 +165,7 @@
                     ]
                   },
                   "init_script": "",
-                  "end_script": "// 规则目的：本节点是玩家的‘嘴硬激将’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 3（火药味更足），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 3\n  ${player.debt_huadu_last_pressure} = 3\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把带火药味的回应写入手机记录，供后续事件读取气氛。\nphone_send_to_contact(\"normal:debt_collector\", \"你真敢来临河，我就真敢当面结。少在手机上吓唬人。\")\nphone_send_from_contact(\"normal:debt_collector\", \"行，这话我记着。明天我下车第一件事就是找你。\")",
+                  "end_script": "// 规则目的：本节点是玩家的‘嘴硬激将’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 3（火药味更足），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 3\n  ${player.debt_huadu_last_pressure} = 3\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把带火药味的回应写入手机记录，供后续事件读取气氛。\ncontact_send_to(\"normal:debt_collector\", \"你真敢来临河，我就真敢当面结。少在手机上吓唬人。\")\ncontact_send_from(\"normal:debt_collector\", \"行，这话我记着。明天我下车第一件事就是找你。\")",
                   "next": [],
                   "bgm": ""
                 },
@@ -201,7 +201,7 @@
                       }
                     ]
                   },
-                  "init_script": "// 规则目的：次日到站收账事件只在旧债已激活、已约定到临河且尚未结清时成立。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_linh_appointment}、${player.debt_huadu_amount}、${player.debt_huadu_cleared}、${player.debt_huadu_tone}。\n// 设计说明：这里不直接替玩家做决定，只负责把现场压力落地，并开放两个主动处理入口给玩家选择。\n// 写回目标：刷新最后一次压力等级；解锁“当场还钱”与“先稳住”两个主动入口；写入对方到站消息。\nif (${player.debt_huadu_active} && ${player.debt_huadu_linh_appointment} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_last_pressure} = ${player.debt_huadu_tone}\n  doing_unlock(\"do_debt_pay_full\")\n  doing_unlock(\"do_debt_cannot_pay\")\n}\n\n// 运行时手机记录：对方到站后发消息，增强‘旧生活追到新主场’的现实感。\nphone_send_from_contact(\"normal:debt_collector\", \"我到临河汽车站了。别让我在站口等你太久。\")",
+                  "init_script": "// 规则目的：次日到站收账事件只在旧债已激活、已约定到临河且尚未结清时成立。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_linh_appointment}、${player.debt_huadu_amount}、${player.debt_huadu_cleared}、${player.debt_huadu_tone}。\n// 设计说明：这里不直接替玩家做决定，只负责把现场压力落地，并开放两个主动处理入口给玩家选择。\n// 写回目标：刷新最后一次压力等级；解锁“当场还钱”与“先稳住”两个主动入口；写入对方到站消息。\nif (${player.debt_huadu_active} && ${player.debt_huadu_linh_appointment} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_last_pressure} = ${player.debt_huadu_tone}\n  doing_unlock(\"do_debt_pay_full\")\n  doing_unlock(\"do_debt_cannot_pay\")\n}\n\n// 运行时手机记录：对方到站后发消息，增强‘旧生活追到新主场’的现实感。\ncontact_send_from(\"normal:debt_collector\", \"我到临河汽车站了。别让我在站口等你太久。\")",
                   "end_script": "",
                   "next": [],
                   "bgm": ""
@@ -239,7 +239,7 @@
                     ]
                   },
                   "init_script": "",
-                  "end_script": "// 规则目的：资金足够时实现主要爽点——玩家当场结清十万旧债。\n// 读取变量：${player.money} 是当前现金；${player.debt_huadu_amount} 是剩余债务金额；${player.debt_huadu_active} 与 ${player.debt_huadu_cleared} 用于校验状态。\n// 计算规则：只有当现金大于等于剩余债务金额，才允许直接扣款；这里按当前剩余额一次性结清，避免写死固定值后与未来部分还款扩展冲突。\n// 写回目标：扣除玩家现金、把剩余债务写为 0、标记已结清并关闭激活状态，同时清空本次临河预约状态。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} >= ${player.debt_huadu_amount}) {\n  ${player.money} -= ${player.debt_huadu_amount}\n  ${player.debt_huadu_amount} = 0\n  ${player.debt_huadu_cleared} = true\n  ${player.debt_huadu_active} = false\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 0\n}\n\n// 规则目的：旧债结清后，现实压力解除，玩家的安保焦虑略微回升；不额外改写其他属性，避免奖励过度。\n${player.attr_anbao} = Math.min(100, ${player.attr_anbao} + 3)\n\n// 运行时消息：把付款确认写入手机记录，形成完整闭环。\nphone_send_to_contact(\"normal:debt_collector\", \"行，十万是吧？现在就转。\")\nphone_send_from_contact(\"normal:debt_collector\", \"到账了。你这次倒是痛快。以后别再让我跨城找你。\")",
+                  "end_script": "// 规则目的：资金足够时实现主要爽点——玩家当场结清十万旧债。\n// 读取变量：${player.money} 是当前现金；${player.debt_huadu_amount} 是剩余债务金额；${player.debt_huadu_active} 与 ${player.debt_huadu_cleared} 用于校验状态。\n// 计算规则：只有当现金大于等于剩余债务金额，才允许直接扣款；这里按当前剩余额一次性结清，避免写死固定值后与未来部分还款扩展冲突。\n// 写回目标：扣除玩家现金、把剩余债务写为 0、标记已结清并关闭激活状态，同时清空本次临河预约状态。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} >= ${player.debt_huadu_amount}) {\n  ${player.money} -= ${player.debt_huadu_amount}\n  ${player.debt_huadu_amount} = 0\n  ${player.debt_huadu_cleared} = true\n  ${player.debt_huadu_active} = false\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 0\n}\n\n// 规则目的：旧债结清后，现实压力解除，玩家的安保焦虑略微回升；不额外改写其他属性，避免奖励过度。\n${player.attr_anbao} = Math.min(100, ${player.attr_anbao} + 3)\n\n// 运行时消息：把付款确认写入手机记录，形成完整闭环。\ncontact_send_to(\"normal:debt_collector\", \"行，十万是吧？现在就转。\")\ncontact_send_from(\"normal:debt_collector\", \"到账了。你这次倒是痛快。以后别再让我跨城找你。\")",
                   "next": [],
                   "bgm": ""
                 },
@@ -276,7 +276,7 @@
                     ]
                   },
                   "init_script": "",
-                  "end_script": "// 规则目的：资金不足时保留开放性，不强行让玩家还清。\n// 读取变量：${player.money}、${player.debt_huadu_amount}、${player.debt_huadu_active}。\n// 计算规则：如果当前现金不足以覆盖剩余债务，则债务继续保留，不扣款；只把状态升级为‘已到站催收但未结清’，便于后续导演继续接追债线。\n// 写回目标：维持债务激活，取消本次预约，提升压力记录，稍微降低安保感，形成后续继续演进的钩子。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} < ${player.debt_huadu_amount}) {\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 4\n}\n\n// 规则目的：本次没能结清，玩家会感到现实压力进一步逼近，因此轻微下调安保感。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 3)\n\n// 运行时消息：写入“暂缓但未解决”的手机记录，留给后续导演继续发酵。\nphone_send_to_contact(\"normal:debt_collector\", \"我今天手头不够，先别在车站闹，再给我一点时间。\")\nphone_send_from_contact(\"normal:debt_collector\", \"我给你时间，不是给你消失。下次再让我白跑，话就没今天这么好听了。\")",
+                  "end_script": "// 规则目的：资金不足时保留开放性，不强行让玩家还清。\n// 读取变量：${player.money}、${player.debt_huadu_amount}、${player.debt_huadu_active}。\n// 计算规则：如果当前现金不足以覆盖剩余债务，则债务继续保留，不扣款；只把状态升级为‘已到站催收但未结清’，便于后续导演继续接追债线。\n// 写回目标：维持债务激活，取消本次预约，提升压力记录，稍微降低安保感，形成后续继续演进的钩子。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} < ${player.debt_huadu_amount}) {\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 4\n}\n\n// 规则目的：本次没能结清，玩家会感到现实压力进一步逼近，因此轻微下调安保感。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 3)\n\n// 运行时消息：写入“暂缓但未解决”的手机记录，留给后续导演继续发酵。\ncontact_send_to(\"normal:debt_collector\", \"我今天手头不够，先别在车站闹，再给我一点时间。\")\ncontact_send_from(\"normal:debt_collector\", \"我给你时间，不是给你消失。下次再让我白跑，话就没今天这么好听了。\")",
                   "next": [],
                   "bgm": ""
                 }
@@ -339,7 +339,8 @@
                   "value": 0
                 }
               ],
-              "phone": {
+              "contact": {
+                "channels": [],
                 "personality_library": [],
                 "talk_library": [],
                 "action_library": [
@@ -444,6 +445,7 @@
                 "contact_profiles": [
                   {
                     "role_key": "normal:debt_collector",
+                    "channel_id": "",
                     "enabled": true,
                     "auto_add": true,
                     "initial_favor": 15,
@@ -546,19 +548,19 @@
               "notes": [
                 "建议把 debt_huadu_linh_appointment 统一更名为 debt_huadu_linhe_appointment，避免后续资产继续扩散错拼。",
                 "若最终坚持更强的‘原著爽点’，可以把 do_debt_pay_full 作为主要可见入口，把 do_debt_cannot_pay 设为更弱可见条件或留给资金不足时显示。",
-                "若引擎侧对联系人消息要求先有联系人，建议在 huadu_debt_message_ping 的 init_script 开头补 phone_add_contact(\"normal:debt_collector\")；若已有 auto_add 机制可忽略。",
+                "若引擎侧对联系人消息要求先有联系人，建议在 huadu_debt_message_ping 的 init_script 开头补 contact_add(\"normal:debt_collector\")；若已有 auto_add 机制可忽略。",
                 "若制作组希望该内容更像真正 chain，可增加一个承上启下的入口节点或将手机回复节点改为 pool/invoke 组合。"
               ],
               "warnings": [
-                "缺少 phone.contact_profiles：事件脚本和 phone.action_library 都在使用 normal:debt_collector，但草稿未给出联系人特配，需至少补一个 role_key=normal:debt_collector 的 contact_profiles 以保证联系人可被加入、可承载消息与动作。",
+                "缺少 contact.contact_profiles：事件脚本和 contact.action_library 都在使用 normal:debt_collector，但草稿未给出联系人特配，需至少补一个 role_key=normal:debt_collector 的 contact_profiles 以保证联系人可被加入、可承载消息与动作。",
                 "缺少 doing 资产：debt_collector_arrives_linh_1d 的 init_script 调用了 doing_unlock(\"do_debt_pay_full\") 与 doing_unlock(\"do_debt_cannot_pay\")，但草稿未提供 doing.menus / doing.doings，对应主动入口不存在。",
                 "chain 事件 next 基本全为空。若这些节点定位为‘链式剧情线’，建议至少让入口事件有 next 指向一个用于玩家处理手机回复/现场处理的后续节点；否则更适合改为 pool + invoke。当前不报硬错误，但链式语义偏弱。",
-                "phone.action_library 的 scope.personality_ids 使用 dominant、pragmatic；其中 pragmatic 已存在，但 dominant 是否作为该联系人实际人格生效，还需 contact_profiles 或角色设定配合。仅从库存在性看没问题。",
-                "剧情脚本直接 phone_send_from_contact/phone_send_to_contact 给 normal:debt_collector，但未见显式 phone_add_contact 或 contact_profiles.auto_add 方案。若引擎要求联系人先存在，需补联系人加入逻辑。",
+                "contact.action_library 的 scope.personality_ids 使用 dominant、pragmatic；其中 pragmatic 已存在，但 dominant 是否作为该联系人实际人格生效，还需 contact_profiles 或角色设定配合。仅从库存在性看没问题。",
+                "剧情脚本直接 contact_send_from/contact_send_to 给 normal:debt_collector，但未见显式 contact_add 或 contact_profiles.auto_add 方案。若引擎要求联系人先存在，需补联系人加入逻辑。",
                 "用户原始描述偏向‘次日爽快还钱’单线结果，而草稿新增了 debt_collector_cannot_pay 分支。该分支有利于保留玩家自由度，但建议在 notes 里说明：这是为了后台编辑期保留选择空间，不代表玩家已注定还不上。",
                 "变量命名 debt_huadu_linh_appointment 中 linh 疑似 county.name_full=临河 的拼音缩写，但写法不够标准，建议统一为 debt_huadu_linhe_appointment，避免后续资产继续沿用错拼。",
                 "若保留 debt_collector_pay_full / debt_collector_cannot_pay 为事件节点，则最好在 doing.doings 中直接 invoke 这两个 chain 事件，形成完整的‘到站后玩家主动选择’闭环。",
-                "当前未看到 phone.action_library 的完整截断后半段与 reply_library，需人工确认 JSON 截断处没有漏字段、缺逗号或未闭合对象。",
+                "当前未看到 contact.action_library 的完整截断后半段与 reply_library，需人工确认 JSON 截断处没有漏字段、缺逗号或未闭合对象。",
                 "联系人、doing 入口是本草稿当前最主要缺口；若不补齐，剧情承诺的手机交互和主动赴约都无法完整落地。"
               ]
             },
@@ -571,7 +573,7 @@
               {
                 "role": "plotPlanner",
                 "title": "剧情规划",
-                "summary": "规划为一条两段式短链：先做一个可被脚本调用的手机催债事件，再用 invoke_once delay_days=1 调度次日汽车站收账事件。为避免单线写死，第一段保留三种回应口气，但都导向“收债人次日来临河”；第二段根据 player.money 是否足够分成爽快还清与暂时还不上两类结果。新增最少必要资产：1个 normal 角色、1组 phone 联系人草稿、4个 value 债务状态变量。地点复用 qichezhan_lvl1，不改 system 时间，不写 calc/system/call。"
+                "summary": "规划为一条两段式短链：先做一个可被脚本调用的手机催债事件，再用 invoke_once delay_days=1 调度次日汽车站收账事件。为避免单线写死，第一段保留三种回应口气，但都导向“收债人次日来临河”；第二段根据 player.money 是否足够分成爽快还清与暂时还不上两类结果。新增最少必要资产：1个 normal 角色、1组 contact 联系人草稿、4个 value 债务状态变量。地点复用 qichezhan_lvl1，不改 system 时间，不写 calc/system/call。"
               },
               {
                 "role": "assetDesigner",
@@ -581,12 +583,12 @@
               {
                 "role": "eventWriter",
                 "title": "事件写作",
-                "summary": "已生成一条两段式短链剧情：先由收债人手机催债并约定次日到临河县汽车站收账，再在次日汽车站落地为足额还清/暂时还不上两类开放结果。新增了最少必要的普通 value 变量、一个 normal 角色，以及 phone 联系人特配与主动消息规则，避免只写成小说叙述。首段与次段都使用 invoke 触发，便于由主线或导演在合适时机挂入；跨天推进使用 invoke_once delay_days=1，不改 system 时间。"
+                "summary": "已生成一条两段式短链剧情：先由收债人手机催债并约定次日到临河县汽车站收账，再在次日汽车站落地为足额还清/暂时还不上两类开放结果。新增了最少必要的普通 value 变量、一个 normal 角色，以及 contact 联系人特配与主动消息规则，避免只写成小说叙述。首段与次段都使用 invoke 触发，便于由主线或导演在合适时机挂入；跨天推进使用 invoke_once delay_days=1，不改 system 时间。"
               },
               {
                 "role": "scriptDoctor",
                 "title": "脚本审校",
-                "summary": "已完成脚本审校，重点检查了事件 init_script/end_script、对白可用性，以及 phone 资产中的可执行脚本位。\n\n审校结论：\n1. 原草稿整体结构方向正确，核心链路“消息催债 -> 玩家回话 -> 1天后到站 -> 还清/暂缓”可落入现有事件结构。\n2. 主要问题在于：\n   - 多个 chain 事件被写成 invoke，但又用 next 形成线性跳转，容易和“仅供脚本调用”的约束混淆。为保守可用，本次保留 invoke，并将 next 清空，改为完全依赖脚本/手机入口调用与 invoke_once 调度，不让它们参与普通链调度。\n   - `bgm` 字段在事件 schema 中允许 null；原稿给了空字符串。为保守起见统一改成 null。\n   - `huadu_debt_message_ping` 原 presentation 把手机消息写成对话，且 init_script 同时 phone_send，存在重复表现风险。保守修正为 message 提示，由脚本负责真正写入手机消息记录。\n   - `debt_collector_arrives_linh_1d` 原稿只把到站落地，没有给玩家主动入口。根据规则，“临时开放玩家主动入口”应同时生成 doing，并在到站事件中 doing_unlock。已补齐。\n   - 用户明确要求“玩家爽快还了钱”，但项目规则要求保留玩家选择空间，不能把结果写死。故保留“当场还清”和“先稳住”两个分支，把“爽快还钱”作为可选主动行动；在摘要和注释里说明这是用户目标场景的主推荐走向，而非唯一结局。\n   - phone.contact_profiles 中原稿省略内容不完整。已补全为保守可用版本，并确保 trigger_expr 只读现有/本次新增 value 变量。\n3. 变量写入审校：\n   - 仅写 player.* 普通 value 变量与现有 `player.money`、`player.attr_anbao`，未写 calc、system.*、call.*，符合权限。\n   - 新增的债务变量均为普通 value，可合法持久化。\n4. 占位符审校：\n   - 本批对白未涉及必须区分玩家性别的人称称谓，因此不强行加入 `${term.player.xxx}`。\n   - 未把 `term.*` 误当变量写入脚本。\n5. StoryScript 保守性：\n   - 保留中文注释。\n   - 保留 `invoke_once chain debt_collector_arrives_linh_1d delay_days=1` 的保守合法写法。\n   - 未使用未明确给出的 JS/TS 风格函数式 invoke_once 写法。\n\n建议接入方式：\n- 由开局某个已存在事件或手机剧情脚本在合适时机 `invoke_once chain huadu_debt_message_ping`。\n- 玩家收到消息后，通过手机联系人动作触发三种回话之一。\n- 次日到站事件自动解锁两个主动 doing，玩家可自行选择还钱或暂缓。\n问题: 发现原草稿中 invoke 事件大量设置 next，容易与“仅供脚本调用”语义冲突；已改为空数组。\n问题: 发现原草稿未完整保留 doing/shop/phone 结构；已补齐空结构或可用资产。\n问题: 发现原草稿到站事件后缺少玩家主动入口；已补充 doing 菜单与两个 doings。"
+                "summary": "已完成脚本审校，重点检查了事件 init_script/end_script、对白可用性，以及 contact 资产中的可执行脚本位。\n\n审校结论：\n1. 原草稿整体结构方向正确，核心链路“消息催债 -> 玩家回话 -> 1天后到站 -> 还清/暂缓”可落入现有事件结构。\n2. 主要问题在于：\n   - 多个 chain 事件被写成 invoke，但又用 next 形成线性跳转，容易和“仅供脚本调用”的约束混淆。为保守可用，本次保留 invoke，并将 next 清空，改为完全依赖脚本/手机入口调用与 invoke_once 调度，不让它们参与普通链调度。\n   - `bgm` 字段在事件 schema 中允许 null；原稿给了空字符串。为保守起见统一改成 null。\n   - `huadu_debt_message_ping` 原 presentation 把手机消息写成对话，且 init_script 同时 contact_send，存在重复表现风险。保守修正为 message 提示，由脚本负责真正写入手机消息记录。\n   - `debt_collector_arrives_linh_1d` 原稿只把到站落地，没有给玩家主动入口。根据规则，“临时开放玩家主动入口”应同时生成 doing，并在到站事件中 doing_unlock。已补齐。\n   - 用户明确要求“玩家爽快还了钱”，但项目规则要求保留玩家选择空间，不能把结果写死。故保留“当场还清”和“先稳住”两个分支，把“爽快还钱”作为可选主动行动；在摘要和注释里说明这是用户目标场景的主推荐走向，而非唯一结局。\n   - contact.contact_profiles 中原稿省略内容不完整。已补全为保守可用版本，并确保 trigger_expr 只读现有/本次新增 value 变量。\n3. 变量写入审校：\n   - 仅写 player.* 普通 value 变量与现有 `player.money`、`player.attr_anbao`，未写 calc、system.*、call.*，符合权限。\n   - 新增的债务变量均为普通 value，可合法持久化。\n4. 占位符审校：\n   - 本批对白未涉及必须区分玩家性别的人称称谓，因此不强行加入 `${term.player.xxx}`。\n   - 未把 `term.*` 误当变量写入脚本。\n5. StoryScript 保守性：\n   - 保留中文注释。\n   - 保留 `invoke_once chain debt_collector_arrives_linh_1d delay_days=1` 的保守合法写法。\n   - 未使用未明确给出的 JS/TS 风格函数式 invoke_once 写法。\n\n建议接入方式：\n- 由开局某个已存在事件或手机剧情脚本在合适时机 `invoke_once chain huadu_debt_message_ping`。\n- 玩家收到消息后，通过手机联系人动作触发三种回话之一。\n- 次日到站事件自动解锁两个主动 doing，玩家可自行选择还钱或暂缓。\n问题: 发现原草稿中 invoke 事件大量设置 next，容易与“仅供脚本调用”语义冲突；已改为空数组。\n问题: 发现原草稿未完整保留 doing/shop/contact 结构；已补齐空结构或可用资产。\n问题: 发现原草稿到站事件后缺少玩家主动入口；已补充 doing 菜单与两个 doings。"
               },
               {
                 "role": "consistencyChecker",
@@ -634,7 +636,7 @@
                 "duration_seconds": 2
               }
             },
-            "init_script": "// 规则目的：激活“花都旧债追到老家”的短链入口，只在未结清时建立一次催债状态。\n// 读取变量：${player.debt_huadu_active} 表示旧债线是否已激活；${player.debt_huadu_cleared} 表示是否已结清；${player.debt_huadu_amount} 表示剩余债务金额。\n// 设计说明：如果旧债尚未激活，就在这里补齐初始状态，保证后续链路可重复读取；若已激活则不覆盖玩家已有进度。\n// 写回目标：初始化旧债激活状态、剩余金额、预约状态与态度记录。注意这里只写普通 value 变量，不写 system/calc/call。\nif (!${player.debt_huadu_active} && !${player.debt_huadu_cleared}) {\n  ${player.debt_huadu_active} = true\n  ${player.debt_huadu_amount} = 100000\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_tone} = 0\n}\n\n// 规则目的：把催债消息缓存为已触发，供后续条件与联系人主动消息规则读取。\n${player.debt_huadu_msg_sent} = true\n${player.debt_huadu_last_pressure} = 1\n\n// 运行时消息：直接把收债人来信写进手机记录，形成结构化手机体验。\nphone_send_from_contact(\"normal:debt_collector\", \"欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。\")\n\n// 规则目的：首次被旧账追上时，形成一点现实压力与安保焦虑。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 2)",
+            "init_script": "// 规则目的：激活“花都旧债追到老家”的短链入口，只在未结清时建立一次催债状态。\n// 读取变量：${player.debt_huadu_active} 表示旧债线是否已激活；${player.debt_huadu_cleared} 表示是否已结清；${player.debt_huadu_amount} 表示剩余债务金额。\n// 设计说明：如果旧债尚未激活，就在这里补齐初始状态，保证后续链路可重复读取；若已激活则不覆盖玩家已有进度。\n// 写回目标：初始化旧债激活状态、剩余金额、预约状态与态度记录。注意这里只写普通 value 变量，不写 system/calc/call。\nif (!${player.debt_huadu_active} && !${player.debt_huadu_cleared}) {\n  ${player.debt_huadu_active} = true\n  ${player.debt_huadu_amount} = 100000\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_tone} = 0\n}\n\n// 规则目的：把催债消息缓存为已触发，供后续条件与联系人主动消息规则读取。\n${player.debt_huadu_msg_sent} = true\n${player.debt_huadu_last_pressure} = 1\n\n// 运行时消息：直接把收债人来信写进手机记录，形成结构化手机体验。\ncontact_send_from(\"normal:debt_collector\", \"欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。\")\n\n// 规则目的：首次被旧账追上时，形成一点现实压力与安保焦虑。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 2)",
             "end_script": "",
             "next": [],
             "bgm": ""
@@ -672,7 +674,7 @@
               ]
             },
             "init_script": "",
-            "end_script": "// 规则目的：本节点是玩家的‘正面稳住’回应分支。玩家承诺人在临河、对方到了就给钱。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount} 用于确认债务仍有效。\n// 写回目标：记录已约定来临河收账、记录本次回应口气为 1（偏稳），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 1\n  ${player.debt_huadu_last_pressure} = 1\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把玩家与对方的关键对话直接写入手机记录。\nphone_send_to_contact(\"normal:debt_collector\", \"我已经回临河了。你要收钱就来，我在老家等你，到了我就给。\")\nphone_send_from_contact(\"normal:debt_collector\", \"行，你在临河等着。明天我过去，到了车站给你打电话。\")",
+            "end_script": "// 规则目的：本节点是玩家的‘正面稳住’回应分支。玩家承诺人在临河、对方到了就给钱。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount} 用于确认债务仍有效。\n// 写回目标：记录已约定来临河收账、记录本次回应口气为 1（偏稳），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 1\n  ${player.debt_huadu_last_pressure} = 1\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把玩家与对方的关键对话直接写入手机记录。\ncontact_send_to(\"normal:debt_collector\", \"我已经回临河了。你要收钱就来，我在老家等你，到了我就给。\")\ncontact_send_from(\"normal:debt_collector\", \"行，你在临河等着。明天我过去，到了车站给你打电话。\")",
             "next": [],
             "bgm": ""
           },
@@ -709,7 +711,7 @@
               ]
             },
             "init_script": "",
-            "end_script": "// 规则目的：本节点是玩家的‘先稳住、明天见面谈’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 2（偏谈判/拖字诀），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 2\n  ${player.debt_huadu_last_pressure} = 2\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：写入双方确认“明天临河见”的手机记录，便于玩家回看。\nphone_send_to_contact(\"normal:debt_collector\", \"我人在老家，别急，明天你过来，当面把这事了了。\")\nphone_send_from_contact(\"normal:debt_collector\", \"少给我绕。行，明天我到临河车站，你别再换地方。\")",
+            "end_script": "// 规则目的：本节点是玩家的‘先稳住、明天见面谈’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 2（偏谈判/拖字诀），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 2\n  ${player.debt_huadu_last_pressure} = 2\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：写入双方确认“明天临河见”的手机记录，便于玩家回看。\ncontact_send_to(\"normal:debt_collector\", \"我人在老家，别急，明天你过来，当面把这事了了。\")\ncontact_send_from(\"normal:debt_collector\", \"少给我绕。行，明天我到临河车站，你别再换地方。\")",
             "next": [],
             "bgm": ""
           },
@@ -746,7 +748,7 @@
               ]
             },
             "init_script": "",
-            "end_script": "// 规则目的：本节点是玩家的‘嘴硬激将’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 3（火药味更足），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 3\n  ${player.debt_huadu_last_pressure} = 3\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把带火药味的回应写入手机记录，供后续事件读取气氛。\nphone_send_to_contact(\"normal:debt_collector\", \"你真敢来临河，我就真敢当面结。少在手机上吓唬人。\")\nphone_send_from_contact(\"normal:debt_collector\", \"行，这话我记着。明天我下车第一件事就是找你。\")",
+            "end_script": "// 规则目的：本节点是玩家的‘嘴硬激将’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 3（火药味更足），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 3\n  ${player.debt_huadu_last_pressure} = 3\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把带火药味的回应写入手机记录，供后续事件读取气氛。\ncontact_send_to(\"normal:debt_collector\", \"你真敢来临河，我就真敢当面结。少在手机上吓唬人。\")\ncontact_send_from(\"normal:debt_collector\", \"行，这话我记着。明天我下车第一件事就是找你。\")",
             "next": [],
             "bgm": ""
           },
@@ -782,7 +784,7 @@
                 }
               ]
             },
-            "init_script": "// 规则目的：次日到站收账事件只在旧债已激活、已约定到临河且尚未结清时成立。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_linh_appointment}、${player.debt_huadu_amount}、${player.debt_huadu_cleared}、${player.debt_huadu_tone}。\n// 设计说明：这里不直接替玩家做决定，只负责把现场压力落地，并开放两个主动处理入口给玩家选择。\n// 写回目标：刷新最后一次压力等级；解锁“当场还钱”与“先稳住”两个主动入口；写入对方到站消息。\nif (${player.debt_huadu_active} && ${player.debt_huadu_linh_appointment} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_last_pressure} = ${player.debt_huadu_tone}\n  doing_unlock(\"do_debt_pay_full\")\n  doing_unlock(\"do_debt_cannot_pay\")\n}\n\n// 运行时手机记录：对方到站后发消息，增强‘旧生活追到新主场’的现实感。\nphone_send_from_contact(\"normal:debt_collector\", \"我到临河汽车站了。别让我在站口等你太久。\")",
+            "init_script": "// 规则目的：次日到站收账事件只在旧债已激活、已约定到临河且尚未结清时成立。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_linh_appointment}、${player.debt_huadu_amount}、${player.debt_huadu_cleared}、${player.debt_huadu_tone}。\n// 设计说明：这里不直接替玩家做决定，只负责把现场压力落地，并开放两个主动处理入口给玩家选择。\n// 写回目标：刷新最后一次压力等级；解锁“当场还钱”与“先稳住”两个主动入口；写入对方到站消息。\nif (${player.debt_huadu_active} && ${player.debt_huadu_linh_appointment} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_last_pressure} = ${player.debt_huadu_tone}\n  doing_unlock(\"do_debt_pay_full\")\n  doing_unlock(\"do_debt_cannot_pay\")\n}\n\n// 运行时手机记录：对方到站后发消息，增强‘旧生活追到新主场’的现实感。\ncontact_send_from(\"normal:debt_collector\", \"我到临河汽车站了。别让我在站口等你太久。\")",
             "end_script": "",
             "next": [],
             "bgm": ""
@@ -820,7 +822,7 @@
               ]
             },
             "init_script": "",
-            "end_script": "// 规则目的：资金足够时实现主要爽点——玩家当场结清十万旧债。\n// 读取变量：${player.money} 是当前现金；${player.debt_huadu_amount} 是剩余债务金额；${player.debt_huadu_active} 与 ${player.debt_huadu_cleared} 用于校验状态。\n// 计算规则：只有当现金大于等于剩余债务金额，才允许直接扣款；这里按当前剩余额一次性结清，避免写死固定值后与未来部分还款扩展冲突。\n// 写回目标：扣除玩家现金、把剩余债务写为 0、标记已结清并关闭激活状态，同时清空本次临河预约状态。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} >= ${player.debt_huadu_amount}) {\n  ${player.money} -= ${player.debt_huadu_amount}\n  ${player.debt_huadu_amount} = 0\n  ${player.debt_huadu_cleared} = true\n  ${player.debt_huadu_active} = false\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 0\n}\n\n// 规则目的：旧债结清后，现实压力解除，玩家的安保焦虑略微回升；不额外改写其他属性，避免奖励过度。\n${player.attr_anbao} = Math.min(100, ${player.attr_anbao} + 3)\n\n// 运行时消息：把付款确认写入手机记录，形成完整闭环。\nphone_send_to_contact(\"normal:debt_collector\", \"行，十万是吧？现在就转。\")\nphone_send_from_contact(\"normal:debt_collector\", \"到账了。你这次倒是痛快。以后别再让我跨城找你。\")",
+            "end_script": "// 规则目的：资金足够时实现主要爽点——玩家当场结清十万旧债。\n// 读取变量：${player.money} 是当前现金；${player.debt_huadu_amount} 是剩余债务金额；${player.debt_huadu_active} 与 ${player.debt_huadu_cleared} 用于校验状态。\n// 计算规则：只有当现金大于等于剩余债务金额，才允许直接扣款；这里按当前剩余额一次性结清，避免写死固定值后与未来部分还款扩展冲突。\n// 写回目标：扣除玩家现金、把剩余债务写为 0、标记已结清并关闭激活状态，同时清空本次临河预约状态。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} >= ${player.debt_huadu_amount}) {\n  ${player.money} -= ${player.debt_huadu_amount}\n  ${player.debt_huadu_amount} = 0\n  ${player.debt_huadu_cleared} = true\n  ${player.debt_huadu_active} = false\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 0\n}\n\n// 规则目的：旧债结清后，现实压力解除，玩家的安保焦虑略微回升；不额外改写其他属性，避免奖励过度。\n${player.attr_anbao} = Math.min(100, ${player.attr_anbao} + 3)\n\n// 运行时消息：把付款确认写入手机记录，形成完整闭环。\ncontact_send_to(\"normal:debt_collector\", \"行，十万是吧？现在就转。\")\ncontact_send_from(\"normal:debt_collector\", \"到账了。你这次倒是痛快。以后别再让我跨城找你。\")",
             "next": [],
             "bgm": ""
           },
@@ -857,7 +859,7 @@
               ]
             },
             "init_script": "",
-            "end_script": "// 规则目的：资金不足时保留开放性，不强行让玩家还清。\n// 读取变量：${player.money}、${player.debt_huadu_amount}、${player.debt_huadu_active}。\n// 计算规则：如果当前现金不足以覆盖剩余债务，则债务继续保留，不扣款；只把状态升级为‘已到站催收但未结清’，便于后续导演继续接追债线。\n// 写回目标：维持债务激活，取消本次预约，提升压力记录，稍微降低安保感，形成后续继续演进的钩子。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} < ${player.debt_huadu_amount}) {\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 4\n}\n\n// 规则目的：本次没能结清，玩家会感到现实压力进一步逼近，因此轻微下调安保感。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 3)\n\n// 运行时消息：写入“暂缓但未解决”的手机记录，留给后续导演继续发酵。\nphone_send_to_contact(\"normal:debt_collector\", \"我今天手头不够，先别在车站闹，再给我一点时间。\")\nphone_send_from_contact(\"normal:debt_collector\", \"我给你时间，不是给你消失。下次再让我白跑，话就没今天这么好听了。\")",
+            "end_script": "// 规则目的：资金不足时保留开放性，不强行让玩家还清。\n// 读取变量：${player.money}、${player.debt_huadu_amount}、${player.debt_huadu_active}。\n// 计算规则：如果当前现金不足以覆盖剩余债务，则债务继续保留，不扣款；只把状态升级为‘已到站催收但未结清’，便于后续导演继续接追债线。\n// 写回目标：维持债务激活，取消本次预约，提升压力记录，稍微降低安保感，形成后续继续演进的钩子。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} < ${player.debt_huadu_amount}) {\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 4\n}\n\n// 规则目的：本次没能结清，玩家会感到现实压力进一步逼近，因此轻微下调安保感。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 3)\n\n// 运行时消息：写入“暂缓但未解决”的手机记录，留给后续导演继续发酵。\ncontact_send_to(\"normal:debt_collector\", \"我今天手头不够，先别在车站闹，再给我一点时间。\")\ncontact_send_from(\"normal:debt_collector\", \"我给你时间，不是给你消失。下次再让我白跑，话就没今天这么好听了。\")",
             "next": [],
             "bgm": ""
           }
@@ -920,7 +922,8 @@
             "value": 0
           }
         ],
-        "phone": {
+        "contact": {
+          "channels": [],
           "personality_library": [],
           "talk_library": [],
           "action_library": [
@@ -1025,6 +1028,7 @@
           "contact_profiles": [
             {
               "role_key": "normal:debt_collector",
+              "channel_id": "",
               "enabled": true,
               "auto_add": true,
               "initial_favor": 15,
@@ -1127,19 +1131,19 @@
         "notes": [
           "建议把 debt_huadu_linh_appointment 统一更名为 debt_huadu_linhe_appointment，避免后续资产继续扩散错拼。",
           "若最终坚持更强的‘原著爽点’，可以把 do_debt_pay_full 作为主要可见入口，把 do_debt_cannot_pay 设为更弱可见条件或留给资金不足时显示。",
-          "若引擎侧对联系人消息要求先有联系人，建议在 huadu_debt_message_ping 的 init_script 开头补 phone_add_contact(\"normal:debt_collector\")；若已有 auto_add 机制可忽略。",
+          "若引擎侧对联系人消息要求先有联系人，建议在 huadu_debt_message_ping 的 init_script 开头补 contact_add(\"normal:debt_collector\")；若已有 auto_add 机制可忽略。",
           "若制作组希望该内容更像真正 chain，可增加一个承上启下的入口节点或将手机回复节点改为 pool/invoke 组合。"
         ],
         "warnings": [
-          "缺少 phone.contact_profiles：事件脚本和 phone.action_library 都在使用 normal:debt_collector，但草稿未给出联系人特配，需至少补一个 role_key=normal:debt_collector 的 contact_profiles 以保证联系人可被加入、可承载消息与动作。",
+          "缺少 contact.contact_profiles：事件脚本和 contact.action_library 都在使用 normal:debt_collector，但草稿未给出联系人特配，需至少补一个 role_key=normal:debt_collector 的 contact_profiles 以保证联系人可被加入、可承载消息与动作。",
           "缺少 doing 资产：debt_collector_arrives_linh_1d 的 init_script 调用了 doing_unlock(\"do_debt_pay_full\") 与 doing_unlock(\"do_debt_cannot_pay\")，但草稿未提供 doing.menus / doing.doings，对应主动入口不存在。",
           "chain 事件 next 基本全为空。若这些节点定位为‘链式剧情线’，建议至少让入口事件有 next 指向一个用于玩家处理手机回复/现场处理的后续节点；否则更适合改为 pool + invoke。当前不报硬错误，但链式语义偏弱。",
-          "phone.action_library 的 scope.personality_ids 使用 dominant、pragmatic；其中 pragmatic 已存在，但 dominant 是否作为该联系人实际人格生效，还需 contact_profiles 或角色设定配合。仅从库存在性看没问题。",
-          "剧情脚本直接 phone_send_from_contact/phone_send_to_contact 给 normal:debt_collector，但未见显式 phone_add_contact 或 contact_profiles.auto_add 方案。若引擎要求联系人先存在，需补联系人加入逻辑。",
+          "contact.action_library 的 scope.personality_ids 使用 dominant、pragmatic；其中 pragmatic 已存在，但 dominant 是否作为该联系人实际人格生效，还需 contact_profiles 或角色设定配合。仅从库存在性看没问题。",
+          "剧情脚本直接 contact_send_from/contact_send_to 给 normal:debt_collector，但未见显式 contact_add 或 contact_profiles.auto_add 方案。若引擎要求联系人先存在，需补联系人加入逻辑。",
           "用户原始描述偏向‘次日爽快还钱’单线结果，而草稿新增了 debt_collector_cannot_pay 分支。该分支有利于保留玩家自由度，但建议在 notes 里说明：这是为了后台编辑期保留选择空间，不代表玩家已注定还不上。",
           "变量命名 debt_huadu_linh_appointment 中 linh 疑似 county.name_full=临河 的拼音缩写，但写法不够标准，建议统一为 debt_huadu_linhe_appointment，避免后续资产继续沿用错拼。",
           "若保留 debt_collector_pay_full / debt_collector_cannot_pay 为事件节点，则最好在 doing.doings 中直接 invoke 这两个 chain 事件，形成完整的‘到站后玩家主动选择’闭环。",
-          "当前未看到 phone.action_library 的完整截断后半段与 reply_library，需人工确认 JSON 截断处没有漏字段、缺逗号或未闭合对象。",
+          "当前未看到 contact.action_library 的完整截断后半段与 reply_library，需人工确认 JSON 截断处没有漏字段、缺逗号或未闭合对象。",
           "联系人、doing 入口是本草稿当前最主要缺口；若不补齐，剧情承诺的手机交互和主动赴约都无法完整落地。"
         ]
       },
@@ -1170,15 +1174,16 @@
             "player.debt_huadu_msg_sent",
             "player.debt_huadu_last_pressure"
           ],
-          "phonePersonalityIds": [],
-          "phoneTalkIds": [],
-          "phoneActionIds": [
+          "contactChannelIds": [],
+          "contactPersonalityIds": [],
+          "contactTalkIds": [],
+          "contactActionIds": [
             "action_debt_reply_steady",
             "action_debt_reply_delay",
             "action_debt_reply_provoke"
           ],
-          "phoneReplyIds": [],
-          "phoneContactProfileKeys": [
+          "contactReplyIds": [],
+          "contactProfileKeys": [
             "normal:debt_collector"
           ],
           "doingMenuIds": [
@@ -1197,26 +1202,27 @@
           "roles": 1,
           "items": 0,
           "variables": 7,
-          "phonePersonalities": 0,
-          "phoneTalks": 0,
-          "phoneActions": 3,
-          "phoneReplies": 0,
-          "phoneContactProfiles": 1,
+          "contactChannels": 0,
+          "contactPersonalities": 0,
+          "contactTalks": 0,
+          "contactActions": 3,
+          "contactReplies": 0,
+          "contactProfiles": 1,
           "doingMenus": 1,
           "doings": 2,
           "shopCategories": 0,
           "shopProducts": 0
         },
         "warnings": [
-          "缺少 phone.contact_profiles：事件脚本和 phone.action_library 都在使用 normal:debt_collector，但草稿未给出联系人特配，需至少补一个 role_key=normal:debt_collector 的 contact_profiles 以保证联系人可被加入、可承载消息与动作。",
+          "缺少 contact.contact_profiles：事件脚本和 contact.action_library 都在使用 normal:debt_collector，但草稿未给出联系人特配，需至少补一个 role_key=normal:debt_collector 的 contact_profiles 以保证联系人可被加入、可承载消息与动作。",
           "缺少 doing 资产：debt_collector_arrives_linh_1d 的 init_script 调用了 doing_unlock(\"do_debt_pay_full\") 与 doing_unlock(\"do_debt_cannot_pay\")，但草稿未提供 doing.menus / doing.doings，对应主动入口不存在。",
           "chain 事件 next 基本全为空。若这些节点定位为‘链式剧情线’，建议至少让入口事件有 next 指向一个用于玩家处理手机回复/现场处理的后续节点；否则更适合改为 pool + invoke。当前不报硬错误，但链式语义偏弱。",
-          "phone.action_library 的 scope.personality_ids 使用 dominant、pragmatic；其中 pragmatic 已存在，但 dominant 是否作为该联系人实际人格生效，还需 contact_profiles 或角色设定配合。仅从库存在性看没问题。",
-          "剧情脚本直接 phone_send_from_contact/phone_send_to_contact 给 normal:debt_collector，但未见显式 phone_add_contact 或 contact_profiles.auto_add 方案。若引擎要求联系人先存在，需补联系人加入逻辑。",
+          "contact.action_library 的 scope.personality_ids 使用 dominant、pragmatic；其中 pragmatic 已存在，但 dominant 是否作为该联系人实际人格生效，还需 contact_profiles 或角色设定配合。仅从库存在性看没问题。",
+          "剧情脚本直接 contact_send_from/contact_send_to 给 normal:debt_collector，但未见显式 contact_add 或 contact_profiles.auto_add 方案。若引擎要求联系人先存在，需补联系人加入逻辑。",
           "用户原始描述偏向‘次日爽快还钱’单线结果，而草稿新增了 debt_collector_cannot_pay 分支。该分支有利于保留玩家自由度，但建议在 notes 里说明：这是为了后台编辑期保留选择空间，不代表玩家已注定还不上。",
           "变量命名 debt_huadu_linh_appointment 中 linh 疑似 county.name_full=临河 的拼音缩写，但写法不够标准，建议统一为 debt_huadu_linhe_appointment，避免后续资产继续沿用错拼。",
           "若保留 debt_collector_pay_full / debt_collector_cannot_pay 为事件节点，则最好在 doing.doings 中直接 invoke 这两个 chain 事件，形成完整的‘到站后玩家主动选择’闭环。",
-          "当前未看到 phone.action_library 的完整截断后半段与 reply_library，需人工确认 JSON 截断处没有漏字段、缺逗号或未闭合对象。",
+          "当前未看到 contact.action_library 的完整截断后半段与 reply_library，需人工确认 JSON 截断处没有漏字段、缺逗号或未闭合对象。",
           "联系人、doing 入口是本草稿当前最主要缺口；若不补齐，剧情承诺的手机交互和主动赴约都无法完整落地。"
         ],
         "draft": {
@@ -1256,7 +1262,7 @@
                   "duration_seconds": 2
                 }
               },
-              "init_script": "// 规则目的：激活“花都旧债追到老家”的短链入口，只在未结清时建立一次催债状态。\n// 读取变量：${player.debt_huadu_active} 表示旧债线是否已激活；${player.debt_huadu_cleared} 表示是否已结清；${player.debt_huadu_amount} 表示剩余债务金额。\n// 设计说明：如果旧债尚未激活，就在这里补齐初始状态，保证后续链路可重复读取；若已激活则不覆盖玩家已有进度。\n// 写回目标：初始化旧债激活状态、剩余金额、预约状态与态度记录。注意这里只写普通 value 变量，不写 system/calc/call。\nif (!${player.debt_huadu_active} && !${player.debt_huadu_cleared}) {\n  ${player.debt_huadu_active} = true\n  ${player.debt_huadu_amount} = 100000\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_tone} = 0\n}\n\n// 规则目的：把催债消息缓存为已触发，供后续条件与联系人主动消息规则读取。\n${player.debt_huadu_msg_sent} = true\n${player.debt_huadu_last_pressure} = 1\n\n// 运行时消息：直接把收债人来信写进手机记录，形成结构化手机体验。\nphone_send_from_contact(\"normal:debt_collector\", \"欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。\")\n\n// 规则目的：首次被旧账追上时，形成一点现实压力与安保焦虑。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 2)",
+              "init_script": "// 规则目的：激活“花都旧债追到老家”的短链入口，只在未结清时建立一次催债状态。\n// 读取变量：${player.debt_huadu_active} 表示旧债线是否已激活；${player.debt_huadu_cleared} 表示是否已结清；${player.debt_huadu_amount} 表示剩余债务金额。\n// 设计说明：如果旧债尚未激活，就在这里补齐初始状态，保证后续链路可重复读取；若已激活则不覆盖玩家已有进度。\n// 写回目标：初始化旧债激活状态、剩余金额、预约状态与态度记录。注意这里只写普通 value 变量，不写 system/calc/call。\nif (!${player.debt_huadu_active} && !${player.debt_huadu_cleared}) {\n  ${player.debt_huadu_active} = true\n  ${player.debt_huadu_amount} = 100000\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_tone} = 0\n}\n\n// 规则目的：把催债消息缓存为已触发，供后续条件与联系人主动消息规则读取。\n${player.debt_huadu_msg_sent} = true\n${player.debt_huadu_last_pressure} = 1\n\n// 运行时消息：直接把收债人来信写进手机记录，形成结构化手机体验。\ncontact_send_from(\"normal:debt_collector\", \"欠我的十万，该还了。你要是还装死，我就顺着你老家的地址过去找你。\")\n\n// 规则目的：首次被旧账追上时，形成一点现实压力与安保焦虑。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 2)",
               "end_script": "",
               "next": [],
               "bgm": ""
@@ -1294,7 +1300,7 @@
                 ]
               },
               "init_script": "",
-              "end_script": "// 规则目的：本节点是玩家的‘正面稳住’回应分支。玩家承诺人在临河、对方到了就给钱。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount} 用于确认债务仍有效。\n// 写回目标：记录已约定来临河收账、记录本次回应口气为 1（偏稳），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 1\n  ${player.debt_huadu_last_pressure} = 1\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把玩家与对方的关键对话直接写入手机记录。\nphone_send_to_contact(\"normal:debt_collector\", \"我已经回临河了。你要收钱就来，我在老家等你，到了我就给。\")\nphone_send_from_contact(\"normal:debt_collector\", \"行，你在临河等着。明天我过去，到了车站给你打电话。\")",
+              "end_script": "// 规则目的：本节点是玩家的‘正面稳住’回应分支。玩家承诺人在临河、对方到了就给钱。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount} 用于确认债务仍有效。\n// 写回目标：记录已约定来临河收账、记录本次回应口气为 1（偏稳），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 1\n  ${player.debt_huadu_last_pressure} = 1\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把玩家与对方的关键对话直接写入手机记录。\ncontact_send_to(\"normal:debt_collector\", \"我已经回临河了。你要收钱就来，我在老家等你，到了我就给。\")\ncontact_send_from(\"normal:debt_collector\", \"行，你在临河等着。明天我过去，到了车站给你打电话。\")",
               "next": [],
               "bgm": ""
             },
@@ -1331,7 +1337,7 @@
                 ]
               },
               "init_script": "",
-              "end_script": "// 规则目的：本节点是玩家的‘先稳住、明天见面谈’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 2（偏谈判/拖字诀），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 2\n  ${player.debt_huadu_last_pressure} = 2\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：写入双方确认“明天临河见”的手机记录，便于玩家回看。\nphone_send_to_contact(\"normal:debt_collector\", \"我人在老家，别急，明天你过来，当面把这事了了。\")\nphone_send_from_contact(\"normal:debt_collector\", \"少给我绕。行，明天我到临河车站，你别再换地方。\")",
+              "end_script": "// 规则目的：本节点是玩家的‘先稳住、明天见面谈’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 2（偏谈判/拖字诀），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 2\n  ${player.debt_huadu_last_pressure} = 2\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：写入双方确认“明天临河见”的手机记录，便于玩家回看。\ncontact_send_to(\"normal:debt_collector\", \"我人在老家，别急，明天你过来，当面把这事了了。\")\ncontact_send_from(\"normal:debt_collector\", \"少给我绕。行，明天我到临河车站，你别再换地方。\")",
               "next": [],
               "bgm": ""
             },
@@ -1368,7 +1374,7 @@
                 ]
               },
               "init_script": "",
-              "end_script": "// 规则目的：本节点是玩家的‘嘴硬激将’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 3（火药味更足），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 3\n  ${player.debt_huadu_last_pressure} = 3\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把带火药味的回应写入手机记录，供后续事件读取气氛。\nphone_send_to_contact(\"normal:debt_collector\", \"你真敢来临河，我就真敢当面结。少在手机上吓唬人。\")\nphone_send_from_contact(\"normal:debt_collector\", \"行，这话我记着。明天我下车第一件事就是找你。\")",
+              "end_script": "// 规则目的：本节点是玩家的‘嘴硬激将’回应分支。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_amount}。\n// 写回目标：记录已约定来临河收账、记录口气为 3（火药味更足），并调度 1 天后的到站收账事件。\nif (${player.debt_huadu_active} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_linh_appointment} = true\n  ${player.debt_huadu_tone} = 3\n  ${player.debt_huadu_last_pressure} = 3\n  invoke_once chain debt_collector_arrives_linh_1d delay_days=1\n}\n\n// 运行时消息：把带火药味的回应写入手机记录，供后续事件读取气氛。\ncontact_send_to(\"normal:debt_collector\", \"你真敢来临河，我就真敢当面结。少在手机上吓唬人。\")\ncontact_send_from(\"normal:debt_collector\", \"行，这话我记着。明天我下车第一件事就是找你。\")",
               "next": [],
               "bgm": ""
             },
@@ -1404,7 +1410,7 @@
                   }
                 ]
               },
-              "init_script": "// 规则目的：次日到站收账事件只在旧债已激活、已约定到临河且尚未结清时成立。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_linh_appointment}、${player.debt_huadu_amount}、${player.debt_huadu_cleared}、${player.debt_huadu_tone}。\n// 设计说明：这里不直接替玩家做决定，只负责把现场压力落地，并开放两个主动处理入口给玩家选择。\n// 写回目标：刷新最后一次压力等级；解锁“当场还钱”与“先稳住”两个主动入口；写入对方到站消息。\nif (${player.debt_huadu_active} && ${player.debt_huadu_linh_appointment} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_last_pressure} = ${player.debt_huadu_tone}\n  doing_unlock(\"do_debt_pay_full\")\n  doing_unlock(\"do_debt_cannot_pay\")\n}\n\n// 运行时手机记录：对方到站后发消息，增强‘旧生活追到新主场’的现实感。\nphone_send_from_contact(\"normal:debt_collector\", \"我到临河汽车站了。别让我在站口等你太久。\")",
+              "init_script": "// 规则目的：次日到站收账事件只在旧债已激活、已约定到临河且尚未结清时成立。\n// 读取变量：${player.debt_huadu_active}、${player.debt_huadu_linh_appointment}、${player.debt_huadu_amount}、${player.debt_huadu_cleared}、${player.debt_huadu_tone}。\n// 设计说明：这里不直接替玩家做决定，只负责把现场压力落地，并开放两个主动处理入口给玩家选择。\n// 写回目标：刷新最后一次压力等级；解锁“当场还钱”与“先稳住”两个主动入口；写入对方到站消息。\nif (${player.debt_huadu_active} && ${player.debt_huadu_linh_appointment} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0) {\n  ${player.debt_huadu_last_pressure} = ${player.debt_huadu_tone}\n  doing_unlock(\"do_debt_pay_full\")\n  doing_unlock(\"do_debt_cannot_pay\")\n}\n\n// 运行时手机记录：对方到站后发消息，增强‘旧生活追到新主场’的现实感。\ncontact_send_from(\"normal:debt_collector\", \"我到临河汽车站了。别让我在站口等你太久。\")",
               "end_script": "",
               "next": [],
               "bgm": ""
@@ -1442,7 +1448,7 @@
                 ]
               },
               "init_script": "",
-              "end_script": "// 规则目的：资金足够时实现主要爽点——玩家当场结清十万旧债。\n// 读取变量：${player.money} 是当前现金；${player.debt_huadu_amount} 是剩余债务金额；${player.debt_huadu_active} 与 ${player.debt_huadu_cleared} 用于校验状态。\n// 计算规则：只有当现金大于等于剩余债务金额，才允许直接扣款；这里按当前剩余额一次性结清，避免写死固定值后与未来部分还款扩展冲突。\n// 写回目标：扣除玩家现金、把剩余债务写为 0、标记已结清并关闭激活状态，同时清空本次临河预约状态。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} >= ${player.debt_huadu_amount}) {\n  ${player.money} -= ${player.debt_huadu_amount}\n  ${player.debt_huadu_amount} = 0\n  ${player.debt_huadu_cleared} = true\n  ${player.debt_huadu_active} = false\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 0\n}\n\n// 规则目的：旧债结清后，现实压力解除，玩家的安保焦虑略微回升；不额外改写其他属性，避免奖励过度。\n${player.attr_anbao} = Math.min(100, ${player.attr_anbao} + 3)\n\n// 运行时消息：把付款确认写入手机记录，形成完整闭环。\nphone_send_to_contact(\"normal:debt_collector\", \"行，十万是吧？现在就转。\")\nphone_send_from_contact(\"normal:debt_collector\", \"到账了。你这次倒是痛快。以后别再让我跨城找你。\")",
+              "end_script": "// 规则目的：资金足够时实现主要爽点——玩家当场结清十万旧债。\n// 读取变量：${player.money} 是当前现金；${player.debt_huadu_amount} 是剩余债务金额；${player.debt_huadu_active} 与 ${player.debt_huadu_cleared} 用于校验状态。\n// 计算规则：只有当现金大于等于剩余债务金额，才允许直接扣款；这里按当前剩余额一次性结清，避免写死固定值后与未来部分还款扩展冲突。\n// 写回目标：扣除玩家现金、把剩余债务写为 0、标记已结清并关闭激活状态，同时清空本次临河预约状态。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} >= ${player.debt_huadu_amount}) {\n  ${player.money} -= ${player.debt_huadu_amount}\n  ${player.debt_huadu_amount} = 0\n  ${player.debt_huadu_cleared} = true\n  ${player.debt_huadu_active} = false\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 0\n}\n\n// 规则目的：旧债结清后，现实压力解除，玩家的安保焦虑略微回升；不额外改写其他属性，避免奖励过度。\n${player.attr_anbao} = Math.min(100, ${player.attr_anbao} + 3)\n\n// 运行时消息：把付款确认写入手机记录，形成完整闭环。\ncontact_send_to(\"normal:debt_collector\", \"行，十万是吧？现在就转。\")\ncontact_send_from(\"normal:debt_collector\", \"到账了。你这次倒是痛快。以后别再让我跨城找你。\")",
               "next": [],
               "bgm": ""
             },
@@ -1479,7 +1485,7 @@
                 ]
               },
               "init_script": "",
-              "end_script": "// 规则目的：资金不足时保留开放性，不强行让玩家还清。\n// 读取变量：${player.money}、${player.debt_huadu_amount}、${player.debt_huadu_active}。\n// 计算规则：如果当前现金不足以覆盖剩余债务，则债务继续保留，不扣款；只把状态升级为‘已到站催收但未结清’，便于后续导演继续接追债线。\n// 写回目标：维持债务激活，取消本次预约，提升压力记录，稍微降低安保感，形成后续继续演进的钩子。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} < ${player.debt_huadu_amount}) {\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 4\n}\n\n// 规则目的：本次没能结清，玩家会感到现实压力进一步逼近，因此轻微下调安保感。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 3)\n\n// 运行时消息：写入“暂缓但未解决”的手机记录，留给后续导演继续发酵。\nphone_send_to_contact(\"normal:debt_collector\", \"我今天手头不够，先别在车站闹，再给我一点时间。\")\nphone_send_from_contact(\"normal:debt_collector\", \"我给你时间，不是给你消失。下次再让我白跑，话就没今天这么好听了。\")",
+              "end_script": "// 规则目的：资金不足时保留开放性，不强行让玩家还清。\n// 读取变量：${player.money}、${player.debt_huadu_amount}、${player.debt_huadu_active}。\n// 计算规则：如果当前现金不足以覆盖剩余债务，则债务继续保留，不扣款；只把状态升级为‘已到站催收但未结清’，便于后续导演继续接追债线。\n// 写回目标：维持债务激活，取消本次预约，提升压力记录，稍微降低安保感，形成后续继续演进的钩子。\nif (${player.debt_huadu_active} && !${player.debt_huadu_cleared} && ${player.debt_huadu_amount} > 0 && ${player.money} < ${player.debt_huadu_amount}) {\n  ${player.debt_huadu_linh_appointment} = false\n  ${player.debt_huadu_last_pressure} = 4\n}\n\n// 规则目的：本次没能结清，玩家会感到现实压力进一步逼近，因此轻微下调安保感。\n${player.attr_anbao} = Math.max(0, ${player.attr_anbao} - 3)\n\n// 运行时消息：写入“暂缓但未解决”的手机记录，留给后续导演继续发酵。\ncontact_send_to(\"normal:debt_collector\", \"我今天手头不够，先别在车站闹，再给我一点时间。\")\ncontact_send_from(\"normal:debt_collector\", \"我给你时间，不是给你消失。下次再让我白跑，话就没今天这么好听了。\")",
               "next": [],
               "bgm": ""
             }
@@ -1542,7 +1548,8 @@
               "value": 0
             }
           ],
-          "phone": {
+          "contact": {
+            "channels": [],
             "personality_library": [],
             "talk_library": [],
             "action_library": [
@@ -1647,6 +1654,7 @@
             "contact_profiles": [
               {
                 "role_key": "normal:debt_collector",
+                "channel_id": "",
                 "enabled": true,
                 "auto_add": true,
                 "initial_favor": 15,
@@ -1749,19 +1757,19 @@
           "notes": [
             "建议把 debt_huadu_linh_appointment 统一更名为 debt_huadu_linhe_appointment，避免后续资产继续扩散错拼。",
             "若最终坚持更强的‘原著爽点’，可以把 do_debt_pay_full 作为主要可见入口，把 do_debt_cannot_pay 设为更弱可见条件或留给资金不足时显示。",
-            "若引擎侧对联系人消息要求先有联系人，建议在 huadu_debt_message_ping 的 init_script 开头补 phone_add_contact(\"normal:debt_collector\")；若已有 auto_add 机制可忽略。",
+            "若引擎侧对联系人消息要求先有联系人，建议在 huadu_debt_message_ping 的 init_script 开头补 contact_add(\"normal:debt_collector\")；若已有 auto_add 机制可忽略。",
             "若制作组希望该内容更像真正 chain，可增加一个承上启下的入口节点或将手机回复节点改为 pool/invoke 组合。"
           ],
           "warnings": [
-            "缺少 phone.contact_profiles：事件脚本和 phone.action_library 都在使用 normal:debt_collector，但草稿未给出联系人特配，需至少补一个 role_key=normal:debt_collector 的 contact_profiles 以保证联系人可被加入、可承载消息与动作。",
+            "缺少 contact.contact_profiles：事件脚本和 contact.action_library 都在使用 normal:debt_collector，但草稿未给出联系人特配，需至少补一个 role_key=normal:debt_collector 的 contact_profiles 以保证联系人可被加入、可承载消息与动作。",
             "缺少 doing 资产：debt_collector_arrives_linh_1d 的 init_script 调用了 doing_unlock(\"do_debt_pay_full\") 与 doing_unlock(\"do_debt_cannot_pay\")，但草稿未提供 doing.menus / doing.doings，对应主动入口不存在。",
             "chain 事件 next 基本全为空。若这些节点定位为‘链式剧情线’，建议至少让入口事件有 next 指向一个用于玩家处理手机回复/现场处理的后续节点；否则更适合改为 pool + invoke。当前不报硬错误，但链式语义偏弱。",
-            "phone.action_library 的 scope.personality_ids 使用 dominant、pragmatic；其中 pragmatic 已存在，但 dominant 是否作为该联系人实际人格生效，还需 contact_profiles 或角色设定配合。仅从库存在性看没问题。",
-            "剧情脚本直接 phone_send_from_contact/phone_send_to_contact 给 normal:debt_collector，但未见显式 phone_add_contact 或 contact_profiles.auto_add 方案。若引擎要求联系人先存在，需补联系人加入逻辑。",
+            "contact.action_library 的 scope.personality_ids 使用 dominant、pragmatic；其中 pragmatic 已存在，但 dominant 是否作为该联系人实际人格生效，还需 contact_profiles 或角色设定配合。仅从库存在性看没问题。",
+            "剧情脚本直接 contact_send_from/contact_send_to 给 normal:debt_collector，但未见显式 contact_add 或 contact_profiles.auto_add 方案。若引擎要求联系人先存在，需补联系人加入逻辑。",
             "用户原始描述偏向‘次日爽快还钱’单线结果，而草稿新增了 debt_collector_cannot_pay 分支。该分支有利于保留玩家自由度，但建议在 notes 里说明：这是为了后台编辑期保留选择空间，不代表玩家已注定还不上。",
             "变量命名 debt_huadu_linh_appointment 中 linh 疑似 county.name_full=临河 的拼音缩写，但写法不够标准，建议统一为 debt_huadu_linhe_appointment，避免后续资产继续沿用错拼。",
             "若保留 debt_collector_pay_full / debt_collector_cannot_pay 为事件节点，则最好在 doing.doings 中直接 invoke 这两个 chain 事件，形成完整的‘到站后玩家主动选择’闭环。",
-            "当前未看到 phone.action_library 的完整截断后半段与 reply_library，需人工确认 JSON 截断处没有漏字段、缺逗号或未闭合对象。",
+            "当前未看到 contact.action_library 的完整截断后半段与 reply_library，需人工确认 JSON 截断处没有漏字段、缺逗号或未闭合对象。",
             "联系人、doing 入口是本草稿当前最主要缺口；若不补齐，剧情承诺的手机交互和主动赴约都无法完整落地。"
           ]
         }

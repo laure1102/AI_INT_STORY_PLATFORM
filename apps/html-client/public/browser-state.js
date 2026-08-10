@@ -25,16 +25,16 @@ export const ui = {
   shopGiftSearchQueries: {},
   bagGiftOpenItemId: null,
   bagGiftDrafts: {},
-  phoneGiftDrafts: {},
+  contactGiftDrafts: {},
   menuPanelScrollTops: {},
-  phoneThreadScrollTops: {},
-  phoneOptionsScrollTops: {},
-  phoneThreadLastMessageKeys: {},
-  phoneThreadAutoScrollRoleKeys: {},
+  contactThreadScrollTops: {},
+  contactOptionsScrollTops: {},
+  contactThreadLastMessageKeys: {},
+  contactThreadAutoScrollRoleKeys: {},
   createOpen: false,
   prompts: [],
-  phoneOpen: false,
-  phoneMode: "talk",
+  contactOpen: false,
+  contactMode: "talk",
   selectedRoleKey: null,
   thread: null,
   tickInFlight: false,
@@ -61,9 +61,9 @@ export function getShopView() {
   return ui.data?.view?.shop ?? { currencyValueKey: "player.money", categories: [], products: [] }
 }
 
-/** @returns 尚未结束的结构化手机会话视图；没有或已结束时为 null。 */
-export function getActivePhoneConversation() {
-  const conversation = ui.data?.view?.phoneConversation ?? null
+/** @returns 尚未结束的结构化联系人剧情视图；没有或已结束时为 null。 */
+export function getActiveContactConversation() {
+  const conversation = ui.data?.view?.contactConversation ?? null
   return conversation && !conversation.finished ? conversation : null
 }
 

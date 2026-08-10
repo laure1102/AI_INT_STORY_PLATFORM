@@ -52,13 +52,13 @@ import type {
 import type { RuntimeStoryDoingDefinition, RuntimeStoryDoingFile, RuntimeStoryDoingMenu, RuntimeStorySessionSnapshot, RuntimeStoryShopCategory, RuntimeStoryShopFile, RuntimeStoryShopProduct } from "./contracts-core"
 import type { RuntimeStoryBundle } from "./contracts-view"
 import { DEFAULT_MAX_CALC_NESTING_DEPTH } from "./contracts-view"
-import { sendPhoneMessageToContact } from "./phone-actions"
-import { getBundleItemNameMap } from "./phone-config"
-import { assertRuntimePhoneRoleKey, ensurePhoneContact, findRoleLabel } from "./phone-threads"
+import { sendContactMessageToContact } from "./contact-actions"
+import { getBundleItemNameMap } from "./contact-config"
+import { assertRuntimeContactRoleKey, ensureContact, findRoleLabel } from "./contact-threads"
 import { getCurrentGameMinute } from "./schedule-clock"
 import { buildRuntimeContextValues, createRuntimeBagScriptFunctions } from "./script-context"
 import { appendHistory } from "./script-execution"
-import { clampPhoneFavor, createCombinedValsFile, createDefaultDoingConfig, createDefaultShopConfig, normalizeDoingId, normalizeDoingState, normalizeItemId, normalizePhoneRoleKey, normalizeShopProductId, normalizeShopState, normalizeText, readSnapshotValue, writeSnapshotValue } from "./state-values"
+import { clampContactFavor, createCombinedValsFile, createDefaultDoingConfig, createDefaultShopConfig, normalizeDoingId, normalizeDoingState, normalizeItemId, normalizeContactRoleKey, normalizeShopProductId, normalizeShopState, normalizeText, readSnapshotValue, writeSnapshotValue } from "./state-values"
 
 /** @param bundle 编译故事。 @returns 去空白后的全部合法物品 id 集合，用于快速校验脚本输入。 */
 export function getBundleItemIds(bundle: RuntimeStoryBundle) {
@@ -215,7 +215,7 @@ export function ensureShopPurchaseRecord(snapshot: RuntimeStorySessionSnapshot, 
 export function findShopGiftRecord(snapshot: RuntimeStorySessionSnapshot, productId: string, roleKey: string) {
   normalizeShopState(snapshot)
   const normalizedProductId = normalizeShopProductId(productId)
-  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  const normalizedRoleKey = normalizeContactRoleKey(roleKey)
   if (!normalizedProductId || !normalizedRoleKey) {
     return null
   }
@@ -229,7 +229,7 @@ export function findShopGiftRecord(snapshot: RuntimeStorySessionSnapshot, produc
 export function ensureShopGiftRecord(snapshot: RuntimeStorySessionSnapshot, productId: string, roleKey: string) {
   normalizeShopState(snapshot)
   const normalizedProductId = normalizeShopProductId(productId)
-  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  const normalizedRoleKey = normalizeContactRoleKey(roleKey)
   let record = snapshot.shop.gifts.find(
     (item) => item.product_id === normalizedProductId && item.role_key === normalizedRoleKey
   )
@@ -518,7 +518,7 @@ export function giftShopProduct(
   roleKey: string
 ) {
   const normalizedProductId = assertRuntimeShopProductId(bundle, productId)
-  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
   const product = findBundleShopProduct(bundle, normalizedProductId)
   if (!product) {
     throw new Error(`商城商品 "${normalizedProductId}" 不存在。`)
@@ -541,8 +541,8 @@ export function giftShopProduct(
   chargeShopProduct(bundle, snapshot, product)
   recordShopPurchase(snapshot, product)
 
-  const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-  contact.favor = clampPhoneFavor(contact.favor + product.gift_favor_delta, contact.favor)
+  const contact = ensureContact(bundle, snapshot, normalizedRoleKey)
+  contact.favor = clampContactFavor(contact.favor + product.gift_favor_delta, contact.favor)
 
   const record = ensureShopGiftRecord(snapshot, product.id, normalizedRoleKey)
   const currentGameMinute = getCurrentGameMinute(snapshot)
@@ -554,7 +554,7 @@ export function giftShopProduct(
 
   const itemName = getBundleItemNameMap(bundle).get(product.item_id) ?? product.item_id
   const roleLabel = findRoleLabel(bundle, normalizedRoleKey)
-  sendPhoneMessageToContact(bundle, snapshot, normalizedRoleKey, `我给你准备了${itemName}。`)
+  sendContactMessageToContact(bundle, snapshot, normalizedRoleKey, `我给你准备了${itemName}。`)
   notifications.push(`已购买并送给 ${roleLabel}：${itemName} x${product.quantity}，好感 ${product.gift_favor_delta >= 0 ? "+" : ""}${product.gift_favor_delta}`)
   appendHistory(snapshot, {
     type: "system",

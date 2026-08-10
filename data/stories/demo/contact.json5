@@ -1,4 +1,13 @@
 {
+  default_channel_id: 'phone',
+  channels: [
+    {
+      id: 'phone',
+      name: '手机',
+      preset: 'phone',
+      labels: {},
+    },
+  ],
   relationship_tracks: [
     {
       descr: '可发展恋爱关系的联系人轨道。低于 10 视为彻底冷掉，不再开放主动联系。',
@@ -716,7 +725,7 @@
           unit: 'hours',
           value: 5,
         },
-        event_id: 'phone_chulian_evening_walk',
+        event_id: 'contact_chulian_evening_walk',
         target_type: 'pool',
       },
       label: '约出去坐坐',
@@ -741,7 +750,7 @@
           unit: 'days',
           value: 1,
         },
-        event_id: 'phone_xianzhang_private_dinner',
+        event_id: 'contact_xianzhang_private_dinner',
         target_type: 'pool',
       },
       label: '私下请吃饭',
@@ -766,7 +775,7 @@
           unit: 'hours',
           value: 3,
         },
-        event_id: 'phone_zhuli_night_snack',
+        event_id: 'contact_zhuli_night_snack',
         target_type: 'pool',
       },
       label: '约夜宵复盘',
@@ -791,7 +800,7 @@
           unit: 'hours',
           value: 12,
         },
-        event_id: 'phone_xianzhang_office_visit',
+        event_id: 'contact_xianzhang_office_visit',
         target_type: 'pool',
       },
       label: '去县里拜访',
@@ -816,7 +825,7 @@
           unit: 'hours',
           value: 1,
         },
-        event_id: 'phone_suanming_paid_consult',
+        event_id: 'contact_suanming_paid_consult',
         target_type: 'pool',
       },
       label: '付费问一卦',
@@ -841,7 +850,7 @@
           unit: 'hours',
           value: 2,
         },
-        event_id: 'phone_yule_dama_book_room',
+        event_id: 'contact_yule_dama_book_room',
         target_type: 'pool',
       },
       label: '让她留个包厢',
@@ -1115,7 +1124,7 @@
         {
           id: "daytime_checkin",
           enabled: true,
-          trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && phone_favor("important:zhuli") >= 20',
+          trigger_expr: '${system.now_day} >= 1 && ${system.now_hour} >= 9 && ${system.now_hour} <= 18 && contact_favor("important:zhuli") >= 20',
           cooldown_hours: 24,
           favor_delta: 0,
           messages: [
@@ -1141,7 +1150,7 @@
         {
           id: "policy_ping",
           enabled: true,
-          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 10 && ${system.now_hour} <= 20 && phone_favor("important:xianzhang") >= 20',
+          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 10 && ${system.now_hour} <= 20 && contact_favor("important:xianzhang") >= 20',
           cooldown_hours: 48,
           favor_delta: 0,
           messages: [
@@ -1168,7 +1177,7 @@
         {
           id: "night_thought",
           enabled: true,
-          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 19 && ${system.now_hour} <= 23 && phone_favor("important:chulian") >= 35',
+          trigger_expr: '${system.now_day} >= 2 && ${system.now_hour} >= 19 && ${system.now_hour} <= 23 && contact_favor("important:chulian") >= 35',
           cooldown_hours: 72,
           favor_delta: 0,
           messages: [
@@ -1194,7 +1203,7 @@
         {
           id: "fortune_hint",
           enabled: true,
-          trigger_expr: '${system.now_hour} >= 8 && ${system.now_hour} <= 20 && phone_favor("normal:start_suanming") >= 15',
+          trigger_expr: '${system.now_hour} >= 8 && ${system.now_hour} <= 20 && contact_favor("normal:start_suanming") >= 15',
           cooldown_hours: 24,
           favor_delta: 0,
           messages: [
@@ -1220,7 +1229,7 @@
         {
           id: "night_offer",
           enabled: true,
-          trigger_expr: '${system.now_hour} >= 20 && ${system.now_hour} <= 23 && phone_favor("normal:yule_dama") >= 15',
+          trigger_expr: '${system.now_hour} >= 20 && ${system.now_hour} <= 23 && contact_favor("normal:yule_dama") >= 15',
           cooldown_hours: 24,
           favor_delta: 0,
           messages: [

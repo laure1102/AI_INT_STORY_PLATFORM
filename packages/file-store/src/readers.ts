@@ -23,8 +23,8 @@ import {
   storyInitialBagsSchema,
   storyItemsSchema,
   storyLoopEventSchema,
-  storyPhoneConversationsSchema,
-  storyPhoneSchema,
+  storyContactConversationsSchema,
+  storyContactSchema,
   storyReferSchema,
   storyScheduleEventsSchema,
   storyShopSchema,
@@ -55,8 +55,8 @@ import {
   type StoryOnceEventFile,
   type StoryOnceEventsFile,
   type StoryPoolEventsFile,
-  type StoryPhoneFile,
-  type StoryPhoneConversationsFile,
+  type StoryContactFile,
+  type StoryContactConversationsFile,
   type StoryPlayerOverrideValsFile,
   type StoryReferFile,
   type StoryImportantRolesDataFile,
@@ -92,8 +92,8 @@ import {
 import {
   createStoryStatePaths,
   createDefaultStoryShop,
-  createDefaultStoryPhone,
-  createDefaultStoryPhoneConversations,
+  createDefaultStoryContact,
+  createDefaultStoryContactConversations,
   createDefaultStoryRefer,
   createDefaultStoryDoing,
   createDefaultStoryScenes,
@@ -397,37 +397,59 @@ export async function readStoryInitialBags(
 }
 
 /**
- * 读取手机联系人、应用和媒体库配置。
+ * 读取联系人、应用和媒体库配置。
  * @param dataDir 数据根目录。 @param storyId 故事 id。
- * @returns 校验后的手机配置；缺失时返回默认空手机。
+ * @returns 校验后的联系人配置；缺失时返回默认空配置。
  */
-export async function readStoryPhone(
+export async function readStoryContact(
   dataDir: string,
   storyId: string
-): Promise<StoryPhoneFile> {
+): Promise<StoryContactFile> {
   const paths = createStoryPaths(dataDir, storyId)
-  const phone = await readOptionalJson5File<StoryPhoneFile>(
-    paths.phoneFile,
-    createDefaultStoryPhone()
+  await assertNoLegacyPhoneFiles(paths)
+  const contact = await readOptionalJson5File<StoryContactFile>(
+    paths.contactFile,
+    createDefaultStoryContact()
   )
-  return storyPhoneSchema.parse(phone)
+  return storyContactSchema.parse(contact)
 }
 
 /**
- * 读取手机私聊、群聊及历史消息。
+ * 读取联系人配置及连续联系人剧情。
  * @param dataDir 数据根目录。 @param storyId 故事 id。
  * @returns 校验后的会话文件；缺失时返回默认空会话集合。
  */
-export async function readStoryPhoneConversations(
+export async function readStoryContactConversations(
   dataDir: string,
   storyId: string
-): Promise<StoryPhoneConversationsFile> {
+): Promise<StoryContactConversationsFile> {
   const paths = createStoryPaths(dataDir, storyId)
-  const phoneConversations = await readOptionalJson5File<StoryPhoneConversationsFile>(
-    paths.phoneConversationsFile,
-    createDefaultStoryPhoneConversations()
+  await assertNoLegacyPhoneFiles(paths)
+  const contactConversations = await readOptionalJson5File<StoryContactConversationsFile>(
+    paths.contactConversationsFile,
+    createDefaultStoryContactConversations()
   )
-  return storyPhoneConversationsSchema.parse(phoneConversations)
+  return storyContactConversationsSchema.parse(contactConversations)
+}
+
+/** 检测并明确拒绝已移除的旧联系人文件名。 */
+async function assertNoLegacyPhoneFiles(paths: ReturnType<typeof createStoryPaths>) {
+  const [hasPhone, hasPhoneConversations] = await Promise.all([
+    fileExists(paths.legacyPhoneFile),
+    fileExists(paths.legacyPhoneConversationsFile)
+  ])
+  const legacyFiles = [
+    hasPhone ? "phone.json5" : "",
+    hasPhoneConversations ? "phone_conversations.json5" : ""
+  ].filter(Boolean)
+
+  if (legacyFiles.length > 0) {
+    throw new FileStoreError(
+      `Legacy phone contact files are not supported: ${legacyFiles.join(", ")}. Rename and migrate them to contact.json5/contact_conversations.json5 before loading the story.`,
+      400,
+      "contact.legacy-phone-files"
+    )
+  }
 }
 
 /**

@@ -4,14 +4,14 @@
 import type { RuntimeBagEntry, RuntimeStorySessionSnapshot, RuntimeStoryShopProduct } from "./contracts-core"
 import type { RuntimeStoryBundle } from "./contracts-view"
 import { ensureShopGiftRecord, getBundleShopConfig, getShopGiftCooldownLeftHours } from "./doing-shop"
-import { sendPhoneMessageToContact } from "./phone-actions"
-import { buildRuntimePhoneContactMeta, getBundleItemNameMap } from "./phone-config"
-import { isPhoneConversationNormalChatLocked } from "./phone-conversations"
-import { assertRuntimePhoneRoleKey, findRoleLabel, getPhoneContact } from "./phone-threads"
+import { sendContactMessageToContact } from "./contact-actions"
+import { buildRuntimeContactMeta, getBundleItemNameMap } from "./contact-config"
+import { isContactConversationNormalChatLocked } from "./contact-conversations"
+import { assertRuntimeContactRoleKey, findRoleLabel, getContact } from "./contact-threads"
 import { getCurrentGameMinute } from "./schedule-clock"
 import { createRuntimeBagScriptFunctions, findBagEntry } from "./script-context"
 import { appendHistory } from "./script-execution"
-import { clampPhoneFavor, normalizeItemId } from "./state-values"
+import { clampContactFavor, normalizeItemId } from "./state-values"
 
 export interface RuntimeBagGiftProductResolution {
   product: RuntimeStoryShopProduct | null
@@ -86,19 +86,19 @@ export function giftBagItem(
     throw new Error("赠礼数量必须是正整数。")
   }
 
-  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-  const contact = getPhoneContact(snapshot, normalizedRoleKey)
+  const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+  const contact = getContact(snapshot, normalizedRoleKey)
   if (!contact) {
-    throw new Error("只能赠送给当前好友列表中的联系人。")
+    throw new Error("只能赠送给当前联系人列表中的角色。")
   }
 
-  const contactMeta = buildRuntimePhoneContactMeta(bundle, normalizedRoleKey, contact.favor)
+  const contactMeta = buildRuntimeContactMeta(bundle, normalizedRoleKey, contact.favor)
   if (!contactMeta.canContact) {
-    throw new Error(contactMeta.lockMessage ?? "当前无法联系该好友。")
+    throw new Error(contactMeta.lockMessage ?? "当前无法联系该联系人。")
   }
 
-  if (isPhoneConversationNormalChatLocked(bundle, snapshot, normalizedRoleKey)) {
-    throw new Error("该联系人正在进行剧情手机对话，暂时不能赠礼。")
+  if (isContactConversationNormalChatLocked(bundle, snapshot, normalizedRoleKey)) {
+    throw new Error("该联系人正在进行联系人剧情，暂时不能赠礼。")
   }
 
   const resolution = resolveBagGiftProduct(bundle, normalizedItemId)
@@ -130,7 +130,7 @@ export function giftBagItem(
   }
 
   const previousFavor = contact.favor
-  contact.favor = clampPhoneFavor(
+  contact.favor = clampContactFavor(
     previousFavor + resolution.product.gift_favor_delta * quantity,
     previousFavor
   )
@@ -145,7 +145,7 @@ export function giftBagItem(
 
   const itemName = getBundleItemNameMap(bundle).get(normalizedItemId) ?? normalizedItemId
   const roleLabel = findRoleLabel(bundle, normalizedRoleKey)
-  sendPhoneMessageToContact(bundle, snapshot, normalizedRoleKey, `我送给你${itemName} x${quantity}。`)
+  sendContactMessageToContact(bundle, snapshot, normalizedRoleKey, `我送给你${itemName} x${quantity}。`)
   notifications.push(`已送给 ${roleLabel}：${itemName} x${quantity}，好感 ${appliedFavorDelta >= 0 ? "+" : ""}${appliedFavorDelta}`)
   appendHistory(snapshot, {
     type: "system",

@@ -1,20 +1,21 @@
 /**
- * 手机配置编辑器的共享响应式状态。
+ * 联系人配置编辑器的共享响应式状态。
  *
- * 输入来自父弹窗的故事、角色和手机配置；输出给两个展示子组件。
+ * 输入来自父弹窗的故事、角色和联系人配置；输出给展示子组件。
  * 它只维护尚未保存的草稿，不直接发送 HTTP 请求。
  */
 import { computed, reactive, shallowRef, watch } from "vue"
 import type {
   StoryDocument,
-  StoryPhoneContactTrackId,
-  StoryPhoneFile,
+  StoryContactTrackId,
+  StoryContactFile,
   StoryRolesFile,
   StoryValsFile
 } from "@story-mgr/core"
-import { useStoryPhoneDraft } from "./useStoryPhoneDraft"
+import { useStoryContactDraft } from "./useStoryContactDraft"
 
-type PhoneTab =
+type ContactTab =
+  | "channels"
   | "tracks"
   | "personalities"
   | "talks"
@@ -31,10 +32,10 @@ interface InvokeEventOption {
   targetType: InvokeTargetType
 }
 
-export interface StoryPhoneEditorProps {
+export interface StoryContactEditorProps {
   itemIds: string[]
   invokeEventOptions: InvokeEventOption[]
-  phone: StoryPhoneFile
+  contact: StoryContactFile
   roles: StoryRolesFile
   saveSuccessMessage?: string | null
   saving: boolean
@@ -42,24 +43,25 @@ export interface StoryPhoneEditorProps {
   vals: StoryValsFile
 }
 
-export interface StoryPhoneEditorEmits {
+export interface StoryContactEditorEmits {
   close: []
-  save: [phone: StoryPhoneFile]
+  save: [contact: StoryContactFile]
 }
 
-export type StoryPhoneEditorEmit = <EventName extends keyof StoryPhoneEditorEmits>(
+export type StoryContactEditorEmit = <EventName extends keyof StoryContactEditorEmits>(
   event: EventName,
-  ...args: StoryPhoneEditorEmits[EventName]
+  ...args: StoryContactEditorEmits[EventName]
 ) => void
 
-/** 组合 `StoryPhoneEditor` 的响应式状态、派生值和操作方法。 @param props 调用方传入的 `props`。 @param emit 调用方传入的 `emit`。 @returns 响应式状态、派生值和操作函数组成的 API 对象。 */
-export function useStoryPhoneEditor(
-  props: Readonly<StoryPhoneEditorProps>,
-  emit: StoryPhoneEditorEmit
+/** 组合 `StoryContactEditor` 的响应式状态、派生值和操作方法。 @param props 调用方传入的 `props`。 @param emit 调用方传入的 `emit`。 @returns 响应式状态、派生值和操作函数组成的 API 对象。 */
+export function useStoryContactEditor(
+  props: Readonly<StoryContactEditorProps>,
+  emit: StoryContactEditorEmit
 ) {
-  const activeTab = shallowRef<PhoneTab>("tracks")
-const sectionSearch = reactive<Record<PhoneTab, string>>({
+  const activeTab = shallowRef<ContactTab>("channels")
+const sectionSearch = reactive<Record<ContactTab, string>>({
   actions: "",
+  channels: "",
   contacts: "",
   fallbackReplies: "",
   personalities: "",
@@ -69,7 +71,8 @@ const sectionSearch = reactive<Record<PhoneTab, string>>({
   tracks: ""
 })
 
-const tabOptions: Array<{ key: PhoneTab; label: string }> = [
+const tabOptions: Array<{ key: ContactTab; label: string }> = [
+  { key: "channels", label: "联系媒介" },
   { key: "tracks", label: "关系规则" },
   { key: "personalities", label: "性格库" },
   { key: "talks", label: "闲聊短句" },
@@ -80,7 +83,7 @@ const tabOptions: Array<{ key: PhoneTab; label: string }> = [
   { key: "fallbackReplies", label: "兜底回复" }
 ]
 
-const contactTrackOptions: Array<{ value: StoryPhoneContactTrackId; label: string }> = [
+const contactTrackOptions: Array<{ value: StoryContactTrackId; label: string }> = [
   { value: "romance", label: "恋爱" },
   { value: "official", label: "政务" },
   { value: "social", label: "社交" }
@@ -88,6 +91,7 @@ const contactTrackOptions: Array<{ value: StoryPhoneContactTrackId; label: strin
 
 const {
   addAction,
+  addChannel,
   addContactProfile,
   addContactReply,
   addFallbackReply,
@@ -98,21 +102,23 @@ const {
   addTalk,
   addTrack,
   addTrackStage,
-  buildPhoneFile,
+  buildContactFile,
   draft,
   removeAction,
+  removeChannel,
   removeContactProfile,
   removeContactReply,
   removeFallbackReply,
   removePersonality,
   removeProactiveMessage,
   removeQuickMessage,
+  renameChannel,
   removeReply,
   removeTalk,
   removeTrack,
   removeTrackStage,
-  syncFromPhone
-} = useStoryPhoneDraft(props.phone)
+  syncFromContact
+} = useStoryContactDraft(props.contact)
 
 const roleKeyOptions = computed(() => [
   ...props.roles.important.roles.map((role) => ({
@@ -124,6 +130,14 @@ const roleKeyOptions = computed(() => [
     value: `normal:${role.id}`
   }))
 ])
+
+const channelOptions = computed(() => draft.channels
+  .map((channel) => ({
+    label: `${channel.name.trim() || channel.id.trim() || "未命名媒介"} · ${channel.id.trim()}`,
+    value: channel.id.trim()
+  }))
+  .filter((option) => option.value)
+)
 
 const roleLabelByKey = computed(() =>
   Object.fromEntries(roleKeyOptions.value.map((option) => [option.value, option.label]))
@@ -332,13 +346,13 @@ function getInvokeOptions(targetType: InvokeTargetType) {
 
 /** 校验当前草稿并提交给父组件或 API。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
 function submitDraft() {
-  emit("save", buildPhoneFile())
+  emit("save", buildContactFile())
 }
 
 watch(
-  () => props.phone,
-  (phone) => {
-    syncFromPhone(phone)
+  () => props.contact,
+  (contact) => {
+    syncFromContact(contact)
   }
 )
 
@@ -348,6 +362,7 @@ watch(
     tabOptions,
     contactTrackOptions,
     addAction,
+    addChannel,
     addContactProfile,
     addContactReply,
     addFallbackReply,
@@ -360,17 +375,20 @@ watch(
     addTrackStage,
     draft,
     removeAction,
+    removeChannel,
     removeContactProfile,
     removeContactReply,
     removeFallbackReply,
     removePersonality,
     removeProactiveMessage,
     removeQuickMessage,
+    renameChannel,
     removeReply,
     removeTalk,
     removeTrack,
     removeTrackStage,
     roleKeyOptions,
+    channelOptions,
     personalityIdOptions,
     quickMessageIdOptions,
     canAddTrack,
@@ -392,4 +410,4 @@ watch(
 }
 
 /** 两个展示子组件共用的、已自动解包的编辑器控制器。 */
-export type StoryPhoneEditorController = ReturnType<typeof useStoryPhoneEditor>
+export type StoryContactEditorController = ReturnType<typeof useStoryContactEditor>

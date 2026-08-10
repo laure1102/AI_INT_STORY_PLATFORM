@@ -111,11 +111,11 @@ const STORY_SCRIPT_BUILTIN_AUTOCOMPLETE_ITEMS: StoryScriptAutocompleteItem[] = [
   { name: "shop_purchase_cooldown_left", description: "读取指定商品购买剩余冷却小时数。" },
   { name: "shop_gift", description: "购买指定商城商品并直接送给联系人，不进入背包，同时增加好感度。" },
   { name: "shop_gift_cooldown_left", description: "读取指定商品送给指定联系人的剩余冷却小时数。" },
-  { name: "phone_start_conversation", description: "启动 phone_conversations.json5 中预设的连续剧情手机对话。" }
+  { name: "contact_start_conversation", description: "启动 contact_conversations.json5 中预设的连续联系人剧情。" }
 ]
 
 const STORY_SCRIPT_HIGHLIGHT_PATTERN =
-  /\b(let|if|else|switch|case|default|for|while|break|continue|return|invoke_once|true|false|null)\b|\b(?:Math|Number|String|Boolean|parseInt|parseFloat|isNaN|isFinite|trim|includes|startsWith|endsWith|slice|toLowerCase|toUpperCase|toFixed|formatWan|bag_count|bag_has|bag_add|bag_remove|doing_has|doing_used_count|doing_cooldown_left|doing_unlock|doing_lock|doing_set_cooldown|shop_can_buy|shop_buy|shop_purchase_cooldown_left|shop_gift|shop_gift_cooldown_left|phone_start_conversation)\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|random|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
+  /\b(let|if|else|switch|case|default|for|while|break|continue|return|invoke_once|true|false|null)\b|\b(?:Math|Number|String|Boolean|parseInt|parseFloat|isNaN|isFinite|trim|includes|startsWith|endsWith|slice|toLowerCase|toUpperCase|toFixed|formatWan|bag_count|bag_has|bag_add|bag_remove|doing_has|doing_used_count|doing_cooldown_left|doing_unlock|doing_lock|doing_set_cooldown|shop_can_buy|shop_buy|shop_purchase_cooldown_left|shop_gift|shop_gift_cooldown_left|contact_start_conversation)\b|\b(?:abs|acos|asin|atan2|atan|ceil|clamp|cos|exp|floor|log10|log2|log|max|min|pow|random|round|sign|sin|sqrt|tan|trunc)\b(?=\s*\()/g
 
 export const STORY_SCRIPT_TEMPLATE_PLACEHOLDER =
   "例如：今天是第 ${system.now_day} 天，账上还有 ${player.money}。"
@@ -226,13 +226,13 @@ export function buildStoryReferAutocompleteItems(
   })
 }
 
-/** 根据当前输入构建 `StoryPhoneConversationAutocompleteItems` 结果。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
-export function buildStoryPhoneConversationAutocompleteItems(
-  story: Pick<StoryDocument, "phoneConversations"> | null | undefined
+/** 根据当前输入构建 `StoryContactConversationAutocompleteItems` 结果。 @param story 调用方传入的 `story`。 @returns 计算、查找或构建后的结果。 */
+export function buildStoryContactConversationAutocompleteItems(
+  story: Pick<StoryDocument, "contactConversations"> | null | undefined
 ) {
   const seen = new Set<string>()
 
-  return (story?.phoneConversations?.conversations ?? []).flatMap((conversation) => {
+  return (story?.contactConversations?.conversations ?? []).flatMap((conversation) => {
     const conversationId = normalizeStoryScriptAutocompleteText(conversation.id)
     if (!conversationId || seen.has(conversationId)) {
       return []
@@ -243,12 +243,12 @@ export function buildStoryPhoneConversationAutocompleteItems(
     const roleKey = normalizeStoryScriptAutocompleteText(conversation.role_key)
     return [{
       name: conversationId,
-      description: title ? `剧情手机对话：${title}` : "剧情手机对话 ID",
-      detailTitle: `phone_start_conversation("${conversationId}")`,
+      description: title ? `联系人剧情：${title}` : "联系人剧情 ID",
+      detailTitle: `contact_start_conversation("${conversationId}")`,
       detailLines: [
         title ? `标题：${title}` : "",
         roleKey ? `联系人：${roleKey}` : "",
-        "用于 phone_start_conversation(...)，同一时间只允许一段剧情手机对话进行中。"
+        "用于 contact_start_conversation(...)，同一时间只允许一段联系人剧情进行中。"
       ].filter(Boolean)
     }]
   })

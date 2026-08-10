@@ -1,9 +1,9 @@
 /**
- * 将 AI 草稿中的角色、资产、手机、行动和商城内容转换成“可以尝试合并”的领域对象。
+ * 将 AI 草稿中的角色、资产、联系人、行动和商城内容转换成“可以尝试合并”的领域对象。
  *
  * 这是纯内存的防护层：它重新解析未知草稿，并根据当前故事与用户本次选择过滤无效引用。
  * 例如，商城商品引用了未选中的物品时，商品会被跳过并产生 warning，而不会偷偷创建一个物品；
- * 手机动作调用不存在的事件时，只移除无效调用，不让整个草稿在更晚阶段突然变成坏数据。
+ * 联系人动作调用不存在的事件时，只移除无效调用，不让整个草稿在更晚阶段突然变成坏数据。
  *
  * 输入来源：前端提交的草稿、当前故事中已有资产、用户勾选后得到的可用 id 集合。
  * 输出去向：`apply.ts` 组装候选 `StoryDocument`。
@@ -16,10 +16,10 @@ import {
   type StoryImportantRoleDefinition,
   type StoryItemDefinition,
   type StoryNormalRoleDefinition,
-  type StoryPhoneActionLibraryEntry,
-  type StoryPhoneContactProfile,
-  type StoryPhoneConversationDefinition,
-  type StoryPhoneTalkLibraryEntry,
+  type StoryContactActionLibraryEntry,
+  type StoryContactProfile,
+  type StoryContactConversationDefinition,
+  type StoryContactTalkLibraryEntry,
   type StoryShopProduct,
   type StoryRolesFile
 } from "@story-mgr/core"
@@ -201,7 +201,7 @@ export function toStoryItem(
   }
 }
 
-/** 建立事件、手机、行动对白都能共用的角色引用集合；`player` 是内建对象，始终可用。 */
+/** 建立事件、联系人、行动对白都能共用的角色引用集合；`player` 是内建对象，始终可用。 */
 export function collectAvailableRoleKeys(roles: StoryRolesFile) {
   return new Set([
     "player",
@@ -211,20 +211,20 @@ export function collectAvailableRoleKeys(roles: StoryRolesFile) {
 }
 
 /**
- * 清理手机库条目的适用范围。
+ * 清理联系人库条目的适用范围。
  *
  * 角色和性格只有在当前故事已存在或本批内容已被用户选中时才可保留。被移除的引用会写入 warnings，
  * 让用户知道 Agent 的哪条建议被调整；关系轨道和好感范围不在本函数职责内。
  */
-export function filterPhoneScopeForApply(
-  scope: StoryPhoneTalkLibraryEntry["scope"],
+export function filterContactScopeForApply(
+  scope: StoryContactTalkLibraryEntry["scope"],
   options: {
     availableRoleKeys: Set<string>
     availablePersonalityIds: Set<string>
     warnings: string[]
     label: string
   }
-): StoryPhoneTalkLibraryEntry["scope"] {
+): StoryContactTalkLibraryEntry["scope"] {
   const roleKeys = scope.role_keys.filter((roleKey) => {
     if (options.availableRoleKeys.has(roleKey)) {
       return true
@@ -250,12 +250,12 @@ export function filterPhoneScopeForApply(
 }
 
 /**
- * 删除指向不可用事件的手机调用。
+ * 删除指向不可用事件的联系人调用。
  *
- * 泛型保证返回对象保留原具体类型。这里选择“保留手机条目、移除 invoke”，因为条目的聊天或动作
+ * 泛型保证返回对象保留原具体类型。这里选择“保留联系人条目、移除 invoke”，因为条目的聊天或动作
  * 本身仍可用；最终候选故事仍会经过 Core 验证，不能把此过滤当成完整校验替代品。
  */
-export function filterPhoneInvokeForApply<T extends { invoke?: StoryPhoneTalkLibraryEntry["invoke"] }>(
+export function filterContactInvokeForApply<T extends { invoke?: StoryContactTalkLibraryEntry["invoke"] }>(
   entry: T,
   options: {
     availableEventIdsByType: Record<"chain" | "pool" | "schedule", Set<string>>
@@ -279,9 +279,9 @@ export function filterPhoneInvokeForApply<T extends { invoke?: StoryPhoneTalkLib
   return rest as T
 }
 
-/** 过滤手机动作中不可用的物品消耗，防止运行时尝试扣除不存在的物品。 */
-export function filterPhoneActionCostItems(
-  entry: StoryPhoneActionLibraryEntry,
+/** 过滤联系人动作中不可用的物品消耗，防止运行时尝试扣除不存在的物品。 */
+export function filterContactActionCostItems(
+  entry: StoryContactActionLibraryEntry,
   availableItemIds: Set<string>,
   warnings: string[]
 ) {
@@ -304,10 +304,10 @@ export function filterPhoneActionCostItems(
  * `reply_by_tag` 按标签覆盖；主动消息按规则 id 覆盖，其余旧规则保留。这样应用局部 AI 建议时，
  * 不会把用户未选择修改的联系人回复和主动消息一起删除。
  */
-export function mergePhoneContactProfile(
-  draftProfile: StoryPhoneContactProfile,
-  existing?: StoryPhoneContactProfile
-): StoryPhoneContactProfile {
+export function mergeContactProfile(
+  draftProfile: StoryContactProfile,
+  existing?: StoryContactProfile
+): StoryContactProfile {
   return {
     ...draftProfile,
     reply_by_tag: {
@@ -323,14 +323,14 @@ export function mergePhoneContactProfile(
   }
 }
 
-/** 遍历连续手机对话节点，移除指向不可用事件的结束调用，并保留对话本体。 */
-export function filterPhoneConversationInvokeForApply(
-  conversation: StoryPhoneConversationDefinition,
+/** 遍历连续联系人剧情节点，移除指向不可用事件的结束调用，并保留对话本体。 */
+export function filterContactConversationInvokeForApply(
+  conversation: StoryContactConversationDefinition,
   options: {
     availableEventIdsByType: Record<"chain" | "pool" | "schedule", Set<string>>
     warnings: string[]
   }
-): StoryPhoneConversationDefinition {
+): StoryContactConversationDefinition {
   return {
     ...conversation,
     nodes: conversation.nodes.map((node) => {
@@ -343,7 +343,7 @@ export function filterPhoneConversationInvokeForApply(
       }
 
       options.warnings.push(
-        `剧情手机对话 ${conversation.id} 的节点 ${node.id} 调用了不存在或未应用的${node.invoke.target_type}事件 ${node.invoke.event_id}，已移除该调用。`
+        `联系人剧情 ${conversation.id} 的节点 ${node.id} 调用了不存在或未应用的${node.invoke.target_type}事件 ${node.invoke.event_id}，已移除该调用。`
       )
       const { invoke: _invoke, ...rest } = node
       return rest

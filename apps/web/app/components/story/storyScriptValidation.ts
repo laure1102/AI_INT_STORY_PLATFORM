@@ -23,7 +23,7 @@ export interface StoryScriptFieldValidationOptions {
   readableTokens?: string[]
   writableTokens?: string[]
   bagMode?: "read" | "write"
-  phoneMode?: "read" | "write"
+  contactMode?: "read" | "write"
   doingMode?: "read" | "write"
   shopMode?: "read" | "write"
   story?: StoryDocument | null
@@ -130,7 +130,7 @@ export function validateStoryScriptField(
       doingIds: options.doingIds ?? collectStoryDoingIds(options.story),
       shopProductIds: options.shopProductIds ?? collectStoryShopProductIds(options.story),
       bagMode: options.bagMode ?? (options.mode === "predicate" ? "read" : "write"),
-      phoneMode: options.phoneMode ?? (options.mode === "predicate" ? "read" : "write"),
+      contactMode: options.contactMode ?? (options.mode === "predicate" ? "read" : "write"),
       doingMode: options.doingMode ?? (options.mode === "predicate" ? "read" : "write"),
       shopMode: options.shopMode ?? (options.mode === "predicate" ? "read" : "write")
     })

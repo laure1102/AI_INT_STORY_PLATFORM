@@ -8,8 +8,8 @@
 import type {
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
-  StoryCreationDraftPhone,
-  StoryCreationDraftPhoneConversations,
+  StoryCreationDraftContact,
+  StoryCreationDraftContactConversations,
   StoryCreationDraftItem,
   StoryCreationDraftLoopRule,
   StoryCreationDraftRole,
@@ -42,9 +42,9 @@ export function useStoryCreationDraftPreview(
     availableRoleKeysForApply, availableShopCategoryIdsForApply,
     draftPreview, editableDraft, existingDoingIds, existingDoingMenuIds,
     existingEventKeys, existingItemCategoryIds, existingItemIds,
-    existingLocationIds, existingPhoneActionIds, existingPhoneContactProfileKeys,
-    existingPhoneConversationIds, existingPhonePersonalityIds, existingPhoneReplyIds,
-    existingPhoneTalkIds, existingRoleKeys, existingShopCategoryIds,
+    existingLocationIds, existingContactActionIds, existingContactProfileKeys,
+    existingContactChannelIds, existingContactConversationIds, existingContactPersonalityIds, existingContactReplyIds,
+    existingContactTalkIds, existingRoleKeys, existingShopCategoryIds,
     existingShopProductIds, existingVariableKeys, getEventKey, getRoleKey,
     getVariableKey, selectedDraftChainIds
   } = state
@@ -150,56 +150,63 @@ function getEventImpact(event: StoryCreationDraftEvent): DraftImpact {
     : createImpact("create", "新增", "应用后会新增事件。")
 }
 
-/** 读取或计算 `PhonePersonalityImpact`。 @param personality 调用方传入的 `personality`。 @returns 计算、查找或构建后的结果。 */
-function getPhonePersonalityImpact(personality: StoryCreationDraftPhone["personality_library"][number]): DraftImpact {
-  return existingPhonePersonalityIds.value.has(personality.id)
+/** 读取或计算 `ContactPersonalityImpact`。 @param personality 调用方传入的 `personality`。 @returns 计算、查找或构建后的结果。 */
+function getContactPersonalityImpact(personality: StoryCreationDraftContact["personality_library"][number]): DraftImpact {
+  return existingContactPersonalityIds.value.has(personality.id)
     ? createImpact("update", "覆盖", "同 id 性格已存在，应用后会更新性格说明和风格标签。")
-    : createImpact("create", "新增", "应用后会写入 phone.json5 的性格库。")
+    : createImpact("create", "新增", "应用后会写入 contact.json5 的性格库。")
 }
 
-/** 读取或计算 `PhoneTalkImpact`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function getPhoneTalkImpact(entry: StoryCreationDraftPhone["talk_library"][number]): DraftImpact {
-  return existingPhoneTalkIds.value.has(entry.id)
+/** 判断联系媒介应用后会新增还是覆盖。 */
+function getContactChannelImpact(channel: StoryCreationDraftContact["channels"][number]): DraftImpact {
+  return existingContactChannelIds.value.has(channel.id)
+    ? createImpact("update", "覆盖", "同 id 联系媒介已存在，应用后会更新名称、预设和文案。")
+    : createImpact("create", "新增", "应用后会写入 contact.json5 的联系媒介。")
+}
+
+/** 读取或计算 `ContactTalkImpact`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
+function getContactTalkImpact(entry: StoryCreationDraftContact["talk_library"][number]): DraftImpact {
+  return existingContactTalkIds.value.has(entry.id)
     ? createImpact("update", "覆盖", "同 id 闲聊短句已存在，应用后会更新短句、作用域和好感变化。")
-    : createImpact("create", "新增", "应用后会写入 phone.json5 的闲聊短句库。")
+    : createImpact("create", "新增", "应用后会写入 contact.json5 的闲聊短句库。")
 }
 
-/** 读取或计算 `PhoneActionImpact`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function getPhoneActionImpact(entry: StoryCreationDraftPhone["action_library"][number]): DraftImpact {
-  return existingPhoneActionIds.value.has(entry.id)
+/** 读取或计算 `ContactActionImpact`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
+function getContactActionImpact(entry: StoryCreationDraftContact["action_library"][number]): DraftImpact {
+  return existingContactActionIds.value.has(entry.id)
     ? createImpact("update", "覆盖", "同 id 联系人动作已存在，应用后会更新动作规则。")
-    : createImpact("create", "新增", "应用后会写入 phone.json5 的动作库。")
+    : createImpact("create", "新增", "应用后会写入 contact.json5 的动作库。")
 }
 
-/** 读取或计算 `PhoneReplyImpact`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function getPhoneReplyImpact(entry: StoryCreationDraftPhone["reply_library"][number]): DraftImpact {
-  return existingPhoneReplyIds.value.has(entry.id)
+/** 读取或计算 `ContactReplyImpact`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
+function getContactReplyImpact(entry: StoryCreationDraftContact["reply_library"][number]): DraftImpact {
+  return existingContactReplyIds.value.has(entry.id)
     ? createImpact("update", "覆盖", "同 id NPC 回复已存在，应用后会更新回复规则。")
-    : createImpact("create", "新增", "应用后会写入 phone.json5 的回复库。")
+    : createImpact("create", "新增", "应用后会写入 contact.json5 的回复库。")
 }
 
-/** 读取或计算 `PhoneContactProfileImpact`。 @param profile 调用方传入的 `profile`。 @returns 计算、查找或构建后的结果。 */
-function getPhoneContactProfileImpact(profile: StoryCreationDraftPhone["contact_profiles"][number]): DraftImpact {
+/** 读取或计算 `ContactProfileImpact`。 @param profile 调用方传入的 `profile`。 @returns 计算、查找或构建后的结果。 */
+function getContactProfileImpact(profile: StoryCreationDraftContact["contact_profiles"][number]): DraftImpact {
   if (!availableRoleKeysForApply.value.has(profile.role_key) || profile.role_key === "player") {
     return createImpact("skip", "跳过", "联系人配置必须引用已存在或本次选中的 NPC 角色。")
   }
 
-  return existingPhoneContactProfileKeys.value.has(profile.role_key)
+  return existingContactProfileKeys.value.has(profile.role_key)
     ? createImpact("update", "覆盖", "同角色联系人配置已存在，应用后会合并主动消息和偏好设置。")
-    : createImpact("create", "新增", "应用后会写入 phone.json5 的联系人特配。")
+    : createImpact("create", "新增", "应用后会写入 contact.json5 的联系人特配。")
 }
 
-/** 读取或计算 `PhoneConversationImpact`。 @param conversation 调用方传入的 `conversation`。 @returns 计算、查找或构建后的结果。 */
-function getPhoneConversationImpact(
-  conversation: StoryCreationDraftPhoneConversations["conversations"][number]
+/** 读取或计算 `ContactConversationImpact`。 @param conversation 调用方传入的 `conversation`。 @returns 计算、查找或构建后的结果。 */
+function getContactConversationImpact(
+  conversation: StoryCreationDraftContactConversations["conversations"][number]
 ): DraftImpact {
   if (!availableRoleKeysForApply.value.has(conversation.role_key) || conversation.role_key === "player") {
-    return createImpact("skip", "跳过", "剧情手机对话必须引用已存在或本次选中的 NPC 角色。")
+    return createImpact("skip", "跳过", "联系人剧情必须引用已存在或本次选中的 NPC 角色。")
   }
 
-  return existingPhoneConversationIds.value.has(conversation.id)
-    ? createImpact("update", "覆盖", "同 id 剧情手机对话已存在，应用后会替换对话节点。")
-    : createImpact("create", "新增", "应用后会写入 phone_conversations.json5。")
+  return existingContactConversationIds.value.has(conversation.id)
+    ? createImpact("update", "覆盖", "同 id 联系人剧情已存在，应用后会替换对话节点。")
+    : createImpact("create", "新增", "应用后会写入 contact_conversations.json5。")
 }
 
 /** 读取或计算 `DoingMenuImpact`。 @param menu 调用方传入的 `menu`。 @returns 计算、查找或构建后的结果。 */
@@ -309,8 +316,8 @@ function setItemTagsText(item: StoryCreationDraftItem, rawValue: string) {
   item.tags = splitListInput(rawValue)
 }
 
-/** 读取或计算 `PhoneScopeText`。 @param scope 调用方传入的 `scope`。 @returns 计算、查找或构建后的结果。 */
-function getPhoneScopeText(scope: StoryCreationDraftPhone["talk_library"][number]["scope"]) {
+/** 读取或计算 `ContactScopeText`。 @param scope 调用方传入的 `scope`。 @returns 计算、查找或构建后的结果。 */
+function getContactScopeText(scope: StoryCreationDraftContact["talk_library"][number]["scope"]) {
   const tracks = scope.contact_tracks.length ? scope.contact_tracks.join(", ") : "不限关系"
   const personalities = scope.personality_ids.length ? scope.personality_ids.join(", ") : "不限性格"
   const roles = scope.role_keys.length ? scope.role_keys.join(", ") : "不限角色"
@@ -327,49 +334,49 @@ function setStringListText(target: { value: string[] }, rawValue: string) {
   target.value = splitListInput(rawValue)
 }
 
-/** 更新 `PhonePersonalityTags` 对应的响应式值。 @param personality 调用方传入的 `personality`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhonePersonalityTags(
-  personality: StoryCreationDraftPhone["personality_library"][number],
+/** 更新 `ContactPersonalityTags` 对应的响应式值。 @param personality 调用方传入的 `personality`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactPersonalityTags(
+  personality: StoryCreationDraftContact["personality_library"][number],
   rawValue: string
 ) {
   personality.style_tags = splitListInput(rawValue)
 }
 
-/** 更新 `PhoneTalkTags` 对应的响应式值。 @param entry 调用方传入的 `entry`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneTalkTags(entry: StoryCreationDraftPhone["talk_library"][number], rawValue: string) {
+/** 更新 `ContactTalkTags` 对应的响应式值。 @param entry 调用方传入的 `entry`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactTalkTags(entry: StoryCreationDraftContact["talk_library"][number], rawValue: string) {
   entry.tags = splitListInput(rawValue)
 }
 
-/** 更新 `PhoneActionTags` 对应的响应式值。 @param entry 调用方传入的 `entry`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneActionTags(entry: StoryCreationDraftPhone["action_library"][number], rawValue: string) {
+/** 更新 `ContactActionTags` 对应的响应式值。 @param entry 调用方传入的 `entry`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactActionTags(entry: StoryCreationDraftContact["action_library"][number], rawValue: string) {
   entry.tags = splitListInput(rawValue)
 }
 
-/** 更新 `PhoneReplyTags` 对应的响应式值。 @param entry 调用方传入的 `entry`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneReplyTags(entry: StoryCreationDraftPhone["reply_library"][number], rawValue: string) {
+/** 更新 `ContactReplyTags` 对应的响应式值。 @param entry 调用方传入的 `entry`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactReplyTags(entry: StoryCreationDraftContact["reply_library"][number], rawValue: string) {
   entry.tags = splitListInput(rawValue)
 }
 
-/** 更新 `PhoneContactPreferredTags` 对应的响应式值。 @param profile 调用方传入的 `profile`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneContactPreferredTags(
-  profile: StoryCreationDraftPhone["contact_profiles"][number],
+/** 更新 `ContactPreferredTags` 对应的响应式值。 @param profile 调用方传入的 `profile`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactPreferredTags(
+  profile: StoryCreationDraftContact["contact_profiles"][number],
   rawValue: string
 ) {
   profile.preferred_tags = splitListInput(rawValue)
 }
 
-/** 读取或计算 `PhoneCostItemsText`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function getPhoneCostItemsText(entry: StoryCreationDraftPhone["action_library"][number]) {
+/** 读取或计算 `ContactCostItemsText`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
+function getContactCostItemsText(entry: StoryCreationDraftContact["action_library"][number]) {
   return entry.cost_items.map((item) => `${item.item_id} x${item.quantity}`).join(", ")
 }
 
-/** 读取或计算 `PhoneRepliesText`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function getPhoneRepliesText(entry: StoryCreationDraftPhone["reply_library"][number]) {
+/** 读取或计算 `ContactRepliesText`。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
+function getContactRepliesText(entry: StoryCreationDraftContact["reply_library"][number]) {
   return entry.replies.join(" / ")
 }
 
-/** 更新 `PhoneRepliesText` 对应的响应式值。 @param entry 调用方传入的 `entry`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function setPhoneRepliesText(entry: StoryCreationDraftPhone["reply_library"][number], rawValue: string) {
+/** 更新 `ContactRepliesText` 对应的响应式值。 @param entry 调用方传入的 `entry`。 @param rawValue 调用方传入的 `rawValue`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function setContactRepliesText(entry: StoryCreationDraftContact["reply_library"][number], rawValue: string) {
   entry.replies = rawValue
     .split(/[\/\n]/g)
     .map((reply) => reply.trim())
@@ -377,7 +384,7 @@ function setPhoneRepliesText(entry: StoryCreationDraftPhone["reply_library"][num
 }
 
 /** 读取或计算 `ContactProfileSummary`。 @param profile 调用方传入的 `profile`。 @returns 计算、查找或构建后的结果。 */
-function getContactProfileSummary(profile: StoryCreationDraftPhone["contact_profiles"][number]) {
+function getContactProfileSummary(profile: StoryCreationDraftContact["contact_profiles"][number]) {
   const messages = profile.proactive_messages.length
   const preferredTags = profile.preferred_tags.length ? profile.preferred_tags.join(", ") : "无偏好标签"
   return `${profile.auto_add ? "自动加入" : "手动加入"} / 初始好感 ${profile.initial_favor} / ${preferredTags} / 主动消息 ${messages} 条`
@@ -548,14 +555,14 @@ function triggerModeLabel(triggerMode: StoryCreationDraftEvent["trigger_mode"]) 
   return {
     variableValueLabel, setVariableValueFromInput, createImpact, getLocationImpact,
     getRoleImpact, getItemImpact, getVariableImpact, getEventImpact,
-    getPhonePersonalityImpact, getPhoneTalkImpact, getPhoneActionImpact, getPhoneReplyImpact,
-    getPhoneContactProfileImpact, getPhoneConversationImpact, getDoingMenuImpact, getDoingImpact,
+    getContactChannelImpact, getContactPersonalityImpact, getContactTalkImpact, getContactActionImpact, getContactReplyImpact,
+    getContactProfileImpact, getContactConversationImpact, getDoingMenuImpact, getDoingImpact,
     getShopCategoryImpact, getShopProductImpact, getDraftPresentationDialogues, getPresentationLabel,
     getImpactClass, getItemCategoryName, getDraftOrExistingItemName, getDraftOrExistingShopCategoryName,
-    getItemTagsText, splitListInput, setItemTagsText, getPhoneScopeText,
-    getStringListText, setStringListText, setPhonePersonalityTags, setPhoneTalkTags,
-    setPhoneActionTags, setPhoneReplyTags, setPhoneContactPreferredTags, getPhoneCostItemsText,
-    getPhoneRepliesText, setPhoneRepliesText, getContactProfileSummary, getDoingPresentationSummary,
+    getItemTagsText, splitListInput, setItemTagsText, getContactScopeText,
+    getStringListText, setStringListText, setContactPersonalityTags, setContactTalkTags,
+    setContactActionTags, setContactReplyTags, setContactPreferredTags, getContactCostItemsText,
+    getContactRepliesText, setContactRepliesText, getContactProfileSummary, getDoingPresentationSummary,
     setItemMaxStackFromInput, ensureScheduleLoop, getScheduleAt, setScheduleAt,
     getSchedulePriority, setSchedulePriority, getScheduleAfterText, setScheduleAfterText,
     getEventApplyWarnings, collectionTypeLabel, triggerModeLabel

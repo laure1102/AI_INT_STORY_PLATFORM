@@ -13,8 +13,8 @@ import type {
   StoryMetaFile,
   StoryOnceDialogueDefinition,
   StoryOnceEventFile,
-  StoryPhoneFile,
-  StoryPhoneConversationsFile,
+  StoryContactFile,
+  StoryContactConversationsFile,
   StoryPlayerOverrideValsFile,
   StoryReferFile,
   StoryRolesFile,
@@ -190,16 +190,17 @@ export interface StoryCreationDraftVariable {
   calc_rule: string
 }
 
-export interface StoryCreationDraftPhone {
-  personality_library: StoryPhoneFile["personality_library"]
-  talk_library: StoryPhoneFile["talk_library"]
-  action_library: StoryPhoneFile["action_library"]
-  reply_library: StoryPhoneFile["reply_library"]
-  contact_profiles: StoryPhoneFile["contact_profiles"]
+export interface StoryCreationDraftContact {
+  channels: StoryContactFile["channels"]
+  personality_library: StoryContactFile["personality_library"]
+  talk_library: StoryContactFile["talk_library"]
+  action_library: StoryContactFile["action_library"]
+  reply_library: StoryContactFile["reply_library"]
+  contact_profiles: StoryContactFile["contact_profiles"]
 }
 
-export interface StoryCreationDraftPhoneConversations {
-  conversations: StoryPhoneConversationsFile["conversations"]
+export interface StoryCreationDraftContactConversations {
+  conversations: StoryContactConversationsFile["conversations"]
 }
 
 export interface StoryCreationDraftDoing {
@@ -238,8 +239,8 @@ export interface StoryCreationDraft {
   items: StoryCreationDraftItem[]
   events: StoryCreationDraftEvent[]
   variables: StoryCreationDraftVariable[]
-  phone?: StoryCreationDraftPhone
-  phoneConversations?: StoryCreationDraftPhoneConversations
+  contact?: StoryCreationDraftContact
+  contactConversations?: StoryCreationDraftContactConversations
   doing?: StoryCreationDraftDoing
   shop?: StoryCreationDraftShop
   notes: string[]
@@ -375,12 +376,13 @@ export interface ApplyStoryCreationDraftSelection {
   locationIds: string[]
   roleKeys?: string[]
   itemIds?: string[]
-  phonePersonalityIds?: string[]
-  phoneTalkIds?: string[]
-  phoneActionIds?: string[]
-  phoneReplyIds?: string[]
-  phoneContactProfileKeys?: string[]
-  phoneConversationIds?: string[]
+  contactChannelIds?: string[]
+  contactPersonalityIds?: string[]
+  contactTalkIds?: string[]
+  contactActionIds?: string[]
+  contactReplyIds?: string[]
+  contactProfileKeys?: string[]
+  contactConversationIds?: string[]
   doingMenuIds?: string[]
   doingIds?: string[]
   shopCategoryIds?: string[]
@@ -406,12 +408,13 @@ export interface ApplyStoryCreationDraftResponse {
     roles: number
     items: number
     variables: number
-    phonePersonalities: number
-    phoneTalks: number
-    phoneActions: number
-    phoneReplies: number
-    phoneContactProfiles: number
-    phoneConversations: number
+    contactChannels: number
+    contactPersonalities: number
+    contactTalks: number
+    contactActions: number
+    contactReplies: number
+    contactProfiles: number
+    contactConversations: number
     doingMenus: number
     doings: number
     shopCategories: number
@@ -508,22 +511,22 @@ export interface SaveStoryShopRequest extends StoryRevisionRequest {
   shop: StoryShopFile
 }
 
-export interface StoryPhoneResponse {
-  phone: StoryPhoneFile
+export interface StoryContactResponse {
+  contact: StoryContactFile
   revision?: number
 }
 
-export interface SaveStoryPhoneRequest extends StoryRevisionRequest {
-  phone: StoryPhoneFile
+export interface SaveStoryContactRequest extends StoryRevisionRequest {
+  contact: StoryContactFile
 }
 
-export interface StoryPhoneConversationsResponse {
-  phoneConversations: StoryPhoneConversationsFile
+export interface StoryContactConversationsResponse {
+  contactConversations: StoryContactConversationsFile
   revision?: number
 }
 
-export interface SaveStoryPhoneConversationsRequest extends StoryRevisionRequest {
-  phoneConversations: StoryPhoneConversationsFile
+export interface SaveStoryContactConversationsRequest extends StoryRevisionRequest {
+  contactConversations: StoryContactConversationsFile
 }
 
 export interface StoryReferResponse {

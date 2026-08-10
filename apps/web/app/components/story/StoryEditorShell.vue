@@ -10,17 +10,17 @@ const {
   creationAgentRunMode, creationAgentError, creationApplyMessage, creationApplyWarnings,
   creationHistory, activeCreationHistorySessionId, editingEventId, creatingFromEventId,
   creatingEventDraft, scenesSaveSuccessMessage, locationsSaveSuccessMessage, itemsSaveSuccessMessage,
-  shopSaveSuccessMessage, phoneSaveSuccessMessage, phoneConversationsSaveErrorMessage, phoneConversationsSaveSuccessMessage,
+  shopSaveSuccessMessage, contactSaveSuccessMessage, contactConversationsSaveErrorMessage, contactConversationsSaveSuccessMessage,
   referSaveSuccessMessage, doingSaveSuccessMessage, rolesSaveSuccessMessage, activeWorkspaceTab,
   workspaceTabOptions, selectedEventId, selectedEvent, editingEvent,
   activeDraftEvent, activeGraphParentNodeId, activeGraphDraftEvent, activeGraphDraftAction,
-  graphNodeOptions, storyScriptVals, storyScriptItemIds, phoneInvokeEventOptions,
+  graphNodeOptions, storyScriptVals, storyScriptItemIds, contactInvokeEventOptions,
   buildGraphEventBranchAutocompleteItemsFromActions, activeGraphBranchAutocompleteItems, isCreateMode, replaceEventInDocument,
   removeEventFromDocument, refreshValidation, closeEditor, openValsDialog,
   closeValsDialog, openPlayerOverrideValsDialog, closePlayerOverrideValsDialog, openSystemValsDialog,
   closeSystemValsDialog, openScenesDialog, closeScenesDialog, openLocationsDialog,
   closeLocationsDialog, openItemsDialog, closeItemsDialog, openShopDialog,
-  closeShopDialog, openPhoneDialog, closePhoneDialog, openReferDialog,
+  closeShopDialog, openContactDialog, closeContactDialog, openReferDialog,
   closeReferDialog, openRolesDialog, closeRolesDialog, openSettingsDialog,
   closeSettingsDialog, openGameSettingsDialog, closeGameSettingsDialog, createHistoryId,
   getActiveCreationHistorySession, upsertLocalCreationHistorySession, persistCreationHistorySession, createCreationHistorySession,
@@ -31,7 +31,7 @@ const {
   handleCreateGraphRootEvent, handleCreateStandaloneEvent, handleSwitchEventTab, handleSwitchWorkspaceTab,
   handleDeleteGraphNode, handleSaveEvent, handleDeleteEvent, handleSaveVals,
   handleSaveSystemVals, handleSavePlayerOverrideVals, handleSaveScenes, handleSaveEventLocations,
-  handleSaveItems, handleSaveShop, handleSavePhone, handleSavePhoneConversations,
+  handleSaveItems, handleSaveShop, handleSaveContact, handleSaveContactConversations,
   handleSaveRefer, handleSaveDoing, handleSaveRoles, handleQuickCreateRole,
   handleQuickCreateLocation, handleSaveStoryBible, handleRunCreationAgent, resumePendingCreationTask,
   handleAbortCreationAgent, isAbortError, selectAppliedEvent, handleApplyCreationDraft,
@@ -39,8 +39,8 @@ const {
   issueKey, applyStoryCreationDraft, deleteEvent, exportStory,
   getAppSettings, getStoryCreationHistory, getStory, deleteStoryCreationHistorySession,
   saveAppSettings, saveEvent, saveEventLocations, saveDoing,
-  saveStoryMeta, saveStoryCreationHistorySession, saveItems, savePhone,
-  savePhoneConversations, saveRefer, saveShop, savePlayerOverrideVals,
+  saveStoryMeta, saveStoryCreationHistorySession, saveItems, saveContact,
+  saveContactConversations, saveRefer, saveShop, savePlayerOverrideVals,
   saveRoles, saveScenes, saveStoryBible, saveSystemVals,
   saveVals, validateStory, creationJob, cancelCreationTask,
   resumeCreationTask, runCreationTask, appSettings, errorMessage,
@@ -52,7 +52,7 @@ const {
   getGraphNodes, isEventCanvasTab, isGraphActionNode, isGraphEventNode,
   normalizeEventTriggerMode, closeAllTools, isValsDialogOpen, isPlayerOverrideValsDialogOpen,
   isSystemValsDialogOpen, isScenesDialogOpen, isLocationsDialogOpen, isItemsDialogOpen,
-  isShopDialogOpen, isPhoneDialogOpen, isReferDialogOpen, isRolesDialogOpen,
+  isShopDialogOpen, isContactDialogOpen, isReferDialogOpen, isRolesDialogOpen,
   isSettingsDialogOpen, isGameSettingsDialogOpen
 } = controller
 </script>
@@ -91,8 +91,8 @@ const {
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openShopDialog">
             商城
           </button>
-          <button class="btn-secondary editor-header__tool-button" type="button" @click="openPhoneDialog">
-            手机
+          <button class="btn-secondary editor-header__tool-button" type="button" @click="openContactDialog">
+            联系人
           </button>
           <button class="btn-secondary editor-header__tool-button" type="button" @click="openReferDialog">
             称谓
@@ -285,18 +285,18 @@ const {
         @save="handleSaveDoing"
       />
 
-      <LazyStoryPhoneConversationsDialog
-        v-else-if="activeEventTab === 'phone-conversations'"
+      <LazyStoryContactConversationsDialog
+        v-else-if="activeEventTab === 'contact-conversations'"
         embedded
-        :invoke-event-options="phoneInvokeEventOptions"
-        :phone-conversations="storyDocument.phoneConversations"
+        :invoke-event-options="contactInvokeEventOptions"
+        :contact-conversations="storyDocument.contactConversations"
         :roles="storyDocument.roles"
-        :save-error-message="phoneConversationsSaveErrorMessage"
-        :save-success-message="phoneConversationsSaveSuccessMessage"
+        :save-error-message="contactConversationsSaveErrorMessage"
+        :save-success-message="contactConversationsSaveSuccessMessage"
         :saving="isSaving"
         :story="storyDocument"
         :vals="storyScriptVals"
-        @save="handleSavePhoneConversations"
+        @save="handleSaveContactConversations"
       />
     </section>
 
@@ -446,18 +446,18 @@ const {
       @save="handleSaveShop"
     />
 
-    <LazyStoryPhoneDialog
-      v-if="storyDocument && isPhoneDialogOpen"
+    <LazyStoryContactDialog
+      v-if="storyDocument && isContactDialogOpen"
       :item-ids="storyScriptItemIds"
-      :invoke-event-options="phoneInvokeEventOptions"
-      :phone="storyDocument.phone"
+      :invoke-event-options="contactInvokeEventOptions"
+      :contact="storyDocument.contact"
       :roles="storyDocument.roles"
-      :save-success-message="phoneSaveSuccessMessage"
+      :save-success-message="contactSaveSuccessMessage"
       :saving="isSaving"
       :story="storyDocument"
       :vals="storyScriptVals"
-      @close="closePhoneDialog"
-      @save="handleSavePhone"
+      @close="closeContactDialog"
+      @save="handleSaveContact"
     />
 
     <LazyStoryReferDialog
@@ -471,7 +471,7 @@ const {
 
     <LazyStoryRolesDialog
       v-if="storyDocument && isRolesDialogOpen"
-      :phone="storyDocument.phone"
+      :contact="storyDocument.contact"
       :roles="storyDocument.roles"
       :save-success-message="rolesSaveSuccessMessage"
       :saving="isSaving"

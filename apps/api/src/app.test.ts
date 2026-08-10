@@ -55,8 +55,8 @@ function emptyCreationResult(): RunStoryCreationAgentResponse {
       items: [],
       events: [],
       variables: [],
-      phone: { personality_library: [], talk_library: [], action_library: [], reply_library: [], contact_profiles: [] },
-      phoneConversations: { conversations: [] },
+      contact: { channels: [], personality_library: [], talk_library: [], action_library: [], reply_library: [], contact_profiles: [] },
+      contactConversations: { conversations: [] },
       doing: { menus: [], doings: [] },
       shop: { categories: [], products: [] },
       notes: [],
@@ -154,6 +154,69 @@ describe("API boundaries", () => {
 
     expect(response.status).toBe(400)
     expect(body.error.code).toBe("asset.invalid-image")
+  })
+
+  it("serves contact routes and leaves legacy phone routes unavailable", async () => {
+    const baseUrl = await startApi()
+    const createResponse = await fetch(`${baseUrl}/api/stories/contact-story`, { method: "GET" })
+    expect(createResponse.status).toBe(404)
+
+    const createdResponse = await fetch(`${baseUrl}/api/stories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "contact-story", title: "联系人路由测试" })
+    })
+    const created = await createdResponse.json() as {
+      story: { contact: Record<string, unknown> }
+      revision: number
+    }
+
+    const saveContact = await fetch(`${baseUrl}/api/stories/contact-story/contact`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contact: {
+          ...created.story.contact,
+          default_channel_id: "letter",
+          channels: [{ id: "letter", name: "书信", preset: "letter", labels: {} }]
+        },
+        expectedRevision: created.revision
+      })
+    })
+    const savedContact = await saveContact.json() as {
+      contact: { default_channel_id: string }
+      revision: number
+    }
+    expect(saveContact.status).toBe(200)
+    expect(savedContact.contact.default_channel_id).toBe("letter")
+
+    const getConversations = await fetch(
+      `${baseUrl}/api/stories/contact-story/contact-conversations`
+    )
+    const conversations = await getConversations.json() as {
+      contactConversations: { conversations: unknown[] }
+    }
+    expect(getConversations.status).toBe(200)
+    expect(conversations.contactConversations.conversations).toEqual([])
+
+    const saveConversations = await fetch(
+      `${baseUrl}/api/stories/contact-story/contact-conversations`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactConversations: { conversations: [] },
+          expectedRevision: savedContact.revision
+        })
+      }
+    )
+    expect(saveConversations.status).toBe(200)
+
+    const legacyResponses = await Promise.all([
+      fetch(`${baseUrl}/api/stories/contact-story/phone`),
+      fetch(`${baseUrl}/api/stories/contact-story/phone-conversations`)
+    ])
+    expect(legacyResponses.map((response) => response.status)).toEqual([404, 404])
   })
 
   it("creates, streams, queries, lists and cancels creation jobs", async () => {

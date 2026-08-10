@@ -168,7 +168,7 @@ function createBagGiftSession(
 ) {
   const seed = createStorySession({ bundle })
   const snapshot = seed.getSnapshot()
-  snapshot.phone.contacts.push({
+  snapshot.contact.contacts.push({
     role_key: "normal:friend",
     favor: 20,
     unlocked_at_day: 1
@@ -185,7 +185,7 @@ function createSave(
   slotId = "slot-1"
 ): RuntimeStorySaveState {
   return {
-    schema_version: 2,
+    schema_version: 3,
     slot_id: slotId,
     story_id: bundle.storyId,
     profile_id: "profile-1",
@@ -231,7 +231,7 @@ describe("RuntimeStorySession v2 saves", () => {
     expect(restored.getSnapshot().history).toHaveLength(beforeSaveHistory)
   })
 
-  it("migrates a v1 save by replaying the current event with a notice", () => {
+  it("rejects v1 and v2 saves with an explicit compatibility error", () => {
     const bundle = createBundle({
       chainEvents: {
         opening: {
@@ -264,11 +264,15 @@ describe("RuntimeStorySession v2 saves", () => {
       session_state: session.getSnapshot()
     } as unknown as RuntimeStorySaveState
 
-    const restored = createStorySession({ bundle, saveState: v1Save })
-    const view = restored.getViewModel()
+    const v2Save = {
+      ...createSave(session, bundle),
+      schema_version: 2
+    } as unknown as RuntimeStorySaveState
 
-    expect(view.currentDialogue?.content).toBe("first")
-    expect(view.notifications).toContain("旧版存档缺少播放游标，当前事件将从开头重放。")
+    expect(() => createStorySession({ bundle, saveState: v1Save }))
+      .toThrow("Save schema v1 is incompatible with the contact runtime; only v3 saves are supported.")
+    expect(() => createStorySession({ bundle, saveState: v2Save }))
+      .toThrow("Save schema v2 is incompatible with the contact runtime; only v3 saves are supported.")
   })
 
   it("persists deterministic RNG state across a save", () => {
@@ -340,7 +344,7 @@ describe("Runtime shop direct gifting", () => {
     expect(snapshot.shop.gifts).toMatchObject([
       { product_id: "gift_box_product", role_key: "normal:friend", gifted_count: 1, cooldown_until_game_minute: 1440 }
     ])
-    expect(snapshot.phone.contacts).toContainEqual(expect.objectContaining({ role_key: "normal:friend", favor: 23 }))
+    expect(snapshot.contact.contacts).toContainEqual(expect.objectContaining({ role_key: "normal:friend", favor: 23 }))
     expect(snapshot.history.at(-1)?.content).toContain("花费 199")
   })
 
@@ -355,7 +359,7 @@ describe("Runtime shop direct gifting", () => {
     expect(snapshot.bags.player.entries).toEqual([])
     expect(snapshot.shop.purchases).toEqual([])
     expect(snapshot.shop.gifts).toEqual([])
-    expect(snapshot.phone.contacts).toEqual([])
+    expect(snapshot.contact.contacts).toEqual([])
     expect(session.getViewModel().notifications).toContain("需要 199 元，当前只有 100 元。")
   })
 })
@@ -374,7 +378,7 @@ describe("Runtime player bag gifting", () => {
 
     const snapshot = session.getSnapshot()
     expect(snapshot.bags.player.entries.find((entry) => entry.item_id === "gift_box")?.quantity).toBe(3)
-    expect(snapshot.phone.contacts[0]?.favor).toBe(26)
+    expect(snapshot.contact.contacts[0]?.favor).toBe(26)
     expect(snapshot.vals.variables[0]?.vals[0]?.value).toBe(5000)
     expect(snapshot.shop.purchases).toEqual([])
     expect(snapshot.shop.gifts).toMatchObject([{
@@ -383,7 +387,7 @@ describe("Runtime player bag gifting", () => {
       gifted_count: 1,
       cooldown_until_game_minute: 1440
     }])
-    expect(snapshot.phone.threads[0]?.messages.at(-1)?.content).toContain("礼盒 x2")
+    expect(snapshot.contact.threads[0]?.messages.at(-1)?.content).toContain("礼盒 x2")
     expect(snapshot.history.at(-1)?.title).toBe("bag:gift")
 
     const giftView = session.getViewModel().bagSummary
@@ -468,7 +472,7 @@ describe("Runtime player bag gifting", () => {
     expect(lockedSession.getSnapshot()).toEqual(lockedBefore)
 
     const conversationBundle = createBagGiftBundle()
-    conversationBundle.phoneConversations = {
+    conversationBundle.contactConversations = {
       conversations: [{
         id: "locked_chat",
         title: "锁定聊天",
@@ -488,7 +492,7 @@ describe("Runtime player bag gifting", () => {
       }]
     }
     const conversationSession = createBagGiftSession(conversationBundle, (snapshot) => {
-      snapshot.phone_conversation = {
+      snapshot.contact_conversation = {
         conversation_id: "locked_chat",
         role_key: "normal:friend",
         node_id: "start",
@@ -610,7 +614,7 @@ describe("Runtime schedule dependency ordering", () => {
     snapshot.scheduler.scheduled = scheduled
     snapshot.scheduler.next_seq = 4
     const session = createStorySession({ bundle, saveState: {
-      schema_version: 2,
+      schema_version: 3,
       slot_id: "seed",
       story_id: "runtime_test",
       profile_id: "profile-1",

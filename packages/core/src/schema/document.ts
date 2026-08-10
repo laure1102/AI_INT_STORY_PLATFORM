@@ -23,9 +23,9 @@ import {
   storyShopSchema
 } from "./commerce"
 import {
-  storyPhoneConversationsSchema,
-  storyPhoneSchema
-} from "./phone"
+  storyContactConversationsSchema,
+  storyContactSchema
+} from "./contact"
 import { storyBibleSchema } from "./settings"
 import {
   storyChainEventsSchema,
@@ -50,8 +50,8 @@ export const storyDocumentSchema = z.object({
   items: storyItemsSchema.default({}),
   shop: storyShopSchema.default({}),
   initialBags: storyInitialBagsSchema,
-  phone: storyPhoneSchema.default({}),
-  phoneConversations: storyPhoneConversationsSchema.default({ conversations: [] }),
+  contact: storyContactSchema.default({}),
+  contactConversations: storyContactConversationsSchema.default({ conversations: [] }),
   doing: storyDoingSchema.default({}),
   chainEvents: storyChainEventsSchema.default([]),
   poolEvents: storyPoolEventsSchema.default([]),
@@ -77,8 +77,8 @@ export const storyDocumentSchema = z.object({
     items: document.items,
     shop: document.shop,
     initialBags: document.initialBags,
-    phone: document.phone,
-    phoneConversations: document.phoneConversations,
+    contact: document.contact,
+    contactConversations: document.contactConversations,
     doing: document.doing,
     chainEvents,
     poolEvents,

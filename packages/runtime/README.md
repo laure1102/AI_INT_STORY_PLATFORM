@@ -93,4 +93,4 @@ Clients mutate session state through `RuntimeStorySession.dispatch(action)`.
 - `{ type: "bag-gift", itemId, roleKey, quantity }` consumes an already-owned player-bag item and sends it to an existing contact.
 - `bag-gift` returns `true` on success and `false` after a handled domain rejection, so clients can preserve unfinished form selections.
 
-`bag-gift` resolves gift behavior from the unique `shop.products[]` row whose `item_id` matches and whose `allow_gift` is `true`. It ignores shop enablement, price, purchase predicates, and purchase cooldown, but shares the product/contact `shop.gifts` cooldown with `shop-gift`. Bound items, missing contacts, contact relationship locks, and active plot-phone chat locks are rejected before inventory mutation.
+`bag-gift` resolves gift behavior from the unique `shop.products[]` row whose `item_id` matches and whose `allow_gift` is `true`. It ignores shop enablement, price, purchase predicates, and purchase cooldown, but shares the product/contact `shop.gifts` cooldown with `shop-gift`. Bound items, missing contacts, contact relationship locks, and active plot-contact chat locks are rejected before inventory mutation.

@@ -23,8 +23,8 @@ import {
   storyInitialBagsSchema,
   storyItemsSchema,
   storyLoopEventSchema,
-  storyPhoneConversationsSchema,
-  storyPhoneSchema,
+  storyContactConversationsSchema,
+  storyContactSchema,
   storyReferSchema,
   storyScheduleEventsSchema,
   storyShopSchema,
@@ -55,8 +55,8 @@ import {
   type StoryOnceEventFile,
   type StoryOnceEventsFile,
   type StoryPoolEventsFile,
-  type StoryPhoneFile,
-  type StoryPhoneConversationsFile,
+  type StoryContactFile,
+  type StoryContactConversationsFile,
   type StoryPlayerOverrideValsFile,
   type StoryReferFile,
   type StoryImportantRolesDataFile,
@@ -97,8 +97,8 @@ import {
 import {
   createStoryStatePaths,
   createDefaultStoryShop,
-  createDefaultStoryPhone,
-  createDefaultStoryPhoneConversations,
+  createDefaultStoryContact,
+  createDefaultStoryContactConversations,
   createDefaultStoryRefer,
   createDefaultStoryDoing,
   createDefaultStoryScenes,
@@ -147,8 +147,8 @@ import {
   readStoryItems,
   readStoryShop,
   readStoryInitialBags,
-  readStoryPhone,
-  readStoryPhoneConversations,
+  readStoryContact,
+  readStoryContactConversations,
   readStoryRefer,
   readStoryDoing,
   readStoryGraphEvents,
@@ -191,24 +191,24 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
   }
 
   /**
-   * 读取故事的手机会话配置。
+   * 读取故事的联系人剧情配置。
    *
    * @param storyId 要读取的故事 id。
    * @returns 经过 Schema 校验的联系人会话、群聊和消息数据；缺少文件时返回兼容默认值。
    * @throws 文件存在但 JSON5 语法错误或内容不符合 Schema 时抛出解析错误。
    *
    * 这里保留一层门面函数，是为了让调用方只依赖 StoryFileStore，而不必知道
-   * `phone_conversations.json5` 的实际位置和旧文件兼容规则。
+   * `contact_conversations.json5` 的实际位置和旧文件兼容规则。
    */
-  async function readPhoneConversations(storyId: string): Promise<StoryPhoneConversationsFile> {
-    return readStoryPhoneConversations(dataDir, storyId)
+  async function readContactConversations(storyId: string): Promise<StoryContactConversationsFile> {
+    return readStoryContactConversations(dataDir, storyId)
   }
 
   /**
    * 列出首页所需的轻量故事摘要。
    * @returns 每个有效故事的 id、标题、描述、chain 节点数和 story.json5 修改时间。
    *
-   * 故事目录先统一列出，各故事元信息/事件再并行读取；不会为了摘要加载手机、图片等完整文档。
+   * 故事目录先统一列出，各故事元信息/事件再并行读取；不会为了摘要加载联系人、图片等完整文档。
    */
   async function listStorySummaries(): Promise<StorySummary[]> {
     const storyIds = await listStoryIds(path.join(dataDir, "stories"))
@@ -259,8 +259,8 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     const items = storyItemsSchema.parse(createDefaultStoryItems())
     const shop = storyShopSchema.parse(createDefaultStoryShop())
     const initialBags = storyInitialBagsSchema.parse(createDefaultInitialBags())
-    const phone = storyPhoneSchema.parse(createDefaultStoryPhone())
-    const phoneConversations = storyPhoneConversationsSchema.parse(createDefaultStoryPhoneConversations())
+    const contact = storyContactSchema.parse(createDefaultStoryContact())
+    const contactConversations = storyContactConversationsSchema.parse(createDefaultStoryContactConversations())
     const refer = storyReferSchema.parse(createDefaultStoryRefer())
     const doing = storyDoingSchema.parse(createDefaultStoryDoing())
     const chainEvents = storyChainEventsSchema.parse([])
@@ -284,8 +284,8 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       items,
       shop,
       initialBags,
-      phone,
-      phoneConversations,
+      contact,
+      contactConversations,
       refer,
       doing,
       chainEvents,
@@ -323,8 +323,8 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       items,
       shop,
       initialBags,
-      phone,
-      phoneConversations,
+      contact,
+      contactConversations,
       refer,
       doing,
       chainEvents,
@@ -343,8 +343,8 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       readStoryItems(dataDir, storyId),
       readStoryShop(dataDir, storyId),
       readStoryInitialBags(dataDir, storyId),
-      readStoryPhone(dataDir, storyId),
-      readStoryPhoneConversations(dataDir, storyId),
+      readStoryContact(dataDir, storyId),
+      readStoryContactConversations(dataDir, storyId),
       readStoryRefer(dataDir, storyId),
       readStoryDoing(dataDir, storyId),
       readStoryGraphEvents(dataDir, storyId),
@@ -364,8 +364,8 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
       items,
       shop,
       initialBags,
-      phone,
-      phoneConversations,
+      contact,
+      contactConversations,
       refer,
       doing,
       chainEvents,
@@ -622,7 +622,7 @@ export function createStoryFileStore(dataDir: string): StoryFileStore {
     withStoryMutation,
     commitStoryDocument,
     readStoryBible,
-    readPhoneConversations,
+    readContactConversations,
     readEvent,
     writeEvent,
     deleteEvent,

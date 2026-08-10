@@ -44,11 +44,11 @@ import {
 } from "./validation/context"
 import {
   findScheduleDependencyCycle,
-  validatePhoneConfig,
+  validateContactConfig,
   validateShopConfig,
   validateVariableDefinitions
 } from "./validation/domains"
-import { validatePhoneConversationsConfig } from "./validation/phone-conversations"
+import { validateContactConversationsConfig } from "./validation/contact-conversations"
 import {
   validateChainAction,
   validateChainEvent,
@@ -65,7 +65,7 @@ export {
 /**
  * 对一个已经通过持久化 Schema 的 StoryDocument 做跨文件语义校验。
  *
- * @param document 完整故事文档，包含变量、资产、三类事件、手机、行动与商城数据。
+ * @param document 完整故事文档，包含变量、资产、三类事件、联系人、行动与商城数据。
  * @returns `{ ok, issues }`；只要存在 error，ok 就是 false，warning 不影响 ok。
  *
  * 关键顺序：先拆分 chain 事件/行动并一次构建共享索引，再检查事件图和各领域引用，最后校验 calc 与
@@ -184,8 +184,8 @@ export function validateStoryDocument(document: StoryDocument): ValidationResult
 
   validateVariableDefinitions(document, issues)
 
-  validatePhoneConfig(document, indexes, issues)
-  validatePhoneConversationsConfig(document, indexes, issues)
+  validateContactConfig(document, indexes, issues)
+  validateContactConversationsConfig(document, indexes, issues)
   validateDoingConfig(document, indexes, issues)
   validateShopConfig(document, indexes, issues)
 

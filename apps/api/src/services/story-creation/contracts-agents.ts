@@ -16,7 +16,7 @@ import type {
   StoryCreationDraft
 } from "@story-mgr/shared"
 import { z } from "zod"
-import { draftDialogueSchema, draftLocationSchema, draftSchema, draftVariableSchema, draftVariableValueSchema, legacyDraftVariableSchema, phoneContactTrackSchema } from "./contracts-draft"
+import { draftDialogueSchema, draftLocationSchema, draftSchema, draftVariableSchema, draftVariableValueSchema, legacyDraftVariableSchema, contactTrackSchema } from "./contracts-draft"
 
 /**
  * 应用阶段接受的草稿边界。
@@ -87,75 +87,92 @@ export const structuredDraftPresentationSchema = z.object({
   dialogues: z.array(draftDialogueSchema).describe("dialogue 类型的对白列表；其他类型填空数组。")
 })
 
-// 手机系统包含关系范围、动作消耗和事件调用等交叉引用。此处只约束形状和基础数值范围；
+// 联系人系统包含关系范围、动作消耗和事件调用等交叉引用。此处只约束形状和基础数值范围；
 // role_key、item_id、event_id 是否真实存在，要到应用阶段结合当前故事和用户选择一起判断。
-export const structuredPhoneLibraryScopeSchema = z.object({
+export const structuredContactLibraryScopeSchema = z.object({
   role_keys: z.array(z.string()).describe("适用角色 key，例如 important:zhuli；不限角色时填空数组。"),
-  contact_tracks: z.array(phoneContactTrackSchema).describe("适用关系轨道；不限轨道时填空数组。"),
+  contact_tracks: z.array(contactTrackSchema).describe("适用关系轨道；不限轨道时填空数组。"),
   personality_ids: z.array(z.string()).describe("适用性格 id；不限性格时填空数组。"),
   min_favor: z.number().int().min(0).max(100).describe("最低好感度。"),
   max_favor: z.number().int().min(0).max(100).describe("最高好感度。")
 })
 
-export const structuredPhoneInvokeDelaySchema = z.object({
+export const structuredContactInvokeDelaySchema = z.object({
   unit: z.enum(["hours", "days", "months", "years"]).describe("游戏内延迟单位。"),
   value: z.number().int().min(1).describe("游戏内延迟数值。")
 })
 
-export const structuredPhoneInvocationSchema = z.object({
+export const structuredContactInvocationSchema = z.object({
   target_type: z.enum(["chain", "pool", "schedule"]).describe("调用事件集合。"),
   event_id: z.string().describe("调用目标事件 id。"),
-  delay: structuredPhoneInvokeDelaySchema.nullable().describe("延迟调用；不延迟时填 null。")
+  delay: structuredContactInvokeDelaySchema.nullable().describe("延迟调用；不延迟时填 null。")
 })
 
-export const structuredPhonePersonalitySchema = z.object({
+export const structuredContactPersonalitySchema = z.object({
   id: z.string().min(1).describe("性格 id。"),
   name: z.string().describe("性格名称。"),
   descr: z.string().describe("性格说明。"),
   style_tags: z.array(z.string()).describe("说话风格标签。")
 })
 
-export const structuredPhoneTalkSchema = z.object({
+export const structuredContactTalkSchema = z.object({
   id: z.string().min(1).describe("闲聊短句 id。"),
   text: z.string().describe("玩家可选的闲聊短句文本。"),
   tags: z.array(z.string()).describe("短句标签。"),
-  scope: structuredPhoneLibraryScopeSchema.describe("适用范围。"),
+  scope: structuredContactLibraryScopeSchema.describe("适用范围。"),
   base_favor_delta: z.number().int().min(-100).max(100).describe("基础好感变化。"),
   cooldown_hours: z.number().int().min(0).describe("冷却小时数。"),
-  invoke: structuredPhoneInvocationSchema.nullable().describe("发送后调用事件；不调用事件时填 null。")
+  invoke: structuredContactInvocationSchema.nullable().describe("发送后调用事件；不调用事件时填 null。")
 })
 
-export const structuredPhoneActionCostItemSchema = z.object({
+export const structuredContactActionCostItemSchema = z.object({
   item_id: z.string().min(1).describe("消耗物品 id。"),
   quantity: z.number().int().min(1).describe("消耗数量。")
 })
 
-export const structuredPhoneReplyByTagEntrySchema = z.object({
+export const structuredContactReplyByTagEntrySchema = z.object({
   tag: z.string().min(1).describe("回复标签 key。"),
   replies: z.array(z.string()).describe("该标签下的回复短句。")
 })
 
-export const structuredPhoneActionSchema = z.object({
+export const structuredContactChannelLabelsSchema = z.object({
+  message: z.string().describe("消息术语覆盖；使用预设默认值时填空字符串。"),
+  conversation: z.string().describe("会话术语覆盖；使用预设默认值时填空字符串。"),
+  talk: z.string().describe("闲聊术语覆盖；使用预设默认值时填空字符串。"),
+  action: z.string().describe("动作术语覆盖；使用预设默认值时填空字符串。"),
+  gift: z.string().describe("赠礼术语覆盖；使用预设默认值时填空字符串。"),
+  send: z.string().describe("发送术语覆盖；使用预设默认值时填空字符串。"),
+  reply: z.string().describe("回复术语覆盖；使用预设默认值时填空字符串。")
+})
+
+export const structuredContactChannelSchema = z.object({
+  id: z.string().min(1).describe("联系人媒介 id，例如 letter、jade_transmission。"),
+  name: z.string().min(1).describe("媒介显示名称，例如 书信、玉简传讯。"),
+  preset: z.enum(["generic", "phone", "letter", "transmission"]).describe("只影响展示样式和默认术语。"),
+  labels: structuredContactChannelLabelsSchema.describe("可选术语覆盖；不覆盖的字段填空字符串。")
+})
+
+export const structuredContactActionSchema = z.object({
   id: z.string().min(1).describe("动作 id。"),
   label: z.string().describe("动作按钮名称。"),
   text: z.string().describe("主角发出的动作消息文本。"),
   tags: z.array(z.string()).describe("动作标签，例如 gift_basic、date、hotel。"),
-  scope: structuredPhoneLibraryScopeSchema.describe("适用范围。"),
+  scope: structuredContactLibraryScopeSchema.describe("适用范围。"),
   base_favor_delta: z.number().int().min(-100).max(100).describe("基础好感变化。"),
   cooldown_hours: z.number().int().min(0).describe("冷却小时数。"),
   cost_money: z.number().min(0).describe("消耗资金；不消耗填 0。"),
-  cost_items: z.array(structuredPhoneActionCostItemSchema).describe("消耗物品；没有时填空数组。"),
-  invoke: structuredPhoneInvocationSchema.nullable().describe("动作后调用事件；不调用事件时填 null。")
+  cost_items: z.array(structuredContactActionCostItemSchema).describe("消耗物品；没有时填空数组。"),
+  invoke: structuredContactInvocationSchema.nullable().describe("动作后调用事件；不调用事件时填 null。")
 })
 
-export const structuredPhoneReplySchema = z.object({
+export const structuredContactReplySchema = z.object({
   id: z.string().min(1).describe("回复库 id。"),
   tags: z.array(z.string()).describe("匹配标签。"),
-  scope: structuredPhoneLibraryScopeSchema.describe("适用范围。"),
+  scope: structuredContactLibraryScopeSchema.describe("适用范围。"),
   replies: z.array(z.string()).describe("NPC 可回复文本。")
 })
 
-export const structuredPhoneProactiveMessageSchema = z.object({
+export const structuredContactProactiveMessageSchema = z.object({
   id: z.string().min(1).describe("主动消息规则 id。"),
   enabled: z.boolean().describe("是否启用。"),
   trigger_expr: z.string().min(1).describe("触发条件 StoryScript 表达式。"),
@@ -165,65 +182,67 @@ export const structuredPhoneProactiveMessageSchema = z.object({
   reply_quick_message_ids: z.array(z.string()).describe("推荐玩家回复短句 id；没有时填空数组。")
 })
 
-export const structuredPhoneContactProfileSchema = z.object({
+export const structuredContactProfileSchema = z.object({
   role_key: z.string().min(1).describe("联系人角色 key，例如 important:zhuli。"),
+  channel_id: z.string().describe("联系人专用媒介 id；继承故事默认媒介时填空字符串。"),
   enabled: z.boolean().describe("是否启用联系人配置。"),
   auto_add: z.boolean().describe("是否交互后自动加入联系人。"),
   initial_favor: z.number().int().min(0).max(100).describe("初始好感度。"),
   preferred_tags: z.array(z.string()).describe("该联系人偏好的短句/动作标签。"),
-  reply_by_tag: z.array(structuredPhoneReplyByTagEntrySchema).describe("按标签定制 NPC 回复；没有时填空数组。"),
-  proactive_messages: z.array(structuredPhoneProactiveMessageSchema).describe("主动消息规则；没有填空数组。")
+  reply_by_tag: z.array(structuredContactReplyByTagEntrySchema).describe("按标签定制 NPC 回复；没有时填空数组。"),
+  proactive_messages: z.array(structuredContactProactiveMessageSchema).describe("主动消息规则；没有填空数组。")
 })
 
-export const structuredPhoneDraftSchema = z.object({
-  personality_library: z.array(structuredPhonePersonalitySchema).describe("建议新增或覆盖的性格定义；没有填空数组。"),
-  talk_library: z.array(structuredPhoneTalkSchema).describe("建议新增或覆盖的闲聊短句；没有填空数组。"),
-  action_library: z.array(structuredPhoneActionSchema).describe("建议新增或覆盖的联系人动作；没有填空数组。"),
-  reply_library: z.array(structuredPhoneReplySchema).describe("建议新增或覆盖的 NPC 回复；没有填空数组。"),
-  contact_profiles: z.array(structuredPhoneContactProfileSchema).describe("建议新增或覆盖的联系人特配；没有填空数组。")
+export const structuredContactDraftSchema = z.object({
+  channels: z.array(structuredContactChannelSchema).describe("建议新增或覆盖的联系人媒介；没有填空数组，不得修改故事默认媒介。"),
+  personality_library: z.array(structuredContactPersonalitySchema).describe("建议新增或覆盖的性格定义；没有填空数组。"),
+  talk_library: z.array(structuredContactTalkSchema).describe("建议新增或覆盖的闲聊短句；没有填空数组。"),
+  action_library: z.array(structuredContactActionSchema).describe("建议新增或覆盖的联系人动作；没有填空数组。"),
+  reply_library: z.array(structuredContactReplySchema).describe("建议新增或覆盖的 NPC 回复；没有填空数组。"),
+  contact_profiles: z.array(structuredContactProfileSchema).describe("建议新增或覆盖的联系人特配；没有填空数组。")
 })
 
-export const structuredPhoneConversationMessageSchema = z.object({
+export const structuredContactConversationMessageSchema = z.object({
   content: z.string().describe("NPC 发给玩家的消息文本，可使用 ${group.value} 或 ${term.xxx} 占位。")
 })
 
-export const structuredPhoneConversationOptionSchema = z.object({
-  id: z.string().min(1).describe("玩家回复选项 id，同一个剧情手机对话内唯一。"),
+export const structuredContactConversationOptionSchema = z.object({
+  id: z.string().min(1).describe("玩家回复选项 id，同一个联系人剧情内唯一。"),
   text: z.string().describe("玩家回复文本，可使用 ${group.value} 或 ${term.xxx} 占位。"),
   visible_expr: z.string().describe("该回复选项显示条件 StoryScript；默认显示填空字符串。"),
   script: z.string().describe("选择该回复后执行的 StoryScript；没有填空字符串。非空脚本必须写中文注释。"),
   next_node_id: z.string().describe("回复后进入的下一节点 id；结束节点或无下一步时填空字符串。")
 })
 
-export const structuredPhoneConversationReminderSchema = z.object({
+export const structuredContactConversationReminderSchema = z.object({
   enabled: z.boolean().describe("玩家未回复时是否重复发送该节点最后一条 NPC 消息。"),
   interval_minutes: z.number().int().min(1).describe("重复提醒间隔，单位为游戏内分钟，例如 10、30、60。")
 })
 
-export const structuredPhoneConversationNodeSchema = z.object({
-  id: z.string().min(1).describe("剧情手机对话节点 id。"),
-  contact_messages: z.array(structuredPhoneConversationMessageSchema).describe("进入该节点时 NPC 连续发出的消息；没有时填空数组。"),
-  player_options: z.array(structuredPhoneConversationOptionSchema).describe("该节点可选的玩家回复；结束节点填空数组。"),
-  reminder: structuredPhoneConversationReminderSchema.describe("未回复重复提醒设置；不需要提醒时填 {enabled:false, interval_minutes:60}。"),
+export const structuredContactConversationNodeSchema = z.object({
+  id: z.string().min(1).describe("联系人剧情节点 id。"),
+  contact_messages: z.array(structuredContactConversationMessageSchema).describe("进入该节点时 NPC 连续发出的消息；没有时填空数组。"),
+  player_options: z.array(structuredContactConversationOptionSchema).describe("该节点可选的玩家回复；结束节点填空数组。"),
+  reminder: structuredContactConversationReminderSchema.describe("未回复重复提醒设置；不需要提醒时填 {enabled:false, interval_minutes:60}。"),
   end: z.boolean().describe("是否为结束节点。"),
   end_script: z.string().describe("进入结束节点后执行的 StoryScript；没有填空字符串。非空脚本必须写中文注释。"),
-  invoke: structuredPhoneInvocationSchema.nullable().describe("结束节点可静默调用后续事件；不调用事件时填 null。")
+  invoke: structuredContactInvocationSchema.nullable().describe("结束节点可静默调用后续事件；不调用事件时填 null。")
 })
 
-export const structuredPhoneConversationDefinitionSchema = z.object({
-  id: z.string().min(1).describe("剧情手机对话 id，用于 phone_start_conversation(id)。"),
-  title: z.string().describe("剧情手机对话标题。"),
+export const structuredContactConversationDefinitionSchema = z.object({
+  id: z.string().min(1).describe("联系人剧情 id，用于 contact_start_conversation(id)。"),
+  title: z.string().describe("联系人剧情标题。"),
   role_key: z.string().min(1).describe("联系人角色 key，例如 normal:debt_collector。"),
   enabled: z.boolean().describe("是否启用。"),
   once: z.boolean().describe("是否每个存档只允许完成一次。"),
   lock_normal_chat: z.boolean().describe("进行该剧情对话时是否锁定普通闲聊和动作。"),
-  trigger_expr: z.string().describe("自动开始条件 StoryScript；如果只由脚本 phone_start_conversation 触发，填空字符串。"),
+  trigger_expr: z.string().describe("自动开始条件 StoryScript；如果只由脚本 contact_start_conversation 触发，填空字符串。"),
   entry_node_id: z.string().min(1).describe("入口节点 id，必须引用 nodes 内的节点。"),
-  nodes: z.array(structuredPhoneConversationNodeSchema).describe("对话节点列表。")
+  nodes: z.array(structuredContactConversationNodeSchema).describe("对话节点列表。")
 })
 
-export const structuredPhoneConversationsDraftSchema = z.object({
-  conversations: z.array(structuredPhoneConversationDefinitionSchema).describe("建议新增或覆盖的连续剧情手机对话；没有填空数组。")
+export const structuredContactConversationsDraftSchema = z.object({
+  conversations: z.array(structuredContactConversationDefinitionSchema).describe("建议新增或覆盖的连续联系人剧情；没有填空数组。")
 })
 
 // Doing 与 Shop Schema 描述玩家主动入口和商城货架。商城商品只引用物品，不在这里创建物品；
@@ -276,7 +295,7 @@ export const structuredShopProductSchema = z.object({
   enabled: z.boolean().describe("是否启用商品。"),
   available_expr: z.string().describe("购买条件 StoryScript；条件不满足时商品灰色显示，默认可买填空字符串。"),
   unavailable_reason: z.string().describe("不可购买时显示原因；没有填空字符串。"),
-  allow_gift: z.boolean().describe("是否允许付费购买后直接送给手机联系人。"),
+  allow_gift: z.boolean().describe("是否允许付费购买后直接送给联系人。"),
   gift_favor_delta: z.number().int().min(-100).max(100).describe("送礼给联系人时增加的好感度。"),
   purchase_cooldown_hours: z.number().int().min(0).describe("购买冷却小时数；没有冷却填 0。"),
   gift_cooldown_hours: z.number().int().min(0).describe("送礼冷却小时数；没有冷却填 0。")
@@ -322,8 +341,8 @@ export const structuredDraftSchema = z.object({
   items: z.array(structuredDraftItemSchema).describe("建议新增或复用的物品；没有物品时填空数组。"),
   events: z.array(structuredDraftEventSchema).describe("建议新增的剧情事件草稿。"),
   variables: z.array(structuredDraftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
-  phone: structuredPhoneDraftSchema.describe("建议新增或覆盖的手机联系人资产；没有时所有数组填空。"),
-  phoneConversations: structuredPhoneConversationsDraftSchema.describe("建议新增或覆盖的连续剧情手机对话；没有时 conversations 填空数组。"),
+  contact: structuredContactDraftSchema.describe("建议新增或覆盖的联系人资产；没有时所有数组填空。"),
+  contactConversations: structuredContactConversationsDraftSchema.describe("建议新增或覆盖的连续联系人剧情；没有时 conversations 填空数组。"),
   doing: structuredDoingDraftSchema.describe("建议新增或覆盖的玩家主动行动资产；没有时所有数组填空。"),
   shop: structuredShopDraftSchema.describe("建议新增或覆盖的商城资产；没有时所有数组填空。"),
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),
@@ -336,9 +355,9 @@ export type StructuredCreationDraftLoopRule = z.infer<typeof structuredDraftLoop
 
 export type StructuredCreationDraftPresentation = z.infer<typeof structuredDraftPresentationSchema>
 
-export type StructuredCreationPhoneDraft = z.infer<typeof structuredPhoneDraftSchema>
+export type StructuredCreationContactDraft = z.infer<typeof structuredContactDraftSchema>
 
-export type StructuredCreationPhoneConversationsDraft = z.infer<typeof structuredPhoneConversationsDraftSchema>
+export type StructuredCreationContactConversationsDraft = z.infer<typeof structuredContactConversationsDraftSchema>
 
 export type StructuredCreationDoingDraft = z.infer<typeof structuredDoingDraftSchema>
 

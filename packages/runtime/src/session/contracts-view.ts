@@ -49,7 +49,7 @@ import type {
   StoryValEntryDefinition,
   StoryValsFile
 } from "../types"
-import type { CompiledAction, CompiledEvent, RuntimeEventTriggerMode, RuntimeInitialBagsFile, RuntimePhoneContactTrackId, RuntimePlaybackActionState, RuntimePlaybackState, RuntimeProfileCustomFile, RuntimeSchedulerAuditKind, RuntimeStandaloneEvent, RuntimeStoryDoingFile, RuntimeStoryItemsFile, RuntimeStoryPhoneContactProfile, RuntimeStoryPhoneConversationRuntimeState, RuntimeStoryPhoneConversationsFile, RuntimeStoryPhoneEventInvocation, RuntimeStoryPhoneFile, RuntimeStoryPhoneRelationshipTrack, RuntimeStoryPresentation, RuntimeStoryReferFile, RuntimeStorySaveState, RuntimeStorySessionSnapshot, RuntimeStoryShopFile } from "./contracts-core"
+import type { CompiledAction, CompiledEvent, RuntimeContactChannelLabels, RuntimeContactChannelPreset, RuntimeEventTriggerMode, RuntimeInitialBagsFile, RuntimeContactTrackId, RuntimePlaybackActionState, RuntimePlaybackState, RuntimeProfileCustomFile, RuntimeSchedulerAuditKind, RuntimeStandaloneEvent, RuntimeStoryDoingFile, RuntimeStoryItemsFile, RuntimeStoryContactProfile, RuntimeStoryContactConversationRuntimeState, RuntimeStoryContactConversationsFile, RuntimeStoryContactEventInvocation, RuntimeStoryContactFile, RuntimeStoryContactRelationshipTrack, RuntimeStoryPresentation, RuntimeStoryReferFile, RuntimeStorySaveState, RuntimeStorySessionSnapshot, RuntimeStoryShopFile } from "./contracts-core"
 import { getRuntimeActiveCallValues } from "./script-context"
 import { cloneValue, normalizeText } from "./state-values"
 
@@ -70,8 +70,8 @@ export interface RuntimeStoryBundle {
   eventLocations: unknown
   items?: RuntimeStoryItemsFile
   initialBags?: RuntimeInitialBagsFile
-  phone?: RuntimeStoryPhoneFile
-  phoneConversations?: RuntimeStoryPhoneConversationsFile
+  contact?: RuntimeStoryContactFile
+  contactConversations?: RuntimeStoryContactConversationsFile
   refer?: RuntimeStoryReferFile
   doing?: RuntimeStoryDoingFile
   shop?: RuntimeStoryShopFile
@@ -158,7 +158,7 @@ export interface RuntimeBagSummary {
   entries: RuntimeBagItemView[]
 }
 
-export interface RuntimePhoneQuickMessageView {
+export interface RuntimeContactQuickMessageView {
   id: string
   text: string
   tags: string[]
@@ -167,11 +167,11 @@ export interface RuntimePhoneQuickMessageView {
   suggested: boolean
 }
 
-export interface RuntimePhoneContactView {
+export interface RuntimeContactView {
   roleKey: string
   label: string
   favor: number
-  relationTrackId: RuntimePhoneContactTrackId
+  relationTrackId: RuntimeContactTrackId
   relationTrackLabel: string
   relationStageId: string
   relationStageLabel: string
@@ -184,9 +184,13 @@ export interface RuntimePhoneContactView {
   lastMessageGameMinute: number | null
   lastMessagePreview: string | null
   messageCount: number
+  channelId: string
+  channelName: string
+  channelPreset: RuntimeContactChannelPreset
+  channelLabels: Required<RuntimeContactChannelLabels>
 }
 
-export interface RuntimePhoneThreadMessageView {
+export interface RuntimeContactThreadMessageView {
   id: string
   sender: "player" | "contact" | "system"
   senderLabel: string
@@ -195,13 +199,13 @@ export interface RuntimePhoneThreadMessageView {
   read: boolean
 }
 
-export interface RuntimePhoneActionCostItemView {
+export interface RuntimeContactActionCostItemView {
   itemId: string
   itemName: string
   quantity: number
 }
 
-export interface RuntimePhoneActionView {
+export interface RuntimeContactActionView {
   id: string
   label: string
   text: string
@@ -209,17 +213,17 @@ export interface RuntimePhoneActionView {
   baseFavorDelta: number
   cooldownHours: number
   costMoney: number
-  costItems: RuntimePhoneActionCostItemView[]
+  costItems: RuntimeContactActionCostItemView[]
   disabled: boolean
   disabledReason: string | null
   invokeEventLabel: string | null
 }
 
-export interface RuntimePhoneThreadView {
+export interface RuntimeContactThreadView {
   roleKey: string
   contactLabel: string
   favor: number
-  relationTrackId: RuntimePhoneContactTrackId
+  relationTrackId: RuntimeContactTrackId
   relationTrackLabel: string
   relationStageId: string
   relationStageLabel: string
@@ -228,10 +232,14 @@ export interface RuntimePhoneThreadView {
   personalityId: string
   personalityLabel: string
   unreadCount: number
-  messages: RuntimePhoneThreadMessageView[]
-  talks: RuntimePhoneQuickMessageView[]
-  actions: RuntimePhoneActionView[]
-  quickMessages: RuntimePhoneQuickMessageView[]
+  messages: RuntimeContactThreadMessageView[]
+  talks: RuntimeContactQuickMessageView[]
+  actions: RuntimeContactActionView[]
+  quickMessages: RuntimeContactQuickMessageView[]
+  channelId: string
+  channelName: string
+  channelPreset: RuntimeContactChannelPreset
+  channelLabels: Required<RuntimeContactChannelLabels>
 }
 
 export interface RuntimeDoingMenuView {
@@ -304,7 +312,7 @@ export interface RuntimeStoryViewModel {
   currentSceneLevel: number | null
   currentMessage: RuntimeRenderedMessage | null
   currentDialogue: RuntimeRenderedDialogue | null
-  phoneConversation: RuntimeRuntimePhoneConversationView | null
+  contactConversation: RuntimeRuntimeContactConversationView | null
   availableBranches: RuntimeBranchOptionView[]
   branchContextSummary: Array<{
     key: string
@@ -326,11 +334,11 @@ export type RuntimeStorySessionAction =
   | { type: "select-option"; optionId: string }
   | { type: "submit-text"; field: string; value: string }
   | { type: "invoke-once"; targetType: StoryInvokeTargetType; eventId: string; args?: Record<string, unknown> }
-  | { type: "phone-select-conversation-reply"; optionId: string }
-  | { type: "phone-send-talk"; roleKey: string; talkId: string }
-  | { type: "phone-send-action"; roleKey: string; actionId: string }
-  | { type: "phone-send-quick-message"; roleKey: string; quickMessageId: string }
-  | { type: "phone-mark-read"; roleKey: string }
+  | { type: "contact-select-conversation-reply"; optionId: string }
+  | { type: "contact-send-talk"; roleKey: string; talkId: string }
+  | { type: "contact-send-action"; roleKey: string; actionId: string }
+  | { type: "contact-send-quick-message"; roleKey: string; quickMessageId: string }
+  | { type: "contact-mark-read"; roleKey: string }
   | { type: "start-doing"; doingId: string }
   | { type: "bag-gift"; itemId: string; roleKey: string; quantity: number }
   | { type: "shop-buy"; productId: string }
@@ -390,7 +398,7 @@ export interface RuntimeState {
   pendingActions: RuntimeActionState[]
   lastAction: RuntimeActionState | null
   activeStandaloneEvent: RuntimeStandaloneEvent | null
-  activePhoneConversation: RuntimeStoryPhoneConversationRuntimeState | null
+  activeContactConversation: RuntimeStoryContactConversationRuntimeState | null
   storyDirector: RuntimeStoryDirector
 }
 
@@ -428,20 +436,20 @@ export function createRuntimePlaybackState(runtimeState: RuntimeState): RuntimeP
   }
 }
 
-export interface RuntimeRuntimePhoneConversationReplyView {
+export interface RuntimeRuntimeContactConversationReplyView {
   id: string
   text: string
   visible: boolean
 }
 
-export interface RuntimeRuntimePhoneConversationNodeView {
+export interface RuntimeRuntimeContactConversationNodeView {
   id: string
   contactMessages: string[]
-  replies: RuntimeRuntimePhoneConversationReplyView[]
+  replies: RuntimeRuntimeContactConversationReplyView[]
   end: boolean
 }
 
-export interface RuntimeRuntimePhoneConversationView {
+export interface RuntimeRuntimeContactConversationView {
   conversationId: string
   title: string
   roleKey: string
@@ -451,19 +459,19 @@ export interface RuntimeRuntimePhoneConversationView {
   nodeIndex: number
   nodeTotal: number
   messages: RuntimeRenderedDialogue[]
-  replies: RuntimeRuntimePhoneConversationReplyView[]
+  replies: RuntimeRuntimeContactConversationReplyView[]
   finished: boolean
   lockNormalChat: boolean
 }
 
-export interface RuntimeResolvedPhoneContactMeta {
+export interface RuntimeResolvedContactMeta {
   roleKey: string
   label: string
   enabled: boolean
   autoAdd: boolean
   favor: number
   initialFavor: number
-  trackId: RuntimePhoneContactTrackId
+  trackId: RuntimeContactTrackId
   trackLabel: string
   stageId: string
   stageLabel: string
@@ -471,12 +479,16 @@ export interface RuntimeResolvedPhoneContactMeta {
   lockMessage: string | null
   personalityId: string
   personalityLabel: string
+  channelId: string
+  channelName: string
+  channelPreset: RuntimeContactChannelPreset
+  channelLabels: Required<RuntimeContactChannelLabels>
   preferredTags: Set<string>
-  profile: RuntimeStoryPhoneContactProfile | null
+  profile: RuntimeStoryContactProfile | null
   unlockActionTags: Set<string>
 }
 
-export interface RuntimeResolvedPhoneTalkOption {
+export interface RuntimeResolvedContactTalkOption {
   id: string
   text: string
   tags: string[]
@@ -484,11 +496,11 @@ export interface RuntimeResolvedPhoneTalkOption {
   cooldownHours: number
   suggested: boolean
   preferred: boolean
-  invoke?: RuntimeStoryPhoneEventInvocation
+  invoke?: RuntimeStoryContactEventInvocation
   source: "talk-library" | "legacy-quick-message"
 }
 
-export interface RuntimeResolvedPhoneActionOption {
+export interface RuntimeResolvedContactActionOption {
   id: string
   label: string
   text: string
@@ -496,11 +508,11 @@ export interface RuntimeResolvedPhoneActionOption {
   baseFavorDelta: number
   cooldownHours: number
   costMoney: number
-  costItems: RuntimePhoneActionCostItemView[]
+  costItems: RuntimeContactActionCostItemView[]
   preferred: boolean
   disabled: boolean
   disabledReason: string | null
-  invoke?: RuntimeStoryPhoneEventInvocation
+  invoke?: RuntimeStoryContactEventInvocation
 }
 
 export interface RuntimeEnterEventOptions {
@@ -526,7 +538,7 @@ export const MAX_SCHEDULER_AUDIT_LOGS = 120
 
 export const MAX_RUNTIME_DIRECTOR_LOGS = 120
 
-export const DEFAULT_PHONE_RELATIONSHIP_TRACKS: RuntimeStoryPhoneRelationshipTrack[] = [
+export const DEFAULT_CONTACT_RELATIONSHIP_TRACKS: RuntimeStoryContactRelationshipTrack[] = [
   {
     id: "romance",
     name: "恋爱关系",

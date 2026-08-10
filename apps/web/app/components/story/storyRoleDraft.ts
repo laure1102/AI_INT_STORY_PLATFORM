@@ -4,7 +4,7 @@
  * 这些结构只描述前端编辑状态，不会直接写入故事文件；保存时由组合控制器转换回 Core 类型。
  */
 import type {
-  StoryPhoneFile,
+  StoryContactFile,
   StoryImportantRoleDefinition,
   StoryNormalRoleDefinition,
   StoryRolesFile
@@ -102,7 +102,7 @@ export const contactTrackOptions = [
 ] as const
 
 export interface StoryRolesEditorProps {
-  phone: StoryPhoneFile
+  contact: StoryContactFile
   roles: StoryRolesFile
   saveSuccessMessage?: string | null
   saving: boolean

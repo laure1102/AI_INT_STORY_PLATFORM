@@ -1,7 +1,7 @@
 /**
  * 组装并返回 RuntimeStorySession，是运行时唯一面向客户端的门面。
  *
- * HTML、Cocos 或测试代码只需要认识这个门面，不需要知道调度器、对白、手机、行动、商城分别放在
+ * HTML、Cocos 或测试代码只需要认识这个门面，不需要知道调度器、对白、联系人、行动、商城分别放在
  * 哪个模块。门面负责初始化/恢复共享状态，把外部 action 分发给领域函数，并在每次 tick 中协调
  * 消息播放、确定性时钟和调度器。
  *
@@ -16,28 +16,34 @@ import type { CreateStorySessionOptions, RuntimeState, RuntimeStorySession, Runt
 import { createRuntimePlaybackState, toRuntimeActionState } from "./contracts-view"
 import { giftBagItem } from "./bag-gifts"
 import { buyShopProduct, giftShopProduct } from "./doing-shop"
-import { sendPhoneAction, sendPhoneQuickMessage, sendPhoneTalk } from "./phone-actions"
-import { advancePhoneConversationReply } from "./phone-conversations"
-import { assertRuntimePhoneRoleKey, markPhoneThreadRead, restoreActiveStandaloneEvent } from "./phone-threads"
-import { enterCurrentEventResolved, executeAction, finishCurrentEvent, getCurrentEventState } from "./playback-entry"
-import { advanceCurrentMessagePresentation, settlePassiveEvents } from "./playback-render"
+import { sendContactAction, sendContactQuickMessage, sendContactTalk } from "./contact-actions"
+import { advanceContactConversationReply } from "./contact-conversations"
+import { assertRuntimeContactRoleKey, markContactThreadRead, restoreActiveStandaloneEvent } from "./contact-threads"
+import { executeAction, finishCurrentEvent, getCurrentEventState } from "./playback-entry"
+import { advanceCurrentMessagePresentation } from "./playback-render"
 import { advanceClockBySingleStep, createBaseSnapshot, isRuntimeTimePaused, queueClockProgress, setSystemNumber } from "./schedule-clock"
 import { queueDoingEvent, reconcileScheduler } from "./schedule-queue"
 import { appendHistory, findBundleInvokeTargetEvent, getInvokeTargetLabel, queueInvokeEvent, validateInvokeArgs } from "./script-execution"
 import { createDefaultClockState, normalizeInvokeTargetType, normalizeSchedulerState, syncSystemTimeFieldsFromClock } from "./state-scheduler"
-import { applyCustomValuesToValsFile, clampInteger, clampNumber, cloneValue, createDefaultSchedulerState, normalizeBagsState, normalizeDoingState, normalizePhoneConversationHistoryState, normalizePhoneConversationState, normalizePhoneState, normalizeShopState, normalizeText } from "./state-values"
+import { applyCustomValuesToValsFile, clampInteger, clampNumber, cloneValue, createDefaultSchedulerState, normalizeBagsState, normalizeDoingState, normalizeContactConversationHistoryState, normalizeContactConversationState, normalizeContactState, normalizeShopState, normalizeText } from "./state-values"
 import { buildViewModel } from "./view-model"
 
 /**
  * 创建一个独立、可推进、可存档的故事运行时会话。
  *
- * 恢复层次按“bundle 默认值 → save snapshot → v2 playback 游标”组装。旧 v1 存档缺少对白索引等
- * 瞬时状态时，会保留持久变量和当前事件，但从事件开头安全重放并通知客户端，绝不假装精确恢复。
+ * 恢复层次按“bundle 默认值 → v3 save snapshot → playback 游标”组装。v1/v2 存档在读取任何领域
+ * 状态前直接拒绝，避免把旧存档中的手机状态静默解释为联系人状态。
  * 返回对象保持稳定 API：客户端通过 `dispatch` 交互、`tick` 推进时间、getter 读取只读副本。
  */
 export function createStorySession(options: CreateStorySessionOptions): RuntimeStorySession {
+  if (options.saveState && options.saveState.schema_version !== 3) {
+    const rawVersion = (options.saveState as { schema_version?: unknown }).schema_version
+    const versionLabel = rawVersion === undefined ? "v1" : `v${String(rawVersion)}`
+    throw new Error(`Save schema ${versionLabel} is incompatible with the contact runtime; only v3 saves are supported.`)
+  }
+
   // 第 1 步：确定基础快照。读取存档时先克隆，避免会话运行过程反向修改调用方持有的 saveState；
-  // 新游戏则从 bundle 的初始变量、背包、手机、行动和商城配置创建快照。
+  // 新游戏则从 bundle 的初始变量、背包、联系人、行动和商城配置创建快照。
   const now = options.now ?? options.wallClock?.() ?? new Date()
   const baseSnapshot = options.saveState
     ? cloneValue(options.saveState.session_state)
@@ -45,9 +51,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
   const notifications: string[] = []
   let screen: RuntimeStoryViewModel["screen"] = "game"
   const storyDirector = options.storyDirector ?? createRuleBasedRuntimeDirector()
-  const savedPlayback = options.saveState?.schema_version === 2
-    ? options.saveState.playback
-    : undefined
+  const savedPlayback = options.saveState?.playback
   const runtimeState: RuntimeState = {
     snapshot: baseSnapshot,
     currentEventEntered: Boolean(savedPlayback?.current_event_entered),
@@ -56,7 +60,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     pendingActions: (savedPlayback?.pending_actions ?? []).map(toRuntimeActionState),
     lastAction: savedPlayback?.last_action ? toRuntimeActionState(savedPlayback.last_action) : null,
     activeStandaloneEvent: null,
-    activePhoneConversation: normalizePhoneConversationState(baseSnapshot.phone_conversation),
+    activeContactConversation: normalizeContactConversationState(baseSnapshot.contact_conversation),
     storyDirector
   }
 
@@ -75,10 +79,10 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
   runtimeState.snapshot.rng = normalizeRuntimeRngState(runtimeState.snapshot.rng, options.bundle)
 
   normalizeBagsState(runtimeState.snapshot)
-  normalizePhoneState(runtimeState.snapshot)
-  runtimeState.snapshot.phone_conversation = normalizePhoneConversationState(runtimeState.snapshot.phone_conversation)
-  runtimeState.snapshot.phone_conversations = normalizePhoneConversationHistoryState(runtimeState.snapshot.phone_conversations)
-  runtimeState.activePhoneConversation = runtimeState.snapshot.phone_conversation ?? null
+  normalizeContactState(runtimeState.snapshot)
+  runtimeState.snapshot.contact_conversation = normalizeContactConversationState(runtimeState.snapshot.contact_conversation)
+  runtimeState.snapshot.contact_conversations = normalizeContactConversationHistoryState(runtimeState.snapshot.contact_conversations)
+  runtimeState.activeContactConversation = runtimeState.snapshot.contact_conversation ?? null
   normalizeDoingState(runtimeState.snapshot)
   normalizeShopState(runtimeState.snapshot)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)
@@ -103,22 +107,15 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     notifications.push(`已加载角色自定义变量：${options.customOverrides.profile_name}`)
   }
 
-  // 第 4 步：处理存档兼容提示与播放游标恢复。
+  // 第 4 步：处理存档内容版本提示。
   // contentHash 不一致并不立即拒绝存档，因为单机编辑器常需要带旧档预览新 bundle；客户端会收到
-  // 明确提示。v1 没有 playback，只能从当前事件开头重放，避免停在一个无法继续的半状态。
+  // 明确提示。存档 Schema 已在函数入口严格限定为 v3。
   if (options.saveState) {
     notifications.push(`已加载存档：${options.saveState.slot_id}`)
     const bundleHash = options.bundle.contentHash ?? options.bundle.generatedAt
-    const saveHash = options.saveState.bundle_content_hash ?? options.saveState.bundle_version
+    const saveHash = options.saveState.bundle_content_hash
     if (saveHash && bundleHash && saveHash !== bundleHash) {
       notifications.push("存档内容版本与当前故事不同，已按兼容模式加载。")
-    }
-    if (!savedPlayback && runtimeState.snapshot.current_event_id) {
-      notifications.push("旧版存档缺少播放游标，当前事件将从开头重放。")
-      enterCurrentEventResolved(options.bundle, runtimeState, notifications, {
-        skipTriggerCheck: true
-      })
-      settlePassiveEvents(options.bundle, runtimeState, notifications)
     }
   } else {
     notifications.push(`已创建运行时会话：${now.toISOString()}`)
@@ -209,7 +206,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         return
       }
 
-      // Doing、商城和手机属于独立领域，但最终的事件调用都进入同一个 scheduler，
+      // Doing、商城和联系人属于独立领域，但最终的事件调用都进入同一个 scheduler，
       // 从而保证任何时刻只有一个前台事件播放。
       if (action.type === "start-doing") {
         try {
@@ -270,29 +267,29 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         return
       }
 
-      if (action.type === "phone-mark-read") {
+      if (action.type === "contact-mark-read") {
         try {
-          const normalizedRoleKey = assertRuntimePhoneRoleKey(options.bundle, action.roleKey)
-          markPhoneThreadRead(runtimeState.snapshot, normalizedRoleKey)
+          const normalizedRoleKey = assertRuntimeContactRoleKey(options.bundle, action.roleKey)
+          markContactThreadRead(runtimeState.snapshot, normalizedRoleKey)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "标记手机消息已读失败。")
+          notifications.push(error instanceof Error ? error.message : "标记联系人消息已读失败。")
         }
         return
       }
 
-      if (action.type === "phone-select-conversation-reply") {
+      if (action.type === "contact-select-conversation-reply") {
         try {
-          advancePhoneConversationReply(options.bundle, runtimeState, notifications, action.optionId)
+          advanceContactConversationReply(options.bundle, runtimeState, notifications, action.optionId)
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "发送手机剧情回复失败。")
+          notifications.push(error instanceof Error ? error.message : "发送联系人剧情回复失败。")
         }
         return
       }
 
-      if (action.type === "phone-send-quick-message") {
+      if (action.type === "contact-send-quick-message") {
         try {
-          sendPhoneQuickMessage(
+          sendContactQuickMessage(
             options.bundle,
             runtimeState,
             notifications,
@@ -301,14 +298,14 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           )
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "发送手机消息失败。")
+          notifications.push(error instanceof Error ? error.message : "发送联系人消息失败。")
         }
         return
       }
 
-      if (action.type === "phone-send-talk") {
+      if (action.type === "contact-send-talk") {
         try {
-          sendPhoneTalk(
+          sendContactTalk(
             options.bundle,
             runtimeState,
             notifications,
@@ -317,14 +314,14 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           )
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "发送手机闲聊失败。")
+          notifications.push(error instanceof Error ? error.message : "发送联系人闲聊失败。")
         }
         return
       }
 
-      if (action.type === "phone-send-action") {
+      if (action.type === "contact-send-action") {
         try {
-          sendPhoneAction(
+          sendContactAction(
             options.bundle,
             runtimeState,
             notifications,
@@ -333,7 +330,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           )
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "执行手机动作失败。")
+          notifications.push(error instanceof Error ? error.message : "执行联系人动作失败。")
         }
         return
       }
@@ -408,7 +405,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
       while (advanceClockBySingleStep(runtimeState.snapshot)) {
         advanced = true
         reconcileScheduler(options.bundle, runtimeState, notifications, {
-          runPhoneAutoMessages: true
+          runContactAutoMessages: true
         })
 
         if (isRuntimeTimePaused(runtimeState.snapshot)) {

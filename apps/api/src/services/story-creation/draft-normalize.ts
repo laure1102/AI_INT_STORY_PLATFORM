@@ -29,14 +29,14 @@ import {
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
-  type StoryPhoneActionLibraryEntry,
-  type StoryPhoneContactProfile,
-  type StoryPhoneConversationDefinition,
-  type StoryPhoneConversationsFile,
-  type StoryPhoneFile,
-  type StoryPhonePersonalityDefinition,
-  type StoryPhoneReplyLibraryEntry,
-  type StoryPhoneTalkLibraryEntry,
+  type StoryContactActionLibraryEntry,
+  type StoryContactProfile,
+  type StoryContactConversationDefinition,
+  type StoryContactConversationsFile,
+  type StoryContactFile,
+  type StoryContactPersonalityDefinition,
+  type StoryContactReplyLibraryEntry,
+  type StoryContactTalkLibraryEntry,
   type StoryShopProduct,
   type StoryScriptValidationIssue,
   type StoryOnceDialogueDefinition,
@@ -59,8 +59,8 @@ import type {
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
-  StoryCreationDraftPhone,
-  StoryCreationDraftPhoneConversations,
+  StoryCreationDraftContact,
+  StoryCreationDraftContactConversations,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftShop,
@@ -217,15 +217,15 @@ export function normalizeDraftPresentation(
 }
 
 /**
- * 清理手机短句/动作的适用范围。
+ * 清理联系人短句/动作的适用范围。
  * @param scope 原 scope。
  * @param roleIdMap 角色 id 映射。
  * @returns 去重引用和 0~100 好感区间；若最小/最大写反会自动交换。
  */
-export function normalizePhoneScope(
-  scope: StoryPhoneTalkLibraryEntry["scope"],
+export function normalizeContactScope(
+  scope: StoryContactTalkLibraryEntry["scope"],
   roleIdMap: Map<string, string>
-): StoryPhoneTalkLibraryEntry["scope"] {
+): StoryContactTalkLibraryEntry["scope"] {
   const minFavor = Number.isFinite(scope.min_favor) ? Math.max(0, Math.min(100, Math.trunc(scope.min_favor))) : 0
   const maxFavor = Number.isFinite(scope.max_favor) ? Math.max(0, Math.min(100, Math.trunc(scope.max_favor))) : 100
 
@@ -241,14 +241,14 @@ export function normalizePhoneScope(
 }
 
 /**
- * 同步手机 invoke 指向的事件 id。
+ * 同步联系人 invoke 指向的事件 id。
  * @param targetType chain/pool/schedule。
  * @param eventId 模型输出 id。
  * @param eventIdMap 草稿事件重命名映射。
  * @returns 映射后的 id；找不到时使用宽松清理 id。
  */
-export function normalizePhoneInvokeTargetId(
-  targetType: NonNullable<StoryPhoneTalkLibraryEntry["invoke"]>["target_type"],
+export function normalizeContactInvokeTargetId(
+  targetType: NonNullable<StoryContactTalkLibraryEntry["invoke"]>["target_type"],
   eventId: string,
   eventIdMap?: Map<string, string>
 ) {
@@ -259,12 +259,12 @@ export function normalizePhoneInvokeTargetId(
 }
 
 /**
- * 不可变地规范一个可选手机 invoke。
+ * 不可变地规范一个可选联系人 invoke。
  * @param entry 含可选 invoke 的短句、动作或对话节点。
  * @param eventIdMap 事件重命名映射。
  * @returns 没有 invoke 时原对象；有值时返回仅替换 event_id 的新对象。
  */
-export function normalizePhoneInvoke<T extends { invoke?: StoryPhoneTalkLibraryEntry["invoke"] }>(
+export function normalizeContactInvoke<T extends { invoke?: StoryContactTalkLibraryEntry["invoke"] }>(
   entry: T,
   eventIdMap?: Map<string, string>
 ): T {
@@ -276,54 +276,79 @@ export function normalizePhoneInvoke<T extends { invoke?: StoryPhoneTalkLibraryE
     ...entry,
     invoke: {
       ...entry.invoke,
-      event_id: normalizePhoneInvokeTargetId(entry.invoke.target_type, entry.invoke.event_id, eventIdMap)
+      event_id: normalizeContactInvokeTargetId(entry.invoke.target_type, entry.invoke.event_id, eventIdMap)
     }
   }
 }
 
 /**
- * 规范完整手机草稿的五类资产。
- * @param phone 可缺省的手机草稿。
+ * 规范完整联系人草稿的领域资产。
+ * @param contact 可缺省的联系人草稿。
  * @param roleIdMap 角色 id 映射。
  * @param eventIdMap invoke 事件 id 映射。
- * @returns id 唯一、引用同步、标签去重、数值限幅后的手机草稿。
+ * @returns id 唯一、引用同步、标签去重、数值限幅后的联系人草稿。
  *
  * 联系人按 role_key 去重并拒绝 player；无触发条件/消息的主动规则会过滤，防止生成无效运行时项。
  */
-export function normalizeDraftPhone(
-  phone: StoryCreationDraft["phone"],
+export function normalizeDraftContact(
+  contact: StoryCreationDraft["contact"],
   roleIdMap: Map<string, string>,
   eventIdMap?: Map<string, string>
-): StoryCreationDraftPhone {
+): StoryCreationDraftContact {
+  const usedChannelIds = new Set<string>()
   const usedPersonalityIds = new Set<string>()
   const usedTalkIds = new Set<string>()
   const usedActionIds = new Set<string>()
   const usedReplyIds = new Set<string>()
   const usedProfileRoleKeys = new Set<string>()
+  const channelIdMap = new Map<string, string>()
 
-  const personalities = (phone?.personality_library ?? []).map((personality, index) => ({
-    id: makeUniqueId(personality.id, `phone-personality-${index + 1}`, usedPersonalityIds),
+  const channels = (contact?.channels ?? []).map((channel, index) => {
+    const id = makeUniqueId(channel.id, `contact-channel-${index + 1}`, usedChannelIds)
+    const rawId = channel.id.trim()
+    const looseId = makeLooseId(channel.id)
+    if (rawId && !channelIdMap.has(rawId)) {
+      channelIdMap.set(rawId, id)
+    }
+    if (looseId && !channelIdMap.has(looseId)) {
+      channelIdMap.set(looseId, id)
+    }
+
+    return {
+      id,
+      name: channel.name.trim() || id,
+      preset: channel.preset ?? "generic",
+      labels: Object.fromEntries(
+        Object.entries(channel.labels ?? {})
+          .map(([key, value]) => [key, value?.trim()] as const)
+          .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      )
+    }
+  })
+
+  const personalities = (contact?.personality_library ?? []).map((personality, index) => ({
+    id: makeUniqueId(personality.id, `contact-personality-${index + 1}`, usedPersonalityIds),
     name: personality.name?.trim() ?? "",
     descr: personality.descr ?? "",
     style_tags: Array.from(new Set((personality.style_tags ?? []).map((tag) => tag.trim()).filter(Boolean)))
   }))
 
-  const talks = (phone?.talk_library ?? []).map((entry, index) => normalizePhoneInvoke({
-    id: makeUniqueId(entry.id, `phone-talk-${index + 1}`, usedTalkIds),
+  const talks = (contact?.talk_library ?? []).map((entry, index) => normalizeContactInvoke({
+    id: makeUniqueId(entry.id, `contact-talk-${index + 1}`, usedTalkIds),
     text: entry.text ?? "",
     tags: Array.from(new Set((entry.tags ?? []).map((tag) => tag.trim()).filter(Boolean))),
-    scope: normalizePhoneScope(entry.scope, roleIdMap),
+    scope: normalizeContactScope(entry.scope, roleIdMap),
     base_favor_delta: Math.max(-100, Math.min(100, Math.trunc(entry.base_favor_delta ?? 0))),
     cooldown_hours: Math.max(0, Math.trunc(entry.cooldown_hours ?? 0)),
     ...(entry.invoke ? { invoke: entry.invoke } : {})
   }, eventIdMap))
 
-  const actions = (phone?.action_library ?? []).map((entry, index) => normalizePhoneInvoke({
-    id: makeUniqueId(entry.id, `phone-action-${index + 1}`, usedActionIds),
+  const actions = (contact?.action_library ?? []).map((entry, index) => normalizeContactInvoke({
+    id: makeUniqueId(entry.id, `contact-action-${index + 1}`, usedActionIds),
     label: entry.label ?? "",
     text: entry.text ?? "",
     tags: Array.from(new Set((entry.tags ?? []).map((tag) => tag.trim()).filter(Boolean))),
-    scope: normalizePhoneScope(entry.scope, roleIdMap),
+    scope: normalizeContactScope(entry.scope, roleIdMap),
     base_favor_delta: Math.max(-100, Math.min(100, Math.trunc(entry.base_favor_delta ?? 0))),
     cooldown_hours: Math.max(0, Math.trunc(entry.cooldown_hours ?? 0)),
     cost_money: Math.max(0, entry.cost_money ?? 0),
@@ -334,14 +359,14 @@ export function normalizeDraftPhone(
     ...(entry.invoke ? { invoke: entry.invoke } : {})
   }, eventIdMap))
 
-  const replies = (phone?.reply_library ?? []).map((entry, index) => ({
-    id: makeUniqueId(entry.id, `phone-reply-${index + 1}`, usedReplyIds),
+  const replies = (contact?.reply_library ?? []).map((entry, index) => ({
+    id: makeUniqueId(entry.id, `contact-reply-${index + 1}`, usedReplyIds),
     tags: Array.from(new Set((entry.tags ?? []).map((tag) => tag.trim()).filter(Boolean))),
-    scope: normalizePhoneScope(entry.scope, roleIdMap),
+    scope: normalizeContactScope(entry.scope, roleIdMap),
     replies: (entry.replies ?? []).map((reply) => reply.trim()).filter(Boolean)
   }))
 
-  const contactProfiles = (phone?.contact_profiles ?? []).flatMap((profile) => {
+  const contactProfiles = (contact?.contact_profiles ?? []).flatMap((profile) => {
     const roleKey = normalizeRoleReference(profile.role_key, roleIdMap)
     if (!roleKey || roleKey === "player" || usedProfileRoleKeys.has(roleKey)) {
       return []
@@ -351,6 +376,8 @@ export function normalizeDraftPhone(
 
     return [{
       role_key: roleKey,
+      channel_id: channelIdMap.get(profile.channel_id?.trim() ?? "")
+        ?? makeLooseId(profile.channel_id ?? ""),
       enabled: profile.enabled ?? true,
       auto_add: profile.auto_add ?? true,
       initial_favor: Math.max(0, Math.min(100, Math.trunc(profile.initial_favor ?? 20))),
@@ -377,6 +404,7 @@ export function normalizeDraftPhone(
   })
 
   return {
+    channels,
     personality_library: personalities,
     talk_library: talks,
     action_library: actions,
@@ -386,20 +414,20 @@ export function normalizeDraftPhone(
 }
 
 /**
- * 规范树状手机剧情对话。
- * @param phoneConversations 可缺省的对话草稿。
+ * 规范树状联系人剧情。
+ * @param contactConversations 可缺省的对话草稿。
  * @param roleIdMap 联系人角色映射。
  * @param eventIdMap 结束节点 invoke 映射。
  * @returns 对话、节点、选项 id 唯一且跳转引用同步的草稿；没有有效节点的对话会丢弃。
  */
-export function normalizeDraftPhoneConversations(
-  phoneConversations: StoryCreationDraft["phoneConversations"],
+export function normalizeDraftContactConversations(
+  contactConversations: StoryCreationDraft["contactConversations"],
   roleIdMap: Map<string, string>,
   eventIdMap: Map<string, string>
-): StoryCreationDraftPhoneConversations {
+): StoryCreationDraftContactConversations {
   const usedConversationIds = new Set<string>()
 
-  const conversations = (phoneConversations?.conversations ?? []).flatMap((conversation, conversationIndex) => {
+  const conversations = (contactConversations?.conversations ?? []).flatMap((conversation, conversationIndex) => {
     const roleKey = normalizeRoleReference(conversation.role_key, roleIdMap)
     if (!roleKey || roleKey === "player") {
       return []
@@ -407,7 +435,7 @@ export function normalizeDraftPhoneConversations(
 
     const id = makeUniqueId(
       conversation.id,
-      `phone-conversation-${conversationIndex + 1}`,
+      `contact-conversation-${conversationIndex + 1}`,
       usedConversationIds
     )
     const usedNodeIds = new Set<string>()
@@ -431,7 +459,7 @@ export function normalizeDraftPhoneConversations(
     const nodes = nodeSeeds.map(({ source, id: nodeId }) => {
       const end = source.end ?? false
       const invoke = end && source.invoke
-        ? normalizePhoneInvoke({ invoke: source.invoke }, eventIdMap).invoke
+        ? normalizeContactInvoke({ invoke: source.invoke }, eventIdMap).invoke
         : undefined
 
       return {
@@ -462,7 +490,7 @@ export function normalizeDraftPhoneConversations(
         end,
         end_script: source.end_script ?? "",
         ...(invoke ? { invoke } : {})
-      } satisfies StoryPhoneConversationDefinition["nodes"][number]
+      } satisfies StoryContactConversationDefinition["nodes"][number]
     })
     const entryNodeId =
       nodeIdMap.get(conversation.entry_node_id)
@@ -634,7 +662,7 @@ export function normalizeDraftShop(
  * @returns 新草稿；不会修改输入对象。
  *
  * 算法分两遍：先为地点、角色、物品、事件建立唯一 id 映射，再规范所有引用、变量和领域数据。
- * 必须先建完事件映射再处理 chain.next/phone.invoke，否则前向引用会因目标尚未处理而丢失。
+ * 必须先建完事件映射再处理 chain.next/contact.invoke，否则前向引用会因目标尚未处理而丢失。
  */
 export function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
   const locationIdMap = new Map<string, string>()
@@ -760,8 +788,8 @@ export function normalizeDraft(draft: StoryCreationDraft): StoryCreationDraft {
     items,
     events,
     variables,
-    phone: normalizeDraftPhone(draft.phone, roleIdMap, eventIdMap),
-    phoneConversations: normalizeDraftPhoneConversations(draft.phoneConversations, roleIdMap, eventIdMap),
+    contact: normalizeDraftContact(draft.contact, roleIdMap, eventIdMap),
+    contactConversations: normalizeDraftContactConversations(draft.contactConversations, roleIdMap, eventIdMap),
     doing: normalizeDraftDoing(draft.doing, roleIdMap, locationIdMap),
     shop: normalizeDraftShop(draft.shop, itemIdMap)
   }

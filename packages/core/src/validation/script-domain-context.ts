@@ -1,13 +1,13 @@
 /**
  * Core 校验阶段使用的“领域函数模拟器”。
  *
- * StoryScript 校验必须实际走一遍解释器，但校验时没有真实背包、手机、行动和商城存档。本模块提供
+ * StoryScript 校验必须实际走一遍解释器，但校验时没有真实背包、联系人、行动和商城存档。本模块提供
  * 无副作用的同名函数：它们验证 id 和参数格式，并返回不会阻断脚本的占位结果，却绝不修改业务数据。
  */
 import type { StoryScriptExecutionContext } from "@story-mgr/storyscript"
 
 export type StoryScriptValidationBagMode = "read" | "write"
-export type StoryScriptValidationPhoneMode = "read" | "write"
+export type StoryScriptValidationContactMode = "read" | "write"
 export type StoryScriptValidationDoingMode = "read" | "write"
 export type StoryScriptValidationShopMode = "read" | "write"
 
@@ -19,9 +19,9 @@ export interface StoryScriptValidationContextOptions {
   roleKeys?: Iterable<string>
   doingIds?: Iterable<string>
   shopProductIds?: Iterable<string>
-  phoneConversationIds?: Iterable<string>
+  contactConversationIds?: Iterable<string>
   bagMode?: StoryScriptValidationBagMode
-  phoneMode?: StoryScriptValidationPhoneMode
+  contactMode?: StoryScriptValidationContactMode
   doingMode?: StoryScriptValidationDoingMode
   shopMode?: StoryScriptValidationShopMode
 }
@@ -118,46 +118,46 @@ function buildValidationBagScriptFunctionsFromIds(
 }
 
 /**
- * 创建手机只读函数，并检查角色引用。
+ * 创建联系人只读函数，并检查角色引用。
  *
  * @param roleKeys 可作为联系人使用的 `normal:id` / `important:id` 集合。
  * @returns 联系人存在、好感和未读数三个模拟查询函数。
  */
-function buildValidationPhoneReadableFunctionsFromRoleKeys(roleKeys: Iterable<string>) {
+function buildValidationContactReadableFunctionsFromRoleKeys(roleKeys: Iterable<string>) {
   const roleKeySet = new Set(
     Array.from(roleKeys, (roleKey) => normalizeStoryScriptText(roleKey).trim()).filter(Boolean)
   )
 
   /**
-   * 校验手机函数收到的角色 key。
+   * 校验联系人函数收到的角色 key。
    *
    * @param roleKey StoryScript 传入的联系人 key。
    * @returns 去掉首尾空格的合法 key。
    * @throws key 缺失或角色不存在时抛错。
    */
   function assertRoleKey(roleKey: unknown) {
-    if (typeof roleKey !== "string") throw new Error("phone role key is required.")
+    if (typeof roleKey !== "string") throw new Error("contact role key is required.")
     const normalizedRoleKey = roleKey.trim()
-    if (!normalizedRoleKey) throw new Error("phone role key is required.")
+    if (!normalizedRoleKey) throw new Error("contact role key is required.")
     if (!roleKeySet.has(normalizedRoleKey)) {
-      throw new Error(`phone role "${normalizedRoleKey}" does not exist in role library.`)
+      throw new Error(`contact role "${normalizedRoleKey}" does not exist in role library.`)
     }
     return normalizedRoleKey
   }
 
   return {
     /** @param roleKey 联系人角色 key。 @returns 固定 false；只做引用校验。 */
-    phone_has_contact(roleKey: unknown) {
+    contact_has(roleKey: unknown) {
       assertRoleKey(roleKey)
       return false
     },
     /** @param roleKey 联系人角色 key。 @returns 固定 0 的模拟好感。 */
-    phone_favor(roleKey: unknown) {
+    contact_favor(roleKey: unknown) {
       assertRoleKey(roleKey)
       return 0
     },
     /** @param roleKey 联系人角色 key。 @returns 固定 0 的模拟未读数。 */
-    phone_unread_count(roleKey: unknown) {
+    contact_unread_count(roleKey: unknown) {
       assertRoleKey(roleKey)
       return 0
     }
@@ -165,71 +165,71 @@ function buildValidationPhoneReadableFunctionsFromRoleKeys(roleKeys: Iterable<st
 }
 
 /**
- * 按模式创建手机脚本函数集合。
+ * 按模式创建联系人脚本函数集合。
  *
  * @param roleKeys 合法联系人角色 key。
- * @param phoneConversationIds 合法连续手机剧情 id。
- * @param phoneMode read 只开放查询，write 额外开放联系人、消息和剧情操作。
- * @returns 无副作用的手机函数表。
+ * @param contactConversationIds 合法连续联系人剧情 id。
+ * @param contactMode read 只开放查询，write 额外开放联系人、消息和剧情操作。
+ * @returns 无副作用的联系人函数表。
  */
-function buildValidationPhoneScriptFunctionsFromRoleKeys(
+function buildValidationContactScriptFunctionsFromRoleKeys(
   roleKeys: Iterable<string>,
-  phoneConversationIds: Iterable<string>,
-  phoneMode: StoryScriptValidationPhoneMode
+  contactConversationIds: Iterable<string>,
+  contactMode: StoryScriptValidationContactMode
 ) {
-  const readableFunctions = buildValidationPhoneReadableFunctionsFromRoleKeys(roleKeys)
-  const phoneConversationIdSet = new Set(
-    Array.from(phoneConversationIds, (conversationId) => normalizeStoryScriptText(conversationId).trim()).filter(Boolean)
+  const readableFunctions = buildValidationContactReadableFunctionsFromRoleKeys(roleKeys)
+  const contactConversationIdSet = new Set(
+    Array.from(contactConversationIds, (conversationId) => normalizeStoryScriptText(conversationId).trim()).filter(Boolean)
   )
 
-  if (phoneMode === "read") return readableFunctions
+  if (contactMode === "read") return readableFunctions
 
   return {
     /** @param roleKey 联系人 key。 @returns 固定 true，表示模拟添加成功。 */
-    phone_add_contact(roleKey: unknown) {
-      readableFunctions.phone_has_contact(roleKey)
+    contact_add(roleKey: unknown) {
+      readableFunctions.contact_has(roleKey)
       return true
     },
     /** @param roleKey 联系人 key。 @returns 固定 false，表示模拟删除后的状态。 */
-    phone_remove_contact(roleKey: unknown) {
-      readableFunctions.phone_has_contact(roleKey)
+    contact_remove(roleKey: unknown) {
+      readableFunctions.contact_has(roleKey)
       return false
     },
     /** @param roleKey 联系人 key。 @param favor 新好感。 @returns 截断到 0..100 的整数。 */
-    phone_set_favor(roleKey: unknown, favor?: unknown) {
-      readableFunctions.phone_has_contact(roleKey)
+    contact_set_favor(roleKey: unknown, favor?: unknown) {
+      readableFunctions.contact_has(roleKey)
       return typeof favor === "number" && Number.isFinite(favor) ? Math.max(0, Math.min(100, Math.trunc(favor))) : 0
     },
     /** @param roleKey 联系人 key。 @param delta 好感变化。 @returns 用于校验的 0..100 整数。 */
-    phone_add_favor(roleKey: unknown, delta?: unknown) {
-      readableFunctions.phone_has_contact(roleKey)
+    contact_add_favor(roleKey: unknown, delta?: unknown) {
+      readableFunctions.contact_has(roleKey)
       return typeof delta === "number" && Number.isFinite(delta) ? Math.max(0, Math.min(100, Math.trunc(delta))) : 0
     },
     /** @param roleKey 联系人 key。 @param content 对方消息。 @returns 去空格后的消息。 */
-    phone_send_from_contact(roleKey: unknown, content?: unknown) {
-      readableFunctions.phone_has_contact(roleKey)
-      if (typeof content !== "string" || !content.trim()) throw new Error("phone message content is required.")
+    contact_send_from(roleKey: unknown, content?: unknown) {
+      readableFunctions.contact_has(roleKey)
+      if (typeof content !== "string" || !content.trim()) throw new Error("contact message content is required.")
       return content.trim()
     },
     /** @param roleKey 联系人 key。 @param content 玩家消息。 @returns 去空格后的消息。 */
-    phone_send_to_contact(roleKey: unknown, content?: unknown) {
-      readableFunctions.phone_has_contact(roleKey)
-      if (typeof content !== "string" || !content.trim()) throw new Error("phone message content is required.")
+    contact_send_to(roleKey: unknown, content?: unknown) {
+      readableFunctions.contact_has(roleKey)
+      if (typeof content !== "string" || !content.trim()) throw new Error("contact message content is required.")
       return content.trim()
     },
     /** @param roleKey 联系人 key。 @returns 固定 0，模拟清空未读。 */
-    phone_mark_read(roleKey: unknown) {
-      readableFunctions.phone_has_contact(roleKey)
+    contact_mark_read(roleKey: unknown) {
+      readableFunctions.contact_has(roleKey)
       return 0
     },
-    /** @param conversationId 连续手机剧情 id。 @returns 引用有效时固定 true。 */
-    phone_start_conversation(conversationId: unknown) {
+    /** @param conversationId 连续联系人剧情 id。 @returns 引用有效时固定 true。 */
+    contact_start_conversation(conversationId: unknown) {
       if (typeof conversationId !== "string" || !conversationId.trim()) {
-        throw new Error("phone conversation id is required.")
+        throw new Error("contact conversation id is required.")
       }
       const normalizedConversationId = conversationId.trim()
-      if (!phoneConversationIdSet.has(normalizedConversationId)) {
-        throw new Error(`phone conversation "${normalizedConversationId}" does not exist in phone conversation library.`)
+      if (!contactConversationIdSet.has(normalizedConversationId)) {
+        throw new Error(`contact conversation "${normalizedConversationId}" does not exist in contact conversation library.`)
       }
       return true
     },
@@ -396,7 +396,7 @@ export function createStoryScriptValidationContext(
   options: StoryScriptValidationContextOptions = {}
 ): StoryScriptExecutionContext {
   const bagMode = options.bagMode ?? "write"
-  const phoneMode = options.phoneMode ?? "write"
+  const contactMode = options.contactMode ?? "write"
   const doingMode = options.doingMode ?? "write"
   const shopMode = options.shopMode ?? "write"
 
@@ -405,10 +405,10 @@ export function createStoryScriptValidationContext(
     assignableValues: { ...(options.assignableValues ?? {}) },
     functions: {
       ...buildValidationBagScriptFunctionsFromIds(options.itemIds ?? [], bagMode),
-      ...buildValidationPhoneScriptFunctionsFromRoleKeys(
+      ...buildValidationContactScriptFunctionsFromRoleKeys(
         options.roleKeys ?? [],
-        options.phoneConversationIds ?? [],
-        phoneMode
+        options.contactConversationIds ?? [],
+        contactMode
       ),
       ...buildValidationDoingScriptFunctionsFromIds(options.doingIds ?? [], doingMode),
       ...buildValidationShopScriptFunctionsFromIds(options.shopProductIds ?? [], shopMode),

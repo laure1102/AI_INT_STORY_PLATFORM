@@ -53,7 +53,7 @@ import type { RuntimeStoryDialogueDefinition, RuntimeStoryMessagePresentation, R
 import type { RuntimeActionState, RuntimePlayableEvent, RuntimeRenderedDialogue, RuntimeRenderedMessage, RuntimeState, RuntimeStoryBundle } from "./contracts-view"
 import { DEFAULT_MAX_CALC_NESTING_DEPTH } from "./contracts-view"
 import { ensureDoingRecord } from "./doing-shop"
-import { findRoleLabel, getBundleGraphNode, isCompiledAction, isCompiledEvent, isRuntimeStandaloneEvent } from "./phone-threads"
+import { findRoleLabel, getBundleGraphNode, isCompiledAction, isCompiledEvent, isRuntimeStandaloneEvent } from "./contact-threads"
 import { finishCurrentEvent, getCurrentEventState, moveToEventResolved } from "./playback-entry"
 import { appendSchedulerAudit, getCurrentGameMinute, getGameDayFromGameMinute, getLoopSchedulerState } from "./schedule-clock"
 import { clearCurrentEventState, reconcileScheduler } from "./schedule-queue"

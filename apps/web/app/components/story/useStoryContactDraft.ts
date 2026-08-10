@@ -1,29 +1,31 @@
 import { reactive } from "vue"
 import type {
-  StoryPhoneActionLibraryEntry,
-  StoryPhoneContactProfile,
-  StoryPhoneContactTrackId,
-  StoryPhoneFile,
-  StoryPhoneProactiveMessageRule,
-  StoryPhoneQuickMessage,
-  StoryPhoneReplyLibraryEntry,
-  StoryPhoneRelationshipStage,
-  StoryPhoneRelationshipTrack,
-  StoryPhoneTalkLibraryEntry
+  StoryContactActionLibraryEntry,
+  StoryContactChannelPreset,
+  StoryContactProfile,
+  StoryContactTrackId,
+  StoryContactFile,
+  StoryContactProactiveMessageRule,
+  StoryContactQuickMessage,
+  StoryContactReplyLibraryEntry,
+  StoryContactRelationshipStage,
+  StoryContactRelationshipTrack,
+  StoryContactTalkLibraryEntry
 } from "@story-mgr/core"
+import { createStoryContactChannelActions } from "./useStoryContactChannels"
 
 type InvokeTargetType = "chain" | "pool" | "schedule"
 type DelayUnit = "hours" | "days" | "months" | "years"
 
-interface PhoneScopeDraft {
-  contact_tracks: StoryPhoneContactTrackId[]
+interface ContactScopeDraft {
+  contact_tracks: StoryContactTrackId[]
   maxFavorText: string
   minFavorText: string
   personalityIds: string[]
   roleKeysText: string
 }
 
-interface PhoneInvokeDraft {
+interface ContactInvokeDraft {
   delayEnabled: boolean
   delayUnit: DelayUnit
   delayValueText: string
@@ -32,7 +34,7 @@ interface PhoneInvokeDraft {
   targetType: InvokeTargetType
 }
 
-export interface PhoneTrackStageDraft {
+export interface ContactTrackStageDraft {
   allowContact: boolean
   descr: string
   draftKey: string
@@ -44,15 +46,15 @@ export interface PhoneTrackStageDraft {
   unlockActionTagsText: string
 }
 
-export interface PhoneTrackDraft {
+export interface ContactTrackDraft {
   descr: string
   draftKey: string
-  id: StoryPhoneContactTrackId
+  id: StoryContactTrackId
   name: string
-  stages: PhoneTrackStageDraft[]
+  stages: ContactTrackStageDraft[]
 }
 
-export interface PhonePersonalityDraft {
+export interface ContactPersonalityDraft {
   descr: string
   draftKey: string
   id: string
@@ -60,40 +62,40 @@ export interface PhonePersonalityDraft {
   styleTagsText: string
 }
 
-export interface PhoneTalkDraft {
+export interface ContactTalkDraft {
   baseFavorDeltaText: string
   cooldownHoursText: string
   draftKey: string
   id: string
-  invoke: PhoneInvokeDraft
-  scope: PhoneScopeDraft
+  invoke: ContactInvokeDraft
+  scope: ContactScopeDraft
   tagsText: string
   text: string
 }
 
-export interface PhoneActionDraft {
+export interface ContactActionDraft {
   baseFavorDeltaText: string
   cooldownHoursText: string
   costItemsText: string
   costMoneyText: string
   draftKey: string
   id: string
-  invoke: PhoneInvokeDraft
+  invoke: ContactInvokeDraft
   label: string
-  scope: PhoneScopeDraft
+  scope: ContactScopeDraft
   tagsText: string
   text: string
 }
 
-export interface PhoneReplyDraft {
+export interface ContactReplyDraft {
   draftKey: string
   id: string
   repliesText: string
-  scope: PhoneScopeDraft
+  scope: ContactScopeDraft
   tagsText: string
 }
 
-export interface PhoneQuickMessageDraft {
+export interface ContactQuickMessageDraft {
   availableRoleKeysText: string
   baseFavorDeltaText: string
   cooldownHoursText: string
@@ -104,13 +106,13 @@ export interface PhoneQuickMessageDraft {
   visibility: "always" | "suggested-only"
 }
 
-export interface PhoneTagRepliesDraft {
+export interface ContactTagRepliesDraft {
   draftKey: string
   repliesText: string
   tag: string
 }
 
-export interface PhoneProactiveMessageDraft {
+export interface ContactProactiveMessageDraft {
   cooldownHoursText: string
   draftKey: string
   enabled: boolean
@@ -121,30 +123,41 @@ export interface PhoneProactiveMessageDraft {
   triggerExpr: string
 }
 
-export interface PhoneContactProfileDraft {
+export interface ContactProfileDraft {
   autoAdd: boolean
+  channelId: string
   draftKey: string
   enabled: boolean
   initialFavorText: string
   preferredTagsText: string
-  proactiveMessages: PhoneProactiveMessageDraft[]
-  replyByTag: PhoneTagRepliesDraft[]
+  proactiveMessages: ContactProactiveMessageDraft[]
+  replyByTag: ContactTagRepliesDraft[]
   roleKey: string
 }
 
-/** 手机配置弹窗在保存前使用的可编辑草稿。 */
-export interface PhoneDraftState {
-  actions: PhoneActionDraft[]
-  contactProfiles: PhoneContactProfileDraft[]
-  fallbackReplies: PhoneTagRepliesDraft[]
-  personalities: PhonePersonalityDraft[]
-  quickMessages: PhoneQuickMessageDraft[]
-  replies: PhoneReplyDraft[]
-  talks: PhoneTalkDraft[]
-  tracks: PhoneTrackDraft[]
+export interface ContactChannelDraft {
+  draftKey: string
+  id: string
+  labels: Record<"message" | "conversation" | "talk" | "action" | "gift" | "send" | "reply", string>
+  name: string
+  preset: StoryContactChannelPreset
 }
 
-const AVAILABLE_CONTACT_TRACK_IDS: StoryPhoneContactTrackId[] = ["romance", "official", "social"]
+/** 联系人配置弹窗在保存前使用的可编辑草稿。 */
+export interface ContactDraftState {
+  actions: ContactActionDraft[]
+  channels: ContactChannelDraft[]
+  contactProfiles: ContactProfileDraft[]
+  defaultChannelId: string
+  fallbackReplies: ContactTagRepliesDraft[]
+  personalities: ContactPersonalityDraft[]
+  quickMessages: ContactQuickMessageDraft[]
+  replies: ContactReplyDraft[]
+  talks: ContactTalkDraft[]
+  tracks: ContactTrackDraft[]
+}
+
+const AVAILABLE_CONTACT_TRACK_IDS: StoryContactTrackId[] = ["romance", "official", "social"]
 
 /** 复制 `Plain`，避免共享可变引用。 @param value 调用方传入的 `value`。 @returns 计算、查找或构建后的结果。 */
 function clonePlain<T>(value: T): T {
@@ -202,8 +215,8 @@ function clampFavor(value: number) {
 
 /** 创建一份新的 `ScopeDraft` 数据。 @param scope 调用方传入的 `scope`。 @returns 计算、查找或构建后的结果。 */
 function createScopeDraft(
-  scope?: Partial<StoryPhoneTalkLibraryEntry["scope"]>
-): PhoneScopeDraft {
+  scope?: Partial<StoryContactTalkLibraryEntry["scope"]>
+): ContactScopeDraft {
   return {
     contact_tracks: Array.isArray(scope?.contact_tracks) ? [...scope.contact_tracks] : [],
     maxFavorText: String(scope?.max_favor ?? 100),
@@ -215,8 +228,8 @@ function createScopeDraft(
 
 /** 创建一份新的 `InvokeDraft` 数据。 @param invoke 调用方传入的 `invoke`。 @returns 计算、查找或构建后的结果。 */
 function createInvokeDraft(
-  invoke?: Partial<NonNullable<StoryPhoneTalkLibraryEntry["invoke"]>>
-): PhoneInvokeDraft {
+  invoke?: Partial<NonNullable<StoryContactTalkLibraryEntry["invoke"]>>
+): ContactInvokeDraft {
   return {
     delayEnabled: Boolean(invoke?.delay),
     delayUnit: invoke?.delay?.unit ?? "hours",
@@ -228,7 +241,7 @@ function createInvokeDraft(
 }
 
 /** 创建一份新的 `StageDraft` 数据。 @param stage 调用方传入的 `stage`。 @returns 计算、查找或构建后的结果。 */
-function createStageDraft(stage?: Partial<StoryPhoneRelationshipStage>): PhoneTrackStageDraft {
+function createStageDraft(stage?: Partial<StoryContactRelationshipStage>): ContactTrackStageDraft {
   return {
     allowContact: stage?.allow_contact ?? true,
     descr: stage?.descr?.trim() ?? "",
@@ -245,7 +258,7 @@ function createStageDraft(stage?: Partial<StoryPhoneRelationshipStage>): PhoneTr
 }
 
 /** 创建一份新的 `TalkDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function createTalkDraft(entry?: Partial<StoryPhoneTalkLibraryEntry>): PhoneTalkDraft {
+function createTalkDraft(entry?: Partial<StoryContactTalkLibraryEntry>): ContactTalkDraft {
   return {
     baseFavorDeltaText: String(entry?.base_favor_delta ?? 0),
     cooldownHoursText: String(entry?.cooldown_hours ?? 0),
@@ -259,7 +272,7 @@ function createTalkDraft(entry?: Partial<StoryPhoneTalkLibraryEntry>): PhoneTalk
 }
 
 /** 创建一份新的 `ActionDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function createActionDraft(entry?: Partial<StoryPhoneActionLibraryEntry>): PhoneActionDraft {
+function createActionDraft(entry?: Partial<StoryContactActionLibraryEntry>): ContactActionDraft {
   return {
     baseFavorDeltaText: String(entry?.base_favor_delta ?? 0),
     cooldownHoursText: String(entry?.cooldown_hours ?? 0),
@@ -278,7 +291,7 @@ function createActionDraft(entry?: Partial<StoryPhoneActionLibraryEntry>): Phone
 }
 
 /** 创建一份新的 `ReplyDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function createReplyDraft(entry?: Partial<StoryPhoneReplyLibraryEntry>): PhoneReplyDraft {
+function createReplyDraft(entry?: Partial<StoryContactReplyLibraryEntry>): ContactReplyDraft {
   return {
     draftKey: createDraftKey("reply"),
     id: entry?.id?.trim() ?? "",
@@ -289,7 +302,7 @@ function createReplyDraft(entry?: Partial<StoryPhoneReplyLibraryEntry>): PhoneRe
 }
 
 /** 创建一份新的 `QuickMessageDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function createQuickMessageDraft(entry?: Partial<StoryPhoneQuickMessage>): PhoneQuickMessageDraft {
+function createQuickMessageDraft(entry?: Partial<StoryContactQuickMessage>): ContactQuickMessageDraft {
   return {
     availableRoleKeysText: Array.isArray(entry?.available_role_keys) ? entry.available_role_keys.join(", ") : "",
     baseFavorDeltaText: String(entry?.base_favor_delta ?? 1),
@@ -303,7 +316,7 @@ function createQuickMessageDraft(entry?: Partial<StoryPhoneQuickMessage>): Phone
 }
 
 /** 创建一份新的 `TagRepliesDraft` 数据。 @param tag 调用方传入的 `tag`。 @param replies 调用方传入的 `replies`。 @returns 计算、查找或构建后的结果。 */
-function createTagRepliesDraft(tag = "", replies: string[] = []): PhoneTagRepliesDraft {
+function createTagRepliesDraft(tag = "", replies: string[] = []): ContactTagRepliesDraft {
   return {
     draftKey: createDraftKey("tag-replies"),
     repliesText: replies.join("\n"),
@@ -312,14 +325,14 @@ function createTagRepliesDraft(tag = "", replies: string[] = []): PhoneTagReplie
 }
 
 /** 创建一份新的 `TagRepliesDrafts` 数据。 @param replyMap 调用方传入的 `replyMap`。 @returns 计算、查找或构建后的结果。 */
-function createTagRepliesDrafts(replyMap?: Record<string, string[]>): PhoneTagRepliesDraft[] {
+function createTagRepliesDrafts(replyMap?: Record<string, string[]>): ContactTagRepliesDraft[] {
   return Object.entries(replyMap ?? {}).map(([tag, replies]) => createTagRepliesDraft(tag, replies))
 }
 
 /** 创建一份新的 `ProactiveMessageDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
 function createProactiveMessageDraft(
-  entry?: Partial<StoryPhoneProactiveMessageRule>
-): PhoneProactiveMessageDraft {
+  entry?: Partial<StoryContactProactiveMessageRule>
+): ContactProactiveMessageDraft {
   return {
     cooldownHoursText: String(entry?.cooldown_hours ?? 24),
     draftKey: createDraftKey("proactive-message"),
@@ -335,9 +348,10 @@ function createProactiveMessageDraft(
 }
 
 /** 创建一份新的 `ContactProfileDraft` 数据。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function createContactProfileDraft(entry?: Partial<StoryPhoneContactProfile>): PhoneContactProfileDraft {
+function createContactProfileDraft(entry?: Partial<StoryContactProfile>): ContactProfileDraft {
   return {
     autoAdd: entry?.auto_add ?? true,
+    channelId: entry?.channel_id?.trim() ?? "",
     draftKey: createDraftKey("contact-profile"),
     enabled: entry?.enabled ?? true,
     initialFavorText: String(entry?.initial_favor ?? 20),
@@ -357,10 +371,12 @@ function createDraftKey(prefix: string) {
 }
 
 /** 创建一份新的 `EmptyDraftState` 数据。 @returns 计算、查找或构建后的结果。 */
-function createEmptyDraftState(): PhoneDraftState {
+function createEmptyDraftState(): ContactDraftState {
   return {
     actions: [],
+    channels: [],
     contactProfiles: [],
+    defaultChannelId: "",
     fallbackReplies: [],
     personalities: [],
     quickMessages: [],
@@ -371,7 +387,7 @@ function createEmptyDraftState(): PhoneDraftState {
 }
 
 /** 创建一份新的 `DefaultTrackDraft` 数据。 @param trackId 调用方传入的 `trackId`。 @returns 计算、查找或构建后的结果。 */
-function createDefaultTrackDraft(trackId: StoryPhoneContactTrackId): PhoneTrackDraft {
+function createDefaultTrackDraft(trackId: StoryContactTrackId): ContactTrackDraft {
   return {
     descr: "",
     draftKey: createDraftKey("track"),
@@ -382,7 +398,7 @@ function createDefaultTrackDraft(trackId: StoryPhoneContactTrackId): PhoneTrackD
 }
 
 /** 根据当前输入构建 `ScopePayload` 结果。 @param scope 调用方传入的 `scope`。 @returns 计算、查找或构建后的结果。 */
-function buildScopePayload(scope: PhoneScopeDraft) {
+function buildScopePayload(scope: ContactScopeDraft) {
   return {
     contact_tracks: Array.from(new Set(scope.contact_tracks.filter((trackId) => trackId !== "none"))),
     max_favor: clampFavor(parseIntegerText(scope.maxFavorText, 100)),
@@ -395,12 +411,12 @@ function buildScopePayload(scope: PhoneScopeDraft) {
 }
 
 /** 根据当前输入构建 `InvokePayload` 结果。 @param invoke 调用方传入的 `invoke`。 @returns 计算、查找或构建后的结果。 */
-function buildInvokePayload(invoke: PhoneInvokeDraft) {
+function buildInvokePayload(invoke: ContactInvokeDraft) {
   if (!invoke.enabled || !invoke.eventId.trim()) {
     return undefined
   }
 
-  const payload: NonNullable<StoryPhoneTalkLibraryEntry["invoke"]> = {
+  const payload: NonNullable<StoryContactTalkLibraryEntry["invoke"]> = {
     event_id: invoke.eventId.trim(),
     target_type: invoke.targetType
   }
@@ -416,7 +432,7 @@ function buildInvokePayload(invoke: PhoneInvokeDraft) {
 }
 
 /** 根据当前输入构建 `TrackPayload` 结果。 @param track 调用方传入的 `track`。 @returns 计算、查找或构建后的结果。 */
-function buildTrackPayload(track: PhoneTrackDraft): StoryPhoneRelationshipTrack {
+function buildTrackPayload(track: ContactTrackDraft): StoryContactRelationshipTrack {
   return {
     descr: track.descr.trim(),
     id: track.id,
@@ -435,7 +451,7 @@ function buildTrackPayload(track: PhoneTrackDraft): StoryPhoneRelationshipTrack 
 }
 
 /** 根据当前输入构建 `TalkPayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function buildTalkPayload(entry: PhoneTalkDraft): StoryPhoneTalkLibraryEntry {
+function buildTalkPayload(entry: ContactTalkDraft): StoryContactTalkLibraryEntry {
   return {
     base_favor_delta: parseIntegerText(entry.baseFavorDeltaText, 0),
     cooldown_hours: Math.max(0, parseIntegerText(entry.cooldownHoursText, 0)),
@@ -448,7 +464,7 @@ function buildTalkPayload(entry: PhoneTalkDraft): StoryPhoneTalkLibraryEntry {
 }
 
 /** 根据当前输入构建 `ActionPayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function buildActionPayload(entry: PhoneActionDraft): StoryPhoneActionLibraryEntry {
+function buildActionPayload(entry: ContactActionDraft): StoryContactActionLibraryEntry {
   return {
     base_favor_delta: parseIntegerText(entry.baseFavorDeltaText, 0),
     cooldown_hours: Math.max(0, parseIntegerText(entry.cooldownHoursText, 0)),
@@ -477,7 +493,7 @@ function buildActionPayload(entry: PhoneActionDraft): StoryPhoneActionLibraryEnt
 }
 
 /** 根据当前输入构建 `ReplyPayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function buildReplyPayload(entry: PhoneReplyDraft): StoryPhoneReplyLibraryEntry {
+function buildReplyPayload(entry: ContactReplyDraft): StoryContactReplyLibraryEntry {
   return {
     id: entry.id.trim(),
     replies: splitLinesText(entry.repliesText),
@@ -487,7 +503,7 @@ function buildReplyPayload(entry: PhoneReplyDraft): StoryPhoneReplyLibraryEntry 
 }
 
 /** 根据当前输入构建 `QuickMessagePayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function buildQuickMessagePayload(entry: PhoneQuickMessageDraft): StoryPhoneQuickMessage {
+function buildQuickMessagePayload(entry: ContactQuickMessageDraft): StoryContactQuickMessage {
   return {
     available_role_keys: Array.from(new Set(splitCsvText(entry.availableRoleKeysText))),
     base_favor_delta: clampFavor(parseIntegerText(entry.baseFavorDeltaText, 1)),
@@ -500,7 +516,7 @@ function buildQuickMessagePayload(entry: PhoneQuickMessageDraft): StoryPhoneQuic
 }
 
 /** 根据当前输入构建 `RepliesRecordPayload` 结果。 @param entries 调用方传入的 `entries`。 @returns 计算、查找或构建后的结果。 */
-function buildRepliesRecordPayload(entries: PhoneTagRepliesDraft[]) {
+function buildRepliesRecordPayload(entries: ContactTagRepliesDraft[]) {
   const replyMap: Record<string, string[]> = {}
 
   for (const entry of entries) {
@@ -517,7 +533,7 @@ function buildRepliesRecordPayload(entries: PhoneTagRepliesDraft[]) {
 }
 
 /** 根据当前输入构建 `ProactiveMessagePayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function buildProactiveMessagePayload(entry: PhoneProactiveMessageDraft): StoryPhoneProactiveMessageRule {
+function buildProactiveMessagePayload(entry: ContactProactiveMessageDraft): StoryContactProactiveMessageRule {
   return {
     cooldown_hours: Math.max(1, parseIntegerText(entry.cooldownHoursText, 24)),
     enabled: entry.enabled,
@@ -530,9 +546,10 @@ function buildProactiveMessagePayload(entry: PhoneProactiveMessageDraft): StoryP
 }
 
 /** 根据当前输入构建 `ContactProfilePayload` 结果。 @param entry 调用方传入的 `entry`。 @returns 计算、查找或构建后的结果。 */
-function buildContactProfilePayload(entry: PhoneContactProfileDraft): StoryPhoneContactProfile {
+function buildContactProfilePayload(entry: ContactProfileDraft): StoryContactProfile {
   return {
     auto_add: entry.autoAdd,
+    channel_id: entry.channelId.trim(),
     enabled: entry.enabled,
     initial_favor: clampFavor(parseIntegerText(entry.initialFavorText, 20)),
     preferred_tags: Array.from(new Set(splitCsvText(entry.preferredTagsText))),
@@ -542,13 +559,33 @@ function buildContactProfilePayload(entry: PhoneContactProfileDraft): StoryPhone
   }
 }
 
-/** 组合 `StoryPhoneDraft` 的响应式状态、派生值和操作方法。 @param source 调用方传入的 `source`。 @returns 响应式状态、派生值和操作函数组成的 API 对象。 */
-export function useStoryPhoneDraft(source: StoryPhoneFile) {
+/** 组合 `StoryContactDraft` 的响应式状态、派生值和操作方法。 @param source 调用方传入的 `source`。 @returns 响应式状态、派生值和操作函数组成的 API 对象。 */
+export function useStoryContactDraft(source: StoryContactFile) {
   const draft = reactive(createEmptyDraftState())
+  const { addChannel, removeChannel, renameChannel } = createStoryContactChannelActions(
+    draft,
+    createDraftKey
+  )
 
-  /** 把外部或服务端数据同步到本地响应式状态。 @param phone 调用方传入的 `phone`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-  function syncFromPhone(phone: StoryPhoneFile) {
-    draft.tracks = (phone.relationship_tracks ?? []).map((track) => ({
+  /** 把外部或服务端数据同步到本地响应式状态。 @param contact 调用方传入的 `contact`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+  function syncFromContact(contact: StoryContactFile) {
+    draft.defaultChannelId = contact.default_channel_id
+    draft.channels = contact.channels.map((channel) => ({
+      draftKey: createDraftKey("channel"),
+      id: channel.id,
+      labels: {
+        message: channel.labels.message ?? "",
+        conversation: channel.labels.conversation ?? "",
+        talk: channel.labels.talk ?? "",
+        action: channel.labels.action ?? "",
+        gift: channel.labels.gift ?? "",
+        send: channel.labels.send ?? "",
+        reply: channel.labels.reply ?? ""
+      },
+      name: channel.name,
+      preset: channel.preset
+    }))
+    draft.tracks = (contact.relationship_tracks ?? []).map((track) => ({
       descr: track.descr,
       draftKey: createDraftKey("track"),
       id: track.id,
@@ -556,7 +593,7 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
       stages: (track.stages ?? []).map((stage) => createStageDraft(stage))
     }))
 
-    draft.personalities = (phone.personality_library ?? []).map((personality) => ({
+    draft.personalities = (contact.personality_library ?? []).map((personality) => ({
       descr: personality.descr,
       draftKey: createDraftKey("personality"),
       id: personality.id,
@@ -564,19 +601,30 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
       styleTagsText: Array.isArray(personality.style_tags) ? personality.style_tags.join(", ") : ""
     }))
 
-    draft.talks = (phone.talk_library ?? []).map((entry) => createTalkDraft(entry))
-    draft.actions = (phone.action_library ?? []).map((entry) => createActionDraft(entry))
-    draft.replies = (phone.reply_library ?? []).map((entry) => createReplyDraft(entry))
-    draft.quickMessages = (phone.player_quick_messages ?? []).map((entry) => createQuickMessageDraft(entry))
-    draft.contactProfiles = (phone.contact_profiles ?? []).map((entry) => createContactProfileDraft(entry))
-    draft.fallbackReplies = createTagRepliesDrafts(phone.fallback_replies)
+    draft.talks = (contact.talk_library ?? []).map((entry) => createTalkDraft(entry))
+    draft.actions = (contact.action_library ?? []).map((entry) => createActionDraft(entry))
+    draft.replies = (contact.reply_library ?? []).map((entry) => createReplyDraft(entry))
+    draft.quickMessages = (contact.player_quick_messages ?? []).map((entry) => createQuickMessageDraft(entry))
+    draft.contactProfiles = (contact.contact_profiles ?? []).map((entry) => createContactProfileDraft(entry))
+    draft.fallbackReplies = createTagRepliesDrafts(contact.fallback_replies)
   }
 
-  /** 根据当前输入构建 `PhoneFile` 结果。 @returns 计算、查找或构建后的结果。 */
-  function buildPhoneFile(): StoryPhoneFile {
+  /** 根据当前输入构建 `ContactFile` 结果。 @returns 计算、查找或构建后的结果。 */
+  function buildContactFile(): StoryContactFile {
     return {
       action_library: draft.actions.map((entry) => buildActionPayload(entry)),
+      channels: draft.channels.map((channel) => ({
+        id: channel.id.trim(),
+        labels: Object.fromEntries(
+          Object.entries(channel.labels)
+            .map(([key, value]) => [key, value.trim()] as const)
+            .filter((entry): entry is [string, string] => Boolean(entry[1]))
+        ),
+        name: channel.name.trim(),
+        preset: channel.preset
+      })),
       contact_profiles: draft.contactProfiles.map((entry) => buildContactProfilePayload(entry)),
+      default_channel_id: draft.defaultChannelId.trim(),
       fallback_replies: buildRepliesRecordPayload(draft.fallbackReplies),
       personality_library: draft.personalities.map((personality) => ({
         descr: personality.descr.trim(),
@@ -608,12 +656,12 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
   }
 
   /** 新增一项 `TrackStage` 草稿。 @param track 调用方传入的 `track`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-  function addTrackStage(track: PhoneTrackDraft) {
+  function addTrackStage(track: ContactTrackDraft) {
     track.stages.push(createStageDraft())
   }
 
   /** 移除指定的 `TrackStage` 数据。 @param track 调用方传入的 `track`。 @param stageIndex 调用方传入的 `stageIndex`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-  function removeTrackStage(track: PhoneTrackDraft, stageIndex: number) {
+  function removeTrackStage(track: ContactTrackDraft, stageIndex: number) {
     track.stages.splice(stageIndex, 1)
   }
 
@@ -684,22 +732,22 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
   }
 
   /** 新增一项 `ContactReply` 草稿。 @param profile 调用方传入的 `profile`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-  function addContactReply(profile: PhoneContactProfileDraft) {
+  function addContactReply(profile: ContactProfileDraft) {
     profile.replyByTag.push(createTagRepliesDraft())
   }
 
   /** 移除指定的 `ContactReply` 数据。 @param profile 调用方传入的 `profile`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-  function removeContactReply(profile: PhoneContactProfileDraft, index: number) {
+  function removeContactReply(profile: ContactProfileDraft, index: number) {
     profile.replyByTag.splice(index, 1)
   }
 
   /** 新增一项 `ProactiveMessage` 草稿。 @param profile 调用方传入的 `profile`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-  function addProactiveMessage(profile: PhoneContactProfileDraft) {
+  function addProactiveMessage(profile: ContactProfileDraft) {
     profile.proactiveMessages.push(createProactiveMessageDraft())
   }
 
   /** 移除指定的 `ProactiveMessage` 数据。 @param profile 调用方传入的 `profile`。 @param index 调用方传入的 `index`。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-  function removeProactiveMessage(profile: PhoneContactProfileDraft, index: number) {
+  function removeProactiveMessage(profile: ContactProfileDraft, index: number) {
     profile.proactiveMessages.splice(index, 1)
   }
 
@@ -713,10 +761,11 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
     draft.fallbackReplies.splice(index, 1)
   }
 
-  syncFromPhone(source)
+  syncFromContact(source)
 
   return {
     addAction,
+    addChannel,
     addContactProfile,
     addContactReply,
     addFallbackReply,
@@ -727,19 +776,21 @@ export function useStoryPhoneDraft(source: StoryPhoneFile) {
     addTalk,
     addTrack,
     addTrackStage,
-    buildPhoneFile,
+    buildContactFile,
     draft,
     removeAction,
+    removeChannel,
     removeContactProfile,
     removeContactReply,
     removeFallbackReply,
     removePersonality,
     removeProactiveMessage,
     removeQuickMessage,
+    renameChannel,
     removeReply,
     removeTalk,
     removeTrack,
     removeTrackStage,
-    syncFromPhone
+    syncFromContact
   }
 }

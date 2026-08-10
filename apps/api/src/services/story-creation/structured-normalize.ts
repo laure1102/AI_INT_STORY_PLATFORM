@@ -29,14 +29,14 @@ import {
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
-  type StoryPhoneActionLibraryEntry,
-  type StoryPhoneContactProfile,
-  type StoryPhoneConversationDefinition,
-  type StoryPhoneConversationsFile,
-  type StoryPhoneFile,
-  type StoryPhonePersonalityDefinition,
-  type StoryPhoneReplyLibraryEntry,
-  type StoryPhoneTalkLibraryEntry,
+  type StoryContactActionLibraryEntry,
+  type StoryContactProfile,
+  type StoryContactConversationDefinition,
+  type StoryContactConversationsFile,
+  type StoryContactFile,
+  type StoryContactPersonalityDefinition,
+  type StoryContactReplyLibraryEntry,
+  type StoryContactTalkLibraryEntry,
   type StoryShopProduct,
   type StoryScriptValidationIssue,
   type StoryOnceDialogueDefinition,
@@ -59,8 +59,8 @@ import type {
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
-  StoryCreationDraftPhone,
-  StoryCreationDraftPhoneConversations,
+  StoryCreationDraftContact,
+  StoryCreationDraftContactConversations,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftShop,
@@ -72,8 +72,8 @@ import {
   type StoryCreationWorkflowObserver,
   type StoryCreationWorkflowOptions
 } from "../story-creation-workflow"
-import type { StructuredCreationDoingDraft, StructuredCreationDraft, StructuredCreationDraftLoopRule, StructuredCreationDraftPresentation, StructuredCreationPhoneConversationsDraft, StructuredCreationPhoneDraft, StructuredCreationShopDraft } from "./contracts-agents"
-import { structuredPhoneInvocationSchema } from "./contracts-agents"
+import type { StructuredCreationDoingDraft, StructuredCreationDraft, StructuredCreationDraftLoopRule, StructuredCreationDraftPresentation, StructuredCreationContactConversationsDraft, StructuredCreationContactDraft, StructuredCreationShopDraft } from "./contracts-agents"
+import { structuredContactInvocationSchema } from "./contracts-agents"
 
 /** @param value 模型输出时间。@returns 合法 HH:mm；缺失或非法时返回 00:00。 */
 export function normalizeScheduleAt(value: string | null | undefined) {
@@ -184,13 +184,13 @@ export function toDraftPresentation(
 }
 
 /**
- * 把 Agent 可空手机调用转换成 Core invoke。
+ * 把 Agent 可空联系人调用转换成 Core invoke。
  * @param invoke structured-output 调用或 null。
  * @returns null 变 undefined；有值时复制目标并仅在存在时加入 delay。
  */
-export function toStructuredPhoneInvocation(
-  invoke: z.infer<typeof structuredPhoneInvocationSchema> | null
-): NonNullable<StoryPhoneTalkLibraryEntry["invoke"]> | undefined {
+export function toStructuredContactInvocation(
+  invoke: z.infer<typeof structuredContactInvocationSchema> | null
+): NonNullable<StoryContactTalkLibraryEntry["invoke"]> | undefined {
   if (!invoke) {
     return undefined
   }
@@ -203,28 +203,38 @@ export function toStructuredPhoneInvocation(
 }
 
 /**
- * 转换 structured phone，并把 Agent 友好的 reply_by_tag 数组还原为对象映射。
- * @param phone Agent 输出手机草稿。
- * @returns 内部 StoryCreationDraftPhone；空 tag/replies 被过滤，回复去重。
+ * 转换 structured contact，并把 Agent 友好的 reply_by_tag 数组还原为对象映射。
+ * @param contact Agent 输出联系人草稿。
+ * @returns 内部 StoryCreationDraftContact；空 tag/replies 被过滤，回复去重。
  */
-export function normalizeStructuredPhoneDraft(phone: StructuredCreationPhoneDraft): StoryCreationDraftPhone {
+export function normalizeStructuredContactDraft(contact: StructuredCreationContactDraft): StoryCreationDraftContact {
   return {
-    personality_library: phone.personality_library.map((personality) => ({
+    channels: contact.channels.map((channel) => ({
+      id: channel.id,
+      name: channel.name,
+      preset: channel.preset,
+      labels: Object.fromEntries(
+        Object.entries(channel.labels)
+          .map(([key, value]) => [key, value.trim()] as const)
+          .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      )
+    })),
+    personality_library: contact.personality_library.map((personality) => ({
       id: personality.id,
       name: personality.name,
       descr: personality.descr,
       style_tags: personality.style_tags
     })),
-    talk_library: phone.talk_library.map((entry) => ({
+    talk_library: contact.talk_library.map((entry) => ({
       id: entry.id,
       text: entry.text,
       tags: entry.tags,
       scope: entry.scope,
       base_favor_delta: entry.base_favor_delta,
       cooldown_hours: entry.cooldown_hours,
-      ...(entry.invoke ? { invoke: toStructuredPhoneInvocation(entry.invoke) } : {})
+      ...(entry.invoke ? { invoke: toStructuredContactInvocation(entry.invoke) } : {})
     })),
-    action_library: phone.action_library.map((entry) => ({
+    action_library: contact.action_library.map((entry) => ({
       id: entry.id,
       label: entry.label,
       text: entry.text,
@@ -234,16 +244,17 @@ export function normalizeStructuredPhoneDraft(phone: StructuredCreationPhoneDraf
       cooldown_hours: entry.cooldown_hours,
       cost_money: entry.cost_money,
       cost_items: entry.cost_items,
-      ...(entry.invoke ? { invoke: toStructuredPhoneInvocation(entry.invoke) } : {})
+      ...(entry.invoke ? { invoke: toStructuredContactInvocation(entry.invoke) } : {})
     })),
-    reply_library: phone.reply_library.map((entry) => ({
+    reply_library: contact.reply_library.map((entry) => ({
       id: entry.id,
       tags: entry.tags,
       scope: entry.scope,
       replies: entry.replies
     })),
-    contact_profiles: phone.contact_profiles.map((profile) => ({
+    contact_profiles: contact.contact_profiles.map((profile) => ({
       role_key: profile.role_key,
+      channel_id: profile.channel_id,
       enabled: profile.enabled,
       auto_add: profile.auto_add,
       initial_favor: profile.initial_favor,
@@ -266,15 +277,15 @@ export function normalizeStructuredPhoneDraft(phone: StructuredCreationPhoneDraf
 }
 
 /**
- * 转换手机剧情对话的节点树。
- * @param phoneConversations Agent 输出。
+ * 转换联系人剧情的节点树。
+ * @param contactConversations Agent 输出。
  * @returns 内部对话草稿；提醒间隔至少为 1 分钟，节点 invoke 转为可选字段。
  */
-export function normalizeStructuredPhoneConversationsDraft(
-  phoneConversations: StructuredCreationPhoneConversationsDraft
-): StoryCreationDraftPhoneConversations {
+export function normalizeStructuredContactConversationsDraft(
+  contactConversations: StructuredCreationContactConversationsDraft
+): StoryCreationDraftContactConversations {
   return {
-    conversations: phoneConversations.conversations.map((conversation) => ({
+    conversations: contactConversations.conversations.map((conversation) => ({
       id: conversation.id,
       title: conversation.title,
       role_key: conversation.role_key,
@@ -301,7 +312,7 @@ export function normalizeStructuredPhoneConversationsDraft(
         },
         end: node.end,
         end_script: node.end_script,
-        ...(node.invoke ? { invoke: toStructuredPhoneInvocation(node.invoke) } : {})
+        ...(node.invoke ? { invoke: toStructuredContactInvocation(node.invoke) } : {})
       }))
     }))
   }
@@ -438,8 +449,8 @@ export function normalizeStructuredDraft(draft: StructuredCreationDraft): StoryC
       calc_rule: variable.calc_rule,
       ...(variable.value_type === "value" ? { value: variable.value } : {})
     })),
-    phone: normalizeStructuredPhoneDraft(draft.phone),
-    phoneConversations: normalizeStructuredPhoneConversationsDraft(draft.phoneConversations),
+    contact: normalizeStructuredContactDraft(draft.contact),
+    contactConversations: normalizeStructuredContactConversationsDraft(draft.contactConversations),
     doing: normalizeStructuredDoingDraft(draft.doing),
     shop: normalizeStructuredShopDraft(draft.shop),
     notes: draft.notes,

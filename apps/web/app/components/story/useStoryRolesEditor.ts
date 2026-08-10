@@ -3,7 +3,7 @@
  * 数据从弹窗 props 进入，保存时通过 emit 返回；外层弹窗开关不在这里处理。
  */
 import type {
-  StoryPhoneFile,
+  StoryContactFile,
   StoryImportantRoleDefinition,
   StoryNormalRoleDefinition,
   StoryRolesFile

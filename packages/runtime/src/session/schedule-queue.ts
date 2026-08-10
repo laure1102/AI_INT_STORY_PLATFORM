@@ -1,7 +1,7 @@
 /**
  * 协调所有事件来源进入统一的 scheduler，并保证一次只播放一个前台事件。
  *
- * 事件可能来自 chain 根节点、pool 自然事件、schedule 到期事件、玩家 Doing、手机/脚本 invoke。
+ * 事件可能来自 chain 根节点、pool 自然事件、schedule 到期事件、玩家 Doing、联系人/脚本 invoke。
  * 它们不会各自直接改 `current_event_id`，而是先进入 `scheduled` 或 `ready_queue`，再由本模块按统一
  * 规则选出 `active`。这样时间暂停、去重、审计和存档恢复不会因事件来源不同而出现多套语义。
  *
@@ -17,9 +17,9 @@ import {
 import type { RuntimeEventTriggerMode, RuntimeStoryPresentation, RuntimeStorySessionSnapshot } from "./contracts-core"
 import type { RuntimeGraphNode, RuntimeLoopEventDefinition, RuntimeState, RuntimeStoryBundle } from "./contracts-view"
 import { assertRuntimeDoingId, findBundleDoing, resolveDoingAvailability } from "./doing-shop"
-import { reconcilePhoneAutoMessages } from "./phone-actions"
-import { reconcileActivePhoneConversationReminder } from "./phone-conversations"
-import { createStandaloneEvent, getBundleChainNodes, getBundleGraphNode, isCompiledEvent } from "./phone-threads"
+import { reconcileContactAutoMessages } from "./contact-actions"
+import { reconcileActiveContactConversationReminder } from "./contact-conversations"
+import { createStandaloneEvent, getBundleChainNodes, getBundleGraphNode, isCompiledEvent } from "./contact-threads"
 import { enterCurrentEventResolved, moveToEventResolved, promoteDueScheduledEventsResolved } from "./playback-entry"
 import { canEnterEvent, settlePassiveEvents } from "./playback-render"
 import { appendRuntimeDirectorLog, appendSchedulerAudit, buildRuntimeDirectorFeatureSnapshot, calculateNextLoopDueGameMinute, createScheduledEvent, enqueueReadyEvent, enqueueScheduledEvent, getCurrentGameMinute, getLoopScheduleOrderConfig, getLoopSchedulerState, isScheduledEventQueued } from "./schedule-clock"
@@ -578,24 +578,24 @@ export function startNextReadyEventIfIdle(
  * 对运行时调度状态执行一次完整对账。
  *
  * 顺序非常重要：先规范旧状态并提升到期项；再让导演补自然事件；再补下一周期 schedule；按需生成
- * 手机提醒/主动消息；最后仅在空闲时启动一个 ready 项，并同步 system 时间变量。各操作都设计为
- * 可重复调用，创建会话、每个 clock step、事件完成和手机操作后都能安全 reconcile。
+ * 联系人提醒/主动消息；最后仅在空闲时启动一个 ready 项，并同步 system 时间变量。各操作都设计为
+ * 可重复调用，创建会话、每个 clock step、事件完成和联系人操作后都能安全 reconcile。
  */
 export function reconcileScheduler(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
   notifications: string[],
   options: {
-    runPhoneAutoMessages?: boolean
+    runContactAutoMessages?: boolean
   } = {}
 ) {
   normalizeSchedulerState(runtimeState.snapshot)
   promoteDueScheduledEventsResolved(bundle, runtimeState.snapshot)
   scanDirectorEntryEvents(bundle, runtimeState, runtimeState.storyDirector)
   ensureLoopSchedules(bundle, runtimeState)
-  if (options.runPhoneAutoMessages) {
-    reconcileActivePhoneConversationReminder(bundle, runtimeState, notifications)
-    reconcilePhoneAutoMessages(bundle, runtimeState, notifications)
+  if (options.runContactAutoMessages) {
+    reconcileActiveContactConversationReminder(bundle, runtimeState, notifications)
+    reconcileContactAutoMessages(bundle, runtimeState, notifications)
   }
   startNextReadyEventIfIdle(bundle, runtimeState, notifications)
   syncSystemTimeFieldsFromClock(runtimeState.snapshot)

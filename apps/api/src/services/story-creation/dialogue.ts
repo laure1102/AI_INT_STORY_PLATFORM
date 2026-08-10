@@ -29,14 +29,14 @@ import {
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
-  type StoryPhoneActionLibraryEntry,
-  type StoryPhoneContactProfile,
-  type StoryPhoneConversationDefinition,
-  type StoryPhoneConversationsFile,
-  type StoryPhoneFile,
-  type StoryPhonePersonalityDefinition,
-  type StoryPhoneReplyLibraryEntry,
-  type StoryPhoneTalkLibraryEntry,
+  type StoryContactActionLibraryEntry,
+  type StoryContactProfile,
+  type StoryContactConversationDefinition,
+  type StoryContactConversationsFile,
+  type StoryContactFile,
+  type StoryContactPersonalityDefinition,
+  type StoryContactReplyLibraryEntry,
+  type StoryContactTalkLibraryEntry,
   type StoryShopProduct,
   type StoryScriptValidationIssue,
   type StoryOnceDialogueDefinition,
@@ -59,8 +59,8 @@ import type {
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
-  StoryCreationDraftPhone,
-  StoryCreationDraftPhoneConversations,
+  StoryCreationDraftContact,
+  StoryCreationDraftContactConversations,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftShop,
@@ -72,7 +72,7 @@ import {
   type StoryCreationWorkflowObserver,
   type StoryCreationWorkflowOptions
 } from "../story-creation-workflow"
-import { formatExistingAssets, formatExistingPhoneAndDoing, formatExistingVariables, formatStoryBible } from "./context"
+import { formatExistingAssets, formatExistingContactAndDoing, formatExistingVariables, formatStoryBible } from "./context"
 import { generatedDialogueSchema } from "./contracts-agents"
 import { createChatModel, requireAgentSettings } from "./model"
 import { invokeStructured, normalizeDialogueGenerationCollectionType, normalizeDialogueSpeakerKey, summarizeEventForDialogueGeneration } from "./prompts"
@@ -81,7 +81,7 @@ import { invokeStructured, normalizeDialogueGenerationCollectionType, normalizeD
  * 为一个现有对白事件生成可直接预览的完整对白候选。
  *
  * @param settings 应用 AI Agent 配置。
- * @param story 当前完整故事，用来提供故事圣经、变量、资产、角色和手机/行动上下文。
+ * @param story 当前完整故事，用来提供故事圣经、变量、资产、角色和联系人/行动上下文。
  * @param request 事件集合、当前事件和用户对白要求。
  * @param signal 可选取消信号，浏览器关闭请求时中止模型调用。
  * @returns 对白摘要、完整 dialogues 和警告；函数不会保存事件。
@@ -145,7 +145,7 @@ export async function generateStoryEventDialogues(
     "",
     formatExistingAssets(story, instruction, null),
     "",
-    formatExistingPhoneAndDoing(story),
+    formatExistingContactAndDoing(story),
     "",
     "【事件上下文】",
     summarizeEventForDialogueGeneration(story, collectionType, event),

@@ -19,8 +19,8 @@ import {
   type StoryEventLocationFile,
   type StoryItemsFile,
   type StoryLoopEventFile,
-  type StoryPhoneConversationsFile,
-  type StoryPhoneFile,
+  type StoryContactConversationsFile,
+  type StoryContactFile,
   type StoryOnceEventFile,
   type StoryRolesFile
 } from "@story-mgr/core"
@@ -29,7 +29,7 @@ import type {
   ApplyStoryCreationDraftRequest,
   ApplyStoryCreationDraftResponse
 } from "@story-mgr/shared"
-import { collectAvailableRoleKeys, draftEventKey, filterPhoneActionCostItems, filterPhoneConversationInvokeForApply, filterPhoneInvokeForApply, filterPhoneScopeForApply, mergePhoneContactProfile, normalizeDoingForApply, normalizeDoingMenuForApply, normalizeShopProductForApply, parseDraftForApply, toEventLocationAssignment, toImportantRole, toNormalRole, toSelectionSet, toStoryItem, upsertById, upsertByKey } from "./apply-domain"
+import { collectAvailableRoleKeys, draftEventKey, filterContactActionCostItems, filterContactConversationInvokeForApply, filterContactInvokeForApply, filterContactScopeForApply, mergeContactProfile, normalizeDoingForApply, normalizeDoingMenuForApply, normalizeShopProductForApply, parseDraftForApply, toEventLocationAssignment, toImportantRole, toNormalRole, toSelectionSet, toStoryItem, upsertById, upsertByKey } from "./apply-domain"
 import { applyDraftVariable, cloneStoryValsFile, draftVariableKey, toStoryEvent } from "./apply-events"
 import { draftRoleKey } from "./draft-normalize"
 
@@ -56,12 +56,13 @@ export async function applyStoryCreationDraft(
   const selectedRoleKeys = toSelectionSet(request.selection.roleKeys ?? [])
   const selectedLegacyRoleIds = toSelectionSet(request.selection.roleIds ?? [])
   const selectedItemIds = toSelectionSet(request.selection.itemIds ?? [])
-  const selectedPhonePersonalityIds = toSelectionSet(request.selection.phonePersonalityIds ?? [])
-  const selectedPhoneTalkIds = toSelectionSet(request.selection.phoneTalkIds ?? [])
-  const selectedPhoneActionIds = toSelectionSet(request.selection.phoneActionIds ?? [])
-  const selectedPhoneReplyIds = toSelectionSet(request.selection.phoneReplyIds ?? [])
-  const selectedPhoneContactProfileKeys = toSelectionSet(request.selection.phoneContactProfileKeys ?? [])
-  const selectedPhoneConversationIds = toSelectionSet(request.selection.phoneConversationIds ?? [])
+  const selectedContactChannelIds = toSelectionSet(request.selection.contactChannelIds ?? [])
+  const selectedContactPersonalityIds = toSelectionSet(request.selection.contactPersonalityIds ?? [])
+  const selectedContactTalkIds = toSelectionSet(request.selection.contactTalkIds ?? [])
+  const selectedContactActionIds = toSelectionSet(request.selection.contactActionIds ?? [])
+  const selectedContactReplyIds = toSelectionSet(request.selection.contactReplyIds ?? [])
+  const selectedContactProfileKeys = toSelectionSet(request.selection.contactProfileKeys ?? [])
+  const selectedContactConversationIds = toSelectionSet(request.selection.contactConversationIds ?? [])
   const selectedDoingMenuIds = toSelectionSet(request.selection.doingMenuIds ?? [])
   const selectedDoingIds = toSelectionSet(request.selection.doingIds ?? [])
   const selectedShopCategoryIds = toSelectionSet(request.selection.shopCategoryIds ?? [])
@@ -80,19 +81,20 @@ export async function applyStoryCreationDraft(
   let appliedRoles = 0
   let appliedItems = 0
   let appliedVariables = 0
-  let appliedPhonePersonalities = 0
-  let appliedPhoneTalks = 0
-  let appliedPhoneActions = 0
-  let appliedPhoneReplies = 0
-  let appliedPhoneContactProfiles = 0
-  let appliedPhoneConversations = 0
+  let appliedContactChannels = 0
+  let appliedContactPersonalities = 0
+  let appliedContactTalks = 0
+  let appliedContactActions = 0
+  let appliedContactReplies = 0
+  let appliedContactProfiles = 0
+  let appliedContactConversations = 0
   let appliedDoingMenus = 0
   let appliedDoings = 0
   let appliedShopCategories = 0
   let appliedShopProducts = 0
 
   // 第 3 步：先合并地点、角色和物品。
-  // 后面的事件、手机、行动和商城都可能引用它们，所以必须先得到“本批选择应用后”的可用资产集合。
+  // 后面的事件、联系人、行动和商城都可能引用它们，所以必须先得到“本批选择应用后”的可用资产集合。
   const nextEventLocations: StoryEventLocationFile = {
     ...story.eventLocations,
     assignments: story.eventLocations.assignments
@@ -206,40 +208,51 @@ export async function applyStoryCreationDraft(
     })
   )
 
-  // 第 5 步：合并普通手机素材。
+  // 第 5 步：合并联系人素材。
   // 顺序是性格 → 闲聊 → 动作 → 回复 → 联系人配置，因为后面的条目可能引用前面刚选中的性格、
   // 角色、物品或事件。无效的可选引用会被过滤并产生 warning，而不是隐式创建缺失资源。
-  const nextPhone: StoryPhoneFile = {
-    ...story.phone,
-    personality_library: story.phone.personality_library,
-    talk_library: story.phone.talk_library,
-    action_library: story.phone.action_library,
-    reply_library: story.phone.reply_library,
-    player_quick_messages: story.phone.player_quick_messages,
-    contact_profiles: story.phone.contact_profiles
+  const nextContact: StoryContactFile = {
+    ...story.contact,
+    personality_library: story.contact.personality_library,
+    talk_library: story.contact.talk_library,
+    action_library: story.contact.action_library,
+    reply_library: story.contact.reply_library,
+    player_quick_messages: story.contact.player_quick_messages,
+    contact_profiles: story.contact.contact_profiles
   }
-  const availablePhonePersonalityIds = new Set(nextPhone.personality_library.map((personality) => personality.id))
+  const availableContactChannelIds = new Set(nextContact.channels.map((channel) => channel.id))
+  const availableContactPersonalityIds = new Set(nextContact.personality_library.map((personality) => personality.id))
 
-  for (const personality of draft.phone?.personality_library ?? []) {
-    if (!selectedPhonePersonalityIds.has(personality.id)) {
+  for (const channel of draft.contact?.channels ?? []) {
+    if (!selectedContactChannelIds.has(channel.id)) {
       continue
     }
 
-    nextPhone.personality_library = upsertById(nextPhone.personality_library, personality)
-    availablePhonePersonalityIds.add(personality.id)
-    appliedPhonePersonalities += 1
+    nextContact.channels = upsertById(nextContact.channels, channel)
+    availableContactChannelIds.add(channel.id)
+    appliedContactChannels += 1
   }
 
-  for (const entry of draft.phone?.talk_library ?? []) {
-    if (!selectedPhoneTalkIds.has(entry.id)) {
+  for (const personality of draft.contact?.personality_library ?? []) {
+    if (!selectedContactPersonalityIds.has(personality.id)) {
       continue
     }
 
-    const nextEntry = filterPhoneInvokeForApply(
+    nextContact.personality_library = upsertById(nextContact.personality_library, personality)
+    availableContactPersonalityIds.add(personality.id)
+    appliedContactPersonalities += 1
+  }
+
+  for (const entry of draft.contact?.talk_library ?? []) {
+    if (!selectedContactTalkIds.has(entry.id)) {
+      continue
+    }
+
+    const nextEntry = filterContactInvokeForApply(
       {
         ...entry,
-        scope: filterPhoneScopeForApply(entry.scope, {
-          availablePersonalityIds: availablePhonePersonalityIds,
+        scope: filterContactScopeForApply(entry.scope, {
+          availablePersonalityIds: availableContactPersonalityIds,
           availableRoleKeys,
           label: `联系人闲聊 ${entry.id}`,
           warnings
@@ -252,21 +265,21 @@ export async function applyStoryCreationDraft(
       }
     )
 
-    nextPhone.talk_library = upsertById(nextPhone.talk_library, nextEntry)
-    appliedPhoneTalks += 1
+    nextContact.talk_library = upsertById(nextContact.talk_library, nextEntry)
+    appliedContactTalks += 1
   }
 
-  for (const entry of draft.phone?.action_library ?? []) {
-    if (!selectedPhoneActionIds.has(entry.id)) {
+  for (const entry of draft.contact?.action_library ?? []) {
+    if (!selectedContactActionIds.has(entry.id)) {
       continue
     }
 
-    const nextEntry = filterPhoneInvokeForApply(
-      filterPhoneActionCostItems(
+    const nextEntry = filterContactInvokeForApply(
+      filterContactActionCostItems(
         {
           ...entry,
-          scope: filterPhoneScopeForApply(entry.scope, {
-            availablePersonalityIds: availablePhonePersonalityIds,
+          scope: filterContactScopeForApply(entry.scope, {
+            availablePersonalityIds: availableContactPersonalityIds,
             availableRoleKeys,
             label: `联系人动作 ${entry.id}`,
             warnings
@@ -282,74 +295,82 @@ export async function applyStoryCreationDraft(
       }
     )
 
-    nextPhone.action_library = upsertById(nextPhone.action_library, nextEntry)
-    appliedPhoneActions += 1
+    nextContact.action_library = upsertById(nextContact.action_library, nextEntry)
+    appliedContactActions += 1
   }
 
-  for (const entry of draft.phone?.reply_library ?? []) {
-    if (!selectedPhoneReplyIds.has(entry.id)) {
+  for (const entry of draft.contact?.reply_library ?? []) {
+    if (!selectedContactReplyIds.has(entry.id)) {
       continue
     }
 
     const nextEntry = {
       ...entry,
-      scope: filterPhoneScopeForApply(entry.scope, {
-        availablePersonalityIds: availablePhonePersonalityIds,
+      scope: filterContactScopeForApply(entry.scope, {
+        availablePersonalityIds: availableContactPersonalityIds,
         availableRoleKeys,
         label: `联系人回复 ${entry.id}`,
         warnings
       })
     }
 
-    nextPhone.reply_library = upsertById(nextPhone.reply_library, nextEntry)
-    appliedPhoneReplies += 1
+    nextContact.reply_library = upsertById(nextContact.reply_library, nextEntry)
+    appliedContactReplies += 1
   }
 
-  for (const profile of draft.phone?.contact_profiles ?? []) {
-    if (!selectedPhoneContactProfileKeys.has(profile.role_key)) {
+  for (const profile of draft.contact?.contact_profiles ?? []) {
+    if (!selectedContactProfileKeys.has(profile.role_key)) {
       continue
     }
 
     if (!availableRoleKeys.has(profile.role_key) || profile.role_key === "player") {
-      warnings.push(`联系人配置 ${profile.role_key} 引用了不存在或未应用的 NPC 角色，未写入 phone.json5。`)
+      warnings.push(`联系人配置 ${profile.role_key} 引用了不存在或未应用的 NPC 角色，未写入 contact.json5。`)
       continue
     }
 
-    const existingProfile = nextPhone.contact_profiles.find((item) => item.role_key === profile.role_key)
-    nextPhone.contact_profiles = upsertByKey(
-      nextPhone.contact_profiles,
-      mergePhoneContactProfile(profile, existingProfile),
+    const normalizedProfile = { ...profile }
+    if (normalizedProfile.channel_id && !availableContactChannelIds.has(normalizedProfile.channel_id)) {
+      warnings.push(
+        `联系人配置 ${profile.role_key} 引用了不存在或未应用的媒介 ${normalizedProfile.channel_id}，已清空覆盖并继承默认媒介。`
+      )
+      normalizedProfile.channel_id = ""
+    }
+
+    const existingProfile = nextContact.contact_profiles.find((item) => item.role_key === profile.role_key)
+    nextContact.contact_profiles = upsertByKey(
+      nextContact.contact_profiles,
+      mergeContactProfile(normalizedProfile, existingProfile),
       (item) => item.role_key
     )
-    appliedPhoneContactProfiles += 1
+    appliedContactProfiles += 1
   }
 
-  // 第 6 步：合并连续剧情手机对话。
+  // 第 6 步：合并连续联系人剧情。
   // 联系人必须是已存在或本批已选中的 NPC；节点末尾调用的事件也必须出现在可用事件索引中。
-  const nextPhoneConversations: StoryPhoneConversationsFile = {
-    conversations: story.phoneConversations.conversations
+  const nextContactConversations: StoryContactConversationsFile = {
+    conversations: story.contactConversations.conversations
   }
 
-  for (const conversation of draft.phoneConversations?.conversations ?? []) {
-    if (!selectedPhoneConversationIds.has(conversation.id)) {
+  for (const conversation of draft.contactConversations?.conversations ?? []) {
+    if (!selectedContactConversationIds.has(conversation.id)) {
       continue
     }
 
     if (!availableRoleKeys.has(conversation.role_key) || conversation.role_key === "player") {
-      warnings.push(`剧情手机对话 ${conversation.id} 引用了不存在或未应用的 NPC 角色 ${conversation.role_key}，未写入 phone_conversations.json5。`)
+      warnings.push(`联系人剧情 ${conversation.id} 引用了不存在或未应用的 NPC 角色 ${conversation.role_key}，未写入 contact_conversations.json5。`)
       continue
     }
 
-    const nextConversation = filterPhoneConversationInvokeForApply(conversation, {
+    const nextConversation = filterContactConversationInvokeForApply(conversation, {
       availableEventIdsByType,
       warnings
     })
 
-    nextPhoneConversations.conversations = upsertById(
-      nextPhoneConversations.conversations,
+    nextContactConversations.conversations = upsertById(
+      nextContactConversations.conversations,
       nextConversation
     )
-    appliedPhoneConversations += 1
+    appliedContactConversations += 1
   }
 
   // 第 7 步：先合并行动菜单，再合并依赖菜单的行动。
@@ -475,8 +496,8 @@ export async function applyStoryCreationDraft(
     eventLocations: nextEventLocations,
     roles: nextRoles,
     items: nextItems,
-    phone: nextPhone,
-    phoneConversations: nextPhoneConversations,
+    contact: nextContact,
+    contactConversations: nextContactConversations,
     doing: nextDoing,
     shop: nextShop,
     chainEvents: nextChainEvents,
@@ -514,12 +535,13 @@ export async function applyStoryCreationDraft(
       roles: appliedRoles,
       items: appliedItems,
       variables: appliedVariables,
-      phonePersonalities: appliedPhonePersonalities,
-      phoneTalks: appliedPhoneTalks,
-      phoneActions: appliedPhoneActions,
-      phoneReplies: appliedPhoneReplies,
-      phoneContactProfiles: appliedPhoneContactProfiles,
-      phoneConversations: appliedPhoneConversations,
+      contactChannels: appliedContactChannels,
+      contactPersonalities: appliedContactPersonalities,
+      contactTalks: appliedContactTalks,
+      contactActions: appliedContactActions,
+      contactReplies: appliedContactReplies,
+      contactProfiles: appliedContactProfiles,
+      contactConversations: appliedContactConversations,
       doingMenus: appliedDoingMenus,
       doings: appliedDoings,
       shopCategories: appliedShopCategories,

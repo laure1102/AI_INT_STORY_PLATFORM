@@ -3,7 +3,7 @@
     {
       enabled: true,
       entry_node_id: 'start',
-      id: 'huadu_debt_phone',
+      id: 'huadu_debt_contact',
       lock_normal_chat: true,
       nodes: [
         {

@@ -3,7 +3,7 @@
  */
 import {
   dom,
-  getActivePhoneConversation,
+  getActiveContactConversation,
   h,
   ui
 } from "./browser-state.js"
@@ -27,12 +27,12 @@ function formatFavorDelta(value) {
 /** @param contact 联系人视图。 @returns 当前入口下不可赠原因；可赠时为 null。 */
 function getContactGiftDisabledReason(contact) {
   if (!contact?.canContact) {
-    return contact?.lockMessage ?? "当前无法联系该好友。"
+    return contact?.lockMessage ?? "当前无法联系该联系人。"
   }
 
-  const conversation = getActivePhoneConversation()
+  const conversation = getActiveContactConversation()
   if (conversation?.roleKey === contact.roleKey && conversation.lockNormalChat) {
-    return "该好友正在进行剧情手机对话，暂时不能赠礼。"
+    return "该联系人正在进行联系人剧情，暂时不能赠礼。"
   }
 
   return null
@@ -50,21 +50,21 @@ function getBagGiftDraft(itemId) {
   return ui.bagGiftDrafts[itemId]
 }
 
-/** @param roleKey 当前好友。 @returns 已存在或新建的手机赠礼草稿。 */
-function getPhoneGiftDraft(roleKey) {
-  if (!ui.phoneGiftDrafts[roleKey]) {
-    ui.phoneGiftDrafts[roleKey] = {
+/** @param roleKey 当前联系人。 @returns 已存在或新建的联系人赠礼草稿。 */
+function getContactGiftDraft(roleKey) {
+  if (!ui.contactGiftDrafts[roleKey]) {
+    ui.contactGiftDrafts[roleKey] = {
       itemId: "",
       search: "",
       quantity: 1
     }
   }
-  return ui.phoneGiftDrafts[roleKey]
+  return ui.contactGiftDrafts[roleKey]
 }
 
 /** @param itemId 背包物品 id。 @param draft 赠礼草稿。 @returns 搜索联系人控件。 */
 function renderBagContactPicker(itemId, draft) {
-  const contacts = Array.isArray(ui.data?.phoneContacts) ? ui.data.phoneContacts : []
+  const contacts = Array.isArray(ui.data?.contacts) ? ui.data.contacts : []
   const selectedContact = contacts.find((contact) => contact.roleKey === draft.roleKey) ?? null
   const query = selectedContact?.label ?? draft.search
   const normalizedQuery = String(query).trim().toLocaleLowerCase("zh-Hans-CN")
@@ -93,7 +93,7 @@ function renderBagContactPicker(itemId, draft) {
         data-gift-search-text="${h(searchText)}"
       >
         <span class="item-title">${h(contact.label ?? contact.roleKey)}</span>
-        <span class="item-meta">${h(contact.relationStageLabel ?? "好友")} · 好感 ${h(contact.favor ?? 0)}/100${disabledReason ? ` · ${h(disabledReason)}` : ""}</span>
+        <span class="item-meta">${h(contact.relationStageLabel ?? "联系人")} · 好感 ${h(contact.favor ?? 0)}/100${disabledReason ? ` · ${h(disabledReason)}` : ""}</span>
       </button>
     `
   }).join("")
@@ -105,7 +105,7 @@ function renderBagContactPicker(itemId, draft) {
         <input
           type="search"
           value="${h(query)}"
-          placeholder="选择或搜索好友"
+          placeholder="选择或搜索联系人"
           autocomplete="off"
           role="combobox"
           aria-autocomplete="list"
@@ -113,7 +113,7 @@ function renderBagContactPicker(itemId, draft) {
         >
         <div class="gift-options" role="listbox">
           ${options}
-          <div class="gift-empty" ${visibleCount > 0 ? "hidden" : ""} data-gift-empty>没有匹配的好友</div>
+          <div class="gift-empty" ${visibleCount > 0 ? "hidden" : ""} data-gift-empty>没有匹配的联系人</div>
         </div>
       </div>
     </div>
@@ -123,11 +123,11 @@ function renderBagContactPicker(itemId, draft) {
 /** @param item 背包物品视图。 @returns 玩家物品的展开赠礼表单。 */
 function renderBagGiftForm(item) {
   const draft = getBagGiftDraft(item.itemId)
-  const contacts = Array.isArray(ui.data?.phoneContacts) ? ui.data.phoneContacts : []
+  const contacts = Array.isArray(ui.data?.contacts) ? ui.data.contacts : []
   const selectedContact = contacts.find((contact) => contact.roleKey === draft.roleKey) ?? null
   const selectedContactDisabledReason = selectedContact
     ? getContactGiftDisabledReason(selectedContact)
-    : "请选择好友。"
+    : "请选择联系人。"
 
   return `
     <div class="bag-gift-form" data-bag-gift-form="${h(item.itemId)}">
@@ -207,11 +207,11 @@ export function renderBagGiftPanel() {
   return `<div class="bag-list">${bags.map(renderBagOwner).join("")}</div>`
 }
 
-/** @param roleKey 当前好友。 @param item 背包物品。 @returns 手机赠礼的已选物品表单。 */
-function renderPhoneGiftSelection(roleKey, item) {
-  const draft = getPhoneGiftDraft(roleKey)
+/** @param roleKey 当前联系人。 @param item 背包物品。 @returns 联系人赠礼的已选物品表单。 */
+function renderContactGiftSelection(roleKey, item) {
+  const draft = getContactGiftDraft(roleKey)
   return `
-    <div class="phone-gift-selection" data-phone-gift-selection>
+    <div class="contact-gift-selection" data-contact-gift-selection>
       <div>
         <div class="item-title">${h(item.itemName ?? item.itemId)} · x${h(item.quantity)}</div>
         <div class="item-meta">单件好感 ${h(formatFavorDelta(item.giftFavorDelta))}${item.giftCooldownHours > 0 ? ` · 冷却 ${h(item.giftCooldownHours)} 小时` : ""}</div>
@@ -224,22 +224,22 @@ function renderPhoneGiftSelection(roleKey, item) {
           max="${h(item.quantity)}"
           step="1"
           value="${h(draft.quantity)}"
-          data-phone-gift-quantity="${h(roleKey)}"
+          data-contact-gift-quantity="${h(roleKey)}"
         >
       </label>
       <button
         class="footer-command"
         type="button"
-        data-phone-gift-confirm="${h(roleKey)}"
+        data-contact-gift-confirm="${h(roleKey)}"
       >确定</button>
     </div>
   `
 }
 
-/** @param contact 当前好友。 @returns 手机聊天区的背包物品搜索和确认界面。 */
-export function renderPhoneGiftPanel(contact) {
+/** @param contact 当前联系人。 @returns 联系人面板的背包物品搜索和确认界面。 */
+export function renderContactGiftPanel(contact) {
   const roleKey = contact.roleKey
-  const draft = getPhoneGiftDraft(roleKey)
+  const draft = getContactGiftDraft(roleKey)
   const bag = getPlayerBag()
   const items = Array.isArray(bag.entries) ? bag.entries : []
   const selectedItem = items.find((item) => item.itemId === draft.itemId) ?? null
@@ -265,9 +265,9 @@ export function renderPhoneGiftPanel(contact) {
         role="option"
         ${disabledReason ? "disabled" : ""}
         ${hidden ? "hidden" : ""}
-        data-phone-gift-item="${h(roleKey)}"
-        data-phone-gift-item-id="${h(item.itemId)}"
-        data-phone-gift-item-label="${h(item.itemName ?? item.itemId)}"
+        data-contact-gift-item="${h(roleKey)}"
+        data-contact-gift-item-id="${h(item.itemId)}"
+        data-contact-gift-item-label="${h(item.itemName ?? item.itemId)}"
         data-gift-search-text="${h(searchText)}"
       >
         <span class="item-title">${h(item.itemName ?? item.itemId)} · x${h(item.quantity)}</span>
@@ -277,7 +277,7 @@ export function renderPhoneGiftPanel(contact) {
   }).join("")
 
   return `
-    <div class="phone-gift-panel" data-phone-options-scroll="${h(`${roleKey}:gift`)}">
+    <div class="contact-gift-panel" data-contact-options-scroll="${h(`${roleKey}:gift`)}">
       ${contactDisabledReason ? `<div class="gift-error">${h(contactDisabledReason)}</div>` : ""}
       <div class="gift-field">
         <label>背包物品</label>
@@ -289,7 +289,7 @@ export function renderPhoneGiftPanel(contact) {
             autocomplete="off"
             role="combobox"
             aria-autocomplete="list"
-            data-phone-gift-search="${h(roleKey)}"
+            data-contact-gift-search="${h(roleKey)}"
           >
           <div class="gift-options" role="listbox">
             ${options}
@@ -297,7 +297,7 @@ export function renderPhoneGiftPanel(contact) {
           </div>
         </div>
       </div>
-      ${selectedItem && !contactDisabledReason ? renderPhoneGiftSelection(roleKey, selectedItem) : ""}
+      ${selectedItem && !contactDisabledReason ? renderContactGiftSelection(roleKey, selectedItem) : ""}
     </div>
   `
 }
@@ -334,7 +334,7 @@ function getLastRuntimeNotification(result) {
 }
 
 /**
- * 为当前渲染结果绑定背包和手机赠礼事件。
+ * 为当前渲染结果绑定背包和联系人赠礼事件。
  * @param callbacks dispatchRuntimeAction、render 和 showToast 回调。 @returns 无返回值。
  */
 export function bindGiftEvents(callbacks) {
@@ -403,39 +403,39 @@ export function bindGiftEvents(callbacks) {
     })
   })
 
-  dom.app.querySelectorAll("[data-phone-gift-search]").forEach((input) => {
+  dom.app.querySelectorAll("[data-contact-gift-search]").forEach((input) => {
     input.addEventListener("input", () => {
-      const roleKey = input.dataset.phoneGiftSearch
-      const draft = getPhoneGiftDraft(roleKey)
+      const roleKey = input.dataset.contactGiftSearch
+      const draft = getContactGiftDraft(roleKey)
       draft.search = input.value
       draft.itemId = ""
-      input.closest(".phone-gift-panel")?.querySelector("[data-phone-gift-selection]")?.setAttribute("hidden", "")
+      input.closest(".contact-gift-panel")?.querySelector("[data-contact-gift-selection]")?.setAttribute("hidden", "")
       filterGiftOptions(input)
     })
   })
 
-  dom.app.querySelectorAll("[data-phone-gift-item]").forEach((button) => {
+  dom.app.querySelectorAll("[data-contact-gift-item]").forEach((button) => {
     button.addEventListener("click", () => {
-      const roleKey = button.dataset.phoneGiftItem
-      ui.phoneGiftDrafts[roleKey] = {
-        itemId: button.dataset.phoneGiftItemId,
-        search: button.dataset.phoneGiftItemLabel,
+      const roleKey = button.dataset.contactGiftItem
+      ui.contactGiftDrafts[roleKey] = {
+        itemId: button.dataset.contactGiftItemId,
+        search: button.dataset.contactGiftItemLabel,
         quantity: 1
       }
       render()
     })
   })
 
-  dom.app.querySelectorAll("[data-phone-gift-quantity]").forEach((input) => {
+  dom.app.querySelectorAll("[data-contact-gift-quantity]").forEach((input) => {
     input.addEventListener("input", () => {
-      getPhoneGiftDraft(input.dataset.phoneGiftQuantity).quantity = Number(input.value)
+      getContactGiftDraft(input.dataset.contactGiftQuantity).quantity = Number(input.value)
     })
   })
 
-  dom.app.querySelectorAll("[data-phone-gift-confirm]").forEach((button) => {
+  dom.app.querySelectorAll("[data-contact-gift-confirm]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const roleKey = button.dataset.phoneGiftConfirm
-      const draft = getPhoneGiftDraft(roleKey)
+      const roleKey = button.dataset.contactGiftConfirm
+      const draft = getContactGiftDraft(roleKey)
       const result = await dispatchRuntimeAction({
         type: "bag-gift",
         itemId: draft.itemId,
@@ -446,7 +446,7 @@ export function bindGiftEvents(callbacks) {
         showToast(getLastRuntimeNotification(result) ?? "赠礼失败。", "error")
         return
       }
-      delete ui.phoneGiftDrafts[roleKey]
+      delete ui.contactGiftDrafts[roleKey]
       showToast(getLastRuntimeNotification(result) ?? "赠礼成功。")
       render()
     })

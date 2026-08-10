@@ -52,17 +52,17 @@ import type {
 import type { CompiledAction, RuntimeHistoryEntry, RuntimeStorySessionSnapshot } from "./contracts-core"
 import type { RuntimeState, RuntimeStoryBundle } from "./contracts-view"
 import { DEFAULT_MAX_CALC_NESTING_DEPTH } from "./contracts-view"
-import { getBundleGraphNode, isCompiledEvent } from "./phone-threads"
+import { getBundleGraphNode, isCompiledEvent } from "./contact-threads"
 import { createScheduledEvent, enqueueReadyEvent, enqueueScheduledEvent, getCurrentGameMinute, resolveInvokeDelayDueGameMinute } from "./schedule-clock"
 import { getBundleOnceEvents, getBundleScheduleEvents } from "./schedule-queue"
-import { buildRuntimeReferContextValues, createRuntimeBagScriptFunctions, createRuntimeDoingScriptFunctions, createRuntimePhoneScriptFunctions, createRuntimeShopScriptFunctions } from "./script-context"
+import { buildRuntimeReferContextValues, createRuntimeBagScriptFunctions, createRuntimeDoingScriptFunctions, createRuntimeContactScriptFunctions, createRuntimeShopScriptFunctions } from "./script-context"
 import { normalizeClockState, normalizeInvokeTargetType } from "./state-scheduler"
 import { applyCombinedValsFile, cloneValue, createCombinedValsFile, normalizeRuntimeEventTriggerMode, normalizeText } from "./state-values"
 
 /**
  * 构造事件脚本可使用的完整安全执行上下文。
  * @param bundle 编译故事。 @param runtimeState 会话状态。 @param notifications UI 通知数组。
- * @param branchValues 当前 action 分支变量。 @param callValues invoke 调用参数。 @returns 变量、称谓及背包/手机/行动/商店白名单函数。
+ * @param branchValues 当前 action 分支变量。 @param callValues invoke 调用参数。 @returns 变量、称谓及背包/联系人/行动/商店白名单函数。
  * 返回的写函数只修改传入快照，不暴露文件系统、网络或任意 JavaScript 全局对象。
  */
 export function buildRuntimeScriptContext(
@@ -94,7 +94,7 @@ export function buildRuntimeScriptContext(
     random: () => nextRuntimeRandom(snapshot.rng),
     functions: {
       ...createRuntimeBagScriptFunctions(bundle, snapshot),
-      ...createRuntimePhoneScriptFunctions(bundle, runtimeState, notifications),
+      ...createRuntimeContactScriptFunctions(bundle, runtimeState, notifications),
       ...createRuntimeDoingScriptFunctions(bundle, snapshot),
       ...createRuntimeShopScriptFunctions(bundle, snapshot, notifications)
     }

@@ -94,7 +94,7 @@ const batchState = reactive({
 })
 
 const personalityOptions = computed(() =>
-  props.phone.personality_library.map((entry) => ({
+  props.contact.personality_library.map((entry) => ({
     label: entry.name || entry.id,
     value: entry.id
   }))
@@ -121,7 +121,7 @@ function clampFavorInput(value: unknown) {
 }
 /** 读取或计算 `PersonalityLabel`。 @param personalityId 调用方传入的 `personalityId`。 @returns 计算、查找或构建后的结果。 */
 function getPersonalityLabel(personalityId: string) {
-  const matched = props.phone.personality_library.find((entry) => entry.id === personalityId)
+  const matched = props.contact.personality_library.find((entry) => entry.id === personalityId)
   return matched?.name ?? personalityId
 }
 /** 根据当前输入构建 `RoleXinggePromptText` 结果。 @param role 调用方传入的 `role`。 @returns 计算、查找或构建后的结果。 */

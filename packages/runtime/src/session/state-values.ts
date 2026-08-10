@@ -49,9 +49,9 @@ import type {
   StoryValEntryDefinition,
   StoryValsFile
 } from "../types"
-import type { RuntimeBagEntry, RuntimeBagState, RuntimeBagsState, RuntimeDoingRecord, RuntimeDoingState, RuntimeEventTriggerMode, RuntimePhoneContactTrackId, RuntimePhoneMessageState, RuntimePhoneState, RuntimeSchedulerState, RuntimeShopGiftRecord, RuntimeShopPurchaseRecord, RuntimeShopState, RuntimeStoryDoingFile, RuntimeStoryPhoneConversationRuntimeState, RuntimeStoryPhoneConversationsFile, RuntimeStoryPhoneFile, RuntimeStoryReferFile, RuntimeStorySessionSnapshot, RuntimeStoryShopFile } from "./contracts-core"
+import type { RuntimeBagEntry, RuntimeBagState, RuntimeBagsState, RuntimeDoingRecord, RuntimeDoingState, RuntimeEventTriggerMode, RuntimeContactTrackId, RuntimeContactMessageState, RuntimeContactState, RuntimeSchedulerState, RuntimeShopGiftRecord, RuntimeShopPurchaseRecord, RuntimeShopState, RuntimeStoryDoingFile, RuntimeStoryContactConversationRuntimeState, RuntimeStoryContactConversationsFile, RuntimeStoryContactFile, RuntimeStoryReferFile, RuntimeStorySessionSnapshot, RuntimeStoryShopFile } from "./contracts-core"
 import type { RuntimeState } from "./contracts-view"
-import { DEFAULT_PHONE_RELATIONSHIP_TRACKS } from "./contracts-view"
+import { DEFAULT_CONTACT_RELATIONSHIP_TRACKS } from "./contracts-view"
 import { normalizeClockState, normalizeOptionalText, normalizeSchedulerState } from "./state-scheduler"
 
 /** @param value JSON 风格的状态值。 @returns 递归复制后的值，数组和对象不会与原状态共享引用。 */
@@ -349,10 +349,12 @@ export function createDefaultBagsState(): RuntimeBagsState {
   }
 }
 
-/** @returns 带内置关系轨道、但没有联系人行为库的默认手机配置。 */
-export function createDefaultPhoneConfig(): RuntimeStoryPhoneFile {
+/** @returns 使用通用媒介、带内置关系轨道且没有行为库的默认联系人配置。 */
+export function createDefaultContactConfig(): RuntimeStoryContactFile {
   return {
-    relationship_tracks: cloneValue(DEFAULT_PHONE_RELATIONSHIP_TRACKS),
+    default_channel_id: "generic",
+    channels: [{ id: "generic", name: "通用往来", preset: "generic", labels: {} }],
+    relationship_tracks: cloneValue(DEFAULT_CONTACT_RELATIONSHIP_TRACKS),
     personality_library: [],
     talk_library: [],
     action_library: [],
@@ -363,44 +365,44 @@ export function createDefaultPhoneConfig(): RuntimeStoryPhoneFile {
   }
 }
 
-/** @returns 没有联系人和消息线程的全新手机运行状态。 */
-export function createDefaultPhoneState(): RuntimePhoneState {
+/** @returns 没有联系人和往来线程的全新联系人运行状态。 */
+export function createDefaultContactState(): RuntimeContactState {
   return {
     contacts: [],
     threads: []
   }
 }
 
-/** @returns 默认没有正在进行的结构化手机会话，因此返回 null。 */
-export function createDefaultPhoneConversationState(): RuntimeStoryPhoneConversationRuntimeState | null {
+/** @returns 默认没有正在进行的结构化联系人会话，因此返回 null。 */
+export function createDefaultContactConversationState(): RuntimeStoryContactConversationRuntimeState | null {
   return null
 }
 
-/** @returns 空的已完成手机会话历史数组。 */
-export function createDefaultPhoneConversationHistoryState(): RuntimeStoryPhoneConversationRuntimeState[] {
+/** @returns 空的已完成联系人会话历史数组。 */
+export function createDefaultContactConversationHistoryState(): RuntimeStoryContactConversationRuntimeState[] {
   return []
 }
 
 /** @returns 不含会话定义的默认配置文件。 */
-export function createDefaultPhoneConversationsConfig(): RuntimeStoryPhoneConversationsFile {
+export function createDefaultContactConversationsConfig(): RuntimeStoryContactConversationsFile {
   return {
     conversations: []
   }
 }
 
 /**
- * 清洗一个正在进行或已完成的手机会话存档。
+ * 清洗一个正在进行或已完成的联系人剧情存档。
  * @param state 可能来自旧存档的不完整状态。 @returns 字段已补齐的状态；没有状态时返回 null。
  */
-export function normalizePhoneConversationState(
-  state: RuntimeStoryPhoneConversationRuntimeState | null | undefined
-): RuntimeStoryPhoneConversationRuntimeState | null {
+export function normalizeContactConversationState(
+  state: RuntimeStoryContactConversationRuntimeState | null | undefined
+): RuntimeStoryContactConversationRuntimeState | null {
   if (!state) {
     return null
   }
 
   const conversationId = normalizeText(state.conversation_id)
-  const roleKey = normalizePhoneRoleKey(state.role_key)
+  const roleKey = normalizeContactRoleKey(state.role_key)
   const nodeId = normalizeText(state.node_id)
   if (!conversationId || !roleKey || !nodeId) {
     return null
@@ -419,25 +421,25 @@ export function normalizePhoneConversationState(
 }
 
 /** @param states 旧存档中的会话历史。 @returns 去除空项并逐条规范化后的新数组。 */
-export function normalizePhoneConversationHistoryState(
-  states: RuntimeStoryPhoneConversationRuntimeState[] | undefined
-): RuntimeStoryPhoneConversationRuntimeState[] {
+export function normalizeContactConversationHistoryState(
+  states: RuntimeStoryContactConversationRuntimeState[] | undefined
+): RuntimeStoryContactConversationRuntimeState[] {
   const normalizedStates = Array.isArray(states) ? states : []
   return normalizedStates
-    .map((state) => normalizePhoneConversationState(state))
-    .filter((state): state is RuntimeStoryPhoneConversationRuntimeState => Boolean(state))
+    .map((state) => normalizeContactConversationState(state))
+    .filter((state): state is RuntimeStoryContactConversationRuntimeState => Boolean(state))
 }
 
 /**
- * 让内存快捷字段与可保存快照中的活动手机会话保持一致。
+ * 让内存快捷字段与可保存快照中的活动联系人剧情保持一致。
  * @param runtimeState 会话内部状态。 @returns 同步后的活动会话或 null；会同时更新两处字段。
  */
-export function syncActivePhoneConversationState(runtimeState: RuntimeState) {
-  runtimeState.snapshot.phone_conversation = normalizePhoneConversationState(
-    runtimeState.snapshot.phone_conversation ?? runtimeState.activePhoneConversation
+export function syncActiveContactConversationState(runtimeState: RuntimeState) {
+  runtimeState.snapshot.contact_conversation = normalizeContactConversationState(
+    runtimeState.snapshot.contact_conversation ?? runtimeState.activeContactConversation
   )
-  runtimeState.activePhoneConversation = runtimeState.snapshot.phone_conversation ?? null
-  return runtimeState.activePhoneConversation
+  runtimeState.activeContactConversation = runtimeState.snapshot.contact_conversation ?? null
+  return runtimeState.activeContactConversation
 }
 
 /** @returns 使用 `player.gender` 及常见中英文性别别名的默认称谓配置。 */
@@ -496,8 +498,8 @@ export function normalizeItemId(itemId: unknown) {
   return typeof itemId === "string" ? itemId.trim() : ""
 }
 
-/** @param roleKey 手机联系人角色键。 @returns 去空白键；非字符串返回空串。 */
-export function normalizePhoneRoleKey(roleKey: unknown) {
+/** @param roleKey 联系人角色键。 @returns 去空白键；非字符串返回空串。 */
+export function normalizeContactRoleKey(roleKey: unknown) {
   return typeof roleKey === "string" ? roleKey.trim() : ""
 }
 
@@ -512,14 +514,14 @@ export function normalizeShopProductId(productId: unknown) {
 }
 
 /** @param value 关系轨道输入。 @returns 四种合法轨道之一，未知值回退为 none。 */
-export function normalizePhoneContactTrackId(value: unknown): RuntimePhoneContactTrackId {
+export function normalizeContactTrackId(value: unknown): RuntimeContactTrackId {
   return value === "romance" || value === "official" || value === "social" || value === "none"
     ? value
     : "none"
 }
 
 /** @param value 好感度输入。 @param fallback 非数字默认值。 @returns 0 到 100 的整数好感度。 */
-export function clampPhoneFavor(value: unknown, fallback = 0) {
+export function clampContactFavor(value: unknown, fallback = 0) {
   return Math.max(0, Math.min(100, clampInteger(value, fallback)))
 }
 
@@ -596,18 +598,18 @@ export function normalizeBagsState(snapshot: RuntimeStorySessionSnapshot) {
 }
 
 /**
- * 清洗手机消息存档。
+ * 清洗联系人消息存档。
  * @param messages 可能来自旧存档的消息数组。 @returns 字段规范、标签去重且 id/content 非空的消息数组。
  */
-export function normalizePhoneMessages(messages: RuntimePhoneMessageState[] | undefined): RuntimePhoneMessageState[] {
+export function normalizeContactMessages(messages: RuntimeContactMessageState[] | undefined): RuntimeContactMessageState[] {
   const nextMessages = Array.isArray(messages) ? messages : []
 
   return nextMessages
     .map((message) => {
-      const sender: RuntimePhoneMessageState["sender"] = message.sender === "contact" || message.sender === "system"
+      const sender: RuntimeContactMessageState["sender"] = message.sender === "contact" || message.sender === "system"
         ? message.sender
         : "player"
-      const optionKind: RuntimePhoneMessageState["option_kind"] = message.option_kind === "action"
+      const optionKind: RuntimeContactMessageState["option_kind"] = message.option_kind === "action"
         ? "action"
         : message.option_kind === "talk"
           ? "talk"
@@ -623,11 +625,11 @@ export function normalizePhoneMessages(messages: RuntimePhoneMessageState[] | un
         option_kind: optionKind,
         quick_message_id: normalizeOptionalText(message.quick_message_id),
         source_rule_id: normalizeOptionalText(message.source_rule_id),
-        phone_conversation_id: normalizeOptionalText(message.phone_conversation_id),
-        phone_conversation_node_id: normalizeOptionalText(message.phone_conversation_node_id),
-        phone_conversation_reminder: message.phone_conversation_reminder === undefined
+        contact_conversation_id: normalizeOptionalText(message.contact_conversation_id),
+        contact_conversation_node_id: normalizeOptionalText(message.contact_conversation_node_id),
+        contact_conversation_reminder: message.contact_conversation_reminder === undefined
           ? undefined
-          : Boolean(message.phone_conversation_reminder),
+          : Boolean(message.contact_conversation_reminder),
         tags: Array.isArray(message.tags)
           ? Array.from(new Set(message.tags.map((tag) => normalizeText(tag)).filter(Boolean)))
           : undefined
@@ -636,24 +638,24 @@ export function normalizePhoneMessages(messages: RuntimePhoneMessageState[] | un
     .filter((message) => message.id && message.content)
 }
 
-/** @param snapshot 会话快照。 @returns 无返回值；规范联系人、好感度、线程和消息并写回 snapshot.phone。 */
-export function normalizePhoneState(snapshot: RuntimeStorySessionSnapshot) {
-  const rawPhone = snapshot.phone ?? createDefaultPhoneState()
-  const contacts = Array.isArray(rawPhone.contacts) ? rawPhone.contacts : []
-  const threads = Array.isArray(rawPhone.threads) ? rawPhone.threads : []
+/** @param snapshot 会话快照。 @returns 无返回值；规范联系人、好感度、线程和消息并写回 snapshot.contact。 */
+export function normalizeContactState(snapshot: RuntimeStorySessionSnapshot) {
+  const rawContact = snapshot.contact ?? createDefaultContactState()
+  const contacts = Array.isArray(rawContact.contacts) ? rawContact.contacts : []
+  const threads = Array.isArray(rawContact.threads) ? rawContact.threads : []
 
-  snapshot.phone = {
+  snapshot.contact = {
     contacts: contacts
       .map((contact) => ({
-        role_key: normalizePhoneRoleKey(contact.role_key),
-        favor: clampPhoneFavor(contact.favor, 0),
+        role_key: normalizeContactRoleKey(contact.role_key),
+        favor: clampContactFavor(contact.favor, 0),
         unlocked_at_day: Math.max(1, clampInteger(contact.unlocked_at_day, 1))
       }))
       .filter((contact) => contact.role_key),
     threads: threads
       .map((thread) => ({
-        role_key: normalizePhoneRoleKey(thread.role_key),
-        messages: normalizePhoneMessages(thread.messages)
+        role_key: normalizeContactRoleKey(thread.role_key),
+        messages: normalizeContactMessages(thread.messages)
       }))
       .filter((thread) => thread.role_key)
   }
@@ -661,13 +663,13 @@ export function normalizePhoneState(snapshot: RuntimeStorySessionSnapshot) {
 
 /**
  * 一次性规范从新建流程或存档恢复得到的全部可变领域状态。
- * @param snapshot 会话快照。 @returns 无返回值；依次修复背包、手机、会话、行动、商店、时钟和调度器。
+ * @param snapshot 会话快照。 @returns 无返回值；依次修复背包、联系人、剧情会话、行动、商店、时钟和调度器。
  */
 export function normalizeStorySnapshotState(snapshot: RuntimeStorySessionSnapshot) {
   normalizeBagsState(snapshot)
-  normalizePhoneState(snapshot)
-  snapshot.phone_conversation = normalizePhoneConversationState(snapshot.phone_conversation)
-  snapshot.phone_conversations = normalizePhoneConversationHistoryState(snapshot.phone_conversations)
+  normalizeContactState(snapshot)
+  snapshot.contact_conversation = normalizeContactConversationState(snapshot.contact_conversation)
+  snapshot.contact_conversations = normalizeContactConversationHistoryState(snapshot.contact_conversations)
   normalizeDoingState(snapshot)
   normalizeShopState(snapshot)
   normalizeClockState(snapshot)
@@ -751,7 +753,7 @@ export function normalizeShopState(snapshot: RuntimeStorySessionSnapshot) {
 
   for (const record of rawGifts) {
     const productId = normalizeShopProductId(record.product_id)
-    const roleKey = normalizePhoneRoleKey(record.role_key)
+    const roleKey = normalizeContactRoleKey(record.role_key)
     if (!productId || !roleKey) {
       continue
     }

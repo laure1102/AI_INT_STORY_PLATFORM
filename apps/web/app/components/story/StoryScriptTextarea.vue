@@ -8,7 +8,7 @@ import {
   buildStoryScriptBuiltinAutocompleteItems,
   buildStoryScriptHighlightTokens,
   buildStoryScriptInvokeAutocompleteContext,
-  buildStoryPhoneConversationAutocompleteItems,
+  buildStoryContactConversationAutocompleteItems,
   buildStoryReferAutocompleteItems,
   buildStoryScriptValAutocompleteItems,
   filterStoryScriptAutocompleteItems,
@@ -57,7 +57,7 @@ const autocompleteCandidates = computed(() =>
         buildStoryScriptBuiltinAutocompleteItems(),
         buildStoryScriptValAutocompleteItems(props.vals),
         buildStoryReferAutocompleteItems(props.story),
-        buildStoryPhoneConversationAutocompleteItems(props.story)
+        buildStoryContactConversationAutocompleteItems(props.story)
       )
 )
 

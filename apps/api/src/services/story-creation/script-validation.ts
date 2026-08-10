@@ -29,14 +29,14 @@ import {
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
-  type StoryPhoneActionLibraryEntry,
-  type StoryPhoneContactProfile,
-  type StoryPhoneConversationDefinition,
-  type StoryPhoneConversationsFile,
-  type StoryPhoneFile,
-  type StoryPhonePersonalityDefinition,
-  type StoryPhoneReplyLibraryEntry,
-  type StoryPhoneTalkLibraryEntry,
+  type StoryContactActionLibraryEntry,
+  type StoryContactProfile,
+  type StoryContactConversationDefinition,
+  type StoryContactConversationsFile,
+  type StoryContactFile,
+  type StoryContactPersonalityDefinition,
+  type StoryContactReplyLibraryEntry,
+  type StoryContactTalkLibraryEntry,
   type StoryShopProduct,
   type StoryScriptValidationIssue,
   type StoryOnceDialogueDefinition,
@@ -59,8 +59,8 @@ import type {
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
-  StoryCreationDraftPhone,
-  StoryCreationDraftPhoneConversations,
+  StoryCreationDraftContact,
+  StoryCreationDraftContactConversations,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftShop,
@@ -75,7 +75,7 @@ import {
 import { draftEventKey } from "./apply-domain"
 import { instructionAllowsScriptRemoval } from "./contracts-draft"
 import type { DraftStoryScriptValidationIssue } from "./script-validation-context"
-import { buildDraftValidationVals, collectDraftValidationDoingIds, collectDraftValidationItemIds, collectDraftValidationPhoneConversationIds, collectDraftValidationRoleKeys, collectDraftValidationShopProductIds, createDraftEventValidationContext, createDraftGlobalValidationContext, getStoryReferTokens, pushDraftScriptValidationIssues } from "./script-validation-context"
+import { buildDraftValidationVals, collectDraftValidationDoingIds, collectDraftValidationItemIds, collectDraftValidationContactConversationIds, collectDraftValidationRoleKeys, collectDraftValidationShopProductIds, createDraftEventValidationContext, createDraftGlobalValidationContext, getStoryReferTokens, pushDraftScriptValidationIssues } from "./script-validation-context"
 
 /**
  * 校验事件 message/dialogue 中的 StoryScript 模板占位符。
@@ -94,7 +94,7 @@ export function validateDraftEventPresentationTemplates(
     roleKeys: string[]
     doingIds: string[]
     shopProductIds: string[]
-    phoneConversationIds: string[]
+    contactConversationIds: string[]
     referTokens: Record<string, null>
   }
 ) {
@@ -135,14 +135,14 @@ export function validateDraftEventPresentationTemplates(
 }
 
 /**
- * 校验手机剧情对话中的触发条件、消息模板、选项条件、过程脚本和结束脚本。
+ * 校验联系人剧情中的触发条件、消息模板、选项条件、过程脚本和结束脚本。
  * @param vals 临时变量表。
  * @param draft 完整草稿。
  * @param issues 目标问题数组。
  * @param context 领域引用索引。
  * @returns 无返回值；字段路径会精确到 conversation/node/option 下标。
  */
-export function validateDraftPhoneConversationScripts(
+export function validateDraftContactConversationScripts(
   vals: StoryValsFile,
   draft: StoryCreationDraft,
   issues: DraftStoryScriptValidationIssue[],
@@ -151,14 +151,14 @@ export function validateDraftPhoneConversationScripts(
     roleKeys: string[]
     doingIds: string[]
     shopProductIds: string[]
-    phoneConversationIds: string[]
+    contactConversationIds: string[]
     referTokens: Record<string, null>
   }
 ) {
-  for (const conversation of draft.phoneConversations?.conversations ?? []) {
+  for (const conversation of draft.contactConversations?.conversations ?? []) {
     const target = {
       collectionType: "pool" as const,
-      id: `phone.conversation:${conversation.id}`
+      id: `contact.conversation:${conversation.id}`
     }
 
     if (conversation.trigger_expr.trim()) {
@@ -257,7 +257,7 @@ export function validateDraftPhoneConversationScripts(
  * @param draft 待检查草稿。
  * @returns 带集合、业务 id、字段路径和消息的问题数组。
  *
- * 校验范围包括事件、行动、联系人主动消息、手机剧情和商城。predicate 使用只读上下文；procedure
+ * 校验范围包括事件、行动、联系人主动消息、联系人剧情和商城。predicate 使用只读上下文；procedure
  * 使用可写上下文。这样同一语法解析器同时阻止条件表达式写变量和过程脚本调用不存在资产。
  */
 export function collectDraftStoryScriptValidationIssues(
@@ -270,7 +270,7 @@ export function collectDraftStoryScriptValidationIssues(
     roleKeys: collectDraftValidationRoleKeys(story, draft),
     doingIds: collectDraftValidationDoingIds(story, draft),
     shopProductIds: collectDraftValidationShopProductIds(story, draft),
-    phoneConversationIds: collectDraftValidationPhoneConversationIds(story, draft),
+    contactConversationIds: collectDraftValidationContactConversationIds(story, draft),
     referTokens: getStoryReferTokens(story)
   }
   const issues: DraftStoryScriptValidationIssue[] = []
@@ -399,13 +399,13 @@ export function collectDraftStoryScriptValidationIssues(
     )
   }
 
-  for (const profile of draft.phone?.contact_profiles ?? []) {
+  for (const profile of draft.contact?.contact_profiles ?? []) {
     for (const rule of profile.proactive_messages) {
       pushDraftScriptValidationIssues(
         issues,
         {
           collectionType: "pool",
-          id: `phone:${profile.role_key}:${rule.id}`
+          id: `contact:${profile.role_key}:${rule.id}`
         },
         "proactive_messages.trigger_expr",
         validateStoryScriptContent(
@@ -419,7 +419,7 @@ export function collectDraftStoryScriptValidationIssues(
     }
   }
 
-  validateDraftPhoneConversationScripts(vals, draft, issues, validationContext)
+  validateDraftContactConversationScripts(vals, draft, issues, validationContext)
 
   for (const category of draft.shop?.categories ?? []) {
     if (!category.visible_expr.trim()) {

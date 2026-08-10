@@ -1,5 +1,5 @@
 /**
- * 运行时 bundle、存档、背包、手机与调度状态契约。
+ * 运行时 bundle、存档、背包、联系人与调度状态契约。
  *
  * 本文件由原 session.ts 按顶层声明依赖拆出；它只负责本领域，不提供新的外部入口。
  */
@@ -97,23 +97,23 @@ export interface RuntimeStoryItemsFile {
   items: RuntimeStoryItemDefinition[]
 }
 
-export type RuntimePhoneContactTrackId = "none" | "romance" | "official" | "social"
+export type RuntimeContactTrackId = "none" | "romance" | "official" | "social"
 
-export interface RuntimeStoryPhoneLibraryScope {
+export interface RuntimeStoryContactLibraryScope {
   role_keys: string[]
-  contact_tracks: RuntimePhoneContactTrackId[]
+  contact_tracks: RuntimeContactTrackId[]
   personality_ids: string[]
   min_favor: number
   max_favor: number
 }
 
-export interface RuntimeStoryPhoneEventInvocation {
+export interface RuntimeStoryContactEventInvocation {
   target_type: StoryInvokeTargetType
   event_id: string
   delay?: StoryScriptInvokeDelay
 }
 
-export interface RuntimeStoryPhoneRelationshipStage {
+export interface RuntimeStoryContactRelationshipStage {
   id: string
   name: string
   descr: string
@@ -124,21 +124,21 @@ export interface RuntimeStoryPhoneRelationshipStage {
   unlock_action_tags: string[]
 }
 
-export interface RuntimeStoryPhoneRelationshipTrack {
-  id: RuntimePhoneContactTrackId
+export interface RuntimeStoryContactRelationshipTrack {
+  id: RuntimeContactTrackId
   name: string
   descr: string
-  stages: RuntimeStoryPhoneRelationshipStage[]
+  stages: RuntimeStoryContactRelationshipStage[]
 }
 
-export interface RuntimeStoryPhonePersonalityDefinition {
+export interface RuntimeStoryContactPersonalityDefinition {
   id: string
   name: string
   descr: string
   style_tags: string[]
 }
 
-export interface RuntimeStoryPhoneQuickMessageDefinition {
+export interface RuntimeStoryContactQuickMessageDefinition {
   id: string
   text: string
   tags: string[]
@@ -148,7 +148,7 @@ export interface RuntimeStoryPhoneQuickMessageDefinition {
   available_role_keys: string[]
 }
 
-export interface RuntimeStoryPhoneProactiveMessageRule {
+export interface RuntimeStoryContactProactiveMessageRule {
   id: string
   enabled: boolean
   trigger_expr: string
@@ -158,72 +158,94 @@ export interface RuntimeStoryPhoneProactiveMessageRule {
   reply_quick_message_ids: string[]
 }
 
-export interface RuntimeStoryPhoneContactProfile {
+export type RuntimeContactChannelPreset = "generic" | "phone" | "letter" | "transmission"
+
+export interface RuntimeContactChannelLabels {
+  message?: string
+  conversation?: string
+  talk?: string
+  action?: string
+  gift?: string
+  send?: string
+  reply?: string
+}
+
+export interface RuntimeStoryContactChannel {
+  id: string
+  name: string
+  preset: RuntimeContactChannelPreset
+  labels: RuntimeContactChannelLabels
+}
+
+export interface RuntimeStoryContactProfile {
   role_key: string
+  channel_id: string
   enabled: boolean
   auto_add: boolean
   initial_favor: number
   preferred_tags: string[]
   reply_by_tag: Record<string, string[]>
-  proactive_messages: RuntimeStoryPhoneProactiveMessageRule[]
+  proactive_messages: RuntimeStoryContactProactiveMessageRule[]
 }
 
-export interface RuntimeStoryPhoneTalkLibraryEntry {
+export interface RuntimeStoryContactTalkLibraryEntry {
   id: string
   text: string
   tags: string[]
-  scope: RuntimeStoryPhoneLibraryScope
+  scope: RuntimeStoryContactLibraryScope
   base_favor_delta: number
   cooldown_hours: number
-  invoke?: RuntimeStoryPhoneEventInvocation
+  invoke?: RuntimeStoryContactEventInvocation
 }
 
-export interface RuntimeStoryPhoneActionCostItem {
+export interface RuntimeStoryContactActionCostItem {
   item_id: string
   quantity: number
 }
 
-export interface RuntimeStoryPhoneActionLibraryEntry {
+export interface RuntimeStoryContactActionLibraryEntry {
   id: string
   label: string
   text: string
   tags: string[]
-  scope: RuntimeStoryPhoneLibraryScope
+  scope: RuntimeStoryContactLibraryScope
   base_favor_delta: number
   cooldown_hours: number
   cost_money: number
-  cost_items: RuntimeStoryPhoneActionCostItem[]
-  invoke?: RuntimeStoryPhoneEventInvocation
+  cost_items: RuntimeStoryContactActionCostItem[]
+  invoke?: RuntimeStoryContactEventInvocation
 }
 
-export interface RuntimeStoryPhoneReplyLibraryEntry {
+export interface RuntimeStoryContactReplyLibraryEntry {
   id: string
   tags: string[]
-  scope: RuntimeStoryPhoneLibraryScope
+  scope: RuntimeStoryContactLibraryScope
   replies: string[]
 }
 
-export interface RuntimeStoryPhoneFile {
-  relationship_tracks: RuntimeStoryPhoneRelationshipTrack[]
-  personality_library: RuntimeStoryPhonePersonalityDefinition[]
-  talk_library: RuntimeStoryPhoneTalkLibraryEntry[]
-  action_library: RuntimeStoryPhoneActionLibraryEntry[]
-  reply_library: RuntimeStoryPhoneReplyLibraryEntry[]
-  player_quick_messages: RuntimeStoryPhoneQuickMessageDefinition[]
-  contact_profiles: RuntimeStoryPhoneContactProfile[]
+export interface RuntimeStoryContactFile {
+  default_channel_id: string
+  channels: RuntimeStoryContactChannel[]
+  relationship_tracks: RuntimeStoryContactRelationshipTrack[]
+  personality_library: RuntimeStoryContactPersonalityDefinition[]
+  talk_library: RuntimeStoryContactTalkLibraryEntry[]
+  action_library: RuntimeStoryContactActionLibraryEntry[]
+  reply_library: RuntimeStoryContactReplyLibraryEntry[]
+  player_quick_messages: RuntimeStoryContactQuickMessageDefinition[]
+  contact_profiles: RuntimeStoryContactProfile[]
   fallback_replies: Record<string, string[]>
 }
 
-export interface RuntimeStoryPhoneConversationMessage {
+export interface RuntimeStoryContactConversationMessage {
   content: string
 }
 
-export interface RuntimeStoryPhoneConversationReminder {
+export interface RuntimeStoryContactConversationReminder {
   enabled: boolean
   interval_minutes: number
 }
 
-export interface RuntimeStoryPhoneConversationOption {
+export interface RuntimeStoryContactConversationOption {
   id: string
   text: string
   visible_expr: string
@@ -231,17 +253,17 @@ export interface RuntimeStoryPhoneConversationOption {
   next_node_id: string
 }
 
-export interface RuntimeStoryPhoneConversationNode {
+export interface RuntimeStoryContactConversationNode {
   id: string
-  contact_messages: RuntimeStoryPhoneConversationMessage[]
-  player_options: RuntimeStoryPhoneConversationOption[]
-  reminder?: RuntimeStoryPhoneConversationReminder
+  contact_messages: RuntimeStoryContactConversationMessage[]
+  player_options: RuntimeStoryContactConversationOption[]
+  reminder?: RuntimeStoryContactConversationReminder
   end: boolean
   end_script: string
-  invoke?: RuntimeStoryPhoneEventInvocation
+  invoke?: RuntimeStoryContactEventInvocation
 }
 
-export interface RuntimeStoryPhoneConversationDefinition {
+export interface RuntimeStoryContactConversationDefinition {
   id: string
   title: string
   role_key: string
@@ -250,14 +272,14 @@ export interface RuntimeStoryPhoneConversationDefinition {
   lock_normal_chat: boolean
   trigger_expr: string
   entry_node_id: string
-  nodes: RuntimeStoryPhoneConversationNode[]
+  nodes: RuntimeStoryContactConversationNode[]
 }
 
-export interface RuntimeStoryPhoneConversationsFile {
-  conversations: RuntimeStoryPhoneConversationDefinition[]
+export interface RuntimeStoryContactConversationsFile {
+  conversations: RuntimeStoryContactConversationDefinition[]
 }
 
-export interface RuntimeStoryPhoneConversationRuntimeState {
+export interface RuntimeStoryContactConversationRuntimeState {
   conversation_id: string
   role_key: string
   node_id: string
@@ -368,13 +390,13 @@ export interface RuntimeBagsState {
   [ownerId: string]: RuntimeBagState
 }
 
-export interface RuntimePhoneContactState {
+export interface RuntimeContactEntryState {
   role_key: string
   favor: number
   unlocked_at_day: number
 }
 
-export interface RuntimePhoneMessageState {
+export interface RuntimeContactMessageState {
   id: string
   sender: "player" | "contact" | "system"
   content: string
@@ -384,20 +406,20 @@ export interface RuntimePhoneMessageState {
   option_kind?: "talk" | "action"
   quick_message_id?: string
   source_rule_id?: string
-  phone_conversation_id?: string
-  phone_conversation_node_id?: string
-  phone_conversation_reminder?: boolean
+  contact_conversation_id?: string
+  contact_conversation_node_id?: string
+  contact_conversation_reminder?: boolean
   tags?: string[]
 }
 
-export interface RuntimePhoneThreadState {
+export interface RuntimeContactThreadState {
   role_key: string
-  messages: RuntimePhoneMessageState[]
+  messages: RuntimeContactMessageState[]
 }
 
-export interface RuntimePhoneState {
-  contacts: RuntimePhoneContactState[]
-  threads: RuntimePhoneThreadState[]
+export interface RuntimeContactState {
+  contacts: RuntimeContactEntryState[]
+  threads: RuntimeContactThreadState[]
 }
 
 export interface RuntimeDoingRecord {
@@ -454,7 +476,7 @@ export interface RuntimeNormalRoleDefinition {
   name?: string
   descr: string
   contact_enabled?: boolean
-  contact_track?: RuntimePhoneContactTrackId
+  contact_track?: RuntimeContactTrackId
   contact_initial_favor?: number
   xingge_id?: string
   xingge_note?: string
@@ -465,7 +487,7 @@ export interface RuntimeImportantRoleDefinition {
   name?: string
   descr: string
   contact_enabled?: boolean
-  contact_track?: RuntimePhoneContactTrackId
+  contact_track?: RuntimeContactTrackId
   contact_initial_favor?: number
   xingge_id?: string
   xingge_note?: string
@@ -536,20 +558,18 @@ export interface RuntimePlayerProfileSetup {
 }
 
 /**
- * Runtime v2 存档的持久化顶层结构。
+ * Runtime v3 存档的持久化顶层结构。
  *
- * `session_state` 保存变量、背包、手机、商城、时钟和 scheduler 等长期状态；`playback` 单独保存
+ * `session_state` 保存变量、背包、联系人、商城、时钟和 scheduler 等长期状态；`playback` 单独保存
  * 当前事件进行到哪一句、等待哪些选项等瞬时游标。两者必须来自同一次会话快照，加载后才能从
  * “下一步”继续，而不是只恢复变量却从事件开头重复执行脚本。
  */
 export interface RuntimeStorySaveState {
-  schema_version: 2
+  schema_version: 3
   slot_id: string
   story_id: string
   profile_id: string
   bundle_content_hash: string
-  /** @deprecated v1 存档字段，仅用于兼容读取 */
-  bundle_version?: string
   saved_at: string
   playback: RuntimePlaybackState
   session_state: RuntimeStorySessionSnapshot
@@ -677,9 +697,9 @@ export interface RuntimeStorySessionSnapshot {
   rng: RuntimeRngState
   scheduler: RuntimeSchedulerState
   bags: RuntimeBagsState
-  phone: RuntimePhoneState
-  phone_conversation?: RuntimeStoryPhoneConversationRuntimeState | null
-  phone_conversations?: RuntimeStoryPhoneConversationRuntimeState[]
+  contact: RuntimeContactState
+  contact_conversation?: RuntimeStoryContactConversationRuntimeState | null
+  contact_conversations?: RuntimeStoryContactConversationRuntimeState[]
   doing: RuntimeDoingState
   shop: RuntimeShopState
   triggered_once_events: RuntimeTriggeredOnceState[]

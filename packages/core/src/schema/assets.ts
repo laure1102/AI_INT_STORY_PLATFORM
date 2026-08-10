@@ -32,7 +32,7 @@ export const storyRoleAiConfigSchema = z.object({
   compress_quality_2: z.number().int().min(1).max(100).default(80)
 })
 
-export const storyPhoneContactTrackIdSchema = z.enum(["none", "romance", "official", "social"])
+export const storyContactTrackIdSchema = z.enum(["none", "romance", "official", "social"])
 
 export const storyNormalRoleSchema = z.object({
   id: z.string().min(1).optional(),
@@ -45,7 +45,7 @@ export const storyNormalRoleSchema = z.object({
   img_compress_1: z.string().default(""),
   img_compress_2: z.string().default(""),
   contact_enabled: z.boolean().default(false),
-  contact_track: storyPhoneContactTrackIdSchema.default("none"),
+  contact_track: storyContactTrackIdSchema.default("none"),
   contact_initial_favor: z.number().int().min(0).max(100).default(20),
   xingge_id: z.string().default(""),
   xingge_note: z.string().default("")
@@ -91,7 +91,7 @@ export const storyImportantRoleSchema = z.object({
   xingge_id: z.string().default(""),
   xingge_note: z.string().default(""),
   contact_enabled: z.boolean().default(false),
-  contact_track: storyPhoneContactTrackIdSchema.default("none"),
+  contact_track: storyContactTrackIdSchema.default("none"),
   contact_initial_favor: z.number().int().min(0).max(100).default(20),
   qufen_xingbie: z.boolean().default(false),
   img_male_raw: z.string().default(""),

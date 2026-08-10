@@ -1,5 +1,5 @@
 /**
- * 角色标签、联系人线程与普通手机选项。
+ * 角色标签、联系人线程与普通联系人选项。
  *
  * 本文件由原 session.ts 按顶层声明依赖拆出；它只负责本领域，不提供新的外部入口。
  */
@@ -49,15 +49,15 @@ import type {
   StoryValEntryDefinition,
   StoryValsFile
 } from "../types"
-import type { CompiledAction, CompiledEvent, RuntimeEventTriggerMode, RuntimeImportantRoleDefinition, RuntimeLocationAssignment, RuntimeNormalRoleDefinition, RuntimePhoneContactState, RuntimePhoneMessageState, RuntimePhoneThreadState, RuntimeStandaloneEvent, RuntimeStoryPhoneActionLibraryEntry, RuntimeStoryPhoneProactiveMessageRule, RuntimeStoryPresentation, RuntimeStorySessionSnapshot } from "./contracts-core"
-import type { RuntimeGraphNode, RuntimePlayableEvent, RuntimeResolvedPhoneActionOption, RuntimeResolvedPhoneTalkOption, RuntimeState, RuntimeStoryBundle } from "./contracts-view"
+import type { CompiledAction, CompiledEvent, RuntimeEventTriggerMode, RuntimeImportantRoleDefinition, RuntimeLocationAssignment, RuntimeNormalRoleDefinition, RuntimeContactEntryState, RuntimeContactMessageState, RuntimeContactThreadState, RuntimeStandaloneEvent, RuntimeStoryContactActionLibraryEntry, RuntimeStoryContactProactiveMessageRule, RuntimeStoryPresentation, RuntimeStorySessionSnapshot } from "./contracts-core"
+import type { RuntimeGraphNode, RuntimePlayableEvent, RuntimeResolvedContactActionOption, RuntimeResolvedContactTalkOption, RuntimeState, RuntimeStoryBundle } from "./contracts-view"
 import { findBundleDoing } from "./doing-shop"
-import { buildRuntimePhoneContactMeta, getBundleItemNameMap, getBundlePhoneConfig, getBundlePhoneContactProfile, getBundlePhoneQuickMessages, getLatestPhoneSuggestedOptionIds, matchesPhoneLibraryScope } from "./phone-config"
+import { buildRuntimeContactMeta, getBundleItemNameMap, getBundleContactConfig, getBundleContactProfile, getBundleContactQuickMessages, getLatestContactSuggestedOptionIds, matchesContactLibraryScope } from "./contact-config"
 import { renderDialogueContent } from "./playback-render"
 import { getCurrentGameMinute } from "./schedule-clock"
 import { getBundleOnceEvents, getBundleScheduleEvents } from "./schedule-queue"
 import { findBagEntry } from "./script-context"
-import { clampInteger, cloneValue, normalizeBagQuantity, normalizeItemId, normalizePhoneRoleKey, normalizePhoneState, normalizeText, readSnapshotValue, readSystemNumber } from "./state-values"
+import { clampInteger, cloneValue, normalizeBagQuantity, normalizeItemId, normalizeContactRoleKey, normalizeContactState, normalizeText, readSnapshotValue, readSystemNumber } from "./state-values"
 
 /** @param node chain 图节点。 @returns 是否为具有剧情表现而非 exec_script 的事件节点，并收窄类型。 */
 export function isCompiledEvent(node: RuntimeGraphNode | null | undefined): node is CompiledEvent {
@@ -242,81 +242,81 @@ export function isBundleRoleKey(bundle: RuntimeStoryBundle, roleKey: string) {
 }
 
 /** @param bundle 编译故事。 @param roleKey 未知输入。 @returns 规范且存在的联系人角色键。 @throws 为空或角色不存在时抛错。 */
-export function assertRuntimePhoneRoleKey(bundle: RuntimeStoryBundle, roleKey: unknown) {
-  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+export function assertRuntimeContactRoleKey(bundle: RuntimeStoryBundle, roleKey: unknown) {
+  const normalizedRoleKey = normalizeContactRoleKey(roleKey)
   if (!normalizedRoleKey) {
-    throw new Error("phone role key is required.")
+    throw new Error("contact role key is required.")
   }
 
   if (!isBundleRoleKey(bundle, normalizedRoleKey)) {
-    throw new Error(`phone role "${normalizedRoleKey}" does not exist in runtime role library.`)
+    throw new Error(`contact role "${normalizedRoleKey}" does not exist in runtime role library.`)
   }
 
   return normalizedRoleKey
 }
 
 /** @param snapshot 会话快照。 @param roleKey 联系人角色键。 @returns 联系人状态，不存在时为 null。 */
-export function getPhoneContact(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
-  normalizePhoneState(snapshot)
-  return snapshot.phone.contacts.find((contact) => contact.role_key === roleKey) ?? null
+export function getContact(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  normalizeContactState(snapshot)
+  return snapshot.contact.contacts.find((contact) => contact.role_key === roleKey) ?? null
 }
 
 /** @param snapshot 会话快照。 @param roleKey 联系人角色键。 @returns 对应消息线程，不存在时为 null。 */
-export function getPhoneThread(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
-  normalizePhoneState(snapshot)
-  return snapshot.phone.threads.find((thread) => thread.role_key === roleKey) ?? null
+export function getContactThread(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  normalizeContactState(snapshot)
+  return snapshot.contact.threads.find((thread) => thread.role_key === roleKey) ?? null
 }
 
 /** @param snapshot 会话快照。 @param roleKey 联系人角色键。 @returns 已存在或新建的空消息线程。 */
-export function ensurePhoneThread(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
-  normalizePhoneState(snapshot)
-  const existing = getPhoneThread(snapshot, roleKey)
+export function ensureContactThread(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  normalizeContactState(snapshot)
+  const existing = getContactThread(snapshot, roleKey)
   if (existing) {
     return existing
   }
 
-  const nextThread: RuntimePhoneThreadState = {
+  const nextThread: RuntimeContactThreadState = {
     role_key: roleKey,
     messages: []
   }
-  snapshot.phone.threads.push(nextThread)
+  snapshot.contact.threads.push(nextThread)
   return nextThread
 }
 
 /**
  * 取得或创建联系人，并保证其消息线程存在。
- * @param bundle 编译故事。 @param snapshot 手机状态。 @param roleKey 已校验角色键。 @returns 可变联系人状态。
+ * @param bundle 编译故事。 @param snapshot 联系人状态。 @param roleKey 已校验角色键。 @returns 可变联系人状态。
  * 新联系人使用角色配置初始好感，解锁日期取当前故事日。
  */
-export function ensurePhoneContact(
+export function ensureContact(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   roleKey: string
 ) {
-  normalizePhoneState(snapshot)
-  const existing = getPhoneContact(snapshot, roleKey)
+  normalizeContactState(snapshot)
+  const existing = getContact(snapshot, roleKey)
   if (existing) {
     return existing
   }
 
-  const contactMeta = buildRuntimePhoneContactMeta(
+  const contactMeta = buildRuntimeContactMeta(
     bundle,
     roleKey,
-    getBundlePhoneContactProfile(bundle, roleKey)?.initial_favor ?? 20
+    getBundleContactProfile(bundle, roleKey)?.initial_favor ?? 20
   )
-  const nextContact: RuntimePhoneContactState = {
+  const nextContact: RuntimeContactEntryState = {
     role_key: roleKey,
     favor: contactMeta.initialFavor,
     unlocked_at_day: Math.max(1, readSystemNumber(snapshot.system_vals, "system.now_day", 1))
   }
-  snapshot.phone.contacts.push(nextContact)
+  snapshot.contact.contacts.push(nextContact)
   return nextContact
 }
 
 /** @param roleKey 联系人键。 @param gameMinute 消息游戏时间。 @param messageIndex 线程内序号。 @returns 可复现且适合作为键的消息 id。 */
-export function createPhoneMessageId(roleKey: string, gameMinute: number, messageIndex: number) {
+export function createContactMessageId(roleKey: string, gameMinute: number, messageIndex: number) {
   const safeRoleKey = roleKey.replace(/[^A-Za-z0-9]+/g, "-").toLowerCase()
-  return `phone-${safeRoleKey}-${gameMinute}-${messageIndex}`
+  return `contact-${safeRoleKey}-${gameMinute}-${messageIndex}`
 }
 
 /**
@@ -324,10 +324,10 @@ export function createPhoneMessageId(roleKey: string, gameMinute: number, messag
  * @param snapshot 会话快照。 @param roleKey 联系人键。 @param sender 发送方。 @param content 消息正文。
  * @param options 已读状态、选项来源、会话节点和标签等元数据。 @returns 新建消息对象，同时写入线程。
  */
-export function appendPhoneMessage(
+export function appendContactMessage(
   snapshot: RuntimeStorySessionSnapshot,
   roleKey: string,
-  sender: RuntimePhoneMessageState["sender"],
+  sender: RuntimeContactMessageState["sender"],
   content: string,
   options: {
     read?: boolean
@@ -335,23 +335,23 @@ export function appendPhoneMessage(
     optionKind?: "talk" | "action"
     quickMessageId?: string
     sourceRuleId?: string
-    phoneConversationId?: string
-    phoneConversationNodeId?: string
-    phoneConversationReminder?: boolean
+    contactConversationId?: string
+    contactConversationNodeId?: string
+    contactConversationReminder?: boolean
     tags?: string[]
   } = {}
 ) {
-  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+  const normalizedRoleKey = normalizeContactRoleKey(roleKey)
   const normalizedContent = normalizeText(content)
 
   if (!normalizedRoleKey || !normalizedContent) {
     return null
   }
 
-  const thread = ensurePhoneThread(snapshot, normalizedRoleKey)
+  const thread = ensureContactThread(snapshot, normalizedRoleKey)
   const gameMinute = getCurrentGameMinute(snapshot)
-  const nextMessage: RuntimePhoneMessageState = {
-    id: createPhoneMessageId(normalizedRoleKey, gameMinute, thread.messages.length + 1),
+  const nextMessage: RuntimeContactMessageState = {
+    id: createContactMessageId(normalizedRoleKey, gameMinute, thread.messages.length + 1),
     sender,
     content: normalizedContent,
     game_minute: gameMinute,
@@ -360,9 +360,9 @@ export function appendPhoneMessage(
     ...(options.optionKind ? { option_kind: options.optionKind } : {}),
     ...(options.quickMessageId ? { quick_message_id: options.quickMessageId } : {}),
     ...(options.sourceRuleId ? { source_rule_id: options.sourceRuleId } : {}),
-    ...(options.phoneConversationId ? { phone_conversation_id: normalizeText(options.phoneConversationId) } : {}),
-    ...(options.phoneConversationNodeId ? { phone_conversation_node_id: normalizeText(options.phoneConversationNodeId) } : {}),
-    ...(options.phoneConversationReminder ? { phone_conversation_reminder: true } : {}),
+    ...(options.contactConversationId ? { contact_conversation_id: normalizeText(options.contactConversationId) } : {}),
+    ...(options.contactConversationNodeId ? { contact_conversation_node_id: normalizeText(options.contactConversationNodeId) } : {}),
+    ...(options.contactConversationReminder ? { contact_conversation_reminder: true } : {}),
     ...(options.tags && options.tags.length > 0
       ? { tags: Array.from(new Set(options.tags.map((tag) => normalizeText(tag)).filter(Boolean))) }
       : {})
@@ -373,8 +373,8 @@ export function appendPhoneMessage(
 }
 
 /** @param snapshot 会话快照。 @param roleKey 联系人键。 @returns 联系人或系统发来的未读消息数，不统计玩家自己的消息。 */
-export function getPhoneUnreadCount(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
-  const thread = getPhoneThread(snapshot, roleKey)
+export function getContactUnreadCount(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  const thread = getContactThread(snapshot, roleKey)
   if (!thread) {
     return 0
   }
@@ -383,8 +383,8 @@ export function getPhoneUnreadCount(snapshot: RuntimeStorySessionSnapshot, roleK
 }
 
 /** @param snapshot 会话快照。 @param roleKey 联系人键。 @returns 本次改为已读的消息数量；会原地修改消息状态。 */
-export function markPhoneThreadRead(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
-  const thread = getPhoneThread(snapshot, roleKey)
+export function markContactThreadRead(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  const thread = getContactThread(snapshot, roleKey)
   if (!thread) {
     return 0
   }
@@ -401,8 +401,8 @@ export function markPhoneThreadRead(snapshot: RuntimeStorySessionSnapshot, roleK
 }
 
 /** @param snapshot 会话快照。 @param roleKey 联系人键。 @returns 最后一条内容、时间和线程总消息数，空线程用 null/0。 */
-export function getLatestPhoneMessagePreview(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
-  const thread = getPhoneThread(snapshot, roleKey)
+export function getLatestContactMessagePreview(snapshot: RuntimeStorySessionSnapshot, roleKey: string) {
+  const thread = getContactThread(snapshot, roleKey)
   const lastMessage = thread?.messages[thread.messages.length - 1]
 
   return {
@@ -417,31 +417,31 @@ export function getLatestPhoneMessagePreview(snapshot: RuntimeStorySessionSnapsh
  * @param bundle 编译故事。 @param roleKey 联系人键。 @param snapshot 可选快照，用于条件表达式和阶段判断。
  * @returns 已去重、按配置顺序解析并带显示元数据的话题选项；不修改状态。
  */
-export function resolvePhoneTalkOptionsForContact(
+export function resolveContactTalkOptionsForContact(
   bundle: RuntimeStoryBundle,
   roleKey: string,
   snapshot?: RuntimeStorySessionSnapshot
-): RuntimeResolvedPhoneTalkOption[] {
-  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+): RuntimeResolvedContactTalkOption[] {
+  const normalizedRoleKey = normalizeContactRoleKey(roleKey)
   if (!normalizedRoleKey) {
     return []
   }
 
-  const contact = snapshot ? getPhoneContact(snapshot, normalizedRoleKey) : null
-  const meta = buildRuntimePhoneContactMeta(
+  const contact = snapshot ? getContact(snapshot, normalizedRoleKey) : null
+  const meta = buildRuntimeContactMeta(
     bundle,
     normalizedRoleKey,
-    contact?.favor ?? getBundlePhoneContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
+    contact?.favor ?? getBundleContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
   )
   if (!meta.canContact) {
     return []
   }
 
-  const suggestedIds = getLatestPhoneSuggestedOptionIds(bundle, normalizedRoleKey, snapshot)
-  const talkLibraryOptions = getBundlePhoneConfig(bundle).talk_library
+  const suggestedIds = getLatestContactSuggestedOptionIds(bundle, normalizedRoleKey, snapshot)
+  const talkLibraryOptions = getBundleContactConfig(bundle).talk_library
     .filter((entry) => {
       const entryId = normalizeText(entry.id)
-      if (!normalizeText(entry.text) || !matchesPhoneLibraryScope(entry.scope, meta)) {
+      if (!normalizeText(entry.text) || !matchesContactLibraryScope(entry.scope, meta)) {
         return false
       }
 
@@ -461,10 +461,10 @@ export function resolvePhoneTalkOptionsForContact(
         preferred: tags.some((tag) => meta.preferredTags.has(tag)),
         invoke: entry.invoke,
         source: "talk-library"
-      } satisfies RuntimeResolvedPhoneTalkOption
+      } satisfies RuntimeResolvedContactTalkOption
     })
     .filter((entry) => entry.id && entry.text)
-  const legacyQuickMessages = getBundlePhoneQuickMessages(bundle)
+  const legacyQuickMessages = getBundleContactQuickMessages(bundle)
     .filter((message) => {
       if (!normalizeText(message.text)) {
         return false
@@ -492,7 +492,7 @@ export function resolvePhoneTalkOptionsForContact(
         suggested: suggestedIds.has(normalizeText(message.id)),
         preferred: tags.some((tag) => meta.preferredTags.has(tag)),
         source: "legacy-quick-message"
-      } satisfies RuntimeResolvedPhoneTalkOption
+      } satisfies RuntimeResolvedContactTalkOption
     })
     .filter((entry) => entry.id && entry.text)
 
@@ -526,11 +526,11 @@ export function resolvePhoneTalkOptionsForContact(
 }
 
 /** @param bundle 编译故事。 @param roleKey 联系人键。 @returns 该联系人的主动消息规则，缺少档案时为空数组。 */
-export function getPhoneProactiveRulesForContact(
+export function getContactProactiveRulesForContact(
   bundle: RuntimeStoryBundle,
   roleKey: string
-): RuntimeStoryPhoneProactiveMessageRule[] {
-  const profile = getBundlePhoneContactProfile(bundle, roleKey)
+): RuntimeStoryContactProactiveMessageRule[] {
+  const profile = getBundleContactProfile(bundle, roleKey)
   if (!profile) {
     return []
   }
@@ -541,7 +541,7 @@ export function getPhoneProactiveRulesForContact(
 }
 
 /** @param bundle 编译故事。 @param roleKey 联系人键。 @param talkId 话题 id。 @param snapshot 可选状态。 @returns 当前解析结果中的指定话题或 null。 */
-export function findPhoneTalkOption(
+export function findContactTalkOption(
   bundle: RuntimeStoryBundle,
   roleKey: string,
   talkId: string,
@@ -552,7 +552,7 @@ export function findPhoneTalkOption(
     return null
   }
 
-  return resolvePhoneTalkOptionsForContact(bundle, roleKey, snapshot).find(
+  return resolveContactTalkOptionsForContact(bundle, roleKey, snapshot).find(
     (message) => message.id === normalizedTalkId
   ) ?? null
 }
@@ -570,21 +570,21 @@ export function getPlayerMoneyBalance(snapshot: RuntimeStorySessionSnapshot) {
 }
 
 /**
- * 依次检查手机互动动作的联系人、关系阶段、好感、金钱、物品和条件表达式。
+ * 依次检查联系人互动动作的联系人、关系阶段、好感、金钱、物品和条件表达式。
  * @param bundle 编译故事。 @param snapshot 会话快照。 @param roleKey 联系人键。 @param action 动作定义。
  * @returns 可执行时为 null，否则返回第一个面向用户的禁用原因；只读，不扣资源。
  */
-export function resolvePhoneActionDisabledReason(
+export function resolveContactActionDisabledReason(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   roleKey: string,
-  action: RuntimeStoryPhoneActionLibraryEntry
+  action: RuntimeStoryContactActionLibraryEntry
 ) {
-  const contact = getPhoneContact(snapshot, roleKey)
-  const meta = buildRuntimePhoneContactMeta(
+  const contact = getContact(snapshot, roleKey)
+  const meta = buildRuntimeContactMeta(
     bundle,
     roleKey,
-    contact?.favor ?? getBundlePhoneContactProfile(bundle, roleKey)?.initial_favor ?? 20
+    contact?.favor ?? getBundleContactProfile(bundle, roleKey)?.initial_favor ?? 20
   )
   if (!meta.canContact) {
     return meta.lockMessage ?? "当前无法主动联系。"
@@ -627,30 +627,30 @@ export function resolvePhoneActionDisabledReason(
 }
 
 /**
- * 为联系人生成手机互动动作视图选项。
+ * 为联系人生成互动动作视图选项。
  * @param bundle 编译故事。 @param roleKey 联系人键。 @param snapshot 当前状态。
  * @returns 合并动作库、联系人限制和当前禁用原因后的选项数组；角色键无效时为空。
  */
-export function resolvePhoneActionOptionsForContact(
+export function resolveContactActionOptionsForContact(
   bundle: RuntimeStoryBundle,
   roleKey: string,
   snapshot: RuntimeStorySessionSnapshot
-): RuntimeResolvedPhoneActionOption[] {
-  const normalizedRoleKey = normalizePhoneRoleKey(roleKey)
+): RuntimeResolvedContactActionOption[] {
+  const normalizedRoleKey = normalizeContactRoleKey(roleKey)
   if (!normalizedRoleKey) {
     return []
   }
 
-  const contact = getPhoneContact(snapshot, normalizedRoleKey)
-  const meta = buildRuntimePhoneContactMeta(
+  const contact = getContact(snapshot, normalizedRoleKey)
+  const meta = buildRuntimeContactMeta(
     bundle,
     normalizedRoleKey,
-    contact?.favor ?? getBundlePhoneContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
+    contact?.favor ?? getBundleContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
   )
   const itemNameMap = getBundleItemNameMap(bundle)
 
-  return getBundlePhoneConfig(bundle).action_library
-    .filter((entry) => normalizeText(entry.label) && normalizeText(entry.text) && matchesPhoneLibraryScope(entry.scope, meta))
+  return getBundleContactConfig(bundle).action_library
+    .filter((entry) => normalizeText(entry.label) && normalizeText(entry.text) && matchesContactLibraryScope(entry.scope, meta))
     .map((entry) => {
       const tags = Array.from(new Set((entry.tags ?? []).map((tag) => normalizeText(tag)).filter(Boolean)))
       return {
@@ -669,9 +669,9 @@ export function resolvePhoneActionOptionsForContact(
           }))
           .filter((item) => item.itemId && item.quantity > 0),
         preferred: tags.some((tag) => meta.preferredTags.has(tag)),
-        disabledReason: resolvePhoneActionDisabledReason(bundle, snapshot, normalizedRoleKey, entry),
+        disabledReason: resolveContactActionDisabledReason(bundle, snapshot, normalizedRoleKey, entry),
         invoke: entry.invoke
-      } satisfies Omit<RuntimeResolvedPhoneActionOption, "disabled">
+      } satisfies Omit<RuntimeResolvedContactActionOption, "disabled">
     })
     .filter((entry) => entry.id && entry.label && entry.text)
     .map((entry) => ({

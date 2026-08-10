@@ -1,4 +1,4 @@
-/* 背包与手机共用的赠礼选择器。 */
+/* 背包与联系人面板共用的赠礼选择器。 */
 .bag-owner,
 .bag-item-card {
   border: 1px solid var(--line-soft);
@@ -12,7 +12,7 @@
 
 .bag-owner-header,
 .bag-item-main,
-.phone-gift-selection {
+.contact-gift-selection {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -108,7 +108,7 @@
 }
 
 .gift-combobox:focus-within .gift-options,
-.phone-gift-panel .gift-options {
+.contact-gift-panel .gift-options {
   display: grid;
 }
 
@@ -132,7 +132,7 @@
 
 .gift-option[hidden],
 .gift-empty[hidden],
-.phone-gift-selection[hidden] {
+.contact-gift-selection[hidden] {
   display: none;
 }
 
@@ -151,7 +151,7 @@
   background: #261312;
 }
 
-.phone-gift-panel {
+.contact-gift-panel {
   max-height: min(240px, 34dvh);
   display: grid;
   gap: 8px;
@@ -159,13 +159,13 @@
   overflow: auto;
 }
 
-.phone-gift-panel .gift-options {
+.contact-gift-panel .gift-options {
   position: static;
   max-height: 126px;
   box-shadow: none;
 }
 
-.phone-gift-selection {
+.contact-gift-selection {
   align-items: end;
   padding: 8px;
   border: 1px solid var(--line-soft);
@@ -175,11 +175,11 @@
 
 @media (max-width: 640px) {
   .bag-gift-form,
-  .phone-gift-selection {
+  .contact-gift-selection {
     grid-template-columns: 1fr;
   }
 
-  .phone-gift-selection {
+  .contact-gift-selection {
     display: grid;
   }
 }

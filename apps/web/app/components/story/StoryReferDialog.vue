@@ -124,7 +124,7 @@ watch(
             <span class="eyebrow">Refer</span>
             <h2 class="refer-dialog__title">称谓库</h2>
             <p class="refer-dialog__subtitle">
-              在对白、消息和手机短句里使用 <code>${term.player.respect}</code> 这类占位符，运行时会根据玩家性别自动替换。
+              在对白、消息和联系人短句里使用 <code>${term.player.respect}</code> 这类占位符，运行时会根据玩家性别自动替换。
             </p>
           </div>
 

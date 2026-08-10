@@ -1,4 +1,4 @@
-﻿# Story Manager Agent Guide
+# Story Manager Agent Guide
 
 Last updated: `2026-08-04`
 
@@ -78,8 +78,8 @@ Core files:
 - `event_location.json5`
 - `items.json5`
 - `initial_bags.json5`
-- `phone.json5` // phone relationship tracks, talk/action/reply libraries, and contact profiles
-- `phone_conversations.json5` // continuous plot phone conversations
+- `contact.json5` // contact channels, default channel, relationship tracks, libraries, and profiles
+- `contact_conversations.json5` // continuous contact story conversations
 - `doing.json5` // player-initiated action menu/event pool
 - `shop.json5` // in-game shop shelves existing item assets
 
@@ -97,9 +97,11 @@ Notes:
 - Chain event nodes and action nodes now live together in `events/chains.json5`.
 - `items.json5` is the story-level item asset library; it is separate from event/location/role assets and includes editable item categories.
 - `initial_bags.json5` is only a new-save initialization template; live inventory is stored in the runtime session snapshot as `bags`.
-- `phone.json5` stores ordinary phone contact assets: relationship tracks, personality library, talk library, action library, reply library, contact profiles, quick messages, and proactive messages.
-- `phone_conversations.json5` stores plot-specific continuous phone dialogues. Use it when a phone exchange must proceed node by node, lock ordinary chat/actions, and optionally invoke a follow-up event when the conversation ends.
-- `refer.json5` is the story-level称谓库. It defines gender-aware text terms exposed as `${term.xxx}` in dialogue/message/phone text templates.
+- `contact.json5` stores the default contact channel, selectable channel presets/labels, relationship tracks, personality library, talk/action/reply libraries, contact profiles, quick messages, and proactive messages. A profile may override `channel_id`; an empty override inherits `default_channel_id`.
+- `contact_conversations.json5` stores plot-specific continuous contact dialogues. Use it when a contact exchange must proceed node by node, lock ordinary chat/actions, and optionally invoke a follow-up event when the conversation ends.
+- New stories use a `generic` channel. Existing modern stories may use the `phone` preset; channel presets affect labels and presentation only, not scheduling or delivery semantics.
+- Runtime saves use schema version 3. Versions 1 and 2 are rejected explicitly and are not migrated.
+- `refer.json5` is the story-level称谓库. It defines gender-aware text terms exposed as `${term.xxx}` in dialogue/message/contact text templates.
 - `doing.json5` is the story-level player-initiated action config. It contains menu tree data plus doings that reuse flat-event presentation/script semantics.
 - `shop.json5` is the story-level shop shelf config. It must only reference existing `items.json5` item ids; it owns price, display/purchase conditions, gift favor delta, and cooldowns.
 - `events/events.json5`, `events/once_events.json5`, and `events/loop_events.json5` are legacy fallback file names only.
@@ -345,7 +347,7 @@ Rules:
 - runtime resolves each term from `gender_value_key`, defaulting to `player.gender`
 - `gender_aliases.male` and `gender_aliases.female` map raw player gender values to male/female variants
 - terms are read-only template context values, not writable story variables
-- Agent-generated dialogue, message prompts, phone quick messages, and phone proactive messages should use `${term.*}` for player gender-sensitive称呼、自称、代词 instead of hardcoding male/female wording
+- Agent-generated dialogue, message prompts, contact quick messages, and contact proactive messages should use `${term.*}` for player gender-sensitive称呼、自称、代词 instead of hardcoding male/female wording
 
 ### `story.json5`
 
@@ -387,7 +389,7 @@ Rules:
 
 - this file is per-story creative source material for the editor and backend generation agents
 - it should describe playable web-novel game design, not only prose-writing instructions
-- generated output must target project data files: chain events, pool events, schedule events, scenes, roles, locations, items, variables, phone contacts, plot phone conversations, doing actions, and shop shelves
+- generated output must target project data files: chain events, pool events, schedule events, scenes, roles, locations, items, variables, contact contacts, plot contact conversations, doing actions, and shop shelves
 - runtime ignores this file; the compiler should not include it in `CompiledStory`
 
 ## 5. Event model
@@ -508,7 +510,7 @@ The `doing` module is the player-initiated event entry system.
 Purpose:
 
 - let the player actively choose actions such as entertainment, visits, shopping, government work, and social contact
-- support temporary unlocks from story events, dialogue, schedule events, and phone messages
+- support temporary unlocks from story events, dialogue, schedule events, and contact messages
 - keep authoring data separate from `pool_events.json5` while using the same flat-event body model
 
 Current shape:
@@ -580,13 +582,13 @@ Implementation notes:
 - `shop.currency_value_key` points to a writable value variable, defaulting to `player.money`.
 - runtime session snapshots store `shop.purchases` and `shop.gifts` with counts, last game minute, and cooldown end game minute.
 - buying a product deducts `currency_value_key` and adds the referenced item to the player bag.
-- gifting a product performs a direct shop purchase: it deducts `currency_value_key`, applies purchase and gift cooldown records, sends the item directly to the target phone contact, and applies `gift_favor_delta` without adding or removing player bag entries.
+- gifting a product performs a direct shop purchase: it deducts `currency_value_key`, applies purchase and gift cooldown records, sends the item directly to the target contact contact, and applies `gift_favor_delta` without adding or removing player bag entries.
 - gifting an already-owned item uses `{ type: "bag-gift", itemId, roleKey, quantity }`: it removes the item from the player bag, does not deduct money or write a purchase record, and shares the matching product/contact gift cooldown with direct shop gifting.
-- bag gifting requires exactly one `allow_gift: true` shop product for the item. Shop enabled state, price, purchase condition, and purchase cooldown do not affect an already-owned item; bound items, missing/locked contacts, and plot-phone conversation locks are rejected before inventory mutation.
+- bag gifting requires exactly one `allow_gift: true` shop product for the item. Shop enabled state, price, purchase condition, and purchase cooldown do not affect an already-owned item; bound items, missing/locked contacts, and plot-contact conversation locks are rejected before inventory mutation.
 - `gift_favor_delta` is applied per gifted item and final favor is clamped to `0..100`; duplicate giftable products for one item are a core validation error and remain a runtime error for legacy bundles.
 - HTML client footer exposes `M 商城` left of `N 下一天`; clicking or pressing `M` opens the shop popup.
 - the HTML bag panel renders structured owner/item cards; player items can open a searchable friend picker with quantity and explicit confirmation, while other owner bags remain read-only.
-- ordinary phone chat has `说话 / 动作 / 赠礼` tabs. The gift tab preselects the current friend and offers a searchable player-bag item picker with quantity and explicit confirmation.
+- ordinary contact chat has `说话 / 动作 / 赠礼` tabs. The gift tab preselects the current friend and offers a searchable player-bag item picker with quantity and explicit confirmation.
 - StoryScript exposes `shop_can_buy`, `shop_purchase_cooldown_left`, `shop_gift_cooldown_left`, `shop_buy`, and `shop_gift`.
 - backend AI creation Agent reads existing shop categories/products and can output `draft.shop.categories` / `draft.shop.products`; selected draft entries are applied to `shop.json5`.
 - Agent-generated shop products must reference existing item ids or item ids from selected `draft.items`; the shop module never creates item assets directly.
@@ -665,7 +667,7 @@ Keep this section short and implementation-focused. Do not duplicate the full la
 - scripts and conditions can use `bag_count("player", "item_id")` and `bag_has("player", "item_id", 1)` to inspect runtime inventory
 - literal `item_id` arguments are validated against `items.json5`; dynamic ids are checked at runtime
 - scripts and conditions can use shop read helpers: `shop_can_buy`, `shop_purchase_cooldown_left`, and `shop_gift_cooldown_left`
-- event/action scripts can use `shop_buy(productId)` to buy into the player bag and `shop_gift(productId, roleKey)` to pay for an existing shop product and send it directly to a phone contact
+- event/action scripts can use `shop_buy(productId)` to buy into the player bag and `shop_gift(productId, roleKey)` to pay for an existing shop product and send it directly to a contact contact
 - literal shop product ids are validated against `shop.json5`; dynamic ids are checked at runtime
 - runtime text substitution for dialogue/template content is implemented in `packages/runtime`
 - editor `?` help popovers for condition/script/dialogue fields should eventually be sourced from `StoryScript.md`
@@ -741,8 +743,8 @@ Current foundation:
 - `apps/api` exposes `POST /api/stories/:storyId/creation-agent/apply`
 - `creation-agent/run` starts a new creation when called with only `instruction`; when called with `baseDraft`, the same multi-Agent workflow revises the current draft and must return a complete revised draft, not a patch
 - the LangGraph workflow returns a structured draft preview and does not directly mutate story files
-- the editor creation workspace can run the backend multi-Agent workflow and display Agent logs, draft events, locations, roles, items, variable suggestions, phone contact assets, plot phone conversations, doing assets, notes, and warnings
-- the editor creation workspace can select draft locations, roles, items, variables, events, phone contact assets, plot phone conversations, and doing assets, then explicitly apply the selected subset
+- the editor creation workspace can run the backend multi-Agent workflow and display Agent logs, draft events, locations, roles, items, variable suggestions, contact contact assets, plot contact conversations, doing assets, notes, and warnings
+- the editor creation workspace can select draft locations, roles, items, variables, events, contact contact assets, plot contact conversations, and doing assets, then explicitly apply the selected subset
 - the backend creation Agent gives item context in two layers:
   - `itemIndexAll` is the full compact item index for existence checks and reuse decisions
   - `relevantItemDetails` is a local keyword-ranked detail pool for richer item fields; it is not the full library
@@ -751,7 +753,7 @@ Current foundation:
 - after a draft exists, the new-creation command area is collapsed by default; the feedback box sends the editable current draft as `baseDraft` so the Agent can optimize the existing result instead of starting over
 - feedback optimization shows a dedicated running state and local feedback history; each submitted feedback item is marked as running, completed, or failed
 - the editor creation workspace previews apply impact before confirmation: create, overwrite, skip, and likely reference cleanups
-- draft apply can write selected data into `events/chains.json5`, `events/pool_events.json5`, `events/schedule_events.json5`, `event_location.json5`, `nomal_roles.json5`, `import_roles.json5`, `items.json5`, `vals.json5`, `phone.json5`, `phone_conversations.json5`, and `doing.json5`
+- draft apply can write selected data into `events/chains.json5`, `events/pool_events.json5`, `events/schedule_events.json5`, `event_location.json5`, `nomal_roles.json5`, `import_roles.json5`, `items.json5`, `vals.json5`, `contact.json5`, `contact_conversations.json5`, and `doing.json5`
 - draft apply returns the updated story document, validation result, applied counts, and warnings for any downgraded or skipped references
 - variable suggestions are structured draft rows and can be written to `vals.json5` after user confirmation
 
@@ -763,8 +765,8 @@ Current draft-apply rules:
 - items are selected by item id and must reference an existing `items.json5` category id
 - events are selected by event keys, using `chain:<id>`, `pool:<id>`, or `schedule:<id>`
 - variables are selected by variable keys, using `group.name`; legacy string suggestions are accepted for backward compatibility
-- phone contact assets are selected by ids/role keys from `draft.phone`: personality ids, talk ids, action ids, reply ids, and contact profile role keys
-- plot phone conversations are selected by conversation id from `draft.phoneConversations.conversations` and are written to `phone_conversations.json5`
+- contact contact assets are selected by ids/role keys from `draft.contact`: personality ids, talk ids, action ids, reply ids, and contact profile role keys
+- plot contact conversations are selected by conversation id from `draft.contactConversations.conversations` and are written to `contact_conversations.json5`
 - doing assets are selected by ids from `draft.doing`: menu ids and doing ids
 - draft object ids and variable keys are not editable in the creation workspace yet; this keeps selection state and event references stable
 - draft ids are normalized to ASCII-like ids before apply
@@ -781,8 +783,8 @@ Current draft-apply rules:
 - missing or unselected role speakers are downgraded to `player` with a warning
 - invalid `condition` or `invoke` trigger details are downgraded to `default` with a warning
 - schedule draft events require `loop`; missing loop rules are applied as `daily` with a warning
-- selected phone assets are written to `phone.json5`; contact profile role keys must reference existing or selected NPC roles, invoke targets must reference existing or selected events, and invalid scopes/costs are pruned with warnings
-- selected plot phone conversations are written to `phone_conversations.json5`; role keys must reference existing or selected NPC roles, node ids must be valid inside the conversation, and ending invoke targets must reference existing or selected events
+- selected contact assets are written to `contact.json5`; contact profile role keys must reference existing or selected NPC roles, invoke targets must reference existing or selected events, and invalid scopes/costs are pruned with warnings
+- selected plot contact conversations are written to `contact_conversations.json5`; role keys must reference existing or selected NPC roles, node ids must be valid inside the conversation, and ending invoke targets must reference existing or selected events
 - selected doing assets are written to `doing.json5`; doing entries must reference existing or selected menus, and missing location/role references are cleared or removed with warnings
 
 Required architecture:
@@ -990,11 +992,11 @@ Implemented:
 - save slots via `*.json5`
 - runtime session control through `apps/html-client/src/client-app.ts`
 - browser UI served by `apps/html-client/src/server.ts` and static files in `apps/html-client/public/`
-- game layout follows header / game area / footer, with footer command popups for doing, phone, messages, variables, scheduler, bag, and saves
-- the old topbar sync/profile/save/phone buttons are removed; story sync now happens automatically before starting or loading a session
+- game layout follows header / game area / footer, with footer command popups for doing, contact, messages, variables, scheduler, bag, and saves
+- the old topbar sync/profile/save/contact buttons are removed; story sync now happens automatically before starting or loading a session
 - runtime time controls are wired through shared session APIs
-- phone contacts are available in the footer and unread phone messages flash as a reminder
-- the phone drawer uses a left/right contact-thread layout; chat history keeps cross-day messages and refreshes when the next day is advanced
+- contact contacts are available in the footer and unread contact messages flash as a reminder
+- the contact drawer uses a left/right contact-thread layout; chat history keeps cross-day messages and refreshes when the next day is advanced
 - number keys `1` through `9` select current game-area options
 
 Current HTML local layout:
@@ -1043,15 +1045,15 @@ Current HTML game-screen behavior:
 
 - header: current event title, location/time, and running state
 - game area: runtime content, dialogue, message prompts, branch options, or empty-state text
-- footer: left shows role, money, and phone unread status; right shows `N 下一天`
-- footer command row opens popups for actions/doing, messages, bag, variables, scheduler, saves, and phone
-- bag and phone gift forms keep browser-only drafts until `确定`; successful `bag-gift` actions refresh bag/favor/thread state and reset the draft, while handled failures preserve it and display the runtime rejection
+- footer: left shows role, money, and contact unread status; right shows `N 下一天`
+- footer command row opens popups for actions/doing, messages, bag, variables, scheduler, saves, and contact
+- bag and contact gift forms keep browser-only drafts until `确定`; successful `bag-gift` actions refresh bag/favor/thread state and reset the draft, while handled failures preserve it and display the runtime rejection
 - `space` pauses/resumes time
 - `n` advances to the next day boundary
 - `d` opens the player action / doing popup shell
-- `p` opens/closes phone
+- `p` opens/closes contact
 - `l`, `b`, `i`, `o`, `t`, and `s` open footer popups
-- `Esc` closes an open popup or phone; when no popup is open it returns to the main profile screen
+- `Esc` closes an open popup or contact; when no popup is open it returns to the main profile screen
 - `1` to `9` select current interaction options
 
 ## 11. Cocos client status

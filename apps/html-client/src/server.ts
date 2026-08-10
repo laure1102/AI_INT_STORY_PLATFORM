@@ -15,8 +15,8 @@ import {
   formatGameMinuteLabel
 } from "./server-view"
 import {
-  buildRuntimePhoneContacts,
-  buildRuntimePhoneThreadView,
+  buildRuntimeContacts,
+  buildRuntimeContactThreadView,
   formatStoryValInput,
   getStoryValCalcDisplay,
   type RuntimeStorySessionAction,
@@ -400,7 +400,7 @@ async function handleApi(app: HtmlClientApp, request: JsonRequest, response: Ser
     return
   }
 
-  if (request.method === "GET" && pathname === "/api/phone/thread") {
+  if (request.method === "GET" && pathname === "/api/contact/thread") {
     const state = app.getState()
     const roleKey = url.searchParams.get("roleKey")?.trim() ?? ""
     const snapshot = state.session?.getSnapshot() ?? null
@@ -410,7 +410,7 @@ async function handleApi(app: HtmlClientApp, request: JsonRequest, response: Ser
     }
 
     const thread = state.bundle && snapshot
-      ? buildPhoneThreadClientView(buildRuntimePhoneThreadView(state.bundle, snapshot, roleKey))
+      ? buildContactThreadClientView(buildRuntimeContactThreadView(state.bundle, snapshot, roleKey))
       : null
 
     sendJson(response, 200, {
@@ -423,8 +423,8 @@ async function handleApi(app: HtmlClientApp, request: JsonRequest, response: Ser
   throw new HttpError(404, "接口不存在。")
 }
 
-/** @param thread Runtime 手机线程视图或 null。 @returns 适合浏览器 JSON 的线程，并补消息时间标签；null 原样返回。 */
-function buildPhoneThreadClientView(thread: ReturnType<typeof buildRuntimePhoneThreadView>) {
+/** @param thread Runtime 联系人线程视图或 null。 @returns 适合浏览器 JSON 的线程，并补消息时间标签；null 原样返回。 */
+function buildContactThreadClientView(thread: ReturnType<typeof buildRuntimeContactThreadView>) {
   if (!thread) {
     return null
   }

@@ -1,5 +1,5 @@
 /**
- * 变量、商城、手机以及 schedule 依赖的领域验证规则。
+ * 变量、商城、联系人以及 schedule 依赖的领域验证规则。
  *
  * 每个函数只向 issues 追加问题，不修改 StoryDocument，方便聚合器按固定顺序调用。
  */
@@ -304,27 +304,27 @@ export function validateShopConfig(
 }
 
 /**
- * 验证普通手机配置中的角色、作用域、invoke 和文本模板。
+ * 验证联系人配置中的角色、作用域、invoke 和文本模板。
  *
- * @param document 完整故事及 phone.json5 数据。
+ * @param document 完整故事及 contact.json5 数据。
  * @param indexes 角色、物品、调用目标和脚本索引。
  * @param issues 共享问题数组。
  * @returns 无返回值；按原字段 path 追加 error。
  */
-export function validatePhoneConfig(
+export function validateContactConfig(
   document: StoryDocument,
   indexes: StoryValidationIndexes,
   issues: ValidationIssue[]
 ) {
   const roleKeys = indexes.roleKeys
   const relationshipTrackIds = new Set<string>(
-    document.phone.relationship_tracks.map((track) => track.id).filter((trackId) => trackId !== "none")
+    document.contact.relationship_tracks.map((track) => track.id).filter((trackId) => trackId !== "none")
   )
   const personalityIds = new Set(
-    document.phone.personality_library.map((personality) => personality.id)
+    document.contact.personality_library.map((personality) => personality.id)
   )
-  const quickMessageIds = new Set(document.phone.player_quick_messages.map((message) => message.id))
-  const talkSuggestionIds = new Set(document.phone.talk_library.map((entry) => entry.id))
+  const quickMessageIds = new Set(document.contact.player_quick_messages.map((message) => message.id))
+  const talkSuggestionIds = new Set(document.contact.talk_library.map((entry) => entry.id))
   const proactiveSuggestionIds = new Set([...quickMessageIds, ...talkSuggestionIds])
   const itemIds = indexes.itemIds
   const invokeTargetKeys = indexes.invokeTargetKeys
@@ -332,11 +332,11 @@ export function validatePhoneConfig(
   const valsFile = indexes.scriptVals
 
   /**
-   * 检查一条手机话术/行动的 scope 中角色和物品引用。
+   * 检查一条联系人话术/行动的 scope 中角色和物品引用。
    * @param scope 条目的可选作用域。 @param basePath 条目文档路径。 @param label 消息名称。
    * @returns 无返回值；缺失引用追加到 issues。
    */
-  function validatePhoneScope(
+  function validateContactScope(
     scope: {
       role_keys: string[]
       contact_tracks: string[]
@@ -350,7 +350,7 @@ export function validatePhoneConfig(
         pushIssue(
           issues,
           "error",
-          "phone.scope.missing-role",
+          "contact.scope.missing-role",
           `${label} references unknown role "${roleKey}".`,
           [...basePath, "role_keys", String(roleKeyIndex)]
         )
@@ -366,7 +366,7 @@ export function validatePhoneConfig(
         pushIssue(
           issues,
           "error",
-          "phone.scope.missing-track",
+          "contact.scope.missing-track",
           `${label} references unknown contact track "${trackId}".`,
           [...basePath, "contact_tracks", String(trackIndex)]
         )
@@ -378,7 +378,7 @@ export function validatePhoneConfig(
         pushIssue(
           issues,
           "error",
-          "phone.scope.missing-personality",
+          "contact.scope.missing-personality",
           `${label} references unknown personality "${personalityId}".`,
           [...basePath, "personality_ids", String(personalityIndex)]
         )
@@ -387,11 +387,11 @@ export function validatePhoneConfig(
   }
 
   /**
-   * 检查手机条目配置的结构化事件调用目标。
+   * 检查联系人条目配置的结构化事件调用目标。
    * @param invoke 可选调用配置。 @param basePath 条目路径。 @param label 消息名称。
    * @returns 无返回值；目标未声明为 invoke 事件时追加 error。
    */
-  function validatePhoneInvoke(
+  function validateContactInvoke(
     invoke: { target_type: string; event_id: string } | undefined,
     basePath: string[],
     label: string
@@ -404,7 +404,7 @@ export function validatePhoneConfig(
       pushIssue(
         issues,
         "error",
-        "phone.invoke.missing-event",
+        "contact.invoke.missing-event",
         `${label} references missing invoke event "${invoke.target_type}:${invoke.event_id}".`,
         [...basePath, "event_id"]
       )
@@ -416,7 +416,7 @@ export function validatePhoneConfig(
       pushIssue(
         issues,
         "error",
-        "phone.role.missing-track",
+        "contact.role.missing-track",
         `Normal role "${role.id}" references unknown contact track "${role.contact_track}".`,
         ["roles", "normal", "roles", String(roleIndex), "contact_track"]
       )
@@ -426,7 +426,7 @@ export function validatePhoneConfig(
       pushIssue(
         issues,
         "error",
-        "phone.role.missing-personality",
+        "contact.role.missing-personality",
         `Normal role "${role.id}" references unknown personality "${role.xingge_id}".`,
         ["roles", "normal", "roles", String(roleIndex), "xingge_id"]
       )
@@ -438,7 +438,7 @@ export function validatePhoneConfig(
       pushIssue(
         issues,
         "error",
-        "phone.role.missing-track",
+        "contact.role.missing-track",
         `Important role "${role.id}" references unknown contact track "${role.contact_track}".`,
         ["roles", "important", "roles", String(roleIndex), "contact_track"]
       )
@@ -448,20 +448,20 @@ export function validatePhoneConfig(
       pushIssue(
         issues,
         "error",
-        "phone.role.missing-personality",
+        "contact.role.missing-personality",
         `Important role "${role.id}" references unknown personality "${role.xingge_id}".`,
         ["roles", "important", "roles", String(roleIndex), "xingge_id"]
       )
     }
   }
 
-  for (const [messageIndex, message] of document.phone.player_quick_messages.entries()) {
+  for (const [messageIndex, message] of document.contact.player_quick_messages.entries()) {
     validateTextTemplateField(
       issues,
-      "phone.quick-message.template-invalid",
-      `Phone quick message "${message.id}" text`,
+      "contact.quick-message.template-invalid",
+      `Contact quick message "${message.id}" text`,
       message.text,
-      ["phone", "player_quick_messages", String(messageIndex), "text"]
+      ["contact", "player_quick_messages", String(messageIndex), "text"]
     )
 
     for (const [roleKeyIndex, roleKey] of message.available_role_keys.entries()) {
@@ -469,60 +469,60 @@ export function validatePhoneConfig(
         pushIssue(
           issues,
           "error",
-          "phone.quick-message.missing-role",
-          `Phone quick message "${message.id}" references unknown role "${roleKey}".`,
-          ["phone", "player_quick_messages", String(messageIndex), "available_role_keys", String(roleKeyIndex)]
+          "contact.quick-message.missing-role",
+          `Contact quick message "${message.id}" references unknown role "${roleKey}".`,
+          ["contact", "player_quick_messages", String(messageIndex), "available_role_keys", String(roleKeyIndex)]
         )
       }
     }
   }
 
-  for (const [entryIndex, entry] of document.phone.talk_library.entries()) {
+  for (const [entryIndex, entry] of document.contact.talk_library.entries()) {
     validateTextTemplateField(
       issues,
-      "phone.talk.template-invalid",
-      `Phone talk "${entry.id}" text`,
+      "contact.talk.template-invalid",
+      `Contact talk "${entry.id}" text`,
       entry.text,
-      ["phone", "talk_library", String(entryIndex), "text"]
+      ["contact", "talk_library", String(entryIndex), "text"]
     )
 
-    validatePhoneScope(
+    validateContactScope(
       entry.scope,
-      ["phone", "talk_library", String(entryIndex), "scope"],
-      `Phone talk "${entry.id}"`
+      ["contact", "talk_library", String(entryIndex), "scope"],
+      `Contact talk "${entry.id}"`
     )
-    validatePhoneInvoke(
+    validateContactInvoke(
       entry.invoke,
-      ["phone", "talk_library", String(entryIndex), "invoke"],
-      `Phone talk "${entry.id}"`
+      ["contact", "talk_library", String(entryIndex), "invoke"],
+      `Contact talk "${entry.id}"`
     )
   }
 
-  for (const [entryIndex, entry] of document.phone.action_library.entries()) {
+  for (const [entryIndex, entry] of document.contact.action_library.entries()) {
     validateTextTemplateField(
       issues,
-      "phone.action.label-template-invalid",
-      `Phone action "${entry.id}" label`,
+      "contact.action.label-template-invalid",
+      `Contact action "${entry.id}" label`,
       entry.label,
-      ["phone", "action_library", String(entryIndex), "label"]
+      ["contact", "action_library", String(entryIndex), "label"]
     )
     validateTextTemplateField(
       issues,
-      "phone.action.text-template-invalid",
-      `Phone action "${entry.id}" text`,
+      "contact.action.text-template-invalid",
+      `Contact action "${entry.id}" text`,
       entry.text,
-      ["phone", "action_library", String(entryIndex), "text"]
+      ["contact", "action_library", String(entryIndex), "text"]
     )
 
-    validatePhoneScope(
+    validateContactScope(
       entry.scope,
-      ["phone", "action_library", String(entryIndex), "scope"],
-      `Phone action "${entry.id}"`
+      ["contact", "action_library", String(entryIndex), "scope"],
+      `Contact action "${entry.id}"`
     )
-    validatePhoneInvoke(
+    validateContactInvoke(
       entry.invoke,
-      ["phone", "action_library", String(entryIndex), "invoke"],
-      `Phone action "${entry.id}"`
+      ["contact", "action_library", String(entryIndex), "invoke"],
+      `Contact action "${entry.id}"`
     )
 
     for (const [costIndex, costItem] of entry.cost_items.entries()) {
@@ -530,40 +530,40 @@ export function validatePhoneConfig(
         pushIssue(
           issues,
           "error",
-          "phone.action.missing-item",
-          `Phone action "${entry.id}" references missing item "${costItem.item_id}".`,
-          ["phone", "action_library", String(entryIndex), "cost_items", String(costIndex), "item_id"]
+          "contact.action.missing-item",
+          `Contact action "${entry.id}" references missing item "${costItem.item_id}".`,
+          ["contact", "action_library", String(entryIndex), "cost_items", String(costIndex), "item_id"]
         )
       }
     }
   }
 
-  for (const [entryIndex, entry] of document.phone.reply_library.entries()) {
+  for (const [entryIndex, entry] of document.contact.reply_library.entries()) {
     for (const [replyIndex, reply] of entry.replies.entries()) {
       validateTextTemplateField(
         issues,
-        "phone.reply.template-invalid",
-        `Phone reply "${entry.id}" reply`,
+        "contact.reply.template-invalid",
+        `Contact reply "${entry.id}" reply`,
         reply,
-        ["phone", "reply_library", String(entryIndex), "replies", String(replyIndex)]
+        ["contact", "reply_library", String(entryIndex), "replies", String(replyIndex)]
       )
     }
 
-    validatePhoneScope(
+    validateContactScope(
       entry.scope,
-      ["phone", "reply_library", String(entryIndex), "scope"],
-      `Phone reply "${entry.id}"`
+      ["contact", "reply_library", String(entryIndex), "scope"],
+      `Contact reply "${entry.id}"`
     )
   }
 
-  for (const [profileIndex, profile] of document.phone.contact_profiles.entries()) {
+  for (const [profileIndex, profile] of document.contact.contact_profiles.entries()) {
     if (!roleKeys.has(profile.role_key)) {
       pushIssue(
         issues,
         "error",
-        "phone.contact-profile.missing-role",
-        `Phone contact profile "${profile.role_key}" does not exist in roles library.`,
-        ["phone", "contact_profiles", String(profileIndex), "role_key"]
+        "contact.contact-profile.missing-role",
+        `Contact contact profile "${profile.role_key}" does not exist in roles library.`,
+        ["contact", "contact_profiles", String(profileIndex), "role_key"]
       )
     }
 
@@ -571,11 +571,11 @@ export function validatePhoneConfig(
       for (const [replyIndex, reply] of replies.entries()) {
         validateTextTemplateField(
           issues,
-          "phone.contact-profile.reply-template-invalid",
-          `Phone contact profile "${profile.role_key}" reply "${tag}"`,
+          "contact.contact-profile.reply-template-invalid",
+          `Contact contact profile "${profile.role_key}" reply "${tag}"`,
           reply,
           [
-            "phone",
+            "contact",
             "contact_profiles",
             String(profileIndex),
             "reply_by_tag",
@@ -590,11 +590,11 @@ export function validatePhoneConfig(
       for (const [messageIndex, message] of rule.messages.entries()) {
         validateTextTemplateField(
           issues,
-          "phone.proactive-rule.message-template-invalid",
-          `Phone proactive rule "${profile.role_key}/${rule.id}" message`,
+          "contact.proactive-rule.message-template-invalid",
+          `Contact proactive rule "${profile.role_key}/${rule.id}" message`,
           message,
           [
-            "phone",
+            "contact",
             "contact_profiles",
             String(profileIndex),
             "proactive_messages",
@@ -617,10 +617,10 @@ export function validatePhoneConfig(
         pushIssue(
           issues,
           "error",
-          "phone.proactive-rule.trigger-invalid",
-          `Phone proactive rule "${profile.role_key}/${rule.id}" trigger_expr is invalid at line ${triggerIssue.lineNumber}: ${triggerIssue.message}`,
+          "contact.proactive-rule.trigger-invalid",
+          `Contact proactive rule "${profile.role_key}/${rule.id}" trigger_expr is invalid at line ${triggerIssue.lineNumber}: ${triggerIssue.message}`,
           [
-            "phone",
+            "contact",
             "contact_profiles",
             String(profileIndex),
             "proactive_messages",
@@ -635,10 +635,10 @@ export function validatePhoneConfig(
           pushIssue(
             issues,
             "error",
-            "phone.proactive-rule.missing-quick-message",
-            `Phone proactive rule "${profile.role_key}/${rule.id}" references missing reply suggestion "${quickMessageId}".`,
+            "contact.proactive-rule.missing-quick-message",
+            `Contact proactive rule "${profile.role_key}/${rule.id}" references missing reply suggestion "${quickMessageId}".`,
             [
-              "phone",
+              "contact",
               "contact_profiles",
               String(profileIndex),
               "proactive_messages",
@@ -652,14 +652,14 @@ export function validatePhoneConfig(
     }
   }
 
-  for (const [tag, replies] of Object.entries(document.phone.fallback_replies)) {
+  for (const [tag, replies] of Object.entries(document.contact.fallback_replies)) {
     for (const [replyIndex, reply] of replies.entries()) {
       validateTextTemplateField(
         issues,
-        "phone.fallback-reply.template-invalid",
-        `Phone fallback reply "${tag}"`,
+        "contact.fallback-reply.template-invalid",
+        `Contact fallback reply "${tag}"`,
         reply,
-        ["phone", "fallback_replies", tag, String(replyIndex)]
+        ["contact", "fallback_replies", tag, String(replyIndex)]
       )
     }
   }

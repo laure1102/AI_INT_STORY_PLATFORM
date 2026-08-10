@@ -29,14 +29,14 @@ import {
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
-  type StoryPhoneActionLibraryEntry,
-  type StoryPhoneContactProfile,
-  type StoryPhoneConversationDefinition,
-  type StoryPhoneConversationsFile,
-  type StoryPhoneFile,
-  type StoryPhonePersonalityDefinition,
-  type StoryPhoneReplyLibraryEntry,
-  type StoryPhoneTalkLibraryEntry,
+  type StoryContactActionLibraryEntry,
+  type StoryContactProfile,
+  type StoryContactConversationDefinition,
+  type StoryContactConversationsFile,
+  type StoryContactFile,
+  type StoryContactPersonalityDefinition,
+  type StoryContactReplyLibraryEntry,
+  type StoryContactTalkLibraryEntry,
   type StoryShopProduct,
   type StoryScriptValidationIssue,
   type StoryOnceDialogueDefinition,
@@ -59,8 +59,8 @@ import type {
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
-  StoryCreationDraftPhone,
-  StoryCreationDraftPhoneConversations,
+  StoryCreationDraftContact,
+  StoryCreationDraftContactConversations,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftShop,
@@ -148,7 +148,7 @@ export const STRUCTURED_OUTPUT_PARSE_RETRY_PROMPT = [
   "不要输出 Markdown、解释文字、代码块或额外字段。",
   "只输出一个完整的 JSON 对象；如果上一次多输出了说明文字或第二个 JSON 片段，这一轮全部删掉。",
   "所有数组字段没有内容时填空数组；所有字符串字段没有内容时填空字符串；nullable 字段没有内容时填 null。",
-  "phone.contact_profiles[].reply_by_tag 在 Agent 结构化输出里必须是数组，格式为 [{\"tag\":\"pressure\",\"replies\":[\"...\"]}]；不要输出对象映射。"
+  "contact.contact_profiles[].reply_by_tag 在 Agent 结构化输出里必须是数组，格式为 [{\"tag\":\"pressure\",\"replies\":[\"...\"]}]；不要输出对象映射。"
 ].join("\n")
 
 export let cachedStoryScriptPromptSection: string | null | undefined
@@ -307,39 +307,56 @@ export const draftItemSchema = z.object({
   usable: z.boolean().default(false).describe("是否可作为可使用道具。")
 })
 
-export const phoneContactTrackSchema = z.enum(["none", "romance", "official", "social"])
+export const contactTrackSchema = z.enum(["none", "romance", "official", "social"])
 
-export const draftPhoneLibraryScopeSchema = z.object({
+export const draftContactChannelLabelsSchema = z.object({
+  message: z.string().optional(),
+  conversation: z.string().optional(),
+  talk: z.string().optional(),
+  action: z.string().optional(),
+  gift: z.string().optional(),
+  send: z.string().optional(),
+  reply: z.string().optional()
+}).default({})
+
+export const draftContactChannelSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  preset: z.enum(["generic", "phone", "letter", "transmission"]).default("generic"),
+  labels: draftContactChannelLabelsSchema
+})
+
+export const draftContactLibraryScopeSchema = z.object({
   role_keys: z.array(z.string()).default([]),
-  contact_tracks: z.array(phoneContactTrackSchema).default([]),
+  contact_tracks: z.array(contactTrackSchema).default([]),
   personality_ids: z.array(z.string()).default([]),
   min_favor: z.number().int().min(0).max(100).default(0),
   max_favor: z.number().int().min(0).max(100).default(100)
 })
 
-export const draftPhoneInvokeDelaySchema = z.object({
+export const draftContactInvokeDelaySchema = z.object({
   unit: z.enum(["hours", "days", "months", "years"]),
   value: z.number().int().min(1)
 })
 
-export const draftPhoneInvocationSchema = z.object({
+export const draftContactInvocationSchema = z.object({
   target_type: z.enum(["chain", "pool", "schedule"]).default("chain"),
   event_id: z.string().min(1),
-  delay: draftPhoneInvokeDelaySchema.optional()
+  delay: draftContactInvokeDelaySchema.optional()
 })
 
-export const draftPhonePersonalitySchema = z.object({
+export const draftContactPersonalitySchema = z.object({
   id: z.string().min(1),
   name: z.string().default(""),
   descr: z.string().default(""),
   style_tags: z.array(z.string()).default([])
 })
 
-export const draftPhoneTalkSchema = z.object({
+export const draftContactTalkSchema = z.object({
   id: z.string().min(1),
   text: z.string().default(""),
   tags: z.array(z.string()).default([]),
-  scope: draftPhoneLibraryScopeSchema.default({
+  scope: draftContactLibraryScopeSchema.default({
     role_keys: [],
     contact_tracks: [],
     personality_ids: [],
@@ -348,20 +365,20 @@ export const draftPhoneTalkSchema = z.object({
   }),
   base_favor_delta: z.number().int().min(-100).max(100).default(0),
   cooldown_hours: z.number().int().min(0).default(0),
-  invoke: draftPhoneInvocationSchema.optional()
+  invoke: draftContactInvocationSchema.optional()
 })
 
-export const draftPhoneActionCostItemSchema = z.object({
+export const draftContactActionCostItemSchema = z.object({
   item_id: z.string().min(1),
   quantity: z.number().int().min(1).default(1)
 })
 
-export const draftPhoneActionSchema = z.object({
+export const draftContactActionSchema = z.object({
   id: z.string().min(1),
   label: z.string().default(""),
   text: z.string().default(""),
   tags: z.array(z.string()).default([]),
-  scope: draftPhoneLibraryScopeSchema.default({
+  scope: draftContactLibraryScopeSchema.default({
     role_keys: [],
     contact_tracks: [],
     personality_ids: [],
@@ -371,14 +388,14 @@ export const draftPhoneActionSchema = z.object({
   base_favor_delta: z.number().int().min(-100).max(100).default(0),
   cooldown_hours: z.number().int().min(0).default(0),
   cost_money: z.number().min(0).default(0),
-  cost_items: z.array(draftPhoneActionCostItemSchema).default([]),
-  invoke: draftPhoneInvocationSchema.optional()
+  cost_items: z.array(draftContactActionCostItemSchema).default([]),
+  invoke: draftContactInvocationSchema.optional()
 })
 
-export const draftPhoneReplySchema = z.object({
+export const draftContactReplySchema = z.object({
   id: z.string().min(1),
   tags: z.array(z.string()).default([]),
-  scope: draftPhoneLibraryScopeSchema.default({
+  scope: draftContactLibraryScopeSchema.default({
     role_keys: [],
     contact_tracks: [],
     personality_ids: [],
@@ -388,7 +405,7 @@ export const draftPhoneReplySchema = z.object({
   replies: z.array(z.string()).default([])
 })
 
-export const draftPhoneProactiveMessageSchema = z.object({
+export const draftContactProactiveMessageSchema = z.object({
   id: z.string().min(1),
   enabled: z.boolean().default(true),
   trigger_expr: z.string().min(1),
@@ -398,17 +415,19 @@ export const draftPhoneProactiveMessageSchema = z.object({
   reply_quick_message_ids: z.array(z.string()).default([])
 })
 
-export const draftPhoneContactProfileSchema = z.object({
+export const draftContactProfileSchema = z.object({
   role_key: z.string().min(1),
+  channel_id: z.string().default(""),
   enabled: z.boolean().default(true),
   auto_add: z.boolean().default(true),
   initial_favor: z.number().int().min(0).max(100).default(20),
   preferred_tags: z.array(z.string()).default([]),
   reply_by_tag: z.record(z.array(z.string()).default([])).default({}),
-  proactive_messages: z.array(draftPhoneProactiveMessageSchema).default([])
+  proactive_messages: z.array(draftContactProactiveMessageSchema).default([])
 })
 
-export const emptyDraftPhone = {
+export const emptyDraftContact = {
+  channels: [],
   personality_library: [],
   talk_library: [],
   action_library: [],
@@ -416,19 +435,20 @@ export const emptyDraftPhone = {
   contact_profiles: []
 }
 
-export const draftPhoneSchema = z.object({
-  personality_library: z.array(draftPhonePersonalitySchema).default([]),
-  talk_library: z.array(draftPhoneTalkSchema).default([]),
-  action_library: z.array(draftPhoneActionSchema).default([]),
-  reply_library: z.array(draftPhoneReplySchema).default([]),
-  contact_profiles: z.array(draftPhoneContactProfileSchema).default([])
-}).default(emptyDraftPhone)
+export const draftContactSchema = z.object({
+  channels: z.array(draftContactChannelSchema).default([]),
+  personality_library: z.array(draftContactPersonalitySchema).default([]),
+  talk_library: z.array(draftContactTalkSchema).default([]),
+  action_library: z.array(draftContactActionSchema).default([]),
+  reply_library: z.array(draftContactReplySchema).default([]),
+  contact_profiles: z.array(draftContactProfileSchema).default([])
+}).default(emptyDraftContact)
 
-export const draftPhoneConversationMessageSchema = z.object({
+export const draftContactConversationMessageSchema = z.object({
   content: z.string().default("")
 })
 
-export const draftPhoneConversationOptionSchema = z.object({
+export const draftContactConversationOptionSchema = z.object({
   id: z.string().min(1),
   text: z.string().default(""),
   visible_expr: z.string().default(""),
@@ -436,7 +456,7 @@ export const draftPhoneConversationOptionSchema = z.object({
   next_node_id: z.string().default("")
 })
 
-export const draftPhoneConversationReminderSchema = z.object({
+export const draftContactConversationReminderSchema = z.object({
   enabled: z.boolean().default(false),
   interval_minutes: z.number().int().min(1).default(60)
 }).default({
@@ -444,17 +464,17 @@ export const draftPhoneConversationReminderSchema = z.object({
   interval_minutes: 60
 })
 
-export const draftPhoneConversationNodeSchema = z.object({
+export const draftContactConversationNodeSchema = z.object({
   id: z.string().min(1),
-  contact_messages: z.array(draftPhoneConversationMessageSchema).default([]),
-  player_options: z.array(draftPhoneConversationOptionSchema).default([]),
-  reminder: draftPhoneConversationReminderSchema,
+  contact_messages: z.array(draftContactConversationMessageSchema).default([]),
+  player_options: z.array(draftContactConversationOptionSchema).default([]),
+  reminder: draftContactConversationReminderSchema,
   end: z.boolean().default(false),
   end_script: z.string().default(""),
-  invoke: draftPhoneInvocationSchema.optional()
+  invoke: draftContactInvocationSchema.optional()
 })
 
-export const draftPhoneConversationDefinitionSchema = z.object({
+export const draftContactConversationDefinitionSchema = z.object({
   id: z.string().min(1),
   title: z.string().default(""),
   role_key: z.string().min(1),
@@ -463,16 +483,16 @@ export const draftPhoneConversationDefinitionSchema = z.object({
   lock_normal_chat: z.boolean().default(true),
   trigger_expr: z.string().default(""),
   entry_node_id: z.string().min(1),
-  nodes: z.array(draftPhoneConversationNodeSchema).default([])
+  nodes: z.array(draftContactConversationNodeSchema).default([])
 })
 
-export const emptyDraftPhoneConversations = {
+export const emptyDraftContactConversations = {
   conversations: []
 }
 
-export const draftPhoneConversationsSchema = z.object({
-  conversations: z.array(draftPhoneConversationDefinitionSchema).default([])
-}).default(emptyDraftPhoneConversations)
+export const draftContactConversationsSchema = z.object({
+  conversations: z.array(draftContactConversationDefinitionSchema).default([])
+}).default(emptyDraftContactConversations)
 
 export const draftEventSchema = z.object({
   collectionType: z.enum(["chain", "pool", "schedule"]).describe("目标事件集合。"),
@@ -569,8 +589,8 @@ export const draftSchema = z.object({
   items: z.array(draftItemSchema).default([]).describe("建议新增或复用的物品。"),
   events: z.array(draftEventSchema).describe("建议新增的剧情事件草稿。"),
   variables: z.array(draftVariableSchema).describe("建议新增变量草稿，只写入 vals.json5，不写 system_vals.json5。"),
-  phone: draftPhoneSchema,
-  phoneConversations: draftPhoneConversationsSchema,
+  contact: draftContactSchema,
+  contactConversations: draftContactConversationsSchema,
   doing: draftDoingSchema,
   shop: draftShopSchema,
   notes: z.array(z.string()).describe("给编辑器作者的落地说明。"),

@@ -1,14 +1,42 @@
 /**
- * 普通手机功能与连续剧情手机对话的持久化 Schema。
+ * 联系人功能与连续联系人剧情的持久化 Schema。
  *
  * 本模块整理联系人、消息库和对话节点；运行时状态不属于这里。
  */
 import { z } from "zod"
-import { storyPhoneContactTrackIdSchema } from "./assets"
+import { storyContactTrackIdSchema } from "./assets"
 
-export const storyPhoneLibraryScopeSchema = z.object({
+export const storyContactChannelPresetSchema = z.enum(["generic", "phone", "letter", "transmission"])
+
+export const storyContactChannelLabelsSchema = z.object({
+  message: z.string().optional(),
+  conversation: z.string().optional(),
+  talk: z.string().optional(),
+  action: z.string().optional(),
+  gift: z.string().optional(),
+  send: z.string().optional(),
+  reply: z.string().optional()
+}).default({}).transform((labels) => Object.fromEntries(
+  Object.entries(labels)
+    .map(([key, value]) => [key, value?.trim()])
+    .filter((entry): entry is [string, string] => Boolean(entry[1]))
+))
+
+export const storyContactChannelSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  preset: storyContactChannelPresetSchema.default("generic"),
+  labels: storyContactChannelLabelsSchema
+}).transform((channel) => ({
+  id: channel.id.trim(),
+  name: channel.name.trim(),
+  preset: channel.preset,
+  labels: channel.labels
+}))
+
+export const storyContactLibraryScopeSchema = z.object({
   role_keys: z.array(z.string()).default([]),
-  contact_tracks: z.array(storyPhoneContactTrackIdSchema).default([]),
+  contact_tracks: z.array(storyContactTrackIdSchema).default([]),
   personality_ids: z.array(z.string()).default([]),
   min_favor: z.number().int().min(0).max(100).default(0),
   max_favor: z.number().int().min(0).max(100).default(100)
@@ -30,22 +58,22 @@ export const storyPhoneLibraryScopeSchema = z.object({
   max_favor: scope.max_favor
 }))
 
-export const storyPhoneInvokeDelaySchema = z.object({
+export const storyContactInvokeDelaySchema = z.object({
   unit: z.enum(["hours", "days", "months", "years"]),
   value: z.number().int().min(1)
 })
 
-export const storyPhoneEventInvocationSchema = z.object({
+export const storyContactEventInvocationSchema = z.object({
   target_type: z.enum(["chain", "pool", "schedule"]).default("chain"),
   event_id: z.string().min(1),
-  delay: storyPhoneInvokeDelaySchema.optional()
+  delay: storyContactInvokeDelaySchema.optional()
 }).transform((invoke) => ({
   target_type: invoke.target_type,
   event_id: invoke.event_id.trim(),
   delay: invoke.delay
 }))
 
-export const storyPhoneRelationshipStageSchema = z.object({
+export const storyContactRelationshipStageSchema = z.object({
   id: z.string().min(1),
   name: z.string().default(""),
   descr: z.string().default(""),
@@ -75,11 +103,11 @@ export const storyPhoneRelationshipStageSchema = z.object({
   )
 }))
 
-export const storyPhoneRelationshipTrackSchema = z.object({
-  id: storyPhoneContactTrackIdSchema,
+export const storyContactRelationshipTrackSchema = z.object({
+  id: storyContactTrackIdSchema,
   name: z.string().default(""),
   descr: z.string().default(""),
-  stages: z.array(storyPhoneRelationshipStageSchema).default([])
+  stages: z.array(storyContactRelationshipStageSchema).default([])
 }).superRefine((track, context) => {
   const stageIds = new Set<string>()
 
@@ -101,7 +129,7 @@ export const storyPhoneRelationshipTrackSchema = z.object({
   stages: track.stages
 }))
 
-export const storyPhonePersonalityDefinitionSchema = z.object({
+export const storyContactPersonalityDefinitionSchema = z.object({
   id: z.string().min(1),
   name: z.string().default(""),
   descr: z.string().default(""),
@@ -113,7 +141,7 @@ export const storyPhonePersonalityDefinitionSchema = z.object({
   style_tags: Array.from(new Set(personality.style_tags.map((tag) => tag.trim()).filter(Boolean)))
 }))
 
-export const storyPhoneQuickMessageSchema = z.object({
+export const storyContactQuickMessageSchema = z.object({
   id: z.string().min(1),
   text: z.string().default(""),
   tags: z.array(z.string()).default([]),
@@ -133,7 +161,7 @@ export const storyPhoneQuickMessageSchema = z.object({
   )
 }))
 
-const storyPhoneRepliesRecordSchema = z.record(z.array(z.string()).default([]))
+const storyContactRepliesRecordSchema = z.record(z.array(z.string()).default([]))
   .default({})
   .transform((replyMap) => {
     const normalizedReplyMap: Record<string, string[]> = {}
@@ -150,7 +178,7 @@ const storyPhoneRepliesRecordSchema = z.record(z.array(z.string()).default([]))
     return normalizedReplyMap
   })
 
-export const storyPhoneProactiveMessageRuleSchema = z.object({
+export const storyContactProactiveMessageRuleSchema = z.object({
   id: z.string().min(1),
   enabled: z.boolean().default(true),
   trigger_expr: z.string().min(1),
@@ -186,16 +214,18 @@ export const storyPhoneProactiveMessageRuleSchema = z.object({
   )
 }))
 
-export const storyPhoneContactProfileSchema = z.object({
+export const storyContactProfileSchema = z.object({
   role_key: z.string().min(1),
+  channel_id: z.string().default(""),
   enabled: z.boolean().default(true),
   auto_add: z.boolean().default(true),
   initial_favor: z.number().int().min(0).max(100).default(0),
   preferred_tags: z.array(z.string()).default([]),
-  reply_by_tag: storyPhoneRepliesRecordSchema,
-  proactive_messages: z.array(storyPhoneProactiveMessageRuleSchema).default([])
+  reply_by_tag: storyContactRepliesRecordSchema,
+  proactive_messages: z.array(storyContactProactiveMessageRuleSchema).default([])
 }).transform((profile) => ({
   role_key: profile.role_key.trim(),
+  channel_id: profile.channel_id.trim(),
   enabled: profile.enabled,
   auto_add: profile.auto_add,
   initial_favor: profile.initial_favor,
@@ -204,11 +234,11 @@ export const storyPhoneContactProfileSchema = z.object({
   proactive_messages: profile.proactive_messages
 }))
 
-export const storyPhoneTalkLibraryEntrySchema = z.object({
+export const storyContactTalkLibraryEntrySchema = z.object({
   id: z.string().min(1),
   text: z.string().default(""),
   tags: z.array(z.string()).default([]),
-  scope: storyPhoneLibraryScopeSchema.default({
+  scope: storyContactLibraryScopeSchema.default({
     role_keys: [],
     contact_tracks: [],
     personality_ids: [],
@@ -217,7 +247,7 @@ export const storyPhoneTalkLibraryEntrySchema = z.object({
   }),
   base_favor_delta: z.number().int().min(-100).max(100).default(0),
   cooldown_hours: z.number().int().min(0).default(0),
-  invoke: storyPhoneEventInvocationSchema.optional()
+  invoke: storyContactEventInvocationSchema.optional()
 }).transform((entry) => ({
   id: entry.id.trim(),
   text: entry.text.trim(),
@@ -228,7 +258,7 @@ export const storyPhoneTalkLibraryEntrySchema = z.object({
   invoke: entry.invoke
 }))
 
-export const storyPhoneActionCostItemSchema = z.object({
+export const storyContactActionCostItemSchema = z.object({
   item_id: z.string().min(1),
   quantity: z.number().int().min(1).default(1)
 }).transform((item) => ({
@@ -236,12 +266,12 @@ export const storyPhoneActionCostItemSchema = z.object({
   quantity: item.quantity
 }))
 
-export const storyPhoneActionLibraryEntrySchema = z.object({
+export const storyContactActionLibraryEntrySchema = z.object({
   id: z.string().min(1),
   label: z.string().default(""),
   text: z.string().default(""),
   tags: z.array(z.string()).default([]),
-  scope: storyPhoneLibraryScopeSchema.default({
+  scope: storyContactLibraryScopeSchema.default({
     role_keys: [],
     contact_tracks: [],
     personality_ids: [],
@@ -251,8 +281,8 @@ export const storyPhoneActionLibraryEntrySchema = z.object({
   base_favor_delta: z.number().int().min(-100).max(100).default(0),
   cooldown_hours: z.number().int().min(0).default(0),
   cost_money: z.number().min(0).default(0),
-  cost_items: z.array(storyPhoneActionCostItemSchema).default([]),
-  invoke: storyPhoneEventInvocationSchema.optional()
+  cost_items: z.array(storyContactActionCostItemSchema).default([]),
+  invoke: storyContactEventInvocationSchema.optional()
 }).transform((entry) => ({
   id: entry.id.trim(),
   label: entry.label.trim(),
@@ -266,10 +296,10 @@ export const storyPhoneActionLibraryEntrySchema = z.object({
   invoke: entry.invoke
 }))
 
-export const storyPhoneReplyLibraryEntrySchema = z.object({
+export const storyContactReplyLibraryEntrySchema = z.object({
   id: z.string().min(1),
   tags: z.array(z.string()).default([]),
-  scope: storyPhoneLibraryScopeSchema.default({
+  scope: storyContactLibraryScopeSchema.default({
     role_keys: [],
     contact_tracks: [],
     personality_ids: [],
@@ -284,16 +314,24 @@ export const storyPhoneReplyLibraryEntrySchema = z.object({
   replies: entry.replies.map((reply) => reply.trim()).filter(Boolean)
 }))
 
-export const storyPhoneSchema = z.object({
-  relationship_tracks: z.array(storyPhoneRelationshipTrackSchema).default([]),
-  personality_library: z.array(storyPhonePersonalityDefinitionSchema).default([]),
-  talk_library: z.array(storyPhoneTalkLibraryEntrySchema).default([]),
-  action_library: z.array(storyPhoneActionLibraryEntrySchema).default([]),
-  reply_library: z.array(storyPhoneReplyLibraryEntrySchema).default([]),
-  player_quick_messages: z.array(storyPhoneQuickMessageSchema).default([]),
-  contact_profiles: z.array(storyPhoneContactProfileSchema).default([]),
-  fallback_replies: storyPhoneRepliesRecordSchema
-}).superRefine((phoneFile, context) => {
+export const storyContactSchema = z.object({
+  default_channel_id: z.string().default("generic"),
+  channels: z.array(storyContactChannelSchema).default([{
+    id: "generic",
+    name: "通用往来",
+    preset: "generic",
+    labels: {}
+  }]),
+  relationship_tracks: z.array(storyContactRelationshipTrackSchema).default([]),
+  personality_library: z.array(storyContactPersonalityDefinitionSchema).default([]),
+  talk_library: z.array(storyContactTalkLibraryEntrySchema).default([]),
+  action_library: z.array(storyContactActionLibraryEntrySchema).default([]),
+  reply_library: z.array(storyContactReplyLibraryEntrySchema).default([]),
+  player_quick_messages: z.array(storyContactQuickMessageSchema).default([]),
+  contact_profiles: z.array(storyContactProfileSchema).default([]),
+  fallback_replies: storyContactRepliesRecordSchema
+}).superRefine((contactFile, context) => {
+  const channelIds = new Set<string>()
   const relationshipTrackIds = new Set<string>()
   const personalityIds = new Set<string>()
   const quickMessageIds = new Set<string>()
@@ -303,7 +341,26 @@ export const storyPhoneSchema = z.object({
   const actionLibraryIds = new Set<string>()
   const replyLibraryIds = new Set<string>()
 
-  for (const [trackIndex, track] of phoneFile.relationship_tracks.entries()) {
+  for (const [channelIndex, channel] of contactFile.channels.entries()) {
+    if (channelIds.has(channel.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate contact channel id "${channel.id}".`,
+        path: ["channels", channelIndex, "id"]
+      })
+    }
+    channelIds.add(channel.id)
+  }
+
+  if (!channelIds.has(contactFile.default_channel_id)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Default contact channel "${contactFile.default_channel_id}" does not exist.`,
+      path: ["default_channel_id"]
+    })
+  }
+
+  for (const [trackIndex, track] of contactFile.relationship_tracks.entries()) {
     if (relationshipTrackIds.has(track.id)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -315,7 +372,7 @@ export const storyPhoneSchema = z.object({
     relationshipTrackIds.add(track.id)
   }
 
-  for (const [personalityIndex, personality] of phoneFile.personality_library.entries()) {
+  for (const [personalityIndex, personality] of contactFile.personality_library.entries()) {
     if (personalityIds.has(personality.id)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -327,11 +384,11 @@ export const storyPhoneSchema = z.object({
     personalityIds.add(personality.id)
   }
 
-  for (const [messageIndex, message] of phoneFile.player_quick_messages.entries()) {
+  for (const [messageIndex, message] of contactFile.player_quick_messages.entries()) {
     if (quickMessageIds.has(message.id)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Duplicate phone quick message id "${message.id}".`,
+        message: `Duplicate contact quick message id "${message.id}".`,
         path: ["player_quick_messages", messageIndex, "id"]
       })
     }
@@ -340,7 +397,7 @@ export const storyPhoneSchema = z.object({
     proactiveSuggestionIds.add(message.id)
   }
 
-  for (const [entryIndex, entry] of phoneFile.talk_library.entries()) {
+  for (const [entryIndex, entry] of contactFile.talk_library.entries()) {
     if (talkLibraryIds.has(entry.id)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -353,7 +410,7 @@ export const storyPhoneSchema = z.object({
     proactiveSuggestionIds.add(entry.id)
   }
 
-  for (const [entryIndex, entry] of phoneFile.action_library.entries()) {
+  for (const [entryIndex, entry] of contactFile.action_library.entries()) {
     if (actionLibraryIds.has(entry.id)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -365,7 +422,7 @@ export const storyPhoneSchema = z.object({
     actionLibraryIds.add(entry.id)
   }
 
-  for (const [entryIndex, entry] of phoneFile.reply_library.entries()) {
+  for (const [entryIndex, entry] of contactFile.reply_library.entries()) {
     if (replyLibraryIds.has(entry.id)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -377,23 +434,31 @@ export const storyPhoneSchema = z.object({
     replyLibraryIds.add(entry.id)
   }
 
-  for (const [profileIndex, profile] of phoneFile.contact_profiles.entries()) {
+  for (const [profileIndex, profile] of contactFile.contact_profiles.entries()) {
     if (contactProfileRoleKeys.has(profile.role_key)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Duplicate phone contact profile role_key "${profile.role_key}".`,
+        message: `Duplicate contact contact profile role_key "${profile.role_key}".`,
         path: ["contact_profiles", profileIndex, "role_key"]
       })
     }
 
     contactProfileRoleKeys.add(profile.role_key)
 
+    if (profile.channel_id && !channelIds.has(profile.channel_id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Contact profile "${profile.role_key}" references missing channel "${profile.channel_id}".`,
+        path: ["contact_profiles", profileIndex, "channel_id"]
+      })
+    }
+
     const proactiveRuleIds = new Set<string>()
     for (const [ruleIndex, rule] of profile.proactive_messages.entries()) {
       if (proactiveRuleIds.has(rule.id)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Duplicate proactive phone rule id "${rule.id}" under "${profile.role_key}".`,
+          message: `Duplicate proactive contact rule id "${rule.id}" under "${profile.role_key}".`,
           path: ["contact_profiles", profileIndex, "proactive_messages", ruleIndex, "id"]
         })
       }
@@ -404,7 +469,7 @@ export const storyPhoneSchema = z.object({
         if (!proactiveSuggestionIds.has(replyQuickMessageId)) {
           context.addIssue({
             code: z.ZodIssueCode.custom,
-            message: `Phone proactive rule "${profile.role_key}/${rule.id}" references missing reply suggestion "${replyQuickMessageId}".`,
+            message: `Contact proactive rule "${profile.role_key}/${rule.id}" references missing reply suggestion "${replyQuickMessageId}".`,
             path: ["contact_profiles", profileIndex, "proactive_messages", ruleIndex, "reply_quick_message_ids", replyIndex]
           })
         }
@@ -413,7 +478,7 @@ export const storyPhoneSchema = z.object({
   }
 })
 
-export const storyPhoneConversationOptionSchema = z.object({
+export const storyContactConversationOptionSchema = z.object({
   id: z.string().min(1),
   text: z.string().default(""),
   visible_expr: z.string().default(""),
@@ -427,7 +492,7 @@ export const storyPhoneConversationOptionSchema = z.object({
   next_node_id: option.next_node_id.trim()
 }))
 
-export const storyPhoneConversationReminderSchema = z.object({
+export const storyContactConversationReminderSchema = z.object({
   enabled: z.boolean().default(false),
   interval_minutes: z.number().int().min(1).default(60)
 }).default({
@@ -438,16 +503,16 @@ export const storyPhoneConversationReminderSchema = z.object({
   interval_minutes: Math.max(1, Math.trunc(reminder.interval_minutes))
 }))
 
-export const storyPhoneConversationNodeSchema = z.object({
+export const storyContactConversationNodeSchema = z.object({
   id: z.string().min(1),
   contact_messages: z.array(z.object({
     content: z.string().default("")
   })).default([]),
-  player_options: z.array(storyPhoneConversationOptionSchema).default([]),
-  reminder: storyPhoneConversationReminderSchema,
+  player_options: z.array(storyContactConversationOptionSchema).default([]),
+  reminder: storyContactConversationReminderSchema,
   end: z.boolean().default(false),
   end_script: z.string().default(""),
-  invoke: storyPhoneEventInvocationSchema.optional()
+  invoke: storyContactEventInvocationSchema.optional()
 }).superRefine((node, context) => {
   if (node.id.trim().length === 0) {
     context.addIssue({
@@ -468,7 +533,7 @@ export const storyPhoneConversationNodeSchema = z.object({
   ...(node.invoke ? { invoke: node.invoke } : {})
 }))
 
-export const storyPhoneConversationDefinitionSchema = z.object({
+export const storyContactConversationDefinitionSchema = z.object({
   id: z.string().min(1),
   title: z.string().default(""),
   role_key: z.string().min(1),
@@ -477,7 +542,7 @@ export const storyPhoneConversationDefinitionSchema = z.object({
   lock_normal_chat: z.boolean().default(true),
   trigger_expr: z.string().default(""),
   entry_node_id: z.string().min(1),
-  nodes: z.array(storyPhoneConversationNodeSchema).default([])
+  nodes: z.array(storyContactConversationNodeSchema).default([])
 }).superRefine((conversation, context) => {
   const nodeIds = new Set<string>()
   const optionIds = new Set<string>()
@@ -486,7 +551,7 @@ export const storyPhoneConversationDefinitionSchema = z.object({
     if (nodeIds.has(node.id)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Duplicate phone conversation node id "${node.id}".`,
+        message: `Duplicate contact conversation node id "${node.id}".`,
         path: ["nodes", nodeIndex, "id"]
       })
     }
@@ -495,7 +560,7 @@ export const storyPhoneConversationDefinitionSchema = z.object({
     if (node.invoke && !node.end) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Phone conversation node "${node.id}" cannot define invoke unless it is an end node.`,
+        message: `Contact conversation node "${node.id}" cannot define invoke unless it is an end node.`,
         path: ["nodes", nodeIndex, "invoke"]
       })
     }
@@ -504,7 +569,7 @@ export const storyPhoneConversationDefinitionSchema = z.object({
       if (optionIds.has(option.id)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Duplicate phone conversation option id "${option.id}".`,
+          message: `Duplicate contact conversation option id "${option.id}".`,
           path: ["nodes", nodeIndex, "player_options", optionIndex, "id"]
         })
       }
@@ -515,7 +580,7 @@ export const storyPhoneConversationDefinitionSchema = z.object({
   if (!nodeIds.has(conversation.entry_node_id)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: `Phone conversation "${conversation.id}" entry_node_id references missing node "${conversation.entry_node_id}".`,
+      message: `Contact conversation "${conversation.id}" entry_node_id references missing node "${conversation.entry_node_id}".`,
       path: ["entry_node_id"]
     })
   }
@@ -525,7 +590,7 @@ export const storyPhoneConversationDefinitionSchema = z.object({
       if (option.next_node_id && !nodeIds.has(option.next_node_id)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Phone conversation option "${option.id}" references missing next node "${option.next_node_id}".`,
+          message: `Contact conversation option "${option.id}" references missing next node "${option.next_node_id}".`,
           path: ["nodes", nodeIndex, "player_options", optionIndex, "next_node_id"]
         })
       }
@@ -543,8 +608,8 @@ export const storyPhoneConversationDefinitionSchema = z.object({
   nodes: conversation.nodes
 }))
 
-export const storyPhoneConversationsSchema = z.object({
-  conversations: z.array(storyPhoneConversationDefinitionSchema).default([])
+export const storyContactConversationsSchema = z.object({
+  conversations: z.array(storyContactConversationDefinitionSchema).default([])
 }).default({
   conversations: []
 }).superRefine((file, context) => {
@@ -553,11 +618,10 @@ export const storyPhoneConversationsSchema = z.object({
     if (conversationIds.has(conversation.id)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Duplicate phone conversation id "${conversation.id}".`,
+        message: `Duplicate contact conversation id "${conversation.id}".`,
         path: ["conversations", conversationIndex, "id"]
       })
     }
     conversationIds.add(conversation.id)
   }
 })
-

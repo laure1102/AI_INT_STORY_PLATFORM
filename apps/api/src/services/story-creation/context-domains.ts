@@ -1,5 +1,5 @@
 /**
- * 将事件、手机、行动和商城配置压缩成 Agent 可阅读的领域摘要。
+ * 将事件、联系人、行动和商城配置压缩成 Agent 可阅读的领域摘要。
  *
  * 输入是已经通过 Core Schema 读取的 `StoryDocument`，输出是受字符上限保护的 JSON 文本。
  * 摘要只保留创作时需要判断“已有内容和可引用 id”的字段，不复制图片、长脚本和全部对白。
@@ -52,13 +52,13 @@ export function formatExistingEvents(story: StoryDocument, compact = false) {
 }
 
 /**
- * 生成手机、连续手机剧情、主动行动和商城的组合摘要。
+ * 生成联系人、联系人剧情、主动行动和商城的组合摘要。
  *
- * 这些领域会互相引用：联系人引用角色，手机动作可能消耗物品或调用事件，商城商品引用物品，
+ * 这些领域会互相引用：联系人引用角色，联系人动作可能消耗物品或调用事件，商城商品引用物品，
  * 行动引用菜单和地点。因此它们被放在同一个上下文片段里，让 Agent 在生成新内容前看到现有 id。
  * 返回文本仅用于推理；引用是否合法仍由草稿规范化和最终 StoryDocument 校验负责。
  */
-export function formatExistingPhoneAndDoing(story: StoryDocument, compact = false) {
+export function formatExistingContactAndDoing(story: StoryDocument, compact = false) {
   return formatJson({
     refer: {
       gender_value_key: story.refer.gender_value_key,
@@ -72,8 +72,15 @@ export function formatExistingPhoneAndDoing(story: StoryDocument, compact = fals
         placeholder: `\${term.${term.id.replace(/^term\./, "")}}`
       }))
     },
-    phone: {
-      relationship_tracks: story.phone.relationship_tracks.map((track) => ({
+    contact: {
+      default_channel_id: story.contact.default_channel_id,
+      channels: story.contact.channels.map((channel) => ({
+        id: channel.id,
+        name: channel.name,
+        preset: channel.preset,
+        labels: channel.labels
+      })),
+      relationship_tracks: story.contact.relationship_tracks.map((track) => ({
         id: track.id,
         name: track.name,
         stages: track.stages.map((stage) => ({
@@ -85,32 +92,33 @@ export function formatExistingPhoneAndDoing(story: StoryDocument, compact = fals
           unlock_action_tags: stage.unlock_action_tags
         }))
       })),
-      personality_library: story.phone.personality_library.map((personality) => ({
+      personality_library: story.contact.personality_library.map((personality) => ({
         id: personality.id,
         name: personality.name,
         style_tags: personality.style_tags
       })),
-      talk_library: story.phone.talk_library.slice(0, 80).map((entry) => ({
+      talk_library: story.contact.talk_library.slice(0, 80).map((entry) => ({
         id: entry.id,
         text: entry.text,
         tags: entry.tags,
         scope: entry.scope
       })),
-      action_library: story.phone.action_library.slice(0, 80).map((entry) => ({
+      action_library: story.contact.action_library.slice(0, 80).map((entry) => ({
         id: entry.id,
         label: entry.label,
         tags: entry.tags,
         scope: entry.scope,
         cost_money: entry.cost_money
       })),
-      reply_library: story.phone.reply_library.slice(0, 80).map((entry) => ({
+      reply_library: story.contact.reply_library.slice(0, 80).map((entry) => ({
         id: entry.id,
         tags: entry.tags,
         scope: entry.scope,
         replies: entry.replies.slice(0, 5)
       })),
-      contact_profiles: story.phone.contact_profiles.map((profile) => ({
+      contact_profiles: story.contact.contact_profiles.map((profile) => ({
         role_key: profile.role_key,
+        channel_id: profile.channel_id,
         enabled: profile.enabled,
         auto_add: profile.auto_add,
         initial_favor: profile.initial_favor,
@@ -118,7 +126,7 @@ export function formatExistingPhoneAndDoing(story: StoryDocument, compact = fals
         proactive_message_ids: profile.proactive_messages.map((rule) => rule.id)
       }))
     },
-    phoneConversations: story.phoneConversations.conversations.map((conversation) => ({
+    contactConversations: story.contactConversations.conversations.map((conversation) => ({
       id: conversation.id,
       title: conversation.title,
       role_key: conversation.role_key,

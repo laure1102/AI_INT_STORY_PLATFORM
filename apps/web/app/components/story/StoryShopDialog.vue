@@ -393,7 +393,7 @@ async function validatePredicateField(
     story: storyForEditor.value,
     shopProductIds: productIds.value,
     bagMode: "read",
-    phoneMode: "read",
+    contactMode: "read",
     doingMode: "read",
     shopMode: "read"
   })

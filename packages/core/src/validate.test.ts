@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { storyDocumentSchema, storyShopSchema } from "./schema"
-import { validateStoryDocument } from "./validate"
+import { storyContactSchema, storyDocumentSchema, storyShopSchema } from "./schema"
+import {
+  createStoryScriptValidationContext,
+  validateStoryDocument,
+  validateStoryScriptContent
+} from "./validate"
 
 function createDocument(overrides: Record<string, unknown> = {}) {
   return storyDocumentSchema.parse({
@@ -155,5 +159,88 @@ describe("validateStoryDocument", () => {
         level: "error"
       })
     ]))
+  })
+})
+
+describe("contact contracts", () => {
+  it("rejects duplicate, missing default, and missing profile channels", () => {
+    const duplicate = storyContactSchema.safeParse({
+      default_channel_id: "generic",
+      channels: [
+        { id: "generic", name: "通用", preset: "generic", labels: {} },
+        { id: "generic", name: "重复", preset: "letter", labels: {} }
+      ]
+    })
+    const missingDefault = storyContactSchema.safeParse({
+      default_channel_id: "missing",
+      channels: [{ id: "generic", name: "通用", preset: "generic", labels: {} }]
+    })
+    const missingProfileChannel = storyContactSchema.safeParse({
+      default_channel_id: "generic",
+      channels: [{ id: "generic", name: "通用", preset: "generic", labels: {} }],
+      contact_profiles: [{ role_key: "normal:guide", channel_id: "missing" }]
+    })
+
+    expect(duplicate.success).toBe(false)
+    expect(missingDefault.success).toBe(false)
+    expect(missingProfileChannel.success).toBe(false)
+    if (!duplicate.success) {
+      expect(duplicate.error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: ["channels", 1, "id"] })
+      ]))
+    }
+    if (!missingDefault.success) {
+      expect(missingDefault.error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: ["default_channel_id"] })
+      ]))
+    }
+    if (!missingProfileChannel.success) {
+      expect(missingProfileChannel.error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: ["contact_profiles", 0, "channel_id"] })
+      ]))
+    }
+  })
+
+  it("enforces contact StoryScript permissions and conversation references", () => {
+    const vals = { variables: [] }
+    const readable = createStoryScriptValidationContext({
+      roleKeys: ["normal:guide"],
+      contactConversationIds: ["intro"],
+      contactMode: "read"
+    })
+    const writable = createStoryScriptValidationContext({
+      roleKeys: ["normal:guide"],
+      contactConversationIds: ["intro"],
+      contactMode: "write"
+    })
+
+    expect(validateStoryScriptContent(
+      vals,
+      'contact_has("normal:guide") && contact_unread_count("normal:guide") === 0',
+      "predicate",
+      undefined,
+      readable
+    )).toEqual([])
+    expect(validateStoryScriptContent(
+      vals,
+      'contact_add("normal:guide")',
+      "predicate",
+      undefined,
+      readable
+    )[0]?.message).toMatch(/Unsupported (identifier|function)/)
+    expect(validateStoryScriptContent(
+      vals,
+      'contact_add("normal:guide")\ncontact_start_conversation("intro")',
+      "procedure",
+      undefined,
+      writable
+    )).toEqual([])
+    expect(validateStoryScriptContent(
+      vals,
+      'contact_start_conversation("missing")',
+      "procedure",
+      undefined,
+      writable
+    )[0]?.message).toContain('contact conversation "missing" does not exist')
   })
 })

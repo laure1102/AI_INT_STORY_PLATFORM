@@ -1,5 +1,5 @@
 /**
- * 手机自动消息、好感、花费和发送动作。
+ * 联系人自动消息、好感、花费和发送动作。
  *
  * 本文件由原 session.ts 按顶层声明依赖拆出；它只负责本领域，不提供新的外部入口。
  */
@@ -50,44 +50,44 @@ import type {
   StoryValsFile
 } from "../types"
 import type { RuntimeStorySessionSnapshot } from "./contracts-core"
-import type { RuntimePlayableEvent, RuntimeResolvedPhoneActionOption, RuntimeState, RuntimeStoryBundle } from "./contracts-view"
-import { buildRuntimePhoneContactMeta, getBundlePhoneContactProfile } from "./phone-config"
-import { canFirePhoneProactiveRule, choosePhoneProactiveRuleMessage, choosePhoneReply, getActivePhoneConversationState, isPhoneConversationNormalChatLocked } from "./phone-conversations"
-import { appendPhoneMessage, assertRuntimePhoneRoleKey, ensurePhoneContact, findPhoneTalkOption, findRoleLabel, getPhoneContact, getPhoneProactiveRulesForContact, getPhoneThread, getPlayerMoneyBalance, isBundleRoleKey, resolvePhoneActionOptionsForContact } from "./phone-threads"
+import type { RuntimePlayableEvent, RuntimeResolvedContactActionOption, RuntimeState, RuntimeStoryBundle } from "./contracts-view"
+import { buildRuntimeContactMeta, getBundleContactProfile } from "./contact-config"
+import { canFireContactProactiveRule, chooseContactProactiveRuleMessage, chooseContactReply, getActiveContactConversationState, isContactConversationNormalChatLocked } from "./contact-conversations"
+import { appendContactMessage, assertRuntimeContactRoleKey, ensureContact, findContactTalkOption, findRoleLabel, getContact, getContactProactiveRulesForContact, getContactThread, getPlayerMoneyBalance, isBundleRoleKey, resolveContactActionOptionsForContact } from "./contact-threads"
 import { renderDialogueContent } from "./playback-render"
 import { getCurrentGameMinute } from "./schedule-clock"
 import { createRuntimeBagScriptFunctions } from "./script-context"
 import { appendHistory, queueInvokeEvent } from "./script-execution"
-import { clampPhoneFavor, normalizePhoneState, normalizeText, writeSnapshotValue } from "./state-values"
+import { clampContactFavor, normalizeContactState, normalizeText, writeSnapshotValue } from "./state-values"
 
 /**
  * 在时间推进后扫描并发送符合条件的联系人主动消息。
  * @param bundle 编译故事。 @param runtimeState 会话状态。 @param notifications UI 通知。 @returns 无返回值。
  * 结构化剧情会话进行中暂停普通主动消息；每个联系人每轮最多触发一条，避免同一 tick 消息轰炸。
  */
-export function reconcilePhoneAutoMessages(
+export function reconcileContactAutoMessages(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
   notifications: string[]
 ) {
-  normalizePhoneState(runtimeState.snapshot)
-  if (getActivePhoneConversationState(runtimeState.snapshot)) {
+  normalizeContactState(runtimeState.snapshot)
+  if (getActiveContactConversationState(runtimeState.snapshot)) {
     return
   }
 
-  for (const contact of runtimeState.snapshot.phone.contacts) {
-    const proactiveRules = getPhoneProactiveRulesForContact(bundle, contact.role_key)
+  for (const contact of runtimeState.snapshot.contact.contacts) {
+    const proactiveRules = getContactProactiveRulesForContact(bundle, contact.role_key)
     for (const rule of proactiveRules) {
-      if (!canFirePhoneProactiveRule(bundle, runtimeState.snapshot, contact.role_key, rule)) {
+      if (!canFireContactProactiveRule(bundle, runtimeState.snapshot, contact.role_key, rule)) {
         continue
       }
 
-      const content = choosePhoneProactiveRuleMessage(runtimeState.snapshot, contact.role_key, rule)
+      const content = chooseContactProactiveRuleMessage(runtimeState.snapshot, contact.role_key, rule)
       if (!content) {
         continue
       }
 
-      const message = sendPhoneMessageFromContact(
+      const message = sendContactMessageFromContact(
         bundle,
         runtimeState.snapshot,
         notifications,
@@ -102,7 +102,7 @@ export function reconcilePhoneAutoMessages(
       }
 
       if (rule.favor_delta !== 0) {
-        contact.favor = clampPhoneFavor(contact.favor + rule.favor_delta, contact.favor)
+        contact.favor = clampContactFavor(contact.favor + rule.favor_delta, contact.favor)
       }
     }
   }
@@ -113,7 +113,7 @@ export function reconcilePhoneAutoMessages(
  * @param bundle 编译故事。 @param snapshot 快照。 @param roleKey 联系人键。 @param option 基础变化和冷却设置。
  * @returns 根据重复使用冷却衰减后的整数变化量；不会直接修改好感度。
  */
-export function calculatePhoneFavorDelta(
+export function calculateContactFavorDelta(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   roleKey: string,
@@ -123,7 +123,7 @@ export function calculatePhoneFavorDelta(
     cooldownHours: number
   }
 ) {
-  const thread = getPhoneThread(snapshot, roleKey)
+  const thread = getContactThread(snapshot, roleKey)
   const previousPlayerMessage = thread?.messages
     .slice()
     .reverse()
@@ -145,7 +145,7 @@ export function calculatePhoneFavorDelta(
     }
   }
 
-  const contact = ensurePhoneContact(bundle, snapshot, roleKey)
+  const contact = ensureContact(bundle, snapshot, roleKey)
   if (contact.favor >= 80) {
     favorDelta = Math.max(0, favorDelta - 1)
   }
@@ -155,10 +155,10 @@ export function calculatePhoneFavorDelta(
 
 /**
  * 在剧情对白首次出现角色时自动加入允许联系的角色。
- * @param bundle 编译故事。 @param snapshot 手机状态。 @param event 当前事件。 @param notifications UI 通知。 @returns 无返回值。
+ * @param bundle 编译故事。 @param snapshot 联系人状态。 @param event 当前事件。 @param notifications UI 通知。 @returns 无返回值。
  * 只检查 dialogue 表现中的非玩家说话者，并尊重角色/档案的 contact_enabled 设置。
  */
-export function autoRegisterPhoneContactsFromEvent(
+export function autoRegisterContactsFromEvent(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   event: RuntimePlayableEvent,
@@ -178,10 +178,10 @@ export function autoRegisterPhoneContactsFromEvent(
   )
 
   for (const roleKey of speakerRoleKeys) {
-    const contactMeta = buildRuntimePhoneContactMeta(
+    const contactMeta = buildRuntimeContactMeta(
       bundle,
       roleKey,
-      getBundlePhoneContactProfile(bundle, roleKey)?.initial_favor ?? 20
+      getBundleContactProfile(bundle, roleKey)?.initial_favor ?? 20
     )
     if (!contactMeta.enabled || !contactMeta.autoAdd) {
       continue
@@ -191,21 +191,21 @@ export function autoRegisterPhoneContactsFromEvent(
       continue
     }
 
-    const existed = Boolean(getPhoneContact(snapshot, roleKey))
-    ensurePhoneContact(bundle, snapshot, roleKey)
+    const existed = Boolean(getContact(snapshot, roleKey))
+    ensureContact(bundle, snapshot, roleKey)
     if (!existed) {
-      notifications.push(`手机已新增联系人：${findRoleLabel(bundle, roleKey)}`)
+      notifications.push(`已新增联系人：${findRoleLabel(bundle, roleKey)}`)
     }
   }
 }
 
 /**
  * 记录一条联系人发给玩家的消息。
- * @param bundle 编译故事。 @param snapshot 手机状态。 @param notifications UI 通知。
+ * @param bundle 编译故事。 @param snapshot 联系人状态。 @param notifications UI 通知。
  * @param roleKey 联系人键。 @param content 支持模板的正文。 @param options 主动规则或剧情会话来源信息。
  * @returns 新消息；会确保联系人存在、渲染模板、标记未读并推送通知。
  */
-export function sendPhoneMessageFromContact(
+export function sendContactMessageFromContact(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   notifications: string[],
@@ -213,20 +213,20 @@ export function sendPhoneMessageFromContact(
   content: string,
   options: {
     sourceRuleId?: string
-    phoneConversationId?: string
-    phoneConversationNodeId?: string
-    phoneConversationReminder?: boolean
+    contactConversationId?: string
+    contactConversationNodeId?: string
+    contactConversationReminder?: boolean
   } = {}
 ) {
-  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
   const renderedContent = renderDialogueContent(bundle, snapshot, content, {})
-  ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-  const message = appendPhoneMessage(snapshot, normalizedRoleKey, "contact", renderedContent, {
+  ensureContact(bundle, snapshot, normalizedRoleKey)
+  const message = appendContactMessage(snapshot, normalizedRoleKey, "contact", renderedContent, {
     read: false,
     sourceRuleId: options.sourceRuleId,
-    phoneConversationId: options.phoneConversationId,
-    phoneConversationNodeId: options.phoneConversationNodeId,
-    phoneConversationReminder: options.phoneConversationReminder
+    contactConversationId: options.contactConversationId,
+    contactConversationNodeId: options.contactConversationNodeId,
+    contactConversationReminder: options.contactConversationReminder
   })
   if (!message) {
     return null
@@ -236,23 +236,23 @@ export function sendPhoneMessageFromContact(
   appendHistory(snapshot, {
     type: "system",
     id: message.id,
-    title: `phone:${normalizedRoleKey}`,
+    title: `contact:${normalizedRoleKey}`,
     content: `${findRoleLabel(bundle, normalizedRoleKey)}: ${message.content}`
   })
   return message
 }
 
-/** @param bundle 编译故事。 @param snapshot 手机状态。 @param roleKey 联系人键。 @param content 玩家消息模板。 @returns 已渲染并标记已读的玩家消息。 */
-export function sendPhoneMessageToContact(
+/** @param bundle 编译故事。 @param snapshot 联系人状态。 @param roleKey 联系人键。 @param content 玩家消息模板。 @returns 已渲染并标记已读的玩家消息。 */
+export function sendContactMessageToContact(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
   roleKey: string,
   content: string
 ) {
-  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
+  const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
   const renderedContent = renderDialogueContent(bundle, snapshot, content, {})
-  ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-  const message = appendPhoneMessage(snapshot, normalizedRoleKey, "player", renderedContent, {
+  ensureContact(bundle, snapshot, normalizedRoleKey)
+  const message = appendContactMessage(snapshot, normalizedRoleKey, "player", renderedContent, {
     read: true
   })
   if (!message) {
@@ -262,21 +262,21 @@ export function sendPhoneMessageToContact(
   appendHistory(snapshot, {
     type: "system",
     id: message.id,
-    title: "phone:player",
+    title: "contact:player",
     content: `主角 -> ${findRoleLabel(bundle, normalizedRoleKey)}: ${message.content}`
   })
   return message
 }
 
 /**
- * 扣除手机动作声明的金钱和物品成本。
+ * 扣除联系人动作声明的金钱和物品成本。
  * @param bundle 编译故事。 @param snapshot 会话快照。 @param action 已解析动作选项。 @returns 无返回值。
  * 调用方必须先完成 disabledReason 检查；本函数仍二次验证余额/库存，异常时抛错，防止竞态或脚本改值后透支。
  */
-export function applyPhoneActionCosts(
+export function applyContactActionCosts(
   bundle: RuntimeStoryBundle,
   snapshot: RuntimeStorySessionSnapshot,
-  action: RuntimeResolvedPhoneActionOption
+  action: RuntimeResolvedContactActionOption
 ) {
   if (action.costMoney > 0) {
     const currentMoney = getPlayerMoneyBalance(snapshot)
@@ -310,11 +310,11 @@ export function applyPhoneActionCosts(
 }
 
 /**
- * 执行一次普通手机话题聊天。
+ * 执行一次普通联系人话题互动。
  * @param bundle 编译故事。 @param runtimeState 会话状态。 @param notifications UI 通知。 @param roleKey 联系人键。 @param talkId 话题 id。
  * @returns 玩家消息、联系人回复和好感变化结果。 @throws 剧情会话锁定、话题不可用或条件不满足时抛错。
  */
-export function sendPhoneTalk(
+export function sendContactTalk(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
   notifications: string[],
@@ -322,20 +322,20 @@ export function sendPhoneTalk(
   talkId: string
 ) {
   const snapshot = runtimeState.snapshot
-  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-  if (isPhoneConversationNormalChatLocked(bundle, snapshot, normalizedRoleKey)) {
-    throw new Error("该联系人正在进行剧情手机对话，暂时不能普通闲聊。")
+  const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+  if (isContactConversationNormalChatLocked(bundle, snapshot, normalizedRoleKey)) {
+    throw new Error("该联系人正在进行联系人剧情，暂时不能普通闲聊。")
   }
 
-  const talkOption = findPhoneTalkOption(bundle, normalizedRoleKey, talkId, snapshot)
+  const talkOption = findContactTalkOption(bundle, normalizedRoleKey, talkId, snapshot)
 
   if (!talkOption) {
-    throw new Error(`phone talk "${talkId}" is not available for "${normalizedRoleKey}".`)
+    throw new Error(`contact talk "${talkId}" is not available for "${normalizedRoleKey}".`)
   }
 
-  ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-  const favorDelta = calculatePhoneFavorDelta(bundle, snapshot, normalizedRoleKey, talkOption)
-  const outgoingMessage = appendPhoneMessage(snapshot, normalizedRoleKey, "player", talkOption.text, {
+  ensureContact(bundle, snapshot, normalizedRoleKey)
+  const favorDelta = calculateContactFavorDelta(bundle, snapshot, normalizedRoleKey, talkOption)
+  const outgoingMessage = appendContactMessage(snapshot, normalizedRoleKey, "player", talkOption.text, {
     read: true,
     optionId: talkOption.id,
     optionKind: "talk",
@@ -346,13 +346,13 @@ export function sendPhoneTalk(
     return false
   }
 
-  const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-  contact.favor = clampPhoneFavor(contact.favor + favorDelta, contact.favor)
+  const contact = ensureContact(bundle, snapshot, normalizedRoleKey)
+  contact.favor = clampContactFavor(contact.favor + favorDelta, contact.favor)
 
   appendHistory(snapshot, {
     type: "system",
     id: outgoingMessage.id,
-    title: `phone:${normalizedRoleKey}`,
+    title: `contact:${normalizedRoleKey}`,
     content: `主角向 ${findRoleLabel(bundle, normalizedRoleKey)} 发送消息：${outgoingMessage.content}`
   })
 
@@ -367,20 +367,20 @@ export function sendPhoneTalk(
     )
   }
 
-  const replyContent = choosePhoneReply(bundle, snapshot, normalizedRoleKey, talkOption.tags)
+  const replyContent = chooseContactReply(bundle, snapshot, normalizedRoleKey, talkOption.tags)
   if (replyContent) {
-    sendPhoneMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, replyContent)
+    sendContactMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, replyContent)
   }
 
   return true
 }
 
 /**
- * 执行一次带成本和脚本的手机互动动作。
+ * 执行一次带成本和脚本的联系人互动动作。
  * @param bundle 编译故事。 @param runtimeState 会话状态。 @param notifications UI 通知。 @param roleKey 联系人键。 @param actionId 动作 id。
  * @returns 消息、好感和动作结果。 @throws 动作不可用时抛错；所有检查通过后才扣成本、执行脚本和写消息。
  */
-export function sendPhoneAction(
+export function sendContactAction(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
   notifications: string[],
@@ -388,26 +388,26 @@ export function sendPhoneAction(
   actionId: string
 ) {
   const snapshot = runtimeState.snapshot
-  const normalizedRoleKey = assertRuntimePhoneRoleKey(bundle, roleKey)
-  if (isPhoneConversationNormalChatLocked(bundle, snapshot, normalizedRoleKey)) {
-    throw new Error("该联系人正在进行剧情手机对话，暂时不能执行普通动作。")
+  const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+  if (isContactConversationNormalChatLocked(bundle, snapshot, normalizedRoleKey)) {
+    throw new Error("该联系人正在进行联系人剧情，暂时不能执行普通动作。")
   }
 
-  const actionOption = resolvePhoneActionOptionsForContact(bundle, normalizedRoleKey, snapshot).find(
+  const actionOption = resolveContactActionOptionsForContact(bundle, normalizedRoleKey, snapshot).find(
     (entry) => entry.id === normalizeText(actionId)
   )
 
   if (!actionOption) {
-    throw new Error(`phone action "${actionId}" is not available for "${normalizedRoleKey}".`)
+    throw new Error(`contact action "${actionId}" is not available for "${normalizedRoleKey}".`)
   }
 
   if (actionOption.disabled) {
-    throw new Error(actionOption.disabledReason ?? `phone action "${actionId}" is currently unavailable.`)
+    throw new Error(actionOption.disabledReason ?? `contact action "${actionId}" is currently unavailable.`)
   }
 
-  applyPhoneActionCosts(bundle, snapshot, actionOption)
-  const favorDelta = calculatePhoneFavorDelta(bundle, snapshot, normalizedRoleKey, actionOption)
-  const outgoingMessage = appendPhoneMessage(snapshot, normalizedRoleKey, "player", actionOption.text, {
+  applyContactActionCosts(bundle, snapshot, actionOption)
+  const favorDelta = calculateContactFavorDelta(bundle, snapshot, normalizedRoleKey, actionOption)
+  const outgoingMessage = appendContactMessage(snapshot, normalizedRoleKey, "player", actionOption.text, {
     read: true,
     optionId: actionOption.id,
     optionKind: "action",
@@ -417,13 +417,13 @@ export function sendPhoneAction(
     return false
   }
 
-  const contact = ensurePhoneContact(bundle, snapshot, normalizedRoleKey)
-  contact.favor = clampPhoneFavor(contact.favor + favorDelta, contact.favor)
+  const contact = ensureContact(bundle, snapshot, normalizedRoleKey)
+  contact.favor = clampContactFavor(contact.favor + favorDelta, contact.favor)
 
   appendHistory(snapshot, {
     type: "system",
     id: outgoingMessage.id,
-    title: `phone:${normalizedRoleKey}`,
+    title: `contact:${normalizedRoleKey}`,
     content: `主角对 ${findRoleLabel(bundle, normalizedRoleKey)} 执行动作：${actionOption.label}`
   })
 
@@ -438,21 +438,21 @@ export function sendPhoneAction(
     )
   }
 
-  const replyContent = choosePhoneReply(bundle, snapshot, normalizedRoleKey, actionOption.tags)
+  const replyContent = chooseContactReply(bundle, snapshot, normalizedRoleKey, actionOption.tags)
   if (replyContent) {
-    sendPhoneMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, replyContent)
+    sendContactMessageFromContact(bundle, snapshot, notifications, normalizedRoleKey, replyContent)
   }
 
   return true
 }
 
 /** @param bundle 编译故事。 @param runtimeState 会话状态。 @param notifications UI 通知。 @param roleKey 联系人键。 @param quickMessageId 快捷消息 id。 @returns 与普通话题发送相同的结果。 */
-export function sendPhoneQuickMessage(
+export function sendContactQuickMessage(
   bundle: RuntimeStoryBundle,
   runtimeState: RuntimeState,
   notifications: string[],
   roleKey: string,
   quickMessageId: string
 ) {
-  return sendPhoneTalk(bundle, runtimeState, notifications, roleKey, quickMessageId)
+  return sendContactTalk(bundle, runtimeState, notifications, roleKey, quickMessageId)
 }

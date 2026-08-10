@@ -29,14 +29,14 @@ import {
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
-  type StoryPhoneActionLibraryEntry,
-  type StoryPhoneContactProfile,
-  type StoryPhoneConversationDefinition,
-  type StoryPhoneConversationsFile,
-  type StoryPhoneFile,
-  type StoryPhonePersonalityDefinition,
-  type StoryPhoneReplyLibraryEntry,
-  type StoryPhoneTalkLibraryEntry,
+  type StoryContactActionLibraryEntry,
+  type StoryContactProfile,
+  type StoryContactConversationDefinition,
+  type StoryContactConversationsFile,
+  type StoryContactFile,
+  type StoryContactPersonalityDefinition,
+  type StoryContactReplyLibraryEntry,
+  type StoryContactTalkLibraryEntry,
   type StoryShopProduct,
   type StoryScriptValidationIssue,
   type StoryOnceDialogueDefinition,
@@ -59,8 +59,8 @@ import type {
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
-  StoryCreationDraftPhone,
-  StoryCreationDraftPhoneConversations,
+  StoryCreationDraftContact,
+  StoryCreationDraftContactConversations,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftShop,
@@ -73,7 +73,7 @@ import {
   type StoryCreationWorkflowOptions
 } from "../story-creation-workflow"
 import type { AgentModelKey, RequiredAgentSettings } from "./contracts-draft"
-import { ROLE_MODEL_KEYS, emptyDraftDoing, emptyDraftPhone, emptyDraftPhoneConversations, emptyDraftShop } from "./contracts-draft"
+import { ROLE_MODEL_KEYS, emptyDraftDoing, emptyDraftContact, emptyDraftContactConversations, emptyDraftShop } from "./contracts-draft"
 
 /**
  * 规范化 Agent 的 OpenAI 兼容基地址。
@@ -421,16 +421,16 @@ export async function invokeStructuredOutputFallback<T extends Record<string, un
 }
 
 /**
- * 把内部 phone 草稿转换成 Agent Schema 更容易输出的结构。
- * @param phone 当前 phone 草稿，可缺省。
- * @returns 带默认值的 phone；reply_by_tag 对象映射转换成 `{tag,replies}[]`。
+ * 把内部 contact 草稿转换成 Agent Schema 更容易输出的结构。
+ * @param contact 当前 contact 草稿，可缺省。
+ * @returns 带默认值的 contact；reply_by_tag 对象映射转换成 `{tag,replies}[]`。
  */
-export function toAgentVisiblePhoneDraft(phone: StoryCreationDraftPhone | undefined) {
-  const nextPhone = phone ?? emptyDraftPhone
+export function toAgentVisibleContactDraft(contact: StoryCreationDraftContact | undefined) {
+  const nextContact = contact ?? emptyDraftContact
 
   return {
-    ...nextPhone,
-    contact_profiles: nextPhone.contact_profiles.map((profile) => ({
+    ...nextContact,
+    contact_profiles: nextContact.contact_profiles.map((profile) => ({
       ...profile,
       reply_by_tag: Object.entries(profile.reply_by_tag ?? {})
         .map(([tag, replies]) => ({
@@ -445,7 +445,7 @@ export function toAgentVisiblePhoneDraft(phone: StoryCreationDraftPhone | undefi
 /**
  * 把内部完整草稿转换成下一节点可见的稳定结构。
  * @param draft 上一节点草稿。
- * @returns 补齐可选领域、角色 xingge null 和 Agent 友好 phone 格式的新对象。
+ * @returns 补齐可选领域、角色 xingge null 和 Agent 友好 contact 格式的新对象。
  */
 export function toAgentVisibleDraft(draft: StoryCreationDraft) {
   return {
@@ -454,8 +454,8 @@ export function toAgentVisibleDraft(draft: StoryCreationDraft) {
       ...role,
       xingge: role.xingge ?? null
     })),
-    phone: toAgentVisiblePhoneDraft(draft.phone),
-    phoneConversations: draft.phoneConversations ?? emptyDraftPhoneConversations,
+    contact: toAgentVisibleContactDraft(draft.contact),
+    contactConversations: draft.contactConversations ?? emptyDraftContactConversations,
     doing: draft.doing ?? emptyDraftDoing,
     shop: draft.shop ?? emptyDraftShop
   }

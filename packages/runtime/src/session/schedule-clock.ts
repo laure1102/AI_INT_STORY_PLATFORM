@@ -52,9 +52,9 @@ import type {
 import type { RuntimeScheduledEvent, RuntimeSchedulerAuditEntry, RuntimeSchedulerSourceType, RuntimeStorySessionSnapshot } from "./contracts-core"
 import type { RuntimeLoopEventDefinition, RuntimeStoryBundle } from "./contracts-view"
 import { MAX_RUNTIME_DIRECTOR_LOGS, MAX_SCHEDULER_AUDIT_LOGS } from "./contracts-view"
-import { createInitialBagsState } from "./phone-config"
+import { createInitialBagsState } from "./contact-config"
 import { createDefaultClockState, normalizeClockState, normalizeOptionalText, normalizeScheduleDependencyIds, normalizeSchedulePriority, normalizeSchedulerAuditKind, normalizeSchedulerSourceType, normalizeSchedulerState, syncSystemTimeFieldsFromClock } from "./state-scheduler"
-import { clampInteger, cloneValsFile, cloneValue, createDefaultDoingState, createDefaultPhoneConversationState, createDefaultPhoneState, createDefaultSchedulerState, createDefaultShopState, normalizeText, readSystemNumber, resolveWeekday, writeSystemValue } from "./state-values"
+import { clampInteger, cloneValsFile, cloneValue, createDefaultDoingState, createDefaultContactConversationState, createDefaultContactState, createDefaultSchedulerState, createDefaultShopState, normalizeText, readSystemNumber, resolveWeekday, writeSystemValue } from "./state-values"
 
 /**
  * 从只读 bundle 创建一份可修改、可存档的新游戏快照。
@@ -72,8 +72,8 @@ export function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySess
     rng: createRuntimeRngState(bundle),
     scheduler: createDefaultSchedulerState(),
     bags: createInitialBagsState(bundle, clock),
-    phone: createDefaultPhoneState(),
-    phone_conversation: createDefaultPhoneConversationState(),
+    contact: createDefaultContactState(),
+    contact_conversation: createDefaultContactConversationState(),
     doing: createDefaultDoingState(),
     shop: createDefaultShopState(),
     triggered_once_events: [],

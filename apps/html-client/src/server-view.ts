@@ -4,7 +4,7 @@
  */
 import type { HtmlClientApp, HtmlClientAppState } from "./client-app"
 import {
-  buildRuntimePhoneContacts,
+  buildRuntimeContacts,
   formatStoryValInput,
   getStoryValCalcDisplay,
   type RuntimeStorySessionSnapshot
@@ -379,7 +379,7 @@ function buildSummary(state: HtmlClientAppState, snapshot: RuntimeStorySessionSn
 export function buildClientState(app: HtmlClientApp) {
   const state = app.getState()
   const snapshot = state.session?.getSnapshot() ?? null
-  const contacts = state.bundle && snapshot ? buildRuntimePhoneContacts(state.bundle, snapshot) : []
+  const contacts = state.bundle && snapshot ? buildRuntimeContacts(state.bundle, snapshot) : []
   const runtimeNotifications = state.view?.notifications ?? []
   const notifications = [
     ...state.notifications,
@@ -413,7 +413,7 @@ export function buildClientState(app: HtmlClientApp) {
     systemValueLines: buildValueLines(snapshot, "system"),
     schedulerLines: buildSchedulerLines(snapshot),
     bagLines: buildBagLines(state),
-    phoneContacts: contacts,
-    phoneUnreadCount: contacts.reduce((sum, contact) => sum + contact.unreadCount, 0)
+    contacts: contacts,
+    contactUnreadCount: contacts.reduce((sum, contact) => sum + contact.unreadCount, 0)
   }
 }

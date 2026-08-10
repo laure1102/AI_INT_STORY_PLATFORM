@@ -1,6 +1,6 @@
 import {
   dom,
-  getActivePhoneConversation,
+  getActiveContactConversation,
   h,
   route,
   ui
@@ -57,46 +57,46 @@ function restoreMenuPanelScroll() {
   window.requestAnimationFrame(apply)
 }
 
-/** @returns 无返回值；按联系人记住手机消息线程滚动位置。 */
-function rememberPhoneThreadScroll() {
-  if (!ui.phoneOpen) {
+/** @returns 无返回值；按联系人记住消息线程滚动位置。 */
+function rememberContactThreadScroll() {
+  if (!ui.contactOpen) {
     return
   }
 
-  const body = dom.app.querySelector("[data-phone-thread-scroll]")
-  const roleKey = body?.dataset.phoneThreadScroll
+  const body = dom.app.querySelector("[data-contact-thread-scroll]")
+  const roleKey = body?.dataset.contactThreadScroll
   if (!body || !roleKey) {
     return
   }
 
-  ui.phoneThreadScrollTops[roleKey] = body.scrollTop
+  ui.contactThreadScrollTops[roleKey] = body.scrollTop
 }
 
 /** @returns 无返回值；新消息时滚到底部，否则恢复联系人之前的阅读位置。 */
-function restorePhoneThreadScroll() {
-  if (!ui.phoneOpen) {
+function restoreContactThreadScroll() {
+  if (!ui.contactOpen) {
     return
   }
 
-  const body = dom.app.querySelector("[data-phone-thread-scroll]")
-  const roleKey = body?.dataset.phoneThreadScroll
+  const body = dom.app.querySelector("[data-contact-thread-scroll]")
+  const roleKey = body?.dataset.contactThreadScroll
   if (!body || !roleKey) {
     return
   }
 
-  if (ui.phoneThreadAutoScrollRoleKeys[roleKey]) {
-    delete ui.phoneThreadAutoScrollRoleKeys[roleKey]
+  if (ui.contactThreadAutoScrollRoleKeys[roleKey]) {
+    delete ui.contactThreadAutoScrollRoleKeys[roleKey]
     /** @returns 无返回值；滚动到消息末尾并保存最终 scrollTop。 */
     const applyBottom = () => {
       body.scrollTop = body.scrollHeight
-      ui.phoneThreadScrollTops[roleKey] = body.scrollTop
+      ui.contactThreadScrollTops[roleKey] = body.scrollTop
     }
     applyBottom()
     window.requestAnimationFrame(applyBottom)
     return
   }
 
-  const top = ui.phoneThreadScrollTops[roleKey]
+  const top = ui.contactThreadScrollTops[roleKey]
   if (!Number.isFinite(top)) {
     return
   }
@@ -109,34 +109,34 @@ function restorePhoneThreadScroll() {
   window.requestAnimationFrame(apply)
 }
 
-/** @returns 无返回值；按联系人和手机模式记住选项区域滚动位置。 */
-function rememberPhoneOptionsScroll() {
-  if (!ui.phoneOpen) {
+/** @returns 无返回值；按联系人和互动模式记住选项区域滚动位置。 */
+function rememberContactOptionsScroll() {
+  if (!ui.contactOpen) {
     return
   }
 
-  const body = dom.app.querySelector("[data-phone-options-scroll]")
-  const key = body?.dataset.phoneOptionsScroll
+  const body = dom.app.querySelector("[data-contact-options-scroll]")
+  const key = body?.dataset.contactOptionsScroll
   if (!body || !key) {
     return
   }
 
-  ui.phoneOptionsScrollTops[key] = body.scrollTop
+  ui.contactOptionsScrollTops[key] = body.scrollTop
 }
 
-/** @returns 无返回值；重绘后恢复手机话题/动作选项滚动位置。 */
-function restorePhoneOptionsScroll() {
-  if (!ui.phoneOpen) {
+/** @returns 无返回值；重绘后恢复联系人话题/动作选项滚动位置。 */
+function restoreContactOptionsScroll() {
+  if (!ui.contactOpen) {
     return
   }
 
-  const body = dom.app.querySelector("[data-phone-options-scroll]")
-  const key = body?.dataset.phoneOptionsScroll
+  const body = dom.app.querySelector("[data-contact-options-scroll]")
+  const key = body?.dataset.contactOptionsScroll
   if (!body || !key) {
     return
   }
 
-  const top = ui.phoneOptionsScrollTops[key]
+  const top = ui.contactOptionsScrollTops[key]
   if (!Number.isFinite(top)) {
     return
   }
@@ -161,79 +161,79 @@ function bindScrollMemory() {
     }, { passive: true })
   })
 
-  dom.app.querySelectorAll("[data-phone-thread-scroll]").forEach((element) => {
+  dom.app.querySelectorAll("[data-contact-thread-scroll]").forEach((element) => {
     element.addEventListener("scroll", () => {
-      const roleKey = element.dataset.phoneThreadScroll
+      const roleKey = element.dataset.contactThreadScroll
       if (!roleKey) {
         return
       }
-      ui.phoneThreadScrollTops[roleKey] = element.scrollTop
+      ui.contactThreadScrollTops[roleKey] = element.scrollTop
     }, { passive: true })
   })
 
-  dom.app.querySelectorAll("[data-phone-options-scroll]").forEach((element) => {
+  dom.app.querySelectorAll("[data-contact-options-scroll]").forEach((element) => {
     element.addEventListener("scroll", () => {
-      const key = element.dataset.phoneOptionsScroll
+      const key = element.dataset.contactOptionsScroll
       if (!key) {
         return
       }
-      ui.phoneOptionsScrollTops[key] = element.scrollTop
+      ui.contactOptionsScrollTops[key] = element.scrollTop
     }, { passive: true })
   })
 }
 
-/** @param thread 手机消息线程。 @returns 由消息数和最后消息 id 组成的轻量变化键。 */
-function getPhoneThreadMessageKey(thread) {
+/** @param thread 联系人消息线程。 @returns 由消息数和最后消息 id 组成的轻量变化键。 */
+function getContactThreadMessageKey(thread) {
   const messages = Array.isArray(thread?.messages) ? thread.messages : []
   const lastMessage = messages.at(-1)
   return `${messages.length}:${lastMessage?.id ?? ""}`
 }
 
 /** @param roleKey 联系人键。 @param thread 最新线程。 @param force 是否强制。 @returns 无返回值；消息变化时标记下次渲染滚到底部。 */
-function updatePhoneThreadAutoScroll(roleKey, thread, { force = false } = {}) {
+function updateContactThreadAutoScroll(roleKey, thread, { force = false } = {}) {
   if (!roleKey) {
     return
   }
 
-  const nextKey = getPhoneThreadMessageKey(thread)
-  const previousKey = ui.phoneThreadLastMessageKeys[roleKey]
-  ui.phoneThreadLastMessageKeys[roleKey] = nextKey
+  const nextKey = getContactThreadMessageKey(thread)
+  const previousKey = ui.contactThreadLastMessageKeys[roleKey]
+  ui.contactThreadLastMessageKeys[roleKey] = nextKey
 
   if (force || previousKey === undefined || previousKey !== nextKey) {
-    ui.phoneThreadAutoScrollRoleKeys[roleKey] = true
+    ui.contactThreadAutoScrollRoleKeys[roleKey] = true
   }
 }
 
 /** @param roleKey 联系人键。 @param options 可含 forceScroll。 @returns 服务端最新线程，并同步自动滚动状态。 */
-async function fetchPhoneThread(roleKey, options = {}) {
-  const result = await api(`/api/phone/thread?roleKey=${encodeURIComponent(roleKey)}`, { method: "GET" })
-  updatePhoneThreadAutoScroll(roleKey, result.thread, { force: Boolean(options.forceScroll) })
+async function fetchContactThread(roleKey, options = {}) {
+  const result = await api(`/api/contact/thread?roleKey=${encodeURIComponent(roleKey)}`, { method: "GET" })
+  updateContactThreadAutoScroll(roleKey, result.thread, { force: Boolean(options.forceScroll) })
   ui.thread = result.thread
   return result.thread
 }
 
-/** @param options 线程加载选项。 @returns 当前选中线程；手机未打开或未选联系人时返回 null。 */
-async function refreshSelectedPhoneThread(options = {}) {
-  if (!ui.phoneOpen || !ui.selectedRoleKey) {
+/** @param options 线程加载选项。 @returns 当前选中线程；联系人抽屉未打开或未选联系人时返回 null。 */
+async function refreshSelectedContactThread(options = {}) {
+  if (!ui.contactOpen || !ui.selectedRoleKey) {
     return null
   }
 
-  return fetchPhoneThread(ui.selectedRoleKey, options)
+  return fetchContactThread(ui.selectedRoleKey, options)
 }
 
-/** @param panel notifications/variables/scheduler/bags/doing/shop 之一。 @returns 无返回值；关闭手机并打开对应工具面板。 */
+/** @param panel notifications/variables/scheduler/bags/doing/shop 之一。 @returns 无返回值；关闭联系人抽屉并打开对应工具面板。 */
 function openMenuPanel(panel) {
   if (ui.menuPanel !== panel) {
     ui.menuPanelScrollTops[panel] = 0
   }
-  ui.phoneOpen = false
+  ui.contactOpen = false
   ui.menuPanel = panel
   render()
 }
 
-/** @returns 无返回值；关闭菜单、手机和建档浮层，回到主游戏画面。 */
+/** @returns 无返回值；关闭菜单、联系人抽屉和建档浮层，回到主游戏画面。 */
 function returnToMainView() {
-  ui.phoneOpen = false
+  ui.contactOpen = false
   ui.menuPanel = null
   ui.selectedRoleKey = null
   ui.thread = null
@@ -330,8 +330,8 @@ function render() {
     : null
 
   rememberMenuPanelScroll()
-  rememberPhoneThreadScroll()
-  rememberPhoneOptionsScroll()
+  rememberContactThreadScroll()
+  rememberContactOptionsScroll()
 
   if (!ui.data) {
     dom.app.innerHTML = `
@@ -354,8 +354,8 @@ function render() {
   bindEvents()
   bindScrollMemory()
   restoreMenuPanelScroll()
-  restorePhoneThreadScroll()
-  restorePhoneOptionsScroll()
+  restoreContactThreadScroll()
+  restoreContactOptionsScroll()
 
   if (activeShopGiftSearch) {
     const input = Array.from(dom.app.querySelectorAll("[data-shop-gift-search]"))
@@ -368,14 +368,14 @@ function render() {
   }
 }
 
-/** @param action Runtime 交互动作。 @returns 服务端动作结果；提交后刷新状态/手机线程并统一处理错误。 */
+/** @param action Runtime 交互动作。 @returns 服务端动作结果；提交后刷新状态/联系人线程并统一处理错误。 */
 async function dispatchRuntimeAction(action) {
   setBusy(true)
   try {
     const result = await api("/api/session/action", { body: { action } })
     ui.data = result
-    if (ui.phoneOpen && ui.selectedRoleKey) {
-      await loadPhoneThread(ui.selectedRoleKey)
+    if (ui.contactOpen && ui.selectedRoleKey) {
+      await loadContactThread(ui.selectedRoleKey)
     } else {
       render()
     }
@@ -388,37 +388,37 @@ async function dispatchRuntimeAction(action) {
   }
 }
 
-/** @param roleKey 联系人键。 @param options 加载选项。 @returns 无返回值；读取线程后重绘手机。 */
-async function loadPhoneThread(roleKey, options = {}) {
-  await fetchPhoneThread(roleKey, options)
+/** @param roleKey 联系人键。 @param options 加载选项。 @returns 无返回值；读取线程后重绘联系人抽屉。 */
+async function loadContactThread(roleKey, options = {}) {
+  await fetchContactThread(roleKey, options)
   render()
 }
 
 /** @param roleKey 联系人键。 @returns 无返回值；先标记服务端消息已读，再加载并强制滚到最新消息。 */
-async function openPhoneThread(roleKey) {
+async function openContactThread(roleKey) {
   ui.selectedRoleKey = roleKey
   await api("/api/session/action", {
     body: {
-      action: { type: "phone-mark-read", roleKey }
+      action: { type: "contact-mark-read", roleKey }
     }
   }).then((result) => {
     ui.data = result
   })
-  await loadPhoneThread(roleKey, { forceScroll: true })
+  await loadContactThread(roleKey, { forceScroll: true })
 }
 
-/** @returns 无返回值；打开手机并优先选活动剧情联系人、上次联系人或第一联系人。 */
-async function openPhoneDrawer() {
+/** @returns 无返回值；打开联系人抽屉并优先选活动剧情联系人、上次联系人或第一联系人。 */
+async function openContactDrawer() {
   ui.menuPanel = null
-  ui.phoneOpen = true
-  const activeConversation = getActivePhoneConversation()
+  ui.contactOpen = true
+  const activeConversation = getActiveContactConversation()
   const fallbackRoleKey = ui.selectedRoleKey
     ?? activeConversation?.roleKey
-    ?? ui.data?.phoneContacts?.[0]?.roleKey
+    ?? ui.data?.contacts?.[0]?.roleKey
     ?? null
 
   if (fallbackRoleKey) {
-    await openPhoneThread(fallbackRoleKey)
+    await openContactThread(fallbackRoleKey)
     return
   }
 
@@ -435,19 +435,19 @@ async function saveGame() {
   await runTask("进度已保存", async () => api("/api/session/save", { body: { slotId } }))
 }
 
-/** @returns 无返回值；调用调试 API 推进一天，并刷新可能产生主动消息的手机线程。 */
+/** @returns 无返回值；调用调试 API 推进一天，并刷新可能产生主动消息的联系人线程。 */
 async function advanceDay() {
   await runTask("已推进到下一天", async () => {
     const result = await api("/api/session/advance-day")
     ui.data = result
-    await refreshSelectedPhoneThread()
+    await refreshSelectedContactThread()
     return result
   })
 }
 
 /** @param key 键盘字符。 @returns 1–9 成功选择当前互动选项时为 true，否则 false。 */
 async function selectInteractionOptionByNumber(key) {
-  if (ui.phoneOpen || ui.menuPanel) {
+  if (ui.contactOpen || ui.menuPanel) {
     return false
   }
 
@@ -479,7 +479,7 @@ async function tick() {
   try {
     const result = await api("/api/session/tick", { body: { deltaMs: 1000 } })
     ui.data = result
-    await refreshSelectedPhoneThread()
+    await refreshSelectedContactThread()
     render()
   } catch (error) {
     showToast(error instanceof Error ? error.message : String(error), "error")
@@ -527,10 +527,10 @@ function bindEvents() {
         await saveGame()
       } else if (action === "back-main") {
         returnToMainView()
-      } else if (action === "open-phone") {
-        await openPhoneDrawer()
-      } else if (action === "close-phone") {
-        ui.phoneOpen = false
+      } else if (action === "open-contact") {
+        await openContactDrawer()
+      } else if (action === "close-contact") {
+        ui.contactOpen = false
         ui.selectedRoleKey = null
         ui.thread = null
         render()
@@ -653,47 +653,47 @@ function bindEvents() {
     })
   })
 
-  dom.app.querySelectorAll("[data-phone-contact]").forEach((button) => {
+  dom.app.querySelectorAll("[data-contact-contact]").forEach((button) => {
     button.addEventListener("click", async () => {
-      rememberPhoneThreadScroll()
-      rememberPhoneOptionsScroll()
-      await openPhoneThread(button.dataset.phoneContact)
+      rememberContactThreadScroll()
+      rememberContactOptionsScroll()
+      await openContactThread(button.dataset.contact)
     })
   })
 
-  dom.app.querySelectorAll("[data-phone-mode]").forEach((button) => {
+  dom.app.querySelectorAll("[data-contact-mode]").forEach((button) => {
     button.addEventListener("click", () => {
-      rememberPhoneThreadScroll()
-      rememberPhoneOptionsScroll()
-      ui.phoneMode = button.dataset.phoneMode
+      rememberContactThreadScroll()
+      rememberContactOptionsScroll()
+      ui.contactMode = button.dataset.contactMode
       render()
     })
   })
 
-  dom.app.querySelectorAll("[data-phone-talk]").forEach((button) => {
+  dom.app.querySelectorAll("[data-contact-talk]").forEach((button) => {
     button.addEventListener("click", async () => {
       if (!ui.selectedRoleKey) return
-      await dispatchRuntimeAction({ type: "phone-send-talk", roleKey: ui.selectedRoleKey, talkId: button.dataset.phoneTalk })
-      await dispatchRuntimeAction({ type: "phone-mark-read", roleKey: ui.selectedRoleKey })
+      await dispatchRuntimeAction({ type: "contact-send-talk", roleKey: ui.selectedRoleKey, talkId: button.dataset.contactTalk })
+      await dispatchRuntimeAction({ type: "contact-mark-read", roleKey: ui.selectedRoleKey })
     })
   })
 
-  dom.app.querySelectorAll("[data-phone-action]").forEach((button) => {
+  dom.app.querySelectorAll("[data-contact-action]").forEach((button) => {
     button.addEventListener("click", async () => {
       if (!ui.selectedRoleKey) return
-      await dispatchRuntimeAction({ type: "phone-send-action", roleKey: ui.selectedRoleKey, actionId: button.dataset.phoneAction })
-      await dispatchRuntimeAction({ type: "phone-mark-read", roleKey: ui.selectedRoleKey })
+      await dispatchRuntimeAction({ type: "contact-send-action", roleKey: ui.selectedRoleKey, actionId: button.dataset.contactAction })
+      await dispatchRuntimeAction({ type: "contact-mark-read", roleKey: ui.selectedRoleKey })
     })
   })
 
-  dom.app.querySelectorAll("[data-phone-conversation-reply]").forEach((button) => {
+  dom.app.querySelectorAll("[data-contact-conversation-reply]").forEach((button) => {
     button.addEventListener("click", async () => {
       await dispatchRuntimeAction({
-        type: "phone-select-conversation-reply",
-        optionId: button.dataset.phoneConversationReply
+        type: "contact-select-conversation-reply",
+        optionId: button.dataset.contactConversationReply
       })
       if (ui.selectedRoleKey) {
-        await dispatchRuntimeAction({ type: "phone-mark-read", roleKey: ui.selectedRoleKey })
+        await dispatchRuntimeAction({ type: "contact-mark-read", roleKey: ui.selectedRoleKey })
       }
     })
   })
@@ -744,14 +744,14 @@ document.addEventListener("keydown", async (event) => {
 
   if (key === "escape") {
     returnToMainView()
-  } else if (key === "p") {
-    if (ui.phoneOpen) {
-      ui.phoneOpen = false
+  } else if (key === "c") {
+    if (ui.contactOpen) {
+      ui.contactOpen = false
       ui.selectedRoleKey = null
       ui.thread = null
       render()
     } else {
-      await openPhoneDrawer()
+      await openContactDrawer()
     }
   } else if (key === " ") {
     event.preventDefault()

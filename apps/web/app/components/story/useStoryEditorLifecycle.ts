@@ -29,17 +29,17 @@ export function useStoryEditorLifecycle(state: StoryEditorStateController) {
     creationAgentRunMode, creationAgentError, creationApplyMessage, creationApplyWarnings,
     creationHistory, activeCreationHistorySessionId, editingEventId, creatingFromEventId,
     creatingEventDraft, scenesSaveSuccessMessage, locationsSaveSuccessMessage, itemsSaveSuccessMessage,
-    shopSaveSuccessMessage, phoneSaveSuccessMessage, phoneConversationsSaveErrorMessage, phoneConversationsSaveSuccessMessage,
+    shopSaveSuccessMessage, contactSaveSuccessMessage, contactConversationsSaveErrorMessage, contactConversationsSaveSuccessMessage,
     referSaveSuccessMessage, doingSaveSuccessMessage, rolesSaveSuccessMessage, activeWorkspaceTab,
     workspaceTabOptions, selectedEventId, selectedEvent, editingEvent,
     activeDraftEvent, activeGraphParentNodeId, activeGraphDraftEvent, activeGraphDraftAction,
-    graphNodeOptions, storyScriptVals, storyScriptItemIds, phoneInvokeEventOptions,
+    graphNodeOptions, storyScriptVals, storyScriptItemIds, contactInvokeEventOptions,
     buildGraphEventBranchAutocompleteItemsFromActions, activeGraphBranchAutocompleteItems, isCreateMode, replaceEventInDocument,
     removeEventFromDocument, applyStoryCreationDraft, deleteEvent, exportStory,
     getAppSettings, getStoryCreationHistory, getStory, deleteStoryCreationHistorySession,
     saveAppSettings, saveEvent, saveEventLocations, saveDoing,
-    saveStoryMeta, saveStoryCreationHistorySession, saveItems, savePhone,
-    savePhoneConversations, saveRefer, saveShop, savePlayerOverrideVals,
+    saveStoryMeta, saveStoryCreationHistorySession, saveItems, saveContact,
+    saveContactConversations, saveRefer, saveShop, savePlayerOverrideVals,
     saveRoles, saveScenes, saveStoryBible, saveSystemVals,
     saveVals, validateStory, creationJob, cancelCreationTask,
     resumeCreationTask, runCreationTask, appSettings, errorMessage,
@@ -51,7 +51,7 @@ export function useStoryEditorLifecycle(state: StoryEditorStateController) {
     getGraphNodes, isEventCanvasTab, isGraphActionNode, isGraphEventNode,
     normalizeEventTriggerMode, closeAllTools, isValsDialogOpen, isPlayerOverrideValsDialogOpen,
     isSystemValsDialogOpen, isScenesDialogOpen, isLocationsDialogOpen, isItemsDialogOpen,
-    isShopDialogOpen, isPhoneDialogOpen, isReferDialogOpen, isRolesDialogOpen,
+    isShopDialogOpen, isContactDialogOpen, isReferDialogOpen, isRolesDialogOpen,
     isSettingsDialogOpen, isGameSettingsDialogOpen
   } = state
 
@@ -82,7 +82,7 @@ function openValsDialog() {
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
-  isPhoneDialogOpen.value = false
+  isContactDialogOpen.value = false
   isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   isValsDialogOpen.value = true
@@ -106,7 +106,7 @@ function openPlayerOverrideValsDialog() {
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
-  isPhoneDialogOpen.value = false
+  isContactDialogOpen.value = false
   isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   isPlayerOverrideValsDialogOpen.value = true
@@ -130,7 +130,7 @@ function openSystemValsDialog() {
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
-  isPhoneDialogOpen.value = false
+  isContactDialogOpen.value = false
   isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   isSystemValsDialogOpen.value = true
@@ -154,7 +154,7 @@ function openScenesDialog() {
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
-  isPhoneDialogOpen.value = false
+  isContactDialogOpen.value = false
   isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   scenesSaveSuccessMessage.value = null
@@ -180,7 +180,7 @@ function openLocationsDialog() {
   isScenesDialogOpen.value = false
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
-  isPhoneDialogOpen.value = false
+  isContactDialogOpen.value = false
   isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   locationsSaveSuccessMessage.value = null
@@ -206,7 +206,7 @@ function openItemsDialog() {
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isShopDialogOpen.value = false
-  isPhoneDialogOpen.value = false
+  isContactDialogOpen.value = false
   isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   itemsSaveSuccessMessage.value = null
@@ -232,7 +232,7 @@ function openShopDialog() {
   isScenesDialogOpen.value = false
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
-  isPhoneDialogOpen.value = false
+  isContactDialogOpen.value = false
   isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
   shopSaveSuccessMessage.value = null
@@ -245,8 +245,8 @@ function closeShopDialog() {
   isShopDialogOpen.value = false
 }
 
-/** 打开 `PhoneDialog` 界面并初始化临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function openPhoneDialog() {
+/** 打开 `ContactDialog` 界面并初始化临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function openContactDialog() {
   if (!storyDocument.value) {
     return
   }
@@ -261,14 +261,14 @@ function openPhoneDialog() {
   isShopDialogOpen.value = false
   isReferDialogOpen.value = false
   isRolesDialogOpen.value = false
-  phoneSaveSuccessMessage.value = null
-  isPhoneDialogOpen.value = true
+  contactSaveSuccessMessage.value = null
+  isContactDialogOpen.value = true
 }
 
-/** 关闭 `PhoneDialog` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
-function closePhoneDialog() {
-  phoneSaveSuccessMessage.value = null
-  isPhoneDialogOpen.value = false
+/** 关闭 `ContactDialog` 界面并清理临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
+function closeContactDialog() {
+  contactSaveSuccessMessage.value = null
+  isContactDialogOpen.value = false
 }
 
 /** 打开 `ReferDialog` 界面并初始化临时状态。 @returns 无返回值；通过响应式状态、emit 或副作用体现结果。 */
@@ -285,7 +285,7 @@ function openReferDialog() {
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
-  isPhoneDialogOpen.value = false
+  isContactDialogOpen.value = false
   isRolesDialogOpen.value = false
   referSaveSuccessMessage.value = null
   isReferDialogOpen.value = true
@@ -311,7 +311,7 @@ function openRolesDialog() {
   isLocationsDialogOpen.value = false
   isItemsDialogOpen.value = false
   isShopDialogOpen.value = false
-  isPhoneDialogOpen.value = false
+  isContactDialogOpen.value = false
   isReferDialogOpen.value = false
   rolesSaveSuccessMessage.value = null
   isRolesDialogOpen.value = true
@@ -528,7 +528,7 @@ async function handleDeleteCreationHistorySession(session: StoryCreationHistoryS
     openPlayerOverrideValsDialog, closePlayerOverrideValsDialog, openSystemValsDialog, closeSystemValsDialog,
     openScenesDialog, closeScenesDialog, openLocationsDialog, closeLocationsDialog,
     openItemsDialog, closeItemsDialog, openShopDialog, closeShopDialog,
-    openPhoneDialog, closePhoneDialog, openReferDialog, closeReferDialog,
+    openContactDialog, closeContactDialog, openReferDialog, closeReferDialog,
     openRolesDialog, closeRolesDialog, openSettingsDialog, closeSettingsDialog,
     openGameSettingsDialog, closeGameSettingsDialog, createHistoryId, getActiveCreationHistorySession,
     upsertLocalCreationHistorySession, persistCreationHistorySession, createCreationHistorySession, handleRestoreCreationHistorySession,

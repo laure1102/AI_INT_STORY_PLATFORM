@@ -144,7 +144,7 @@ code {
 }
 
 .topbar::before {
-  content: "[ Story Phone ]";
+  content: "[ Story Contact ]";
   grid-column: 1 / -1;
   justify-self: center;
   margin-bottom: -4px;
@@ -441,7 +441,7 @@ code {
 }
 
 .game-status-chip.unread,
-.footer-stat.phone-unread {
+.footer-stat.contact-unread {
   color: #221006;
   border-color: var(--gold);
   background: var(--gold);

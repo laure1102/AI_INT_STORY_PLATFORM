@@ -29,14 +29,14 @@ import {
   type StoryLoopEventFile,
   type StoryLoopRule,
   type StoryNormalRoleDefinition,
-  type StoryPhoneActionLibraryEntry,
-  type StoryPhoneContactProfile,
-  type StoryPhoneConversationDefinition,
-  type StoryPhoneConversationsFile,
-  type StoryPhoneFile,
-  type StoryPhonePersonalityDefinition,
-  type StoryPhoneReplyLibraryEntry,
-  type StoryPhoneTalkLibraryEntry,
+  type StoryContactActionLibraryEntry,
+  type StoryContactProfile,
+  type StoryContactConversationDefinition,
+  type StoryContactConversationsFile,
+  type StoryContactFile,
+  type StoryContactPersonalityDefinition,
+  type StoryContactReplyLibraryEntry,
+  type StoryContactTalkLibraryEntry,
   type StoryShopProduct,
   type StoryScriptValidationIssue,
   type StoryOnceDialogueDefinition,
@@ -59,8 +59,8 @@ import type {
   StoryCreationDraftDoing,
   StoryCreationDraftEvent,
   StoryCreationDraftItem,
-  StoryCreationDraftPhone,
-  StoryCreationDraftPhoneConversations,
+  StoryCreationDraftContact,
+  StoryCreationDraftContactConversations,
   StoryCreationDraftPresentation,
   StoryCreationDraftRole,
   StoryCreationDraftShop,
@@ -290,18 +290,18 @@ export function collectDraftValidationShopProductIds(story: StoryDocument, draft
   return Array.from(productIds)
 }
 
-/** @param story 当前故事。@param draft 草稿。@returns 现有与草稿手机剧情对话 id 的去重数组。 */
-export function collectDraftValidationPhoneConversationIds(story: StoryDocument, draft: StoryCreationDraft) {
+/** @param story 当前故事。@param draft 草稿。@returns 现有与草稿联系人剧情 id 的去重数组。 */
+export function collectDraftValidationContactConversationIds(story: StoryDocument, draft: StoryCreationDraft) {
   const conversationIds = new Set<string>()
 
-  for (const conversation of story.phoneConversations.conversations) {
+  for (const conversation of story.contactConversations.conversations) {
     const conversationId = conversation.id.trim()
     if (conversationId) {
       conversationIds.add(conversationId)
     }
   }
 
-  for (const conversation of draft.phoneConversations?.conversations ?? []) {
+  for (const conversation of draft.contactConversations?.conversations ?? []) {
     const conversationId = conversation.id.trim()
     if (!conversationId) {
       continue
@@ -391,7 +391,7 @@ export function createDraftEventValidationContext(
     roleKeys: string[]
     doingIds: string[]
     shopProductIds: string[]
-    phoneConversationIds: string[]
+    contactConversationIds: string[]
     referTokens: Record<string, null>
   },
   mode: "read" | "write"
@@ -406,9 +406,9 @@ export function createDraftEventValidationContext(
     roleKeys: context.roleKeys,
     doingIds: context.doingIds,
     shopProductIds: context.shopProductIds,
-    phoneConversationIds: context.phoneConversationIds,
+    contactConversationIds: context.contactConversationIds,
     bagMode: mode,
-    phoneMode: mode,
+    contactMode: mode,
     doingMode: mode,
     shopMode: mode
   })
@@ -426,7 +426,7 @@ export function createDraftGlobalValidationContext(
     roleKeys: string[]
     doingIds: string[]
     shopProductIds: string[]
-    phoneConversationIds: string[]
+    contactConversationIds: string[]
     referTokens: Record<string, null>
   },
   mode: "read" | "write"
@@ -437,9 +437,9 @@ export function createDraftGlobalValidationContext(
     roleKeys: context.roleKeys,
     doingIds: context.doingIds,
     shopProductIds: context.shopProductIds,
-    phoneConversationIds: context.phoneConversationIds,
+    contactConversationIds: context.contactConversationIds,
     bagMode: mode,
-    phoneMode: mode,
+    contactMode: mode,
     doingMode: mode,
     shopMode: mode
   })

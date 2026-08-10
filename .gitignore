@@ -15,3 +15,5 @@ data/setting.json5
 .tui-client
 .html-client
 .story-manager/
+.claude
+.codex

@@ -9,8 +9,8 @@ import type {
   StoryDoingFile,
   StoryEventLocationFile,
   StoryNormalRolesDataFile,
-  StoryPhoneConversationsFile,
-  StoryPhoneFile,
+  StoryContactConversationsFile,
+  StoryContactFile,
   StoryReferFile,
   StorySceneFile,
   StoryShopFile
@@ -21,9 +21,11 @@ export function createDefaultStoryShop(): StoryShopFile {
   return { currency_value_key: "player.money", categories: [], products: [] }
 }
 
-/** @returns 所有手机资料库均为空的新手机配置。 */
-export function createDefaultStoryPhone(): StoryPhoneFile {
+/** @returns 使用通用媒介且资料库为空的新联系人配置。 */
+export function createDefaultStoryContact(): StoryContactFile {
   return {
+    default_channel_id: "generic",
+    channels: [{ id: "generic", name: "通用往来", preset: "generic", labels: {} }],
     relationship_tracks: [],
     personality_library: [],
     talk_library: [],
@@ -35,8 +37,8 @@ export function createDefaultStoryPhone(): StoryPhoneFile {
   }
 }
 
-/** @returns 不含会话的新连续手机剧情文件。 */
-export function createDefaultStoryPhoneConversations(): StoryPhoneConversationsFile {
+/** @returns 不含会话的新连续联系人剧情文件。 */
+export function createDefaultStoryContactConversations(): StoryContactConversationsFile {
   return { conversations: [] }
 }
 

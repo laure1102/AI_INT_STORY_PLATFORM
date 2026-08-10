@@ -21,6 +21,27 @@ afterEach(async () => {
 })
 
 describe("StoryFileStore revisions and transactions", () => {
+  it("creates only the contact file names for a new story", async () => {
+    await createTestStore()
+    const storyFiles = await readdir(path.join(testDirectory!, "stories", "test_story"))
+
+    expect(storyFiles).toContain("contact.json5")
+    expect(storyFiles).toContain("contact_conversations.json5")
+    expect(storyFiles).not.toContain("phone.json5")
+    expect(storyFiles).not.toContain("phone_conversations.json5")
+  })
+
+  it("rejects legacy phone contact files instead of loading empty defaults", async () => {
+    const store = await createTestStore()
+    const storyDir = path.join(testDirectory!, "stories", "test_story")
+    await writeFile(path.join(storyDir, "phone.json5"), "{}\n", "utf8")
+
+    await expect(store.readStoryDocument("test_story")).rejects.toMatchObject({
+      code: "contact.legacy-phone-files",
+      statusCode: 400
+    })
+  })
+
   it("serializes mutations and rejects a stale revision", async () => {
     const store = await createTestStore()
     const original = await store.readStoryDocument("test_story")

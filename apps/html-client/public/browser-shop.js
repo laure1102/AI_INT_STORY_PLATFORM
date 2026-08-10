@@ -1,5 +1,5 @@
 /**
- * 按搜索词过滤当前赠礼好友下拉，并让已编辑的目标等待重新选择。
+ * 按搜索词过滤当前赠礼联系人下拉，并让已编辑的目标等待重新选择。
  * @param {HTMLInputElement} input 赠礼目标搜索框。 @returns 无返回值。
  */
 export function filterShopGiftTargetOptions(input) {

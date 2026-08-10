@@ -218,7 +218,7 @@ async function validateScriptSource(
     story: storyForEditor.value,
     doingIds: draftDoingIds.value,
     bagMode: "read",
-    phoneMode: "read",
+    contactMode: "read",
     doingMode: "read"
   })
 

@@ -6,7 +6,7 @@
 import type { StoryDocument } from "@story-mgr/core"
 import type { RunStoryCreationAgentResponse } from "@story-mgr/shared"
 import StoryCreationAssetDraftPreview from "./StoryCreationAssetDraftPreview.vue"
-import StoryCreationPhoneDraftPreview from "./StoryCreationPhoneDraftPreview.vue"
+import StoryCreationContactDraftPreview from "./StoryCreationContactDraftPreview.vue"
 import type { StoryCreationWorkspaceController } from "./useStoryCreationWorkspace"
 
 const { controller } = defineProps<{
@@ -22,19 +22,19 @@ const {
   commandText, feedbackText, newCreationExpanded, creationHistoryExpanded,
   feedbackSeq, activeFeedbackId, activeBibleField, selectedEventKeys,
   selectedLocationIds, selectedRoleKeys, selectedItemIds, selectedVariableKeys,
-  selectedPhonePersonalityIds, selectedPhoneTalkIds, selectedPhoneActionIds, selectedPhoneReplyIds,
-  selectedPhoneContactProfileKeys, selectedPhoneConversationIds, selectedDoingMenuIds, selectedDoingIds,
+  selectedContactPersonalityIds, selectedContactTalkIds, selectedContactActionIds, selectedContactReplyIds,
+  selectedContactProfileKeys, selectedContactConversationIds, selectedDoingMenuIds, selectedDoingIds,
   selectedShopCategoryIds, selectedShopProductIds, feedbackHistory, editableDraft,
   draftApplied, draft, bibleFields, pipelineSteps,
   activeBibleFieldConfig, agentModelSummary, filledBibleFieldCount, canRunAgent,
   canRefineDraft, isFeedbackRunning, isNewCreationRunning, abortAgentLabel,
   activeFeedbackItem, historySessions, historySessionCount, showNewCreationForm,
   runStatus, agentLogs, loggedRoles, activeAgentRole,
-  draftPreview, eventTypeSummary, phoneDraftCount, phoneConversationDraftCount,
+  draftPreview, eventTypeSummary, contactDraftCount, contactConversationDraftCount,
   doingDraftCount, shopDraftCount, selectedApplyCount, canApplyDraft,
   applyButtonLabel, existingLocationIds, existingRoleKeys, existingItemIds,
-  existingItemCategoryIds, existingVariableKeys, existingPhonePersonalityIds, existingPhoneTalkIds,
-  existingPhoneActionIds, existingPhoneReplyIds, existingPhoneContactProfileKeys, existingPhoneConversationIds,
+  existingItemCategoryIds, existingVariableKeys, existingContactPersonalityIds, existingContactTalkIds,
+  existingContactActionIds, existingContactReplyIds, existingContactProfileKeys, existingContactConversationIds,
   existingDoingMenuIds, existingDoingIds, existingShopCategoryIds, existingShopProductIds,
   existingChainIds, existingEventKeys, selectedDraftChainIds, availableLocationIdsForApply,
   availableRoleKeysForApply, availableChainIdsForApply, availableDoingMenuIdsForApply, availableItemIdsForApply,
@@ -46,23 +46,23 @@ const {
   getEventKey, getRoleKey, getVariableKey, cloneCreationDraft,
   syncEditableDraft, resetEditableDraft, syncApplySelection, toggleStringSelection,
   setEventSelected, setLocationSelected, setRoleSelected, setItemSelected,
-  setVariableSelected, setPhonePersonalitySelected, setPhoneTalkSelected, setPhoneActionSelected,
-  setPhoneReplySelected, setPhoneContactProfileSelected, setPhoneConversationSelected, setDoingMenuSelected,
+  setVariableSelected, setContactPersonalitySelected, setContactTalkSelected, setContactActionSelected,
+  setContactReplySelected, setContactProfileSelected, setContactConversationSelected, setDoingMenuSelected,
   setDoingSelected, setShopCategorySelected, setShopProductSelected, getCheckboxChecked,
   handleLocationSelectionChange, handleRoleSelectionChange, handleItemSelectionChange, handleVariableSelectionChange,
-  handleEventSelectionChange, handlePhonePersonalitySelectionChange, handlePhoneTalkSelectionChange, handlePhoneActionSelectionChange,
-  handlePhoneReplySelectionChange, handlePhoneContactProfileSelectionChange, handlePhoneConversationSelectionChange, handleDoingMenuSelectionChange,
+  handleEventSelectionChange, handleContactPersonalitySelectionChange, handleContactTalkSelectionChange, handleContactActionSelectionChange,
+  handleContactReplySelectionChange, handleContactProfileSelectionChange, handleContactConversationSelectionChange, handleDoingMenuSelectionChange,
   handleDoingSelectionChange, handleShopCategorySelectionChange, handleShopProductSelectionChange, applyDraft,
   variableValueLabel, setVariableValueFromInput, createImpact, getLocationImpact,
   getRoleImpact, getItemImpact, getVariableImpact, getEventImpact,
-  getPhonePersonalityImpact, getPhoneTalkImpact, getPhoneActionImpact, getPhoneReplyImpact,
-  getPhoneContactProfileImpact, getPhoneConversationImpact, getDoingMenuImpact, getDoingImpact,
+  getContactPersonalityImpact, getContactTalkImpact, getContactActionImpact, getContactReplyImpact,
+  getContactProfileImpact, getContactConversationImpact, getDoingMenuImpact, getDoingImpact,
   getShopCategoryImpact, getShopProductImpact, getDraftPresentationDialogues, getPresentationLabel,
   getImpactClass, getItemCategoryName, getDraftOrExistingItemName, getDraftOrExistingShopCategoryName,
-  getItemTagsText, splitListInput, setItemTagsText, getPhoneScopeText,
-  getStringListText, setStringListText, setPhonePersonalityTags, setPhoneTalkTags,
-  setPhoneActionTags, setPhoneReplyTags, setPhoneContactPreferredTags, getPhoneCostItemsText,
-  getPhoneRepliesText, setPhoneRepliesText, getContactProfileSummary, getDoingPresentationSummary,
+  getItemTagsText, splitListInput, setItemTagsText, getContactScopeText,
+  getStringListText, setStringListText, setContactPersonalityTags, setContactTalkTags,
+  setContactActionTags, setContactReplyTags, setContactPreferredTags, getContactCostItemsText,
+  getContactRepliesText, setContactRepliesText, getContactProfileSummary, getDoingPresentationSummary,
   setItemMaxStackFromInput, ensureScheduleLoop, getScheduleAt, setScheduleAt,
   getSchedulePriority, setSchedulePriority, getScheduleAfterText, setScheduleAfterText,
   getEventApplyWarnings, collectionTypeLabel, triggerModeLabel
@@ -138,7 +138,7 @@ const {
               <span>链式 {{ eventTypeSummary.chain }}</span>
               <span>事件池 {{ eventTypeSummary.pool }}</span>
               <span>定时 {{ eventTypeSummary.schedule }}</span>
-              <span v-if="phoneDraftCount">手机 {{ phoneDraftCount }}</span>
+              <span v-if="contactDraftCount">联系人 {{ contactDraftCount }}</span>
               <span v-if="doingDraftCount">行动 {{ doingDraftCount }}</span>
               <span v-if="shopDraftCount">商城 {{ shopDraftCount }}</span>
             </div>
@@ -207,7 +207,7 @@ const {
 
             <StoryCreationAssetDraftPreview :controller="controller" :story="story" />
 
-            <StoryCreationPhoneDraftPreview :controller="controller" />
+            <StoryCreationContactDraftPreview :controller="controller" />
 
             <section class="creation-result__section">
               <h4 class="creation-result__section-title">行动资产</h4>
