@@ -1,7 +1,7 @@
 # Story Manager Agent Guide
 
 
-Last updated: `2026-08-04`
+Last updated: `2026-08-17`
 
 This file is the current high-signal project map for future agents and developers.
 If this guide conflicts with code, trust the code in these files first:
@@ -453,6 +453,14 @@ Event presentation:
 - `presentation: { type: "silent" }` runs scripts and advances without client-facing text
 - `presentation: { type: "message", message: { content: "...", duration_seconds: 3 } }` shows a transient client message
 - `presentation: { type: "dialogue", dialogues: [...] }` uses the current click-through dialogue flow
+- A dialogue may explicitly declare `role_name_input: { role_key: "important:<roleId>", prompt?: "..." }` to request a saved custom surname and given name for that important role. This is opt-in only: use it only when the dialogue clearly asks the player to name the role, never on player/normal-role dialogue. The same dialogue must use `${role.important.<roleId>.name}` when displaying that role's name; the role must be its object speaker and be listed in `object_keys`.
+
+### Authoring Agent role-name rules
+
+- The creation Agent may emit `role_name_input` only for an explicit important-role naming moment.
+- `role_name_input.role_key` must reference the same important object speaker and an entry in the event `object_keys`; invalid targets are removed during draft normalization/application.
+- The generated dialogue should use `${role.important.<roleId>.name}`. It falls back to the configured role name until the player submits a surname and given name.
+- Do not infer this feature from ordinary text such as “我叫……” and do not add it to player or normal-role dialogue.
 
 ### Pool events: `events/pool_events.json5`
 

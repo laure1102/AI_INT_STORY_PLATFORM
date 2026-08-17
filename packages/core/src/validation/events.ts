@@ -296,6 +296,46 @@ function validatePlayableEvent(
 
   const dialogues = getPresentationDialogues(event.presentation)
   for (const [dialogueIndex, dialogue] of dialogues.entries()) {
+    const roleNameInput = dialogue.role_name_input
+    if (roleNameInput) {
+      const roleNamePath = buildEventValidationPath(
+        eventGroupKey,
+        eventIndex,
+        "presentation",
+        "dialogues",
+        String(dialogueIndex),
+        "role_name_input"
+      )
+      const roleReference = findStoryRoleReference(document.roles, roleNameInput.role_key)
+      if (!roleReference || roleReference.scope !== "important") {
+        pushIssue(
+          issues,
+          "error",
+          `${codePrefix}.invalid-role-name-input-role`,
+          `${label} "${event.id}" role_name_input must reference an existing important role.`,
+          [...roleNamePath, "role_key"]
+        )
+      } else if (dialogue.speaker_type !== "object" || dialogue.speaker_key !== roleReference.key) {
+        pushIssue(
+          issues,
+          "error",
+          `${codePrefix}.role-name-input-speaker-mismatch`,
+          `${label} "${event.id}" role_name_input must be attached to the same important role dialogue speaker.`,
+          roleNamePath
+        )
+      }
+
+      if (!event.object_keys.includes(roleReference?.key ?? roleNameInput.role_key)) {
+        pushIssue(
+          issues,
+          "error",
+          `${codePrefix}.role-name-input-missing-object`,
+          `${label} "${event.id}" role_name_input role must be listed in event object_keys.`,
+          [...roleNamePath, "role_key"]
+        )
+      }
+    }
+
     if (dialogue.speaker_type === "player") {
       if (dialogue.speaker_key !== "player") {
         pushIssue(

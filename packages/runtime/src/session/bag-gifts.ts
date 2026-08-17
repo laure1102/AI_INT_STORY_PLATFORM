@@ -4,7 +4,7 @@
 import type { RuntimeBagEntry, RuntimeStorySessionSnapshot, RuntimeStoryShopProduct } from "./contracts-core"
 import type { RuntimeStoryBundle } from "./contracts-view"
 import { ensureShopGiftRecord, getBundleShopConfig, getShopGiftCooldownLeftHours } from "./doing-shop"
-import { sendContactMessageToContact } from "./contact-actions"
+import { appendContactFavorChangeMessage, sendContactMessageToContact } from "./contact-actions"
 import { buildRuntimeContactMeta, getBundleItemNameMap } from "./contact-config"
 import { isContactConversationNormalChatLocked } from "./contact-conversations"
 import { assertRuntimeContactRoleKey, findRoleLabel, getContact } from "./contact-threads"
@@ -67,7 +67,7 @@ export function resolveBagGiftEntryState(bundle: RuntimeStoryBundle, entry: Runt
  * 从玩家背包赠送物品给已有联系人。
  * @param bundle 编译故事。 @param snapshot 会话快照。 @param notifications UI 通知数组。
  * @param itemId 物品 id。 @param roleKey 收礼联系人。 @param quantity 正整数数量。 @returns 成功时为 true。
- * @throws 配置、联系人、剧情锁定、库存、绑定或冷却任一条件不满足时抛错，失败前不修改状态。
+ * @throws 配置、联系人、剧情锁定、库存或绑定任一条件不满足时抛错，失败前不修改状态；赠礼冷却期间仍允许赠送但不增加好感。
  */
 export function giftBagItem(
   bundle: RuntimeStoryBundle,
@@ -92,7 +92,7 @@ export function giftBagItem(
     throw new Error("只能赠送给当前联系人列表中的角色。")
   }
 
-  const contactMeta = buildRuntimeContactMeta(bundle, normalizedRoleKey, contact.favor)
+  const contactMeta = buildRuntimeContactMeta(bundle, normalizedRoleKey, contact.favor, snapshot)
   if (!contactMeta.canContact) {
     throw new Error(contactMeta.lockMessage ?? "当前无法联系该联系人。")
   }
@@ -116,9 +116,7 @@ export function giftBagItem(
   }
 
   const cooldownLeftHours = getShopGiftCooldownLeftHours(snapshot, resolution.product.id, normalizedRoleKey)
-  if (cooldownLeftHours > 0) {
-    throw new Error(`送礼冷却中，还需 ${Math.ceil(cooldownLeftHours)} 小时。`)
-  }
+  const cooldownActive = cooldownLeftHours > 0
 
   const removed = createRuntimeBagScriptFunctions(bundle, snapshot).bag_remove(
     "player",
@@ -131,7 +129,7 @@ export function giftBagItem(
 
   const previousFavor = contact.favor
   contact.favor = clampContactFavor(
-    previousFavor + resolution.product.gift_favor_delta * quantity,
+    previousFavor + (cooldownActive ? 0 : resolution.product.gift_favor_delta * quantity),
     previousFavor
   )
   const appliedFavorDelta = contact.favor - previousFavor
@@ -139,18 +137,22 @@ export function giftBagItem(
   const record = ensureShopGiftRecord(snapshot, resolution.product.id, normalizedRoleKey)
   record.gifted_count += 1
   record.last_gifted_game_minute = currentGameMinute
-  record.cooldown_until_game_minute = resolution.product.gift_cooldown_hours > 0
-    ? currentGameMinute + resolution.product.gift_cooldown_hours * 60
-    : null
+  if (!cooldownActive) {
+    record.cooldown_until_game_minute = resolution.product.gift_cooldown_hours > 0
+      ? currentGameMinute + resolution.product.gift_cooldown_hours * 60
+      : null
+  }
 
   const itemName = getBundleItemNameMap(bundle).get(normalizedItemId) ?? normalizedItemId
-  const roleLabel = findRoleLabel(bundle, normalizedRoleKey)
+  const roleLabel = findRoleLabel(bundle, normalizedRoleKey, snapshot)
   sendContactMessageToContact(bundle, snapshot, normalizedRoleKey, `我送给你${itemName} x${quantity}。`)
+  appendContactFavorChangeMessage(bundle, snapshot, normalizedRoleKey, appliedFavorDelta)
   notifications.push(`已送给 ${roleLabel}：${itemName} x${quantity}，好感 ${appliedFavorDelta >= 0 ? "+" : ""}${appliedFavorDelta}`)
   appendHistory(snapshot, {
     category: "operation",
     type: "system",
     id: `bag-gift:${resolution.product.id}:${normalizedRoleKey}:${record.gifted_count}`,
+    role_key: normalizedRoleKey,
     title: "bag:gift",
     content: `从背包送给 ${roleLabel} ${itemName} x${quantity}，好感变化 ${appliedFavorDelta}，当前好感 ${contact.favor}。`
   })

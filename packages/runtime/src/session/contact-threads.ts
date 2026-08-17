@@ -200,7 +200,7 @@ export function getBundleLocations(bundle: RuntimeStoryBundle) {
 }
 
 /** @param bundle 编译故事。 @param roleKey 如 `normal:alice` 的角色键。 @returns 角色显示名；未知键原样返回，player 返回“主角”。 */
-export function findRoleLabel(bundle: RuntimeStoryBundle, roleKey: string) {
+export function findRoleLabel(bundle: RuntimeStoryBundle, roleKey: string, snapshot?: RuntimeStorySessionSnapshot) {
   if (roleKey === "player") {
     return "主角"
   }
@@ -217,6 +217,11 @@ export function findRoleLabel(bundle: RuntimeStoryBundle, roleKey: string) {
 
   if (!role) {
     return roleKey
+  }
+
+  const override = snapshot?.role_name_overrides?.[`${scope}:${roleId}`]
+  if (override?.surname && override.given_name) {
+    return `${override.surname}${override.given_name}`
   }
 
   return normalizeText(role.name).trim() || role.descr.trim() || role.id
@@ -302,7 +307,8 @@ export function ensureContact(
   const contactMeta = buildRuntimeContactMeta(
     bundle,
     roleKey,
-    getBundleContactProfile(bundle, roleKey)?.initial_favor ?? 20
+    getBundleContactProfile(bundle, roleKey)?.initial_favor ?? 20,
+    snapshot
   )
   const nextContact: RuntimeContactEntryState = {
     role_key: roleKey,
@@ -338,6 +344,8 @@ export function appendContactMessage(
     contactConversationId?: string
     contactConversationNodeId?: string
     contactConversationReminder?: boolean
+    favorDelta?: number
+    favorCooldownAnchor?: boolean
     tags?: string[]
   } = {}
 ) {
@@ -363,6 +371,12 @@ export function appendContactMessage(
     ...(options.contactConversationId ? { contact_conversation_id: normalizeText(options.contactConversationId) } : {}),
     ...(options.contactConversationNodeId ? { contact_conversation_node_id: normalizeText(options.contactConversationNodeId) } : {}),
     ...(options.contactConversationReminder ? { contact_conversation_reminder: true } : {}),
+    ...(options.favorDelta !== undefined && Number.isFinite(options.favorDelta)
+      ? { favor_delta: options.favorDelta }
+      : {}),
+    ...(options.favorCooldownAnchor !== undefined
+      ? { favor_cooldown_anchor: options.favorCooldownAnchor }
+      : {}),
     ...(options.tags && options.tags.length > 0
       ? { tags: Array.from(new Set(options.tags.map((tag) => normalizeText(tag)).filter(Boolean))) }
       : {})
@@ -431,7 +445,8 @@ export function resolveContactTalkOptionsForContact(
   const meta = buildRuntimeContactMeta(
     bundle,
     normalizedRoleKey,
-    contact?.favor ?? getBundleContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
+    contact?.favor ?? getBundleContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20,
+    snapshot
   )
   if (!meta.canContact) {
     return []
@@ -584,7 +599,8 @@ export function resolveContactActionDisabledReason(
   const meta = buildRuntimeContactMeta(
     bundle,
     roleKey,
-    contact?.favor ?? getBundleContactProfile(bundle, roleKey)?.initial_favor ?? 20
+    contact?.favor ?? getBundleContactProfile(bundle, roleKey)?.initial_favor ?? 20,
+    snapshot
   )
   if (!meta.canContact) {
     return meta.lockMessage ?? "当前无法主动联系。"
@@ -645,7 +661,8 @@ export function resolveContactActionOptionsForContact(
   const meta = buildRuntimeContactMeta(
     bundle,
     normalizedRoleKey,
-    contact?.favor ?? getBundleContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
+    contact?.favor ?? getBundleContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20,
+    snapshot
   )
   const itemNameMap = getBundleItemNameMap(bundle)
 

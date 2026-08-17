@@ -328,6 +328,15 @@ function render() {
         selectionEnd: document.activeElement.selectionEnd
       }
     : null
+  // 游戏时钟每秒刷新一次视图。姓名表单位于当前对白交互中，不能因为 innerHTML 重绘而丢失焦点和已输入内容。
+  const activeRoleNameInput = document.activeElement?.closest?.("#role-name-interaction-form")
+    ? {
+        name: document.activeElement.name,
+        value: document.activeElement.value,
+        selectionStart: document.activeElement.selectionStart,
+        selectionEnd: document.activeElement.selectionEnd
+      }
+    : null
 
   rememberMenuPanelScroll()
   rememberContactThreadScroll()
@@ -365,6 +374,18 @@ function render() {
       activeShopGiftSearch.selectionStart ?? input.value.length,
       activeShopGiftSearch.selectionEnd ?? input.value.length
     )
+  }
+
+  if (activeRoleNameInput?.name) {
+    const input = dom.app.querySelector(`#role-name-interaction-form [name="${activeRoleNameInput.name}"]`)
+    if (input) {
+      input.value = activeRoleNameInput.value
+      input.focus()
+      input.setSelectionRange(
+        activeRoleNameInput.selectionStart ?? input.value.length,
+        activeRoleNameInput.selectionEnd ?? input.value.length
+      )
+    }
   }
 }
 
@@ -479,6 +500,10 @@ async function tick() {
   try {
     const result = await api("/api/session/tick", { body: { deltaMs: 1000 } })
     ui.data = result
+    // 姓名填写期间不要因时钟 tick 重建整块 DOM；否则浏览器会反复打断输入法和输入框焦点。
+    if (document.activeElement?.closest?.("#role-name-interaction-form")) {
+      return
+    }
     await refreshSelectedContactThread()
     render()
   } catch (error) {
@@ -729,6 +754,23 @@ function bindEvents() {
       const interaction = ui.data?.view?.interaction
       if (interaction?.kind === "text-input") {
         await dispatchRuntimeAction({ type: "submit-text", field: interaction.field, value })
+      }
+    })
+  }
+
+  const roleNameForm = dom.app.querySelector("#role-name-interaction-form")
+  if (roleNameForm) {
+    roleNameForm.addEventListener("submit", async (event) => {
+      event.preventDefault()
+      const formData = new FormData(roleNameForm)
+      const interaction = ui.data?.view?.interaction
+      if (interaction?.kind === "role-name-input") {
+        await dispatchRuntimeAction({
+          type: "submit-role-name",
+          roleKey: interaction.roleKey,
+          surname: String(formData.get("surname") ?? ""),
+          givenName: String(formData.get("givenName") ?? "")
+        })
       }
     })
   }

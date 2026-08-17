@@ -166,7 +166,7 @@ function renderBagOwner(bag) {
         ${bag.entries.length === 0 ? `<div class="empty">背包为空。</div>` : bag.entries.map((item) => {
           const giftOpen = canGift && item.giftable && ui.bagGiftOpenItemId === item.itemId
           const giftMeta = item.giftable
-            ? `单件好感 ${formatFavorDelta(item.giftFavorDelta)}${item.giftCooldownHours > 0 ? ` · 冷却 ${item.giftCooldownHours} 小时` : ""}`
+            ? `可赠礼${item.giftCooldownHours > 0 ? ` · 冷却 ${item.giftCooldownHours} 小时` : ""}`
             : item.giftDisabledReason ?? "该物品不可赠送。"
 
           return `
@@ -214,7 +214,7 @@ function renderContactGiftSelection(roleKey, item) {
     <div class="contact-gift-selection" data-contact-gift-selection>
       <div>
         <div class="item-title">${h(item.itemName ?? item.itemId)} · x${h(item.quantity)}</div>
-        <div class="item-meta">单件好感 ${h(formatFavorDelta(item.giftFavorDelta))}${item.giftCooldownHours > 0 ? ` · 冷却 ${h(item.giftCooldownHours)} 小时` : ""}</div>
+        <div class="item-meta">${item.giftEffectiveFavorDeltas?.[roleKey] ? `单件好感 ${h(formatFavorDelta(item.giftEffectiveFavorDeltas[roleKey]))} · ` : ""}${item.giftCooldownHours > 0 ? `冷却 ${h(item.giftCooldownHours)} 小时` : ""}</div>
       </div>
       <label class="gift-quantity">
         <span>数量</span>
@@ -271,7 +271,7 @@ export function renderContactGiftPanel(contact) {
         data-gift-search-text="${h(searchText)}"
       >
         <span class="item-title">${h(item.itemName ?? item.itemId)} · x${h(item.quantity)}</span>
-        <span class="item-meta">${h(disabledReason ?? `单件好感 ${formatFavorDelta(item.giftFavorDelta)}${item.giftCooldownHours > 0 ? ` · 冷却 ${item.giftCooldownHours} 小时` : ""}`)}</span>
+        <span class="item-meta">${h(disabledReason ?? (item.giftCooldownHours > 0 ? `冷却 ${item.giftCooldownHours} 小时` : "可赠礼；请选择联系人查看实际好感变化"))}</span>
       </button>
     `
   }).join("")

@@ -111,7 +111,7 @@ export function reconcileContactAutoMessages(
 /**
  * 计算一次聊天或动作实际增加的好感度。
  * @param bundle 编译故事。 @param snapshot 快照。 @param roleKey 联系人键。 @param option 基础变化和冷却设置。
- * @returns 根据重复使用冷却衰减后的整数变化量；不会直接修改好感度。
+ * @returns 按该具体话题最近一次发送时间计算冷却后的实际变化量；不会直接修改好感度。
  */
 export function calculateContactFavorDelta(
   bundle: RuntimeStoryBundle,
@@ -124,24 +124,23 @@ export function calculateContactFavorDelta(
   }
 ) {
   const thread = getContactThread(snapshot, roleKey)
-  const previousPlayerMessage = thread?.messages
+  const previousSameOptionMessage = thread?.messages
     .slice()
     .reverse()
-    .find((message) => message.sender === "player") ?? null
+    .find((message) => (
+      message.sender === "player"
+      && (message.option_id === option.id || message.quick_message_id === option.id)
+      // 新消息明确标记冷却锚点；未标记的旧存档消息按历史操作兼容处理。
+      && message.favor_cooldown_anchor !== false
+    )) ?? null
   let favorDelta = Math.max(0, option.baseFavorDelta)
 
-  if (previousPlayerMessage?.option_id === option.id || previousPlayerMessage?.quick_message_id === option.id) {
-    favorDelta = Math.max(0, favorDelta - 1)
-  }
-
-  if (option.cooldownHours > 0 && previousPlayerMessage) {
+  if (option.cooldownHours > 0 && previousSameOptionMessage) {
     const cooldownMinutes = option.cooldownHours * 60
-    const minuteGap = Math.max(0, getCurrentGameMinute(snapshot) - previousPlayerMessage.game_minute)
-    if (
-      (previousPlayerMessage.option_id === option.id || previousPlayerMessage.quick_message_id === option.id)
-      && minuteGap < cooldownMinutes
-    ) {
-      favorDelta = Math.max(0, favorDelta - 1)
+    const minuteGap = Math.max(0, getCurrentGameMinute(snapshot) - previousSameOptionMessage.game_minute)
+    if (minuteGap < cooldownMinutes) {
+      // 冷却按具体话题计算，期间即使发送了其它话题也不能再次获得该话题好感。
+      favorDelta = 0
     }
   }
 
@@ -151,6 +150,73 @@ export function calculateContactFavorDelta(
   }
 
   return favorDelta
+}
+
+/**
+ * 计算当前选项真正会写入联系人的好感变化。
+ * 配置值还要经过话题冷却、关系阶段规则和 0~100 上限钳制，界面只能展示最终结果。
+ */
+export function calculateAppliedContactFavorDelta(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  option: {
+    id: string
+    baseFavorDelta: number
+    cooldownHours: number
+  }
+) {
+  const contact = ensureContact(bundle, snapshot, roleKey)
+  const candidate = calculateContactFavorDelta(bundle, snapshot, roleKey, option)
+  return clampContactFavor(contact.favor + candidate, contact.favor) - contact.favor
+}
+
+/** @returns 将实际好感变化写入联系人聊天线程的系统提示；变化为 0 时不追加。 */
+export function appendContactFavorChangeMessage(
+  bundle: RuntimeStoryBundle,
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  appliedFavorDelta: number
+) {
+  if (appliedFavorDelta === 0) {
+    return null
+  }
+
+  const normalizedRoleKey = assertRuntimeContactRoleKey(bundle, roleKey)
+  const sign = appliedFavorDelta > 0 ? "+" : ""
+  return appendContactMessage(
+    snapshot,
+    normalizedRoleKey,
+    "system",
+    `与${findRoleLabel(bundle, normalizedRoleKey, snapshot)}的好友度 ${sign}${appliedFavorDelta}。`,
+    { read: true }
+  )
+}
+
+/** @returns 当前互动是否处于该话题的好感冷却中。冷却内重复消息不会成为新的锚点。 */
+function isContactFavorCooldownActive(
+  snapshot: RuntimeStorySessionSnapshot,
+  roleKey: string,
+  option: { id: string; cooldownHours: number }
+) {
+  if (option.cooldownHours <= 0) {
+    return false
+  }
+
+  const thread = getContactThread(snapshot, roleKey)
+  const anchor = thread?.messages
+    .slice()
+    .reverse()
+    .find((message) => (
+      message.sender === "player"
+      && (message.option_id === option.id || message.quick_message_id === option.id)
+      && message.favor_cooldown_anchor !== false
+    )) ?? null
+  if (!anchor) {
+    return false
+  }
+
+  return Math.max(0, getCurrentGameMinute(snapshot) - anchor.game_minute) < option.cooldownHours * 60
 }
 
 /**
@@ -181,7 +247,8 @@ export function autoRegisterContactsFromEvent(
     const contactMeta = buildRuntimeContactMeta(
       bundle,
       roleKey,
-      getBundleContactProfile(bundle, roleKey)?.initial_favor ?? 20
+      getBundleContactProfile(bundle, roleKey)?.initial_favor ?? 20,
+      snapshot
     )
     if (!contactMeta.enabled || !contactMeta.autoAdd) {
       continue
@@ -194,7 +261,7 @@ export function autoRegisterContactsFromEvent(
     const existed = Boolean(getContact(snapshot, roleKey))
     ensureContact(bundle, snapshot, roleKey)
     if (!existed) {
-      notifications.push(`已新增联系人：${findRoleLabel(bundle, roleKey)}`)
+      notifications.push(`已新增联系人：${findRoleLabel(bundle, roleKey, snapshot)}`)
     }
   }
 }
@@ -232,13 +299,14 @@ export function sendContactMessageFromContact(
     return null
   }
 
-  notifications.push(`联系人 ${findRoleLabel(bundle, normalizedRoleKey)} 发来新消息。`)
+  notifications.push(`联系人 ${findRoleLabel(bundle, normalizedRoleKey, snapshot)} 发来新消息。`)
   appendHistory(snapshot, {
     category: "system",
     type: "system",
     id: message.id,
+    role_key: normalizedRoleKey,
     title: `contact:${normalizedRoleKey}`,
-    content: `${findRoleLabel(bundle, normalizedRoleKey)}: ${message.content}`
+    content: `${findRoleLabel(bundle, normalizedRoleKey, snapshot)}: ${message.content}`
   })
   return message
 }
@@ -264,8 +332,9 @@ export function sendContactMessageToContact(
     category: "operation",
     type: "system",
     id: message.id,
+    role_key: normalizedRoleKey,
     title: "contact:player",
-    content: `主角 -> ${findRoleLabel(bundle, normalizedRoleKey)}: ${message.content}`
+    content: `主角 -> ${findRoleLabel(bundle, normalizedRoleKey, snapshot)}: ${message.content}`
   })
   return message
 }
@@ -353,26 +422,34 @@ export function sendContactTalk(
 
   ensureContact(bundle, snapshot, normalizedRoleKey)
   const favorDelta = calculateContactFavorDelta(bundle, snapshot, normalizedRoleKey, talkOption)
+  const favorCooldownActive = isContactFavorCooldownActive(snapshot, normalizedRoleKey, talkOption)
   const outgoingMessage = appendContactMessage(snapshot, normalizedRoleKey, "player", talkOption.text, {
     read: true,
     optionId: talkOption.id,
     optionKind: "talk",
     quickMessageId: talkOption.source === "legacy-quick-message" ? talkOption.id : undefined,
-    tags: talkOption.tags
+    tags: talkOption.tags,
+    favorDelta,
+    favorCooldownAnchor: !favorCooldownActive
   })
   if (!outgoingMessage) {
     return false
   }
 
   const contact = ensureContact(bundle, snapshot, normalizedRoleKey)
-  contact.favor = clampContactFavor(contact.favor + favorDelta, contact.favor)
+  const previousFavor = contact.favor
+  contact.favor = clampContactFavor(previousFavor + favorDelta, previousFavor)
+  const appliedFavorDelta = contact.favor - previousFavor
+  outgoingMessage.favor_delta = appliedFavorDelta
+  appendContactFavorChangeMessage(bundle, snapshot, normalizedRoleKey, appliedFavorDelta)
 
   appendHistory(snapshot, {
     category: "operation",
     type: "system",
     id: outgoingMessage.id,
+    role_key: normalizedRoleKey,
     title: `contact:${normalizedRoleKey}`,
-    content: `主角向 ${findRoleLabel(bundle, normalizedRoleKey)} 发送消息：${outgoingMessage.content}；好感 ${favorDelta >= 0 ? "+" : ""}${favorDelta}（当前 ${contact.favor}）`
+    content: `主角向 ${findRoleLabel(bundle, normalizedRoleKey, snapshot)} 发送消息：${outgoingMessage.content}；好感 ${appliedFavorDelta >= 0 ? "+" : ""}${appliedFavorDelta}（当前 ${contact.favor}）`
   })
 
   if (talkOption.invoke) {
@@ -426,25 +503,33 @@ export function sendContactAction(
 
   applyContactActionCosts(bundle, snapshot, actionOption)
   const favorDelta = calculateContactFavorDelta(bundle, snapshot, normalizedRoleKey, actionOption)
+  const favorCooldownActive = isContactFavorCooldownActive(snapshot, normalizedRoleKey, actionOption)
   const outgoingMessage = appendContactMessage(snapshot, normalizedRoleKey, "player", actionOption.text, {
     read: true,
     optionId: actionOption.id,
     optionKind: "action",
-    tags: actionOption.tags
+    tags: actionOption.tags,
+    favorDelta,
+    favorCooldownAnchor: !favorCooldownActive
   })
   if (!outgoingMessage) {
     return false
   }
 
   const contact = ensureContact(bundle, snapshot, normalizedRoleKey)
-  contact.favor = clampContactFavor(contact.favor + favorDelta, contact.favor)
+  const previousFavor = contact.favor
+  contact.favor = clampContactFavor(previousFavor + favorDelta, previousFavor)
+  const appliedFavorDelta = contact.favor - previousFavor
+  outgoingMessage.favor_delta = appliedFavorDelta
+  appendContactFavorChangeMessage(bundle, snapshot, normalizedRoleKey, appliedFavorDelta)
 
   appendHistory(snapshot, {
     category: "operation",
     type: "system",
     id: outgoingMessage.id,
+    role_key: normalizedRoleKey,
     title: `contact:${normalizedRoleKey}`,
-    content: `主角对 ${findRoleLabel(bundle, normalizedRoleKey)} 执行动作：${actionOption.label}；好感 ${favorDelta >= 0 ? "+" : ""}${favorDelta}（当前 ${contact.favor}）`
+    content: `主角对 ${findRoleLabel(bundle, normalizedRoleKey, snapshot)} 执行动作：${actionOption.label}；好感 ${appliedFavorDelta >= 0 ? "+" : ""}${appliedFavorDelta}（当前 ${contact.favor}）`
   })
 
   if (actionOption.invoke) {

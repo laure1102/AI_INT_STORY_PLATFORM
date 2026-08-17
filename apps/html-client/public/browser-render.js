@@ -273,6 +273,19 @@ function renderInteraction(view) {
     `
   }
 
+  if (interaction.kind === "role-name-input") {
+    return `
+      <section class="interaction-card">
+        <form id="role-name-interaction-form" class="form-grid">
+          <p class="interaction-title">${h(interaction.prompt)}（${h(interaction.roleLabel)}）</p>
+          <div class="field"><label>姓</label><input name="surname" required value="${h(interaction.initialSurname ?? "")}" autofocus></div>
+          <div class="field"><label>名</label><input name="givenName" required value="${h(interaction.initialGivenName ?? "")}"></div>
+          <button class="primary" type="submit">确认姓名</button>
+        </form>
+      </section>
+    `
+  }
+
   if (interaction.kind === "confirm") {
     return `
       <section class="interaction-card">
@@ -418,7 +431,7 @@ function renderMenuPanelBody(panelId) {
               product.disabledReason
             ].filter(Boolean).join(" · ")
             const giftMeta = [
-              product.allowGift ? `送礼好感 ${product.giftFavorDelta >= 0 ? "+" : ""}${product.giftFavorDelta}` : "不可送礼",
+              product.allowGift ? "可送礼" : "不可送礼",
               product.giftCooldownHours > 0 ? `送礼冷却 ${product.giftCooldownHours}小时` : ""
             ].filter(Boolean).join(" · ")
             const canOpenGift = product.allowGift && !product.disabled && contacts.length > 0
@@ -457,7 +470,7 @@ function renderMenuPanelBody(panelId) {
                   data-shop-gift-search-text="${h(searchText)}"
                 >
                   <span class="item-title">${h(contact.label ?? contact.roleKey)}</span>
-                  <span class="item-meta">${h(contact.relationStageLabel ?? "联系人")} · 好感 ${h(contact.favor ?? 0)}/100</span>
+                  <span class="item-meta">${h(contact.relationStageLabel ?? "联系人")} · 好感 ${h(contact.favor ?? 0)}/100${product.giftEffectiveFavorDeltas?.[contact.roleKey] ? ` · 好感 ${product.giftEffectiveFavorDeltas[contact.roleKey] > 0 ? "+" : ""}${h(product.giftEffectiveFavorDeltas[contact.roleKey])}` : ""}</span>
                 </button>
               `
             }).join("")
@@ -777,9 +790,13 @@ function renderContactDrawer() {
                   ${thread?.canContact === false ? `<div class="empty">${h(thread.lockMessage ?? "对方现在不想理我。")}</div>` : ""}
                   ${options.length === 0 ? `<div class="empty">当前没有可用${ui.contactMode === "talk" ? "短句" : "动作"}。</div>` : options.map((option) => {
                     const disabled = ui.contactMode === "action" && option.disabled
+                    const effectiveFavorDelta = Number(option.effectiveFavorDelta) || 0
+                    const favorMeta = effectiveFavorDelta !== 0
+                      ? ` · 好感 ${effectiveFavorDelta > 0 ? "+" : ""}${effectiveFavorDelta}`
+                      : ""
                     const meta = ui.contactMode === "action"
-                      ? `${formatContactCost(option)}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.disabledReason ? ` · ${option.disabledReason}` : ""}`
-                      : `${option.tags?.slice(0, 2).join("/") || "闲聊"}${option.baseFavorDelta ? ` · 好感 +${option.baseFavorDelta}` : ""}${option.suggested ? " · 推荐" : ""}`
+                      ? `${formatContactCost(option)}${favorMeta}${option.disabledReason ? ` · ${option.disabledReason}` : ""}`
+                      : `${option.tags?.slice(0, 2).join("/") || "闲聊"}${favorMeta}${option.suggested ? " · 推荐" : ""}`
                     return `
                       <button class="option-button" ${disabled ? "disabled" : ""} data-contact-${ui.contactMode}="${h(option.id)}">
                         ${h(ui.contactMode === "action" ? option.label : option.text)}

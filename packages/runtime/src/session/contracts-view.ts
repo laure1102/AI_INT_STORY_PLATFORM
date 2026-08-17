@@ -104,6 +104,14 @@ export type RuntimeInteraction =
       placeholder?: string
     }
   | {
+      kind: "role-name-input"
+      roleKey: string
+      roleLabel: string
+      prompt: string
+      initialSurname: string
+      initialGivenName: string
+    }
+  | {
       kind: "confirm"
       prompt: string
       confirmLabel?: string
@@ -117,6 +125,10 @@ export interface RuntimeRenderedDialogue {
   speakerLabel: string
   speakerKey: string
   content: string
+  roleNameInput?: {
+    roleKey: string
+    prompt: string
+  }
 }
 
 export interface RuntimeRenderedMessage {
@@ -147,6 +159,7 @@ export interface RuntimeBagItemView {
   obtainedAtMinute: number
   giftable: boolean
   giftFavorDelta: number
+  giftEffectiveFavorDeltas: Record<string, number>
   giftCooldownHours: number
   giftDisabledReason: string | null
 }
@@ -163,6 +176,8 @@ export interface RuntimeContactQuickMessageView {
   text: string
   tags: string[]
   baseFavorDelta: number
+  /** 当前点击该选项预计实际生效的变化；冷却或上限导致不变化时为 0。 */
+  effectiveFavorDelta: number
   cooldownHours: number
   suggested: boolean
 }
@@ -211,6 +226,8 @@ export interface RuntimeContactActionView {
   text: string
   tags: string[]
   baseFavorDelta: number
+  /** 当前点击该动作预计实际生效的变化；冷却或上限导致不变化时为 0。 */
+  effectiveFavorDelta: number
   cooldownHours: number
   costMoney: number
   costItems: RuntimeContactActionCostItemView[]
@@ -236,6 +253,8 @@ export interface RuntimeContactThreadView {
   talks: RuntimeContactQuickMessageView[]
   actions: RuntimeContactActionView[]
   quickMessages: RuntimeContactQuickMessageView[]
+  /** 当前联系人对背包物品赠礼的单件实际好感变化，键为 item id。 */
+  giftEffectiveFavorDeltas: Record<string, number>
   channelId: string
   channelName: string
   channelPreset: RuntimeContactChannelPreset
@@ -285,6 +304,7 @@ export interface RuntimeShopProductView {
   sortOrder: number
   allowGift: boolean
   giftFavorDelta: number
+  giftEffectiveFavorDeltas: Record<string, number>
   purchaseCooldownHours: number
   purchaseCooldownLeftHours: number
   giftCooldownHours: number
@@ -334,6 +354,7 @@ export type RuntimeStorySessionAction =
   | { type: "continue" }
   | { type: "select-option"; optionId: string }
   | { type: "submit-text"; field: string; value: string }
+  | { type: "submit-role-name"; roleKey: string; surname: string; givenName: string }
   | { type: "invoke-once"; targetType: StoryInvokeTargetType; eventId: string; args?: Record<string, unknown> }
   | { type: "contact-select-conversation-reply"; optionId: string }
   | { type: "contact-send-talk"; roleKey: string; talkId: string }

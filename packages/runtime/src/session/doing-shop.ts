@@ -52,7 +52,7 @@ import type {
 import type { RuntimeStoryDoingDefinition, RuntimeStoryDoingFile, RuntimeStoryDoingMenu, RuntimeStorySessionSnapshot, RuntimeStoryShopCategory, RuntimeStoryShopFile, RuntimeStoryShopProduct } from "./contracts-core"
 import type { RuntimeStoryBundle } from "./contracts-view"
 import { DEFAULT_MAX_CALC_NESTING_DEPTH } from "./contracts-view"
-import { sendContactMessageToContact } from "./contact-actions"
+import { appendContactFavorChangeMessage, sendContactMessageToContact } from "./contact-actions"
 import { getBundleItemNameMap } from "./contact-config"
 import { assertRuntimeContactRoleKey, ensureContact, findRoleLabel } from "./contact-threads"
 import { getCurrentGameMinute } from "./schedule-clock"
@@ -328,14 +328,20 @@ function chargeShopProduct(
 }
 
 /** @param snapshot 会话快照。 @param product 商品定义。 @returns 更新后的购买记录；自购和直接赠礼都会计入。 */
-function recordShopPurchase(snapshot: RuntimeStorySessionSnapshot, product: RuntimeStoryShopProduct) {
+function recordShopPurchase(
+  snapshot: RuntimeStorySessionSnapshot,
+  product: RuntimeStoryShopProduct,
+  options: { preserveCooldown?: boolean } = {}
+) {
   const record = ensureShopPurchaseRecord(snapshot, product.id)
   const currentGameMinute = getCurrentGameMinute(snapshot)
   record.purchased_count += 1
   record.last_purchased_game_minute = currentGameMinute
-  record.cooldown_until_game_minute = product.purchase_cooldown_hours > 0
-    ? currentGameMinute + product.purchase_cooldown_hours * 60
-    : null
+  if (!options.preserveCooldown) {
+    record.cooldown_until_game_minute = product.purchase_cooldown_hours > 0
+      ? currentGameMinute + product.purchase_cooldown_hours * 60
+      : null
+  }
   return record
 }
 
@@ -408,9 +414,11 @@ export function resolveShopProductDisabledReason(
   product: RuntimeStoryShopProduct,
   options: {
     checkMoney?: boolean
+    checkPurchaseCooldown?: boolean
   } = {}
 ) {
   const checkMoney = options.checkMoney ?? true
+  const checkPurchaseCooldown = options.checkPurchaseCooldown ?? true
   const itemId = normalizeItemId(product.item_id)
 
   if (!product.enabled) {
@@ -430,9 +438,11 @@ export function resolveShopProductDisabledReason(
     return availableResult.error || product.unavailable_reason || "当前展示条件不满足。"
   }
 
-  const cooldownLeftHours = getShopPurchaseCooldownLeftHours(snapshot, product.id)
-  if (cooldownLeftHours > 0) {
-    return `购买冷却中，还需 ${Math.ceil(cooldownLeftHours)} 小时。`
+  if (checkPurchaseCooldown) {
+    const cooldownLeftHours = getShopPurchaseCooldownLeftHours(snapshot, product.id)
+    if (cooldownLeftHours > 0) {
+      return `购买冷却中，还需 ${Math.ceil(cooldownLeftHours)} 小时。`
+    }
   }
 
   if (checkMoney && product.price > 0) {
@@ -509,7 +519,7 @@ export function buyShopProduct(
  * 从商城购买商品并直接送给联系人。
  * @param bundle 编译故事。 @param snapshot 会话快照。 @param notifications UI 通知数组。
  * @param productId 商品 id。 @param roleKey 收礼角色键。 @returns 更新后的赠礼结果。
- * @throws 商品不可购买、不可赠、余额不足或仍在冷却时抛错；成功时不经过玩家背包。
+ * @throws 商品不可购买、不可赠或余额不足时抛错；赠礼冷却期间仍允许赠送但不增加好感。
  */
 export function giftShopProduct(
   bundle: RuntimeStoryBundle,
@@ -529,40 +539,49 @@ export function giftShopProduct(
     throw new Error("该商品不能送人。")
   }
 
-  const disabledReason = resolveShopProductDisabledReason(bundle, snapshot, product)
+  // 赠礼本身就是一次购买，不能被购买冷却拦截；赠礼冷却只影响好感是否生效。
+  const disabledReason = resolveShopProductDisabledReason(bundle, snapshot, product, {
+    checkPurchaseCooldown: false
+  })
   if (disabledReason) {
     throw new Error(disabledReason)
   }
 
   const cooldownLeftHours = getShopGiftCooldownLeftHours(snapshot, product.id, normalizedRoleKey)
-  if (cooldownLeftHours > 0) {
-    throw new Error(`送礼冷却中，还需 ${Math.ceil(cooldownLeftHours)} 小时。`)
-  }
+  const cooldownActive = cooldownLeftHours > 0
 
   chargeShopProduct(bundle, snapshot, product)
-  recordShopPurchase(snapshot, product)
+  const purchaseCooldownActive = getShopPurchaseCooldownLeftHours(snapshot, product.id) > 0
+  recordShopPurchase(snapshot, product, { preserveCooldown: purchaseCooldownActive })
 
   const contact = ensureContact(bundle, snapshot, normalizedRoleKey)
   const previousFavor = contact.favor
-  contact.favor = clampContactFavor(previousFavor + product.gift_favor_delta, previousFavor)
+  contact.favor = clampContactFavor(
+    previousFavor + (cooldownActive ? 0 : product.gift_favor_delta),
+    previousFavor
+  )
   const appliedFavorDelta = contact.favor - previousFavor
 
   const record = ensureShopGiftRecord(snapshot, product.id, normalizedRoleKey)
   const currentGameMinute = getCurrentGameMinute(snapshot)
   record.gifted_count += 1
   record.last_gifted_game_minute = currentGameMinute
-  record.cooldown_until_game_minute = product.gift_cooldown_hours > 0
-    ? currentGameMinute + product.gift_cooldown_hours * 60
-    : null
+  if (!cooldownActive) {
+    record.cooldown_until_game_minute = product.gift_cooldown_hours > 0
+      ? currentGameMinute + product.gift_cooldown_hours * 60
+      : null
+  }
 
   const itemName = getBundleItemNameMap(bundle).get(product.item_id) ?? product.item_id
-  const roleLabel = findRoleLabel(bundle, normalizedRoleKey)
+  const roleLabel = findRoleLabel(bundle, normalizedRoleKey, snapshot)
   sendContactMessageToContact(bundle, snapshot, normalizedRoleKey, `我给你准备了${itemName}。`)
+  appendContactFavorChangeMessage(bundle, snapshot, normalizedRoleKey, appliedFavorDelta)
   notifications.push(`已购买并送给 ${roleLabel}：${itemName} x${product.quantity}，好感 ${appliedFavorDelta >= 0 ? "+" : ""}${appliedFavorDelta}`)
   appendHistory(snapshot, {
     category: "operation",
     type: "system",
     id: `shop-gift:${product.id}:${normalizedRoleKey}:${record.gifted_count}`,
+    role_key: normalizedRoleKey,
     title: "shop:gift",
     content: `购买 ${itemName} x${product.quantity} 并送给 ${roleLabel}，花费 ${product.price}，好感变化 ${appliedFavorDelta}，当前好感 ${contact.favor}。`
   })

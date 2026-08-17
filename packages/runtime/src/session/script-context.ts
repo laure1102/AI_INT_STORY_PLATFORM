@@ -229,6 +229,16 @@ export function buildRuntimeContextValues(
 ) {
   const combinedValues: Record<string, unknown> = buildRuntimeReferContextValues(bundle, snapshot)
 
+  const roles = bundle.roles as { important?: { roles?: Array<{ id: string; name?: string; descr?: string }> } } | null
+  for (const role of roles?.important?.roles ?? []) {
+    const roleKey = `important:${role.id}`
+    const override = snapshot.role_name_overrides?.[roleKey]
+    const fallback = normalizeText(role.name).trim() || normalizeText(role.descr).trim() || role.id
+    combinedValues[`role.important.${role.id}.name`] = override
+      ? `${override.surname}${override.given_name}`
+      : fallback
+  }
+
   for (const [key, value] of Object.entries(branchValues)) {
     combinedValues[`branch.${key}`] = cloneValue(value)
   }
@@ -464,7 +474,7 @@ export function createRuntimeContactScriptFunctions(
       const existed = Boolean(getContact(snapshot, normalizedRoleKey))
       ensureContact(bundle, snapshot, normalizedRoleKey)
       if (!existed) {
-        notifications.push(`已新增联系人：${findRoleLabel(bundle, normalizedRoleKey)}`)
+        notifications.push(`已新增联系人：${findRoleLabel(bundle, normalizedRoleKey, snapshot)}`)
       }
       return true
     },

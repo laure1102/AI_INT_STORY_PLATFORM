@@ -78,7 +78,8 @@ export function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySess
     shop: createDefaultShopState(),
     triggered_once_events: [],
     loop_event_states: [],
-    history: []
+    history: [],
+    role_name_overrides: {}
   }
 
   syncSystemTimeFieldsFromClock(snapshot)

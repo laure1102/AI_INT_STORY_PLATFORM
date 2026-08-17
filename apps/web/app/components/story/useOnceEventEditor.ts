@@ -373,7 +373,10 @@ export function useOnceEventEditor(
       dialogues: draft.dialogues.map((dialogue) => ({
         speaker_type: dialogue.speaker_type,
         speaker_key: dialogue.speaker_key.trim(),
-        content: dialogue.content.trim()
+        content: dialogue.content.trim(),
+        ...(dialogue.role_name_input?.role_key
+          ? { role_name_input: { role_key: dialogue.role_name_input.role_key.trim(), ...(dialogue.role_name_input.prompt?.trim() ? { prompt: dialogue.role_name_input.prompt.trim() } : {}) } }
+          : {})
       }))
     }
   }

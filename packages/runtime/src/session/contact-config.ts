@@ -301,7 +301,8 @@ export function resolveContactRelationshipStage(
 export function buildRuntimeContactMeta(
   bundle: RuntimeStoryBundle,
   roleKey: string,
-  favor: number
+  favor: number,
+  snapshot?: RuntimeStorySessionSnapshot
 ): RuntimeResolvedContactMeta {
   const normalizedRoleKey = normalizeContactRoleKey(roleKey)
   const roleDefinition = findBundleRoleDefinition(bundle, normalizedRoleKey)
@@ -336,7 +337,7 @@ export function buildRuntimeContactMeta(
 
   return {
     roleKey: normalizedRoleKey,
-    label: findRoleLabel(bundle, normalizedRoleKey),
+    label: findRoleLabel(bundle, normalizedRoleKey, snapshot),
     enabled,
     autoAdd,
     favor: clampContactFavor(favor, initialFavor),

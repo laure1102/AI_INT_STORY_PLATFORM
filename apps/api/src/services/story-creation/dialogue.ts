@@ -130,6 +130,7 @@ export async function generateStoryEventDialogues(
     "要结合故事背景、当前篇章、事件触发方式、对象角色、地点和现有脚本语义来写。",
     "必须保留玩家代入感。涉及主角说话时，speaker_type 用 player，speaker_key 固定为 player。",
     "事件对象说话时，speaker_type 用 object，speaker_key 必须是 player 以外的现有 object key。",
+    "只有对白明确要求玩家设置重要角色姓名时，才填写 role_name_input；role_name_input.role_key 必须是同句说话人、属于当前事件 object_keys 的 important 角色，并让 content 使用 `${role.important.<roleId>.name}`。普通对白、玩家对白和普通角色对白不要填写。",
     "对白应该自然、短促、可点击推进。避免一条对白过长。",
     "如当前事件对象里没有合适的说话人，不要凭空新增角色，只在 player 和现有对象里分配。",
     "可以复用 `${group.value}` 这样的占位符，但只在确有必要时使用，且不要编造不存在的变量。",
@@ -182,10 +183,27 @@ export async function generateStoryEventDialogues(
       }
     }
 
+    const roleNameTarget = dialogue.role_name_input
+      ? normalizeDialogueSpeakerKey(story.roles, {
+          speaker_type: "object",
+          speaker_key: dialogue.role_name_input.role_key,
+          content: ""
+        })
+      : ""
+    const roleNameInput = dialogue.role_name_input
+      && normalizedKey.startsWith("important:")
+      && roleNameTarget === normalizedKey
+      ? {
+          role_key: normalizedKey,
+          ...(dialogue.role_name_input.prompt?.trim() ? { prompt: dialogue.role_name_input.prompt.trim() } : {})
+        }
+      : undefined
+
     return {
       speaker_type: "object" as const,
       speaker_key: normalizedKey,
-      content: dialogue.content.trim()
+      content: dialogue.content.trim(),
+      ...(roleNameInput ? { role_name_input: roleNameInput } : {})
     }
   }).filter((dialogue) => dialogue.content.length > 0)
 

@@ -235,6 +235,7 @@ export async function runStoryCreationAgents(
             : "你的任务：生成可预览的结构化剧情草稿，默认 3 到 8 个事件。",
           "写每个事件前先问自己：这个事件的 next 是否真的指向另一个本次或已有事件？如果是，一批用 next 连起来的事件才整体归为 chain；如果 next 只会是空数组，即使它由 invoke 单次调用触发、即使它讲的是一整条剧情，也要归为 pool，不能因为“像一条线”就选 chain。",
           "schedule 事件必须适合时间循环，不适合表达单次剧情分支。",
+          "只有对白明确要求玩家设置重要角色姓名时，才在该对白中填写 role_name_input；role_key 必须是同句 object 说话人且属于 event.object_keys 的 important 角色，并在 content 中使用 `${role.important.<roleId>.name}`。普通对白、玩家对白和普通角色对白不要填写。",
           "生成 schedule 事件时必须显式配置 loop.at、loop.priority、loop.after、loop.before；同一时间点需要业务顺序时优先用 after 表达硬依赖，再用 priority 做排序。",
         "如果事件需要持久化改变数值，优先在 init_script 或 end_script 写普通 value 变量；可以读取 calc 变量参与计算，但不能给 calc 变量赋值。",
         "如果用户要求改变一个 calc 汇总，例如人口总量，应写入它依赖的普通 value 分项；如现有分项不足，在 variables 中新增普通 value 变量并在脚本中引用。",

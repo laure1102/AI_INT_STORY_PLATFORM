@@ -18,14 +18,14 @@ import { giftBagItem } from "./bag-gifts"
 import { buyShopProduct, giftShopProduct } from "./doing-shop"
 import { sendContactAction, sendContactQuickMessage, sendContactTalk } from "./contact-actions"
 import { advanceContactConversationReply } from "./contact-conversations"
-import { assertRuntimeContactRoleKey, markContactThreadRead, restoreActiveStandaloneEvent } from "./contact-threads"
+import { assertRuntimeContactRoleKey, findRoleLabel, markContactThreadRead, restoreActiveStandaloneEvent } from "./contact-threads"
 import { executeAction, finishCurrentEvent, getCurrentEventState } from "./playback-entry"
-import { advanceCurrentMessagePresentation } from "./playback-render"
+import { advanceCurrentMessagePresentation, renderDialogueContent } from "./playback-render"
 import { advanceClockBySingleStep, createBaseSnapshot, isRuntimeTimePaused, queueClockProgress, setSystemNumber } from "./schedule-clock"
 import { queueDoingEvent, reconcileScheduler } from "./schedule-queue"
 import { appendHistory, findBundleInvokeTargetEvent, getInvokeTargetLabel, queueInvokeEvent, validateInvokeArgs } from "./script-execution"
 import { createDefaultClockState, normalizeInvokeTargetType, normalizeSchedulerState, syncSystemTimeFieldsFromClock } from "./state-scheduler"
-import { applyCustomValuesToValsFile, clampInteger, clampNumber, cloneValue, createDefaultSchedulerState, normalizeBagsState, normalizeDoingState, normalizeContactConversationHistoryState, normalizeContactConversationState, normalizeContactState, normalizeHistoryState, normalizeShopState, normalizeText } from "./state-values"
+import { applyCustomValuesToValsFile, clampInteger, clampNumber, cloneValue, createDefaultSchedulerState, normalizeBagsState, normalizeDoingState, normalizeContactConversationHistoryState, normalizeContactConversationState, normalizeContactState, normalizeHistoryState, normalizeRoleNameOverrides, normalizeShopState, normalizeText } from "./state-values"
 import { buildViewModel } from "./view-model"
 
 /**
@@ -90,6 +90,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
   normalizeBagsState(runtimeState.snapshot)
   runtimeState.snapshot.history = normalizeHistoryState(runtimeState.snapshot.history)
+  normalizeRoleNameOverrides(runtimeState.snapshot)
   normalizeContactState(runtimeState.snapshot)
   runtimeState.snapshot.contact_conversation = normalizeContactConversationState(runtimeState.snapshot.contact_conversation)
   runtimeState.snapshot.contact_conversations = normalizeContactConversationHistoryState(runtimeState.snapshot.contact_conversations)
@@ -297,6 +298,74 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         return
       }
 
+      if (action.type === "submit-role-name") {
+        const currentEventState = getCurrentEventState(options.bundle, runtimeState)
+        const currentDialogue = currentEventState?.currentDialogue
+        const requestedRoleKey = action.roleKey.trim()
+        const roleNameInput = currentDialogue?.roleNameInput
+        const surname = action.surname.trim()
+        const givenName = action.givenName.trim()
+        if (!currentDialogue || !roleNameInput || roleNameInput.roleKey !== requestedRoleKey) {
+          const message = "当前没有等待提交的角色姓名。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `role-name-failed:${requestedRoleKey}`, title: "设置角色姓名失败", content: message })
+          return false
+        }
+        if (runtimeState.snapshot.role_name_overrides[requestedRoleKey]) {
+          const message = "该角色姓名已经设置，不能重复修改。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `role-name-failed:${requestedRoleKey}:already-set`, title: "设置角色姓名失败", content: message, role_key: requestedRoleKey })
+          return false
+        }
+        if (!surname || !givenName) {
+          const message = "角色姓和名都不能为空。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `role-name-failed:${requestedRoleKey}`, title: "设置角色姓名失败", content: message })
+          return false
+        }
+        const roles = options.bundle.roles as { important?: { roles?: Array<{ id: string }> } } | null
+        const roleId = requestedRoleKey.startsWith("important:") ? requestedRoleKey.slice("important:".length) : ""
+        if (!roleId || !(roles?.important?.roles ?? []).some((role) => role.id === roleId)) {
+          const message = "角色姓名目标无效。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `role-name-failed:${requestedRoleKey}`, title: "设置角色姓名失败", content: message })
+          return false
+        }
+        runtimeState.snapshot.role_name_overrides[requestedRoleKey] = {
+          surname,
+          given_name: givenName
+        }
+        const roleLabel = findRoleLabel(options.bundle, requestedRoleKey, runtimeState.snapshot)
+        notifications.push(`已设置${roleLabel}的姓名。`)
+        appendHistory(runtimeState.snapshot, {
+          category: "operation",
+          type: "system",
+          id: `role-name:${requestedRoleKey}:${currentDialogue.index}`,
+          title: "设置角色姓名",
+          content: `${roleLabel}：${surname}${givenName}`
+        })
+        appendHistory(runtimeState.snapshot, {
+          category: "story",
+          type: "dialogue",
+          id: `${currentEventState.node.id}:${runtimeState.currentDialogueIndex}`,
+          title: roleLabel,
+          content: currentEventState.node.presentation.type === "dialogue"
+            ? renderDialogueContent(
+                options.bundle,
+                runtimeState.snapshot,
+                currentEventState.node.presentation.dialogues[runtimeState.currentDialogueIndex]?.content ?? currentDialogue.content,
+                runtimeState.lastAction?.branchValues ?? {}
+              )
+            : currentDialogue.content,
+          ...(currentDialogue.speakerKey !== "player" ? { role_key: currentDialogue.speakerKey } : {})
+        })
+        runtimeState.currentDialogueIndex += 1
+        if (runtimeState.currentDialogueIndex >= currentDialogue.total) {
+          finishCurrentEvent(options.bundle, runtimeState, notifications)
+        }
+        return true
+      }
+
       if (action.type === "contact-mark-read") {
         try {
           const normalizedRoleKey = assertRuntimeContactRoleKey(options.bundle, action.roleKey)
@@ -393,7 +462,10 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
             type: "dialogue",
             id: `${currentEventState.node.id}:${runtimeState.currentDialogueIndex}`,
             title: currentEventState.currentDialogue.speakerLabel,
-            content: currentEventState.currentDialogue.content
+            content: currentEventState.currentDialogue.content,
+            ...(currentEventState.currentDialogue.speakerKey !== "player"
+              ? { role_key: currentEventState.currentDialogue.speakerKey }
+              : {})
           })
           runtimeState.currentDialogueIndex += 1
 

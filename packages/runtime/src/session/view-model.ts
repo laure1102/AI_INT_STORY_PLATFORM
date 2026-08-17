@@ -52,14 +52,15 @@ import type {
 import type { RuntimeStorySessionSnapshot } from "./contracts-core"
 import type { RuntimeBagItemView, RuntimeBagSummary, RuntimeDoingActionView, RuntimeDoingMenuView, RuntimeDoingView, RuntimeInteraction, RuntimeContactView, RuntimeContactThreadView, RuntimeRuntimeContactConversationReplyView, RuntimeRuntimeContactConversationView, RuntimeShopCategoryView, RuntimeShopProductView, RuntimeShopView, RuntimeState, RuntimeStoryBundle, RuntimeStoryViewModel } from "./contracts-view"
 import { resolveBagGiftEntryState } from "./bag-gifts"
-import { buildRuntimeDoingMenuState, findDoingRecord, getBundleDoingConfig, getBundleShopConfig, getDoingCooldownLeftHours, getRuntimeShopVisibleCategoryIds, getShopPurchaseCooldownLeftHours, resolveDoingAvailability, resolveShopProductDisabledReason } from "./doing-shop"
+import { buildRuntimeDoingMenuState, findDoingRecord, getBundleDoingConfig, getBundleShopConfig, getDoingCooldownLeftHours, getRuntimeShopVisibleCategoryIds, getShopGiftCooldownLeftHours, getShopPurchaseCooldownLeftHours, resolveDoingAvailability, resolveShopProductDisabledReason } from "./doing-shop"
 import { buildRuntimeContactMeta, findBundleContactConversation, findContactConversationNode, getBundleItemNameMap } from "./contact-config"
+import { calculateAppliedContactFavorDelta } from "./contact-actions"
 import { getActiveContactConversationState, isContactConversationOptionVisible } from "./contact-conversations"
 import { findRoleLabel, getBundleGraphNode, getCurrentPlayableEvent, getLatestContactMessagePreview, getContact, getContactThread, getContactUnreadCount, isCompiledAction, resolveContactActionOptionsForContact, resolveContactTalkOptionsForContact } from "./contact-threads"
 import { getCurrentEventState } from "./playback-entry"
 import { renderDialogueContent } from "./playback-render"
 import { findBagEntry } from "./script-context"
-import { clampInteger, formatValueSummary, normalizeBagsState, normalizeDoingState, normalizeItemId, normalizeOwnerId, normalizeContactRoleKey, normalizeContactState, normalizeShopState, normalizeText } from "./state-values"
+import { clampContactFavor, clampInteger, formatValueSummary, normalizeBagsState, normalizeDoingState, normalizeItemId, normalizeOwnerId, normalizeContactRoleKey, normalizeContactState, normalizeShopState, normalizeText } from "./state-values"
 
 /**
  * 将内部背包状态转换成按所有者分组的只读展示数据。
@@ -81,6 +82,22 @@ export function buildRuntimeBagSummary(
         .map((entry) => {
           const itemId = normalizeItemId(entry.item_id)
           const giftState = resolveBagGiftEntryState(bundle, entry)
+          const giftEffectiveFavorDeltas: Record<string, number> = {}
+          if (giftState.giftable) {
+            const product = bundle.shop?.products?.find((candidate) => (
+              candidate.allow_gift && normalizeItemId(candidate.item_id) === itemId
+            ))
+            for (const contact of snapshot.contact.contacts) {
+              if (!product) {
+                continue
+              }
+              const cooldownActive = getShopGiftCooldownLeftHours(snapshot, product.id, contact.role_key) > 0
+              const previousFavor = contact.favor
+              giftEffectiveFavorDeltas[contact.role_key] = cooldownActive
+                ? 0
+                : clampContactFavor(previousFavor + product.gift_favor_delta, previousFavor) - previousFavor
+            }
+          }
           return {
             ownerId: normalizedOwnerId,
             itemId,
@@ -89,7 +106,8 @@ export function buildRuntimeBagSummary(
             bound: entry.bound,
             obtainedAtDay: entry.obtained_at_day,
             obtainedAtMinute: entry.obtained_at_minute,
-            ...giftState
+            ...giftState,
+            giftEffectiveFavorDeltas
           } satisfies RuntimeBagItemView
         })
         .filter((entry) => entry.itemId)
@@ -215,6 +233,7 @@ export function buildRuntimeShopView(
 ): RuntimeShopView {
   normalizeShopState(snapshot)
   normalizeBagsState(snapshot)
+  normalizeContactState(snapshot)
 
   const shopConfig = getBundleShopConfig(bundle)
   const itemNameMap = getBundleItemNameMap(bundle)
@@ -252,6 +271,17 @@ export function buildRuntimeShopView(
         sortOrder: product.sort_order,
         allowGift: Boolean(product.allow_gift),
         giftFavorDelta: clampInteger(product.gift_favor_delta, 0),
+        giftEffectiveFavorDeltas: Object.fromEntries(
+          snapshot.contact.contacts.map((contact) => {
+            const cooldownActive = getShopGiftCooldownLeftHours(snapshot, product.id, contact.role_key) > 0
+            return [
+              contact.role_key,
+              cooldownActive
+                ? 0
+                : clampContactFavor(contact.favor + product.gift_favor_delta, contact.favor) - contact.favor
+            ]
+          })
+        ),
         purchaseCooldownHours: Math.max(0, clampInteger(product.purchase_cooldown_hours, 0)),
         purchaseCooldownLeftHours: getShopPurchaseCooldownLeftHours(snapshot, product.id),
         giftCooldownHours,
@@ -295,7 +325,7 @@ export function buildRuntimeContacts(
   return snapshot.contact.contacts
     .map((contact) => {
       const latest = getLatestContactMessagePreview(snapshot, contact.role_key)
-      const meta = buildRuntimeContactMeta(bundle, contact.role_key, contact.favor)
+      const meta = buildRuntimeContactMeta(bundle, contact.role_key, contact.favor, snapshot)
 
       return {
         roleKey: contact.role_key,
@@ -358,7 +388,7 @@ export function buildRuntimeContactThreadView(
 
   const thread = getContactThread(snapshot, normalizedRoleKey)
   const messages = thread?.messages ?? []
-  const meta = buildRuntimeContactMeta(bundle, normalizedRoleKey, contact.favor)
+  const meta = buildRuntimeContactMeta(bundle, normalizedRoleKey, contact.favor, snapshot)
   const talks = resolveContactTalkOptionsForContact(bundle, normalizedRoleKey, snapshot)
   const actions = resolveContactActionOptionsForContact(bundle, normalizedRoleKey, snapshot)
 
@@ -386,7 +416,7 @@ export function buildRuntimeContactThreadView(
         ? "我"
         : message.sender === "system"
           ? "系统"
-          : findRoleLabel(bundle, normalizedRoleKey),
+          : findRoleLabel(bundle, normalizedRoleKey, snapshot),
       content: message.content,
       gameMinute: message.game_minute,
       read: message.read
@@ -396,6 +426,7 @@ export function buildRuntimeContactThreadView(
       text: message.text,
       tags: [...message.tags],
       baseFavorDelta: message.baseFavorDelta,
+      effectiveFavorDelta: calculateAppliedContactFavorDelta(bundle, snapshot, normalizedRoleKey, message),
       cooldownHours: message.cooldownHours,
       suggested: message.suggested
     })),
@@ -405,6 +436,9 @@ export function buildRuntimeContactThreadView(
       text: action.text,
       tags: [...action.tags],
       baseFavorDelta: action.baseFavorDelta,
+      effectiveFavorDelta: action.disabled
+        ? 0
+        : calculateAppliedContactFavorDelta(bundle, snapshot, normalizedRoleKey, action),
       cooldownHours: action.cooldownHours,
       costMoney: action.costMoney,
       costItems: action.costItems.map((item) => ({
@@ -421,9 +455,20 @@ export function buildRuntimeContactThreadView(
       text: message.text,
       tags: [...message.tags],
       baseFavorDelta: message.baseFavorDelta,
+      effectiveFavorDelta: calculateAppliedContactFavorDelta(bundle, snapshot, normalizedRoleKey, message),
       cooldownHours: message.cooldownHours,
       suggested: message.suggested
-    }))
+    })),
+    giftEffectiveFavorDeltas: Object.fromEntries(
+      (bundle.shop?.products ?? [])
+        .filter((product) => product.allow_gift)
+        .map((product) => [
+          normalizeItemId(product.item_id),
+          getShopGiftCooldownLeftHours(snapshot, product.id, normalizedRoleKey) > 0
+            ? 0
+            : clampContactFavor(contact.favor + product.gift_favor_delta, contact.favor) - contact.favor
+        ])
+    )
   }
 }
 
@@ -447,7 +492,7 @@ export function buildRuntimeContactConversationView(
     return null
   }
 
-  const roleLabel = findRoleLabel(bundle, activeState.role_key)
+  const roleLabel = findRoleLabel(bundle, activeState.role_key, snapshot)
   const nodeIndex = Math.max(0, conversation.nodes.findIndex((item) => item.id === node.id))
   const replies = node.player_options.map((option) => {
     const visible = isContactConversationOptionVisible(bundle, snapshot, option)
@@ -503,16 +548,27 @@ export function buildViewModel(
     if (currentMessage) {
       interaction = null
     } else if (currentDialogue) {
-      interaction = {
-        kind: "select",
-        prompt: "请选择下一步。",
-        options: [
-          {
-            id: "continue",
-            label: currentDialogue.index < currentDialogue.total ? "继续对白" : "结束当前事件"
-          }
-        ]
-      }
+        const roleNameInput = currentDialogue.roleNameInput
+        const override = roleNameInput ? runtimeState.snapshot.role_name_overrides?.[roleNameInput.roleKey] : null
+        interaction = roleNameInput && !override
+          ? {
+              kind: "role-name-input",
+              roleKey: roleNameInput.roleKey,
+              roleLabel: findRoleLabel(bundle, roleNameInput.roleKey, runtimeState.snapshot),
+              prompt: roleNameInput.prompt,
+              initialSurname: "",
+              initialGivenName: ""
+            }
+          : {
+              kind: "select",
+              prompt: "请选择下一步。",
+              options: [
+                {
+                  id: "continue",
+                  label: currentDialogue.index < currentDialogue.total ? "继续对白" : "结束当前事件"
+                }
+              ]
+            }
     } else if (currentEventState && currentEventState.availableActions.length > 0) {
       interaction = {
         kind: "select",
@@ -577,7 +633,10 @@ export function buildViewModel(
     activeEventTitle: currentEvent?.title ?? null,
     interaction,
     notifications,
-    history: runtimeState.snapshot.history.map((entry) => ({ ...entry })),
+    history: runtimeState.snapshot.history.map((entry) => ({
+      ...entry,
+      ...(entry.role_key ? { title: findRoleLabel(bundle, entry.role_key, runtimeState.snapshot) } : {})
+    })),
     currentLocationId: normalizeText(currentEvent?.location ?? "") || null,
     currentLocationName: currentEventState?.locationName ?? null,
     currentSceneLevel: null,

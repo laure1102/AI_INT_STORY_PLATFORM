@@ -388,10 +388,16 @@ export type StoryGraphEventsFile = StoryChainEventsFile
 
 export type StoryOnceSpeakerType = "player" | "object"
 
+export interface StoryRoleNameInputDefinition {
+  role_key: string
+  prompt?: string
+}
+
 export interface StoryOnceDialogueDefinition {
   speaker_type: StoryOnceSpeakerType
   speaker_key: string
   content: string
+  role_name_input?: StoryRoleNameInputDefinition
 }
 
 export type StoryEventPresentationType = "silent" | "message" | "dialogue"

@@ -132,6 +132,8 @@ export function buildBasePrompt(roleTitle: string, state: CreationStateValue) {
     "pool 事件不是只能给 AI 剧情导演挑选；trigger_mode 为 invoke 的 pool 事件同样合法，专门用于“被动等待调用、自身不连接后续事件”的单次剧情，例如招聘、催债、联系人剧情分支这类由玩家操作或其他事件触发的一次性场景，都应该放 pool，不要放 chain。",
     "chain/pool/schedule 中 trigger_mode 为 invoke 的事件只供脚本调用，不参与普通调度；invoke 不等于 chain，判断集合类型仍然只看是否存在真实 next 连接。",
     "角色引用使用 player、normal:<roleId>、important:<roleId>。",
+    "重要角色可以在对白中声明一次性姓名设置：只有对白明确需要玩家给重要角色取名时，才填写 role_name_input，并让 content 使用 `${role.important.<roleId>.name}` 模板；role_name_input.role_key 必须是同一句对白的说话人、必须引用事件 object_keys 中的 important 角色。",
+    "role_name_input 不能用于玩家对白、普通角色或没有明确姓名设置需求的对白；姓和名由运行时分别收集并保存到当前存档，未设置时姓名模板回退角色原名。",
     "涉及玩家性别差异的称呼、自称和代词时，必须优先使用 refer.json5 称谓库占位符，例如 `${term.player.respect}`、`${term.player.self_proud}`；不要硬编码先生/女士/少爷/小姐。",
     "生成对白、消息提示、联系人短句、NPC 主动消息、contact_send_from/contact_send_to 文本时，都可以使用 `${term.xxx}`。称谓库只读，不要把 term.* 当作普通变量写入。",
     "地点使用地点 id。所有 id 尽量使用 ASCII 小写、数字、下划线或短横线。",

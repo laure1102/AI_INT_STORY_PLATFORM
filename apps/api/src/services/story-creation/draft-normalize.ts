@@ -206,13 +206,25 @@ export function normalizeDraftPresentation(
 
   return {
     type: "dialogue",
-    dialogues: presentation.dialogues.map((dialogue) => ({
-      ...dialogue,
-      speaker_key:
-        dialogue.speaker_type === "player"
-          ? "player"
-          : normalizeRoleReference(dialogue.speaker_key, roleIdMap)
-    }))
+    dialogues: presentation.dialogues.map((dialogue) => {
+      const speakerKey = dialogue.speaker_type === "player"
+        ? "player"
+        : normalizeRoleReference(dialogue.speaker_key, roleIdMap)
+      const roleNameInput = dialogue.role_name_input
+        ? {
+            role_key: normalizeRoleReference(dialogue.role_name_input.role_key, roleIdMap),
+            ...(dialogue.role_name_input.prompt?.trim() ? { prompt: dialogue.role_name_input.prompt.trim() } : {})
+          }
+        : undefined
+
+      return {
+        ...dialogue,
+        speaker_key: speakerKey,
+        ...(roleNameInput?.role_key && speakerKey === roleNameInput.role_key && speakerKey.startsWith("important:")
+          ? { role_name_input: roleNameInput }
+          : {})
+      }
+    })
   }
 }
 

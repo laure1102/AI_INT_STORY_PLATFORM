@@ -79,7 +79,8 @@ export function chooseContactReply(
   const meta = buildRuntimeContactMeta(
     bundle,
     normalizedRoleKey,
-    contact?.favor ?? getBundleContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20
+    contact?.favor ?? getBundleContactProfile(bundle, normalizedRoleKey)?.initial_favor ?? 20,
+    snapshot
   )
   const fallbackReplies = getBundleContactConfig(bundle).fallback_replies
   const replyEntries = getBundleContactConfig(bundle).reply_library
@@ -582,8 +583,9 @@ export function advanceContactConversationReply(
       category: "operation",
       type: "system",
       id: playerMessage.id,
+      role_key: activeState.role_key,
       title: `contact:${activeState.role_key}`,
-      content: `主角向 ${findRoleLabel(bundle, activeState.role_key)} 发送剧情回复：${playerMessage.content}`
+      content: `主角向 ${findRoleLabel(bundle, activeState.role_key, runtimeState.snapshot)} 发送剧情回复：${playerMessage.content}`
     })
   }
 

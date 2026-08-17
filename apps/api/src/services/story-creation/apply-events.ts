@@ -273,23 +273,40 @@ export function normalizeEventPeople(
 
   const dialogues = event.presentation.dialogues.map((dialogue) => {
     if (dialogue.speaker_type === "player") {
+      const { role_name_input: _roleNameInput, ...playerDialogue } = dialogue
       return {
-        ...dialogue,
+        ...playerDialogue,
         speaker_key: "player" as const
       }
     }
 
     const speakerKey = normalizeObjectKey(dialogue.speaker_key)
     if (speakerKey && objectKeySet.has(speakerKey)) {
+      const rawRoleNameInput = dialogue.role_name_input
+      const roleNameInput = rawRoleNameInput
+        && speakerKey === normalizeObjectKey(rawRoleNameInput.role_key)
+        && speakerKey.startsWith("important:")
+        && objectKeySet.has(speakerKey)
+        && availableRoleKeys.has(speakerKey)
+        ? {
+            role_key: speakerKey,
+            ...(rawRoleNameInput.prompt?.trim() ? { prompt: rawRoleNameInput.prompt.trim() } : {})
+          }
+        : undefined
+      if (rawRoleNameInput && !roleNameInput) {
+        warnings.push(`事件 ${event.id} 的 role_name_input 只能附着在当前对白说话人的 important 角色上，已移除。`)
+      }
       return {
         ...dialogue,
-        speaker_key: speakerKey
+        speaker_key: speakerKey,
+        ...(roleNameInput ? { role_name_input: roleNameInput } : {})
       }
     }
 
     warnings.push(`事件 ${event.id} 的对白说话人 ${dialogue.speaker_key} 不可用，已改为 player。`)
+    const { role_name_input: _roleNameInput, ...fallbackDialogue } = dialogue
     return {
-      ...dialogue,
+      ...fallbackDialogue,
       speaker_type: "player" as const,
       speaker_key: "player"
     }

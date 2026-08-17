@@ -370,6 +370,113 @@ describe("Runtime shop direct gifting", () => {
   })
 })
 
+describe("Runtime contact talk cooldown", () => {
+  it("keeps a talk cooldown keyed to that talk after another talk is sent", () => {
+    const bundle = createBundle({
+      roles: {
+        normal: {
+          roles: [
+            { id: "friend", name: "好友", descr: "测试好友", zhiye: "", contact_enabled: true }
+          ]
+        },
+        important: { roles: [] }
+      },
+      contact: {
+        default_channel_id: "generic",
+        channels: [{ id: "generic", name: "消息", preset: "generic", labels: {} }],
+        relationship_tracks: [],
+        personality_library: [],
+        talk_library: [
+          { id: "greet", text: "在吗", tags: [], scope: { role_keys: [], contact_tracks: [], personality_ids: [], min_favor: 0, max_favor: 100 }, base_favor_delta: 1, cooldown_hours: 6 },
+          { id: "other", text: "最近怎么样", tags: [], scope: { role_keys: [], contact_tracks: [], personality_ids: [], min_favor: 0, max_favor: 100 }, base_favor_delta: 1, cooldown_hours: 0 }
+        ],
+        action_library: [],
+        reply_library: [],
+        player_quick_messages: [],
+        contact_profiles: [],
+        fallback_replies: {}
+      }
+    })
+    const seed = createStorySession({ bundle })
+    const snapshot = seed.getSnapshot()
+    snapshot.contact.contacts.push({ role_key: "normal:friend", favor: 20, unlocked_at_day: 1 })
+    const save = createSave(seed, bundle, "contact-talk-cooldown")
+    save.session_state = snapshot
+    const session = createStorySession({ bundle, saveState: save })
+
+    session.dispatch({ type: "contact-send-talk", roleKey: "normal:friend", talkId: "greet" })
+    expect(session.getSnapshot().contact.contacts[0]?.favor).toBe(21)
+
+    session.dispatch({ type: "contact-send-talk", roleKey: "normal:friend", talkId: "other" })
+    expect(session.getSnapshot().contact.contacts[0]?.favor).toBe(22)
+
+    session.dispatch({ type: "contact-send-talk", roleKey: "normal:friend", talkId: "greet" })
+    expect(session.getSnapshot().contact.contacts[0]?.favor).toBe(22)
+    expect(session.getSnapshot().history.some((entry) => entry.content?.includes("好感 +0（当前 22）"))).toBe(true)
+
+    const cooldownEndedSave = createSave(session, bundle, "contact-talk-cooldown-ended")
+    cooldownEndedSave.session_state.clock.total_minutes = 360
+    const cooldownEnded = createStorySession({ bundle, saveState: cooldownEndedSave })
+    cooldownEnded.dispatch({ type: "contact-send-talk", roleKey: "normal:friend", talkId: "greet" })
+    expect(cooldownEnded.getSnapshot().contact.contacts[0]?.favor).toBe(23)
+  })
+
+  it("allows repeated contact actions during cooldown but only applies favor once", () => {
+    const bundle = createBundle({
+      vals: {
+        variables: [{
+          name: "player",
+          vals: [{ name: "money", value_type: "value", value: 100, calc_rule: "" }]
+        }]
+      },
+      roles: {
+        normal: { roles: [{ id: "friend", name: "好友", descr: "测试好友", zhiye: "", contact_enabled: true }] },
+        important: { roles: [] }
+      },
+      contact: {
+        default_channel_id: "generic",
+        channels: [{ id: "generic", name: "消息", preset: "generic", labels: {} }],
+        relationship_tracks: [],
+        personality_library: [],
+        talk_library: [],
+        action_library: [{
+          id: "visit",
+          label: "见面",
+          text: "我去找你",
+          tags: [],
+          scope: { role_keys: [], contact_tracks: [], personality_ids: [], min_favor: 0, max_favor: 100 },
+          base_favor_delta: 2,
+          cooldown_hours: 6,
+          cost_money: 10,
+          cost_items: []
+        }],
+        reply_library: [],
+        player_quick_messages: [],
+        contact_profiles: [],
+        fallback_replies: {}
+      }
+    })
+    const seed = createStorySession({ bundle })
+    seed.getSnapshot().contact.contacts.push({ role_key: "normal:friend", favor: 20, unlocked_at_day: 1 })
+    const save = createSave(seed, bundle, "contact-action-cooldown")
+    save.session_state = seed.getSnapshot()
+    const session = createStorySession({ bundle, saveState: save })
+
+    session.dispatch({ type: "contact-send-action", roleKey: "normal:friend", actionId: "visit" })
+    session.dispatch({ type: "contact-send-action", roleKey: "normal:friend", actionId: "visit" })
+    expect(session.getSnapshot().contact.contacts[0]?.favor).toBe(22)
+    expect(session.getSnapshot().vals.variables[0]?.vals[0]?.value).toBe(80)
+    expect(session.getSnapshot().contact.threads[0]?.messages.filter((message) => message.option_id === "visit")).toHaveLength(2)
+    expect(session.getSnapshot().history.filter((entry) => entry.title === "contact:normal:friend").at(-1)?.content).toContain("好感 +0")
+
+    const cooldownEndedSave = createSave(session, bundle, "contact-action-cooldown-ended")
+    cooldownEndedSave.session_state.clock.total_minutes = 360
+    const cooldownEnded = createStorySession({ bundle, saveState: cooldownEndedSave })
+    cooldownEnded.dispatch({ type: "contact-send-action", roleKey: "normal:friend", actionId: "visit" })
+    expect(cooldownEnded.getSnapshot().contact.contacts[0]?.favor).toBe(24)
+  })
+})
+
 describe("Runtime player bag gifting", () => {
   it("gifts multiple owned items, scales favor, and does not charge or record a purchase", () => {
     const bundle = createBagGiftBundle()
@@ -393,7 +500,8 @@ describe("Runtime player bag gifting", () => {
       gifted_count: 1,
       cooldown_until_game_minute: 1440
     }])
-    expect(snapshot.contact.threads[0]?.messages.at(-1)?.content).toContain("礼盒 x2")
+    expect(snapshot.contact.threads[0]?.messages.some((message) => message.content.includes("礼盒 x2"))).toBe(true)
+    expect(snapshot.contact.threads[0]?.messages.at(-1)?.content).toContain("好友度 +6")
     expect(snapshot.history.at(-1)?.title).toBe("bag:gift")
 
     const giftView = session.getViewModel().bagSummary
@@ -546,15 +654,17 @@ describe("Runtime player bag gifting", () => {
     const bundle = createBagGiftBundle()
     const shopFirst = createBagGiftSession(bundle)
     shopFirst.dispatch({ type: "shop-gift", productId: "gift_box_product", roleKey: "normal:friend" })
-    const afterShopGift = shopFirst.getSnapshot()
     expect(shopFirst.dispatch({
       type: "bag-gift",
       itemId: "gift_box",
       roleKey: "normal:friend",
       quantity: 1
-    })).toBe(false)
-    expect(withoutHistory(shopFirst.getSnapshot())).toEqual(withoutHistory(afterShopGift))
-    expect(shopFirst.getSnapshot().history.at(-1)).toMatchObject({ category: "operation", content: expect.stringContaining("送礼冷却中") })
+    })).toBe(true)
+    expect(shopFirst.getSnapshot().contact.contacts[0]?.favor).toBe(23)
+    expect(shopFirst.getSnapshot().bags.player.entries.find((entry) => entry.item_id === "gift_box")?.quantity).toBe(4)
+    expect(shopFirst.getSnapshot().shop.gifts[0]).toMatchObject({ gifted_count: 2, cooldown_until_game_minute: 1440 })
+    expect(shopFirst.getSnapshot().shop.purchases[0]).toMatchObject({ purchased_count: 1, cooldown_until_game_minute: 720 })
+    expect(shopFirst.getSnapshot().history.at(-1)?.content).toContain("好感变化 0")
 
     const cooldownEndedSave = createSave(shopFirst, bundle, "cooldown-ended")
     cooldownEndedSave.session_state.clock.total_minutes = 1440
@@ -573,10 +683,12 @@ describe("Runtime player bag gifting", () => {
       roleKey: "normal:friend",
       quantity: 1
     })).toBe(true)
-    const afterBagGift = bagFirst.getSnapshot()
     bagFirst.dispatch({ type: "shop-gift", productId: "gift_box_product", roleKey: "normal:friend" })
-    expect(withoutHistory(bagFirst.getSnapshot())).toEqual(withoutHistory(afterBagGift))
-    expect(bagFirst.getViewModel().notifications.at(-1)).toContain("送礼冷却中")
+    expect(bagFirst.getSnapshot().contact.contacts[0]?.favor).toBe(23)
+    expect(bagFirst.getSnapshot().vals.variables[0]?.vals[0]?.value).toBe(4801)
+    expect(bagFirst.getSnapshot().shop.gifts[0]).toMatchObject({ gifted_count: 2, cooldown_until_game_minute: 1440 })
+    expect(bagFirst.getSnapshot().shop.purchases[0]).toMatchObject({ purchased_count: 1, cooldown_until_game_minute: 720 })
+    expect(bagFirst.getSnapshot().history.at(-1)?.content).toContain("好感变化 0")
   })
 })
 

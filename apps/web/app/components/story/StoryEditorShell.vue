@@ -308,7 +308,7 @@ const {
           @click.self="closeEditor"
         >
           <div class="editor-modal__panel">
-            <LazyGraphEventDetailPanel
+            <LazyStoryGraphEventDetailPanel
               v-if="activeEventTab === 'chain' && activeGraphDraftEvent"
               :event="activeGraphDraftEvent"
               :branch-autocomplete-items="activeGraphBranchAutocompleteItems"
@@ -326,7 +326,7 @@ const {
               @quick-create-role="handleQuickCreateRole"
               @save="handleSaveEvent"
             />
-            <LazyGraphActionDetailPanel
+            <LazyStoryGraphActionDetailPanel
               v-else-if="activeEventTab === 'chain' && activeGraphDraftAction"
               :action="activeGraphDraftAction"
               :graph-node-options="graphNodeOptions"
@@ -337,7 +337,7 @@ const {
               @close="closeEditor"
               @save="handleSaveEvent"
             />
-            <LazyOnceEventDetailPanel
+            <LazyStoryOnceEventDetailPanel
               v-else-if="activeEventTab === 'pool'"
               :event="activeDraftEvent as StoryOnceEventFile | null"
               :event-locations="storyDocument.eventLocations"
@@ -353,7 +353,7 @@ const {
               @quick-create-role="handleQuickCreateRole"
               @save="handleSaveEvent"
             />
-            <LazyLoopEventDetailPanel
+            <LazyStoryLoopEventDetailPanel
               v-else
               :event="activeDraftEvent as StoryLoopEventFile | null"
               :event-locations="storyDocument.eventLocations"
@@ -481,7 +481,7 @@ const {
       @save="handleSaveRoles"
     />
 
-    <LazyAppSettingsDialog
+    <LazyStoryAppSettingsDialog
       v-if="appSettings && isSettingsDialogOpen"
       :saving="isSaving"
       :settings="appSettings"

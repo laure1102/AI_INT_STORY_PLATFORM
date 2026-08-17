@@ -630,6 +630,12 @@ export function normalizeContactMessages(messages: RuntimeContactMessageState[] 
         ...(message.contact_conversation_reminder !== undefined
           ? { contact_conversation_reminder: Boolean(message.contact_conversation_reminder) }
           : {}),
+        ...(message.favor_delta !== undefined && Number.isFinite(message.favor_delta)
+          ? { favor_delta: message.favor_delta }
+          : {}),
+        ...(message.favor_cooldown_anchor !== undefined
+          ? { favor_cooldown_anchor: Boolean(message.favor_cooldown_anchor) }
+          : {}),
         ...(Array.isArray(message.tags)
           ? { tags: Array.from(new Set(message.tags.map((tag) => normalizeText(tag)).filter(Boolean))) }
           : {})
@@ -660,6 +666,7 @@ export function normalizeHistoryState(history: RuntimeHistoryEntry[] | undefined
         category: entry.category,
         type: entry.type,
         id,
+        ...(normalizeText(entry.role_key) ? { role_key: normalizeText(entry.role_key) } : {}),
         game_minute: gameMinute,
         ...(normalizeText(entry.title) ? { title: normalizeText(entry.title) } : {}),
         ...(normalizeText(entry.content) ? { content: normalizeText(entry.content) } : {}),
@@ -667,6 +674,22 @@ export function normalizeHistoryState(history: RuntimeHistoryEntry[] | undefined
       }
     })
     .filter((entry): entry is RuntimeHistoryEntry => Boolean(entry))
+}
+
+/** @param snapshot 会话快照。 @returns 规范化存档级重要角色姓名覆盖。 */
+export function normalizeRoleNameOverrides(snapshot: RuntimeStorySessionSnapshot) {
+  const raw = snapshot.role_name_overrides && typeof snapshot.role_name_overrides === "object"
+    ? snapshot.role_name_overrides
+    : {}
+  const normalized: RuntimeStorySessionSnapshot["role_name_overrides"] = {}
+  for (const [roleKey, value] of Object.entries(raw)) {
+    const surname = normalizeText(value?.surname).trim()
+    const givenName = normalizeText(value?.given_name).trim()
+    if (roleKey.trim() && surname && givenName) {
+      normalized[roleKey.trim()] = { surname, given_name: givenName }
+    }
+  }
+  snapshot.role_name_overrides = normalized
 }
 
 /** @param snapshot 会话快照。 @returns 无返回值；规范联系人、好感度、线程和消息并写回 snapshot.contact。 */
@@ -698,6 +721,7 @@ export function normalizeContactState(snapshot: RuntimeStorySessionSnapshot) {
  */
 export function normalizeStorySnapshotState(snapshot: RuntimeStorySessionSnapshot) {
   snapshot.history = normalizeHistoryState(snapshot.history)
+  normalizeRoleNameOverrides(snapshot)
   normalizeBagsState(snapshot)
   normalizeContactState(snapshot)
   snapshot.contact_conversation = normalizeContactConversationState(snapshot.contact_conversation)

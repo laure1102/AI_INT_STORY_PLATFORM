@@ -371,19 +371,36 @@ export function filterDoingPresentationForApply(
     type: "dialogue",
     dialogues: doing.presentation.dialogues.map((dialogue) => {
       if (dialogue.speaker_type === "player") {
+        const { role_name_input: _roleNameInput, ...playerDialogue } = dialogue
         return {
-          ...dialogue,
+          ...playerDialogue,
           speaker_key: "player"
         }
       }
 
       if (objectKeys.has(dialogue.speaker_key) && availableRoleKeys.has(dialogue.speaker_key)) {
-        return dialogue
+        const rawRoleNameInput = dialogue.role_name_input
+        const roleNameInput = rawRoleNameInput
+          && dialogue.speaker_key.startsWith("important:")
+          && rawRoleNameInput.role_key === dialogue.speaker_key
+          ? {
+              role_key: dialogue.speaker_key,
+              ...(rawRoleNameInput.prompt?.trim() ? { prompt: rawRoleNameInput.prompt.trim() } : {})
+            }
+          : undefined
+        if (rawRoleNameInput && !roleNameInput) {
+          warnings.push(`行动 ${doing.id} 的 role_name_input 目标无效，已移除。`)
+        }
+        return {
+          ...dialogue,
+          ...(roleNameInput ? { role_name_input: roleNameInput } : {})
+        }
       }
 
       warnings.push(`行动 ${doing.id} 的对白说话人 ${dialogue.speaker_key} 不可用，已改为 player。`)
+      const { role_name_input: _roleNameInput, ...fallbackDialogue } = dialogue
       return {
-        ...dialogue,
+        ...fallbackDialogue,
         speaker_type: "player" as const,
         speaker_key: "player"
       }

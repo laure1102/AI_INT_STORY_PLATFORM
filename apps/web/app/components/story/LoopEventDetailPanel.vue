@@ -45,7 +45,7 @@ const {
   normalizeObjectKeys, normalizeStoredObjectKeys, createDialogueEditorDraft,
   openCreateDialogueEditor, openEditDialogueEditor, closeDialogueEditor, removeDialogue,
   addInvokeParam, removeInvokeParam, moveDialogue, handleDialogueEditorSpeakerTypeChange,
-  getDialogueEditorSpeakerOptions, saveDialogueEditor, toggleDialogueTemplateHelp,
+  getDialogueEditorSpeakerOptions, getDialogueEditorRoleNameOptions, handleDialogueEditorRoleNameToggle, saveDialogueEditor, toggleDialogueTemplateHelp,
   getInvokeParamValidationTokens, closeDialogueContentAutocomplete,
   updateDialogueContentAutocompleteFromCaret, insertDialogueContentAutocompleteItem,
   onDialogueContentInput, onDialogueContentKeydown, openDialogueAiDialog,
@@ -641,6 +641,14 @@ const {
               </select>
             </label>
           </div>
+
+          <template v-if="dialogueEditorState.draft.speaker_type === 'object'">
+            <label class="field field--checkbox"><input type="checkbox" :checked="Boolean(dialogueEditorState.draft.role_name_input)" @change="handleDialogueEditorRoleNameToggle(($event.target as HTMLInputElement).checked)" /><span class="field-label">触发角色姓名设置</span></label>
+            <div v-if="dialogueEditorState.draft.role_name_input" class="dialogue-editor__grid">
+              <label class="field"><span class="field-label">重要角色</span><select v-model="dialogueEditorState.draft.role_name_input.role_key" class="select-input"><option v-for="option in getDialogueEditorRoleNameOptions()" :key="option.key" :value="option.key">{{ option.label }}</option></select></label>
+              <label class="field"><span class="field-label">姓名提示语</span><input v-model="dialogueEditorState.draft.role_name_input.prompt" class="text-input" placeholder="请设置角色的姓名" /></label>
+            </div>
+          </template>
 
           <label ref="dialogueContentField" class="field">
             <div class="detail-panel__label-row">

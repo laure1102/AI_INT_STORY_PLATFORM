@@ -6,10 +6,19 @@
 import { z } from "zod"
 import { looseMetaSchema } from "./base"
 
+export const storyRoleNameInputSchema = z.object({
+  role_key: z.string().default(""),
+  prompt: z.string().optional()
+}).transform((input) => ({
+  role_key: input.role_key.trim(),
+  ...(input.prompt?.trim() ? { prompt: input.prompt.trim() } : {})
+}))
+
 export const storyOnceDialogueSchema = z.object({
   speaker_type: z.enum(["player", "object"]).default("object"),
   speaker_key: z.string().default(""),
-  content: z.string().default("")
+  content: z.string().default(""),
+  role_name_input: storyRoleNameInputSchema.optional()
 })
 
 export const storyEventPresentationSchema = z.discriminatedUnion("type", [

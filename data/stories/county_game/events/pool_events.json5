@@ -22,7 +22,11 @@
           speaker_type: 'player',
         },
         {
-          content: '我叫助理，之前一直在外面给人跑事务。听说您想在县里做点事，我或许能帮上忙。',
+          content: '我叫${role.important.zhuli.name}，之前一直在外面给人跑事务。听说您想在县里做点事，我或许能帮上忙。',
+          role_name_input: {
+            role_key: 'important:zhuli',
+            prompt: '请输入助理的姓和名',
+          },
           speaker_key: 'important:zhuli',
           speaker_type: 'object',
         },

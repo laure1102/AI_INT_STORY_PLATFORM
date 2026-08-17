@@ -35,6 +35,7 @@ interface DialogueEditorDraft {
   speaker_type: StoryOnceDialogueDefinition["speaker_type"]
   speaker_key: string
   content: string
+  role_name_input?: { role_key: string; prompt?: string }
 }
 interface InvokeParamDraft extends StoryEventInvokeParamDefinition { id: string }
 interface RoleOption { key: string; label: string }
@@ -136,7 +137,10 @@ export function useEventDialogueFields(options: UseEventDialogueFieldsOptions) {
       id: createDialogueId(),
       speaker_type: dialogue?.speaker_type ?? "object",
       speaker_key: dialogue?.speaker_key ?? "",
-      content: dialogue?.content ?? ""
+      content: dialogue?.content ?? "",
+      role_name_input: dialogue?.role_name_input
+        ? { role_key: dialogue.role_name_input.role_key, prompt: dialogue.role_name_input.prompt ?? "" }
+        : undefined
     }
   }
   
@@ -267,7 +271,10 @@ export function useEventDialogueFields(options: UseEventDialogueFieldsOptions) {
     return {
       speaker_type: speakerType,
       speaker_key: speakerKey,
-      content: dialogue?.content ?? ""
+      content: dialogue?.content ?? "",
+      role_name_input: dialogue?.role_name_input
+        ? { role_key: dialogue.role_name_input.role_key, prompt: dialogue.role_name_input.prompt ?? "" }
+        : undefined
     }
   }
   
@@ -338,10 +345,29 @@ export function useEventDialogueFields(options: UseEventDialogueFieldsOptions) {
   function handleDialogueEditorSpeakerTypeChange() {
     if (dialogueEditorState.draft.speaker_type === "player") {
       dialogueEditorState.draft.speaker_key = "player"
+      dialogueEditorState.draft.role_name_input = undefined
       return
     }
   
     dialogueEditorState.draft.speaker_key = objectKeyOptions.value[0] ?? ""
+  }
+
+  function getDialogueEditorRoleNameOptions() {
+    const objectKeys = new Set(objectKeyOptions.value)
+    return importantRoleOptions.value.filter((option) => objectKeys.has(option.key))
+  }
+
+  function handleDialogueEditorRoleNameToggle(enabled: boolean) {
+    if (!enabled || dialogueEditorState.draft.speaker_type === "player") {
+      dialogueEditorState.draft.role_name_input = undefined
+      return
+    }
+    const options = getDialogueEditorRoleNameOptions()
+    const current = dialogueEditorState.draft.role_name_input?.role_key
+    dialogueEditorState.draft.role_name_input = {
+      role_key: current && options.some((option) => option.key === current) ? current : (options[0]?.key ?? ""),
+      prompt: dialogueEditorState.draft.role_name_input?.prompt ?? ""
+    }
   }
   
   /** 读取或计算 `DialogueEditorSpeakerOptions`。 @returns 计算、查找或构建后的结果。 */
@@ -366,6 +392,14 @@ export function useEventDialogueFields(options: UseEventDialogueFieldsOptions) {
           ? "player"
           : dialogueEditorState.draft.speaker_key,
       content: dialogueEditorState.draft.content
+      ,...(dialogueEditorState.draft.role_name_input?.role_key
+        ? { role_name_input: {
+            role_key: dialogueEditorState.draft.role_name_input.role_key.trim(),
+            ...(dialogueEditorState.draft.role_name_input.prompt?.trim()
+              ? { prompt: dialogueEditorState.draft.role_name_input.prompt.trim() }
+              : {})
+          } }
+        : {})
     }
   
     if (dialogueEditorState.mode === "edit") {
@@ -586,7 +620,8 @@ export function useEventDialogueFields(options: UseEventDialogueFieldsOptions) {
     isDialogueContentAutocompleteOpen, activeDialogueContentAutocompleteItem, submitLabel, normalizeObjectKeys,
     normalizeStoredObjectKeys, createDialogueEditorDraft, openCreateDialogueEditor, openEditDialogueEditor,
     closeDialogueEditor, removeDialogue, addInvokeParam, removeInvokeParam,
-    moveDialogue, handleDialogueEditorSpeakerTypeChange, getDialogueEditorSpeakerOptions, saveDialogueEditor,
+    moveDialogue, handleDialogueEditorSpeakerTypeChange, getDialogueEditorSpeakerOptions, getDialogueEditorRoleNameOptions,
+    handleDialogueEditorRoleNameToggle, saveDialogueEditor,
     toggleDialogueTemplateHelp, getInvokeParamValidationTokens, closeDialogueContentAutocomplete, updateDialogueContentAutocompleteFromCaret,
     insertDialogueContentAutocompleteItem, onDialogueContentInput, onDialogueContentKeydown, openDialogueAiDialog,
     closeDialogueAiDialog, abortDialogueAi, applyDialogueAiResult, requestQuickCreateRole,

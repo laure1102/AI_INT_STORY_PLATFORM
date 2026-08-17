@@ -145,6 +145,10 @@ export interface StoryCreationDraftDialogue {
   speaker_type: "player" | "object"
   speaker_key: string
   content: string
+  role_name_input?: {
+    role_key: string
+    prompt?: string
+  }
 }
 
 export type StoryCreationDraftPresentation =

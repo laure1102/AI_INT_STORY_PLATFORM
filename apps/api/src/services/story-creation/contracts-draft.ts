@@ -215,7 +215,11 @@ export function instructionAllowsScriptRemoval(instruction: string) {
 export const draftDialogueSchema = z.object({
   speaker_type: z.enum(["player", "object"]).describe("player 表示玩家主角，object 表示事件对象。"),
   speaker_key: z.string().describe("player 或 normal:<roleId> / important:<roleId>。"),
-  content: z.string().describe("对白文本，可使用 ${group.value} 占位。")
+  content: z.string().describe("对白文本，可使用 ${group.value} 或 ${role.important.<roleId>.name} 占位。"),
+  role_name_input: z.object({
+    role_key: z.string().describe("需要玩家设置姓名的重要角色 key，例如 important:zhuli。"),
+    prompt: z.string().optional().describe("姓名输入提示语；未填写时使用默认提示。")
+  }).optional().describe("仅当本句对白明确要求玩家设置重要角色姓名时填写；普通对白不要填写。")
 })
 
 export const draftPresentationSchema = z.discriminatedUnion("type", [

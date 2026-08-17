@@ -55,6 +55,10 @@ export interface RuntimeStoryDialogueDefinition {
   speaker_type: "player" | "object"
   speaker_key: string
   content: string
+  role_name_input?: {
+    role_key: string
+    prompt?: string
+  }
 }
 
 export interface RuntimeStorySilentPresentation {
@@ -409,6 +413,10 @@ export interface RuntimeContactMessageState {
   contact_conversation_id?: string
   contact_conversation_node_id?: string
   contact_conversation_reminder?: boolean
+  /** 本次互动实际生效的好感变化，用于保持冷却锚点不被冷却内重复操作刷新。 */
+  favor_delta?: number
+  /** 是否由本次互动建立好感冷却；冷却内重复消息为 false。 */
+  favor_cooldown_anchor?: boolean
   tags?: string[]
 }
 
@@ -613,6 +621,7 @@ export interface RuntimeHistoryEntry {
   category: "operation" | "story" | "system"
   type: "event" | "action" | "dialogue" | "system"
   id: string
+  role_key?: string
   game_minute: number
   title?: string
   content?: string
@@ -708,4 +717,8 @@ export interface RuntimeStorySessionSnapshot {
   /** @deprecated 请改用 triggered_once_events */
   loop_event_states: RuntimeLoopEventState[]
   history: RuntimeHistoryEntry[]
+  role_name_overrides: Record<string, {
+    surname: string
+    given_name: string
+  }>
 }

@@ -146,14 +146,22 @@ export function buildDialogueView(
 ): RuntimeRenderedDialogue {
   const speakerLabel = dialogue.speaker_type === "player"
     ? "主角"
-    : findRoleLabel(bundle, dialogue.speaker_key)
+    : findRoleLabel(bundle, dialogue.speaker_key, snapshot)
 
   return {
     index: index + 1,
     total,
     speakerLabel,
     speakerKey: dialogue.speaker_key,
-    content: renderDialogueContent(bundle, snapshot, dialogue.content, branchValues, callValues)
+    content: renderDialogueContent(bundle, snapshot, dialogue.content, branchValues, callValues),
+    ...(dialogue.role_name_input
+      ? {
+          roleNameInput: {
+            roleKey: dialogue.role_name_input.role_key,
+            prompt: dialogue.role_name_input.prompt?.trim() || "请设置角色姓名"
+          }
+        }
+      : {})
   }
 }
 
