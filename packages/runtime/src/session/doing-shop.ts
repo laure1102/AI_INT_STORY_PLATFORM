@@ -495,6 +495,7 @@ export function buyShopProduct(
   const itemName = getBundleItemNameMap(bundle).get(product.item_id) ?? product.item_id
   notifications.push(`已购买：${itemName} x${product.quantity}`)
   appendHistory(snapshot, {
+    category: "operation",
     type: "system",
     id: `shop-buy:${product.id}:${record.purchased_count}`,
     title: "shop:buy",
@@ -542,7 +543,9 @@ export function giftShopProduct(
   recordShopPurchase(snapshot, product)
 
   const contact = ensureContact(bundle, snapshot, normalizedRoleKey)
-  contact.favor = clampContactFavor(contact.favor + product.gift_favor_delta, contact.favor)
+  const previousFavor = contact.favor
+  contact.favor = clampContactFavor(previousFavor + product.gift_favor_delta, previousFavor)
+  const appliedFavorDelta = contact.favor - previousFavor
 
   const record = ensureShopGiftRecord(snapshot, product.id, normalizedRoleKey)
   const currentGameMinute = getCurrentGameMinute(snapshot)
@@ -555,12 +558,13 @@ export function giftShopProduct(
   const itemName = getBundleItemNameMap(bundle).get(product.item_id) ?? product.item_id
   const roleLabel = findRoleLabel(bundle, normalizedRoleKey)
   sendContactMessageToContact(bundle, snapshot, normalizedRoleKey, `我给你准备了${itemName}。`)
-  notifications.push(`已购买并送给 ${roleLabel}：${itemName} x${product.quantity}，好感 ${product.gift_favor_delta >= 0 ? "+" : ""}${product.gift_favor_delta}`)
+  notifications.push(`已购买并送给 ${roleLabel}：${itemName} x${product.quantity}，好感 ${appliedFavorDelta >= 0 ? "+" : ""}${appliedFavorDelta}`)
   appendHistory(snapshot, {
+    category: "operation",
     type: "system",
     id: `shop-gift:${product.id}:${normalizedRoleKey}:${record.gifted_count}`,
     title: "shop:gift",
-    content: `购买 ${itemName} x${product.quantity} 并送给 ${roleLabel}，花费 ${product.price}，好感变化 ${product.gift_favor_delta}。`
+    content: `购买 ${itemName} x${product.quantity} 并送给 ${roleLabel}，花费 ${product.price}，好感变化 ${appliedFavorDelta}，当前好感 ${contact.favor}。`
   })
 
   return true

@@ -148,10 +148,11 @@ export function giftBagItem(
   sendContactMessageToContact(bundle, snapshot, normalizedRoleKey, `我送给你${itemName} x${quantity}。`)
   notifications.push(`已送给 ${roleLabel}：${itemName} x${quantity}，好感 ${appliedFavorDelta >= 0 ? "+" : ""}${appliedFavorDelta}`)
   appendHistory(snapshot, {
+    category: "operation",
     type: "system",
     id: `bag-gift:${resolution.product.id}:${normalizedRoleKey}:${record.gifted_count}`,
     title: "bag:gift",
-    content: `从背包送给 ${roleLabel} ${itemName} x${quantity}，好感变化 ${appliedFavorDelta}。`
+    content: `从背包送给 ${roleLabel} ${itemName} x${quantity}，好感变化 ${appliedFavorDelta}，当前好感 ${contact.favor}。`
   })
 
   return true

@@ -432,7 +432,7 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     },
     /**
      * 保存当前会话到指定槽位。
-     * @param slotId 用户输入槽名。 @returns 写入的 v3 存档对象。 @throws 没有档案/会话时抛错。
+     * @param slotId 用户输入槽名。 @returns 写入的 v4 存档对象。 @throws 没有档案/会话时抛错。
      * 同时保存领域快照、播放游标和 bundle contentHash，随后刷新存档列表。
      */
     async saveToSlot(slotId) {
@@ -442,7 +442,7 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
       // 存档记录 bundle 版本，后面做兼容或迁移时可以据此判断。
       const normalizedSlotId = sanitizeSegment(slotId) || "slot-1"
       const saveState: RuntimeStorySaveState = {
-        schema_version: 3,
+        schema_version: 4,
         slot_id: normalizedSlotId,
         story_id: options.storyId,
         profile_id: profile.profile_id,

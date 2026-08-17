@@ -267,12 +267,14 @@ export function normalizeSchedulerState(snapshot: RuntimeStorySessionSnapshot) {
 
   snapshot.history = Array.isArray(snapshot.history)
     ? snapshot.history.map((item) => ({
+        category: item.category,
         type: item.type,
         id: normalizeText(item.id),
-        title: normalizeOptionalText(item.title),
-        content: normalizeOptionalText(item.content),
+        game_minute: Math.max(0, clampInteger(item.game_minute, 0)),
+        ...(normalizeOptionalText(item.title) ? { title: normalizeOptionalText(item.title) } : {}),
+        ...(normalizeOptionalText(item.content) ? { content: normalizeOptionalText(item.content) } : {}),
         timestamp: normalizeText(item.timestamp)
-      })).filter((item) => item.id && item.timestamp)
+      })).filter((item) => (item.category === "operation" || item.category === "story" || item.category === "system") && item.id && item.timestamp)
     : []
 }
 

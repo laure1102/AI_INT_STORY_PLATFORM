@@ -547,6 +547,13 @@ function bindEvents() {
     })
   })
 
+  dom.app.querySelectorAll("[data-history-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      ui.historyFilter = button.dataset.historyFilter ?? "all"
+      render()
+    })
+  })
+
   dom.app.querySelectorAll("[data-doing-menu]").forEach((button) => {
     button.addEventListener("click", () => {
       ui.selectedDoingMenuId = button.dataset.doingMenu
@@ -657,7 +664,7 @@ function bindEvents() {
     button.addEventListener("click", async () => {
       rememberContactThreadScroll()
       rememberContactOptionsScroll()
-      await openContactThread(button.dataset.contact)
+      await openContactThread(button.dataset.contactContact)
     })
   })
 

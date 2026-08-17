@@ -327,10 +327,20 @@ function renderMenuPanelBody(panelId) {
   let body = ""
 
   if (panelId === "notifications") {
-    const notifications = data?.notifications ?? []
-    body = notifications.length === 0
-      ? `<div class="empty">暂无通知。</div>`
-      : `<div class="notification-list">${notifications.slice().reverse().map((item) => `<div class="notification-item">${h(item)}</div>`).join("")}</div>`
+    const history = Array.isArray(data?.view?.history) ? data.view.history : []
+    const filters = [["all", "全部"], ["operation", "操作"], ["story", "剧情"], ["system", "系统"]]
+    const filteredHistory = ui.historyFilter === "all" ? history : history.filter((item) => item.category === ui.historyFilter)
+    const sortedHistory = filteredHistory
+      .map((item, index) => ({ item, index }))
+      .sort((left, right) => {
+        const minuteDiff = (Number(right.item.game_minute) || 0) - (Number(left.item.game_minute) || 0)
+        if (minuteDiff !== 0) return minuteDiff
+        const timestampDiff = String(right.item.timestamp ?? "").localeCompare(String(left.item.timestamp ?? ""))
+        return timestampDiff !== 0 ? timestampDiff : right.index - left.index
+      })
+      .map(({ item }) => item)
+    body = `<div class="history-filters">${filters.map(([id, label]) => `<button class="footer-command ${ui.historyFilter === id ? "active" : ""}" data-history-filter="${id}">${label}</button>`).join("")}</div>
+      ${sortedHistory.length === 0 ? `<div class="empty">暂无历史记录。</div>` : `<div class="notification-list">${sortedHistory.map((item) => `<div class="notification-item"><div class="item-meta">${h(formatHistoryMinute(item.game_minute))} · ${h(formatHistoryCategory(item.category))} · ${h(item.title ?? "")}</div>${item.content ? `<div>${h(item.content)}</div>` : ""}</div>`).join("")}</div>`}`
   } else if (panelId === "global") {
     body = `<pre class="pre-lines">${h((data?.globalValueLines ?? []).join("\n"))}</pre>`
   } else if (panelId === "system") {
@@ -523,6 +533,18 @@ function renderMenuPanelBody(panelId) {
   }
 
   return body
+}
+
+function formatHistoryMinute(gameMinute) {
+  if (typeof gameMinute !== "number" || !Number.isFinite(gameMinute) || gameMinute < 0) return "未定"
+  const minute = Math.trunc(gameMinute)
+  const day = Math.floor(minute / 1440) + 1
+  const time = minute % 1440
+  return `第${day}天 ${String(Math.floor(time / 60)).padStart(2, "0")}:${String(time % 60).padStart(2, "0")}`
+}
+
+function formatHistoryCategory(category) {
+  return category === "operation" ? "操作" : category === "story" ? "剧情" : "系统"
 }
 
 /** @returns 当前工具面板的抽屉 HTML；没有打开面板时返回空串。 */

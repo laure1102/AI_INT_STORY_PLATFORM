@@ -49,7 +49,7 @@ import type {
   StoryValEntryDefinition,
   StoryValsFile
 } from "../types"
-import type { RuntimeBagEntry, RuntimeBagState, RuntimeBagsState, RuntimeDoingRecord, RuntimeDoingState, RuntimeEventTriggerMode, RuntimeContactTrackId, RuntimeContactMessageState, RuntimeContactState, RuntimeSchedulerState, RuntimeShopGiftRecord, RuntimeShopPurchaseRecord, RuntimeShopState, RuntimeStoryDoingFile, RuntimeStoryContactConversationRuntimeState, RuntimeStoryContactConversationsFile, RuntimeStoryContactFile, RuntimeStoryReferFile, RuntimeStorySessionSnapshot, RuntimeStoryShopFile } from "./contracts-core"
+import type { RuntimeBagEntry, RuntimeBagState, RuntimeBagsState, RuntimeDoingRecord, RuntimeDoingState, RuntimeEventTriggerMode, RuntimeContactTrackId, RuntimeContactMessageState, RuntimeContactState, RuntimeHistoryEntry, RuntimeSchedulerState, RuntimeShopGiftRecord, RuntimeShopPurchaseRecord, RuntimeShopState, RuntimeStoryDoingFile, RuntimeStoryContactConversationRuntimeState, RuntimeStoryContactConversationsFile, RuntimeStoryContactFile, RuntimeStoryReferFile, RuntimeStorySessionSnapshot, RuntimeStoryShopFile } from "./contracts-core"
 import type { RuntimeState } from "./contracts-view"
 import { DEFAULT_CONTACT_RELATIONSHIP_TRACKS } from "./contracts-view"
 import { normalizeClockState, normalizeOptionalText, normalizeSchedulerState } from "./state-scheduler"
@@ -621,21 +621,52 @@ export function normalizeContactMessages(messages: RuntimeContactMessageState[] 
         content: normalizeText(message.content),
         game_minute: Math.max(0, clampInteger(message.game_minute, 0)),
         read: Boolean(message.read),
-        option_id: normalizeOptionalText(message.option_id),
-        option_kind: optionKind,
-        quick_message_id: normalizeOptionalText(message.quick_message_id),
-        source_rule_id: normalizeOptionalText(message.source_rule_id),
-        contact_conversation_id: normalizeOptionalText(message.contact_conversation_id),
-        contact_conversation_node_id: normalizeOptionalText(message.contact_conversation_node_id),
-        contact_conversation_reminder: message.contact_conversation_reminder === undefined
-          ? undefined
-          : Boolean(message.contact_conversation_reminder),
-        tags: Array.isArray(message.tags)
-          ? Array.from(new Set(message.tags.map((tag) => normalizeText(tag)).filter(Boolean)))
-          : undefined
+        ...(normalizeOptionalText(message.option_id) ? { option_id: normalizeOptionalText(message.option_id) } : {}),
+        ...(optionKind ? { option_kind: optionKind } : {}),
+        ...(normalizeOptionalText(message.quick_message_id) ? { quick_message_id: normalizeOptionalText(message.quick_message_id) } : {}),
+        ...(normalizeOptionalText(message.source_rule_id) ? { source_rule_id: normalizeOptionalText(message.source_rule_id) } : {}),
+        ...(normalizeOptionalText(message.contact_conversation_id) ? { contact_conversation_id: normalizeOptionalText(message.contact_conversation_id) } : {}),
+        ...(normalizeOptionalText(message.contact_conversation_node_id) ? { contact_conversation_node_id: normalizeOptionalText(message.contact_conversation_node_id) } : {}),
+        ...(message.contact_conversation_reminder !== undefined
+          ? { contact_conversation_reminder: Boolean(message.contact_conversation_reminder) }
+          : {}),
+        ...(Array.isArray(message.tags)
+          ? { tags: Array.from(new Set(message.tags.map((tag) => normalizeText(tag)).filter(Boolean))) }
+          : {})
       }
     })
     .filter((message) => message.id && message.content)
+}
+
+/** @param history 可能来自存档或外部调用的历史。 @returns 只保留显式合法分类并规范字段的完整时间线。 */
+export function normalizeHistoryState(history: RuntimeHistoryEntry[] | undefined): RuntimeHistoryEntry[] {
+  const validCategories = new Set<RuntimeHistoryEntry["category"]>(["operation", "story", "system"])
+  const validTypes = new Set<RuntimeHistoryEntry["type"]>(["event", "action", "dialogue", "system"])
+
+  return (Array.isArray(history) ? history : [])
+    .map((entry) => {
+      if (!entry || !validCategories.has(entry.category) || !validTypes.has(entry.type)) {
+        return null
+      }
+
+      const id = normalizeText(entry.id)
+      if (!id) {
+        return null
+      }
+
+      const gameMinute = Math.max(0, clampInteger(entry.game_minute, 0))
+      const timestamp = normalizeText(entry.timestamp) || new Date(gameMinute * 60000).toISOString()
+      return {
+        category: entry.category,
+        type: entry.type,
+        id,
+        game_minute: gameMinute,
+        ...(normalizeText(entry.title) ? { title: normalizeText(entry.title) } : {}),
+        ...(normalizeText(entry.content) ? { content: normalizeText(entry.content) } : {}),
+        timestamp
+      }
+    })
+    .filter((entry): entry is RuntimeHistoryEntry => Boolean(entry))
 }
 
 /** @param snapshot 会话快照。 @returns 无返回值；规范联系人、好感度、线程和消息并写回 snapshot.contact。 */
@@ -666,6 +697,7 @@ export function normalizeContactState(snapshot: RuntimeStorySessionSnapshot) {
  * @param snapshot 会话快照。 @returns 无返回值；依次修复背包、联系人、剧情会话、行动、商店、时钟和调度器。
  */
 export function normalizeStorySnapshotState(snapshot: RuntimeStorySessionSnapshot) {
+  snapshot.history = normalizeHistoryState(snapshot.history)
   normalizeBagsState(snapshot)
   normalizeContactState(snapshot)
   snapshot.contact_conversation = normalizeContactConversationState(snapshot.contact_conversation)

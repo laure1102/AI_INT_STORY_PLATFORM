@@ -120,10 +120,11 @@ export function initializeActionValues(action: CompiledAction) {
 /** @param snapshot 会话快照。 @param entry 不含时间戳的历史项。 @returns 无返回值；补当前确定性时间后追加到 history。 */
 export function appendHistory(
   snapshot: RuntimeStorySessionSnapshot,
-  entry: Omit<RuntimeHistoryEntry, "timestamp">
+  entry: Omit<RuntimeHistoryEntry, "timestamp" | "game_minute">
 ) {
   snapshot.history.push({
     ...entry,
+    game_minute: getCurrentGameMinute(snapshot),
     timestamp: getRuntimeTimestamp(snapshot)
   })
 }

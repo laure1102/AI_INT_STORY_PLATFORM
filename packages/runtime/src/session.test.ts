@@ -185,7 +185,7 @@ function createSave(
   slotId = "slot-1"
 ): RuntimeStorySaveState {
   return {
-    schema_version: 3,
+    schema_version: 4,
     slot_id: slotId,
     story_id: bundle.storyId,
     profile_id: "profile-1",
@@ -196,7 +196,12 @@ function createSave(
   }
 }
 
-describe("RuntimeStorySession v2 saves", () => {
+function withoutHistory(snapshot: RuntimeStorySessionSnapshot) {
+  const { history: _history, ...rest } = snapshot
+  return rest
+}
+
+describe("RuntimeStorySession v4 saves", () => {
   it("restores the exact dialogue cursor without replaying init", () => {
     const bundle = createBundle({
       chainEvents: {
@@ -221,14 +226,15 @@ describe("RuntimeStorySession v2 saves", () => {
     })
     const session = createStorySession({ bundle })
     session.dispatch({ type: "continue" })
-    const beforeSaveHistory = session.getSnapshot().history.length
+    const beforeSaveHistory = session.getSnapshot().history
+    expect(beforeSaveHistory.at(-1)).toMatchObject({ category: "story", type: "dialogue", game_minute: 0 })
 
     const restored = createStorySession({ bundle, saveState: createSave(session, bundle) })
     const view = restored.getViewModel()
 
     expect(view.currentDialogue?.content).toBe("second")
     expect(view.currentDialogue?.index).toBe(2)
-    expect(restored.getSnapshot().history).toHaveLength(beforeSaveHistory)
+    expect(restored.getSnapshot().history).toEqual(beforeSaveHistory)
   })
 
   it("rejects v1 and v2 saves with an explicit compatibility error", () => {
@@ -266,13 +272,13 @@ describe("RuntimeStorySession v2 saves", () => {
 
     const v2Save = {
       ...createSave(session, bundle),
-      schema_version: 2
+      schema_version: 3
     } as unknown as RuntimeStorySaveState
 
     expect(() => createStorySession({ bundle, saveState: v1Save }))
-      .toThrow("Save schema v1 is incompatible with the contact runtime; only v3 saves are supported.")
+      .toThrow("Save schema v1 is incompatible with the contact runtime; only v4 saves are supported.")
     expect(() => createStorySession({ bundle, saveState: v2Save }))
-      .toThrow("Save schema v2 is incompatible with the contact runtime; only v3 saves are supported.")
+      .toThrow("Save schema v3 is incompatible with the contact runtime; only v4 saves are supported.")
   })
 
   it("persists deterministic RNG state across a save", () => {
@@ -417,7 +423,8 @@ describe("Runtime player bag gifting", () => {
         roleKey: "normal:friend",
         quantity: testCase.quantity
       })).toBe(false)
-      expect(session.getSnapshot()).toEqual(before)
+      expect(withoutHistory(session.getSnapshot())).toEqual(withoutHistory(before))
+      expect(session.getSnapshot().history.at(-1)).toMatchObject({ category: "operation", title: "赠礼失败", content: expect.stringContaining(testCase.message) })
       expect(session.getViewModel().notifications.at(-1)).toContain(testCase.message)
     }
   })
@@ -437,7 +444,8 @@ describe("Runtime player bag gifting", () => {
       roleKey: "normal:friend",
       quantity: 1
     })).toBe(false)
-    expect(session.getSnapshot()).toEqual(before)
+    expect(withoutHistory(session.getSnapshot())).toEqual(withoutHistory(before))
+    expect(session.getSnapshot().history.at(-1)).toMatchObject({ category: "operation", title: "赠礼失败" })
     const giftBoxView = session.getViewModel().bagSummary[0]?.entries
       .find((entry) => entry.itemId === "gift_box")
     expect(giftBoxView).toMatchObject({
@@ -455,7 +463,7 @@ describe("Runtime player bag gifting", () => {
       roleKey: "normal:stranger",
       quantity: 1
     })).toBe(false)
-    expect(nonContactSession.getSnapshot()).toEqual(nonContactBefore)
+    expect(withoutHistory(nonContactSession.getSnapshot())).toEqual(withoutHistory(nonContactBefore))
 
     const lockedBundle = createBagGiftBundle()
     const roles = lockedBundle.roles as { normal: { roles: Array<{ id: string; contact_enabled?: boolean }> } }
@@ -469,7 +477,7 @@ describe("Runtime player bag gifting", () => {
       roleKey: "normal:friend",
       quantity: 1
     })).toBe(false)
-    expect(lockedSession.getSnapshot()).toEqual(lockedBefore)
+    expect(withoutHistory(lockedSession.getSnapshot())).toEqual(withoutHistory(lockedBefore))
 
     const conversationBundle = createBagGiftBundle()
     conversationBundle.contactConversations = {
@@ -506,7 +514,7 @@ describe("Runtime player bag gifting", () => {
       roleKey: "normal:friend",
       quantity: 1
     })).toBe(false)
-    expect(conversationSession.getSnapshot()).toEqual(conversationBefore)
+    expect(withoutHistory(conversationSession.getSnapshot())).toEqual(withoutHistory(conversationBefore))
   })
 
   it("ignores shop purchase restrictions for already-owned items", () => {
@@ -545,7 +553,8 @@ describe("Runtime player bag gifting", () => {
       roleKey: "normal:friend",
       quantity: 1
     })).toBe(false)
-    expect(shopFirst.getSnapshot()).toEqual(afterShopGift)
+    expect(withoutHistory(shopFirst.getSnapshot())).toEqual(withoutHistory(afterShopGift))
+    expect(shopFirst.getSnapshot().history.at(-1)).toMatchObject({ category: "operation", content: expect.stringContaining("送礼冷却中") })
 
     const cooldownEndedSave = createSave(shopFirst, bundle, "cooldown-ended")
     cooldownEndedSave.session_state.clock.total_minutes = 1440
@@ -566,7 +575,7 @@ describe("Runtime player bag gifting", () => {
     })).toBe(true)
     const afterBagGift = bagFirst.getSnapshot()
     bagFirst.dispatch({ type: "shop-gift", productId: "gift_box_product", roleKey: "normal:friend" })
-    expect(bagFirst.getSnapshot()).toEqual(afterBagGift)
+    expect(withoutHistory(bagFirst.getSnapshot())).toEqual(withoutHistory(afterBagGift))
     expect(bagFirst.getViewModel().notifications.at(-1)).toContain("送礼冷却中")
   })
 })
@@ -614,7 +623,7 @@ describe("Runtime schedule dependency ordering", () => {
     snapshot.scheduler.scheduled = scheduled
     snapshot.scheduler.next_seq = 4
     const session = createStorySession({ bundle, saveState: {
-      schema_version: 3,
+      schema_version: 4,
       slot_id: "seed",
       story_id: "runtime_test",
       profile_id: "profile-1",

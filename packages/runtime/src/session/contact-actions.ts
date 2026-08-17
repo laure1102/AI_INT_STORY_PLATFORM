@@ -56,7 +56,7 @@ import { canFireContactProactiveRule, chooseContactProactiveRuleMessage, chooseC
 import { appendContactMessage, assertRuntimeContactRoleKey, ensureContact, findContactTalkOption, findRoleLabel, getContact, getContactProactiveRulesForContact, getContactThread, getPlayerMoneyBalance, isBundleRoleKey, resolveContactActionOptionsForContact } from "./contact-threads"
 import { renderDialogueContent } from "./playback-render"
 import { getCurrentGameMinute } from "./schedule-clock"
-import { createRuntimeBagScriptFunctions } from "./script-context"
+import { createRuntimeBagScriptFunctions, findBagEntry } from "./script-context"
 import { appendHistory, queueInvokeEvent } from "./script-execution"
 import { clampContactFavor, normalizeContactState, normalizeText, writeSnapshotValue } from "./state-values"
 
@@ -234,6 +234,7 @@ export function sendContactMessageFromContact(
 
   notifications.push(`联系人 ${findRoleLabel(bundle, normalizedRoleKey)} 发来新消息。`)
   appendHistory(snapshot, {
+    category: "system",
     type: "system",
     id: message.id,
     title: `contact:${normalizedRoleKey}`,
@@ -260,6 +261,7 @@ export function sendContactMessageToContact(
   }
 
   appendHistory(snapshot, {
+    category: "operation",
     type: "system",
     id: message.id,
     title: "contact:player",
@@ -278,6 +280,7 @@ export function applyContactActionCosts(
   snapshot: RuntimeStorySessionSnapshot,
   action: RuntimeResolvedContactActionOption
 ) {
+  // 先完整校验余额和库存，再执行任何扣除，避免后续物品不足时只扣了部分金钱。
   if (action.costMoney > 0) {
     const currentMoney = getPlayerMoneyBalance(snapshot)
     if (currentMoney === null) {
@@ -288,23 +291,38 @@ export function applyContactActionCosts(
       throw new Error(`需要 ${action.costMoney} 元，当前只有 ${Math.max(0, Math.trunc(currentMoney))} 元。`)
     }
 
-    if (!writeSnapshotValue(snapshot, "player.money", Math.max(0, Math.trunc(currentMoney - action.costMoney)))) {
-      throw new Error("player.money 不是可写 value 变量，暂时无法支付。")
-    }
   }
 
+  const requiredItems = new Map<string, number>()
   for (const costItem of action.costItems) {
     if (!costItem.itemId || costItem.quantity <= 0) {
       continue
     }
 
-    const removed = createRuntimeBagScriptFunctions(bundle, snapshot).bag_remove(
-      "player",
-      costItem.itemId,
-      costItem.quantity
-    )
-    if (!removed) {
-      throw new Error(`消耗物品失败：${costItem.itemName} x${costItem.quantity}`)
+    requiredItems.set(costItem.itemId, (requiredItems.get(costItem.itemId) ?? 0) + costItem.quantity)
+  }
+
+  for (const [itemId, quantity] of requiredItems) {
+    const entry = findBagEntry(snapshot, "player", itemId)
+    if (!entry || entry.quantity < quantity) {
+      const label = action.costItems.find((item) => item.itemId === itemId)?.itemName ?? itemId
+      throw new Error(`消耗物品失败：${label} x${quantity}`)
+    }
+  }
+
+  if (action.costMoney > 0) {
+    const currentMoney = getPlayerMoneyBalance(snapshot)
+    if (currentMoney === null || !writeSnapshotValue(snapshot, "player.money", Math.max(0, Math.trunc(currentMoney - action.costMoney)))) {
+      throw new Error("player.money 不是可写 value 变量，暂时无法支付。")
+    }
+  }
+
+  for (const [itemId, quantity] of requiredItems) {
+    if (itemId && quantity > 0) {
+      const removed = createRuntimeBagScriptFunctions(bundle, snapshot).bag_remove("player", itemId, quantity)
+      if (!removed) {
+        throw new Error(`消耗物品失败：${itemId} x${quantity}`)
+      }
     }
   }
 }
@@ -350,10 +368,11 @@ export function sendContactTalk(
   contact.favor = clampContactFavor(contact.favor + favorDelta, contact.favor)
 
   appendHistory(snapshot, {
+    category: "operation",
     type: "system",
     id: outgoingMessage.id,
     title: `contact:${normalizedRoleKey}`,
-    content: `主角向 ${findRoleLabel(bundle, normalizedRoleKey)} 发送消息：${outgoingMessage.content}`
+    content: `主角向 ${findRoleLabel(bundle, normalizedRoleKey)} 发送消息：${outgoingMessage.content}；好感 ${favorDelta >= 0 ? "+" : ""}${favorDelta}（当前 ${contact.favor}）`
   })
 
   if (talkOption.invoke) {
@@ -421,10 +440,11 @@ export function sendContactAction(
   contact.favor = clampContactFavor(contact.favor + favorDelta, contact.favor)
 
   appendHistory(snapshot, {
+    category: "operation",
     type: "system",
     id: outgoingMessage.id,
     title: `contact:${normalizedRoleKey}`,
-    content: `主角对 ${findRoleLabel(bundle, normalizedRoleKey)} 执行动作：${actionOption.label}`
+    content: `主角对 ${findRoleLabel(bundle, normalizedRoleKey)} 执行动作：${actionOption.label}；好感 ${favorDelta >= 0 ? "+" : ""}${favorDelta}（当前 ${contact.favor}）`
   })
 
   if (actionOption.invoke) {

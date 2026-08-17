@@ -455,6 +455,7 @@ export function completeContactConversation(
   runtimeState.snapshot.contact_conversation = null
   runtimeState.activeContactConversation = null
   appendHistory(runtimeState.snapshot, {
+    category: "system",
     type: "system",
     id: `contact-conversation:${conversation.id}`,
     title: conversation.title || conversation.id,
@@ -521,6 +522,7 @@ export function startContactConversation(
 
   appendContactConversationContactMessages(bundle, runtimeState, notifications, conversation, entryNode)
   appendHistory(runtimeState.snapshot, {
+    category: "system",
     type: "system",
     id: `contact-conversation:${conversation.id}`,
     title: conversation.title || conversation.id,
@@ -577,6 +579,7 @@ export function advanceContactConversationReply(
 
   if (playerMessage) {
     appendHistory(runtimeState.snapshot, {
+      category: "operation",
       type: "system",
       id: playerMessage.id,
       title: `contact:${activeState.role_key}`,

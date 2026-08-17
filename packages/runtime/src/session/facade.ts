@@ -25,21 +25,21 @@ import { advanceClockBySingleStep, createBaseSnapshot, isRuntimeTimePaused, queu
 import { queueDoingEvent, reconcileScheduler } from "./schedule-queue"
 import { appendHistory, findBundleInvokeTargetEvent, getInvokeTargetLabel, queueInvokeEvent, validateInvokeArgs } from "./script-execution"
 import { createDefaultClockState, normalizeInvokeTargetType, normalizeSchedulerState, syncSystemTimeFieldsFromClock } from "./state-scheduler"
-import { applyCustomValuesToValsFile, clampInteger, clampNumber, cloneValue, createDefaultSchedulerState, normalizeBagsState, normalizeDoingState, normalizeContactConversationHistoryState, normalizeContactConversationState, normalizeContactState, normalizeShopState, normalizeText } from "./state-values"
+import { applyCustomValuesToValsFile, clampInteger, clampNumber, cloneValue, createDefaultSchedulerState, normalizeBagsState, normalizeDoingState, normalizeContactConversationHistoryState, normalizeContactConversationState, normalizeContactState, normalizeHistoryState, normalizeShopState, normalizeText } from "./state-values"
 import { buildViewModel } from "./view-model"
 
 /**
  * 创建一个独立、可推进、可存档的故事运行时会话。
  *
- * 恢复层次按“bundle 默认值 → v3 save snapshot → playback 游标”组装。v1/v2 存档在读取任何领域
+ * 恢复层次按“bundle 默认值 → v4 save snapshot → playback 游标”组装。v3 及更早存档在读取任何领域
  * 状态前直接拒绝，避免把旧存档中的手机状态静默解释为联系人状态。
  * 返回对象保持稳定 API：客户端通过 `dispatch` 交互、`tick` 推进时间、getter 读取只读副本。
  */
 export function createStorySession(options: CreateStorySessionOptions): RuntimeStorySession {
-  if (options.saveState && options.saveState.schema_version !== 3) {
+  if (options.saveState && options.saveState.schema_version !== 4) {
     const rawVersion = (options.saveState as { schema_version?: unknown }).schema_version
     const versionLabel = rawVersion === undefined ? "v1" : `v${String(rawVersion)}`
-    throw new Error(`Save schema ${versionLabel} is incompatible with the contact runtime; only v3 saves are supported.`)
+    throw new Error(`Save schema ${versionLabel} is incompatible with the contact runtime; only v4 saves are supported.`)
   }
 
   // 第 1 步：确定基础快照。读取存档时先克隆，避免会话运行过程反向修改调用方持有的 saveState；
@@ -64,6 +64,16 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     storyDirector
   }
 
+  function recordOperation(id: string, title: string, content: string, type: "system" | "action" = "system") {
+    appendHistory(runtimeState.snapshot, {
+      category: "operation",
+      type,
+      id,
+      title,
+      content
+    })
+  }
+
   // 第 2 步：兼容旧快照中缺失的确定性基础设施与领域状态。
   // 所有 normalize 函数都只把缺失/旧格式收敛到当前结构，不能在加载时触发剧情或消耗资源。
   if (!runtimeState.snapshot.clock) {
@@ -79,6 +89,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
   runtimeState.snapshot.rng = normalizeRuntimeRngState(runtimeState.snapshot.rng, options.bundle)
 
   normalizeBagsState(runtimeState.snapshot)
+  runtimeState.snapshot.history = normalizeHistoryState(runtimeState.snapshot.history)
   normalizeContactState(runtimeState.snapshot)
   runtimeState.snapshot.contact_conversation = normalizeContactConversationState(runtimeState.snapshot.contact_conversation)
   runtimeState.snapshot.contact_conversations = normalizeContactConversationHistoryState(runtimeState.snapshot.contact_conversations)
@@ -109,7 +120,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
   // 第 4 步：处理存档内容版本提示。
   // contentHash 不一致并不立即拒绝存档，因为单机编辑器常需要带旧档预览新 bundle；客户端会收到
-  // 明确提示。存档 Schema 已在函数入口严格限定为 v3。
+  // 明确提示。存档 Schema 已在函数入口严格限定为 v4。
   if (options.saveState) {
     notifications.push(`已加载存档：${options.saveState.slot_id}`)
     const bundleHash = options.bundle.contentHash ?? options.bundle.generatedAt
@@ -143,9 +154,11 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         ? cloneValue(args)
         : {}
     if (!normalizedTargetType) {
+      const message = "调用事件时必须指定目标类型：chain、pool 或 schedule。"
       if (notifyFailure) {
-        notifications.push("调用事件时必须指定目标类型：chain、pool 或 schedule。")
+        notifications.push(message)
       }
+      recordOperation(`invoke-failed:${normalizedEventId}`, "调用事件失败", message)
       return false
     }
 
@@ -153,9 +166,11 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     const validation = validateInvokeArgs(normalizedTargetType, targetEvent, normalizedArgs)
 
     if (!validation.ok || !targetEvent) {
-      if (notifyFailure && validation.message) {
-        notifications.push(validation.message)
+      const message = validation.message || `${getInvokeTargetLabel(normalizedTargetType)} "${normalizedEventId}" 不存在。`
+      if (notifyFailure) {
+        notifications.push(message)
       }
+      recordOperation(`invoke-failed:${normalizedEventId}`, "调用事件失败", message)
       return false
     }
 
@@ -167,13 +182,16 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
       normalizedArgs
     )
     if (!queued) {
+      const message = `${getInvokeTargetLabel(normalizedTargetType)} "${targetEvent.id}" 未能进入队列。`
       if (notifyFailure) {
-        notifications.push(`${getInvokeTargetLabel(normalizedTargetType)} "${targetEvent.id}" 未能进入队列。`)
+        notifications.push(message)
       }
+      recordOperation(`invoke-failed:${targetEvent.id}`, "调用事件失败", message)
       return false
     }
 
     reconcileScheduler(options.bundle, runtimeState, notifications)
+    recordOperation(`invoke:${normalizedTargetType}:${targetEvent.id}`, "调用事件", `${getInvokeTargetLabel(normalizedTargetType)}：${targetEvent.title}`)
     return true
   }
 
@@ -212,12 +230,17 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         try {
           const queued = queueDoingEvent(options.bundle, runtimeState, action.doingId)
           if (!queued) {
-            notifications.push("行动未能进入队列。")
+            const message = "行动未能进入队列。"
+            notifications.push(message)
+            recordOperation(`doing-failed:${action.doingId}`, "行动失败", message)
             return
           }
+          recordOperation(`doing:${action.doingId}`, "行动", `发起行动：${action.doingId}`, "action")
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "发起行动失败。")
+          const message = error instanceof Error ? error.message : "发起行动失败。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `doing-failed:${action.doingId}`, title: "行动失败", content: message })
         }
         return
       }
@@ -226,7 +249,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         try {
           buyShopProduct(options.bundle, runtimeState.snapshot, notifications, action.productId)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "购买商品失败。")
+          const message = error instanceof Error ? error.message : "购买商品失败。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `shop-buy-failed:${action.productId}`, title: "购买失败", content: message })
         }
         return
       }
@@ -242,7 +267,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
             action.quantity
           )
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "赠送背包物品失败。")
+          const message = error instanceof Error ? error.message : "赠送背包物品失败。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `bag-gift-failed:${action.itemId}:${action.roleKey}`, title: "赠礼失败", content: message })
           return false
         }
       }
@@ -251,7 +278,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         try {
           giftShopProduct(options.bundle, runtimeState.snapshot, notifications, action.productId, action.roleKey)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "赠送商品失败。")
+          const message = error instanceof Error ? error.message : "赠送商品失败。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `shop-gift-failed:${action.productId}:${action.roleKey}`, title: "赠礼失败", content: message })
         }
         return
       }
@@ -259,6 +288,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
       if (action.type === "submit-text") {
         notifications.push(`已提交输入字段：${action.field}`)
         appendHistory(runtimeState.snapshot, {
+          category: "operation",
           type: "system",
           id: "submit-text",
           title: action.field,
@@ -272,7 +302,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           const normalizedRoleKey = assertRuntimeContactRoleKey(options.bundle, action.roleKey)
           markContactThreadRead(runtimeState.snapshot, normalizedRoleKey)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "标记联系人消息已读失败。")
+          const message = error instanceof Error ? error.message : "标记联系人消息已读失败。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `contact-read-failed:${action.roleKey}`, title: "联系人操作失败", content: message })
         }
         return
       }
@@ -282,7 +314,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           advanceContactConversationReply(options.bundle, runtimeState, notifications, action.optionId)
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "发送联系人剧情回复失败。")
+          const message = error instanceof Error ? error.message : "发送联系人剧情回复失败。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `contact-reply-failed:${action.optionId}`, title: "联系人回复失败", content: message })
         }
         return
       }
@@ -298,7 +332,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           )
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "发送联系人消息失败。")
+          const message = error instanceof Error ? error.message : "发送联系人消息失败。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `contact-talk-failed:${action.roleKey}:${action.quickMessageId}`, title: "联系人消息失败", content: message })
         }
         return
       }
@@ -314,7 +350,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           )
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "发送联系人闲聊失败。")
+          const message = error instanceof Error ? error.message : "发送联系人闲聊失败。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `contact-talk-failed:${action.roleKey}:${action.talkId}`, title: "联系人闲聊失败", content: message })
         }
         return
       }
@@ -330,7 +368,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           )
           reconcileScheduler(options.bundle, runtimeState, notifications)
         } catch (error) {
-          notifications.push(error instanceof Error ? error.message : "执行联系人动作失败。")
+          const message = error instanceof Error ? error.message : "执行联系人动作失败。"
+          notifications.push(message)
+          appendHistory(runtimeState.snapshot, { category: "operation", type: "system", id: `contact-action-failed:${action.roleKey}:${action.actionId}`, title: "联系人动作失败", content: message })
         }
         return
       }
@@ -339,7 +379,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         const currentEventState = getCurrentEventState(options.bundle, runtimeState)
 
         if (!currentEventState) {
-          notifications.push("当前没有可继续的事件。")
+          const message = "当前没有可继续的事件。"
+          notifications.push(message)
+          recordOperation("continue-failed:no-event", "继续失败", message)
           return
         }
 
@@ -347,6 +389,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
           // 当前句在用户确认“继续”时才写入历史，然后游标前进。游标到末尾后统一走事件结束流程，
           // 由它执行 end_script、处理分支或进入下一个事件。
           appendHistory(runtimeState.snapshot, {
+            category: "story",
             type: "dialogue",
             id: `${currentEventState.node.id}:${runtimeState.currentDialogueIndex}`,
             title: currentEventState.currentDialogue.speakerLabel,
@@ -361,7 +404,9 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         }
 
         if (currentEventState.availableActions.length > 0) {
-          notifications.push("当前事件需要先选择一个操作分支。")
+          const message = "当前事件需要先选择一个操作分支。"
+          notifications.push(message)
+          recordOperation(`continue-failed:${currentEventState.node.id}`, "继续失败", message)
           return
         }
 

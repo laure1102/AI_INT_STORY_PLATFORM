@@ -18,6 +18,7 @@ export const ui = {
   busy: false,
   screen: "auto",
   menuPanel: null,
+  historyFilter: "all",
   selectedDoingMenuId: null,
   selectedShopCategoryId: null,
   selectedShopGiftProductId: null,

@@ -577,6 +577,7 @@ export function buildViewModel(
     activeEventTitle: currentEvent?.title ?? null,
     interaction,
     notifications,
+    history: runtimeState.snapshot.history.map((entry) => ({ ...entry })),
     currentLocationId: normalizeText(currentEvent?.location ?? "") || null,
     currentLocationName: currentEventState?.locationName ?? null,
     currentSceneLevel: null,

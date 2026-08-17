@@ -49,7 +49,7 @@ import type {
   StoryValEntryDefinition,
   StoryValsFile
 } from "../types"
-import type { CompiledAction, CompiledEvent, RuntimeContactChannelLabels, RuntimeContactChannelPreset, RuntimeEventTriggerMode, RuntimeInitialBagsFile, RuntimeContactTrackId, RuntimePlaybackActionState, RuntimePlaybackState, RuntimeProfileCustomFile, RuntimeSchedulerAuditKind, RuntimeStandaloneEvent, RuntimeStoryDoingFile, RuntimeStoryItemsFile, RuntimeStoryContactProfile, RuntimeStoryContactConversationRuntimeState, RuntimeStoryContactConversationsFile, RuntimeStoryContactEventInvocation, RuntimeStoryContactFile, RuntimeStoryContactRelationshipTrack, RuntimeStoryPresentation, RuntimeStoryReferFile, RuntimeStorySaveState, RuntimeStorySessionSnapshot, RuntimeStoryShopFile } from "./contracts-core"
+import type { CompiledAction, CompiledEvent, RuntimeContactChannelLabels, RuntimeContactChannelPreset, RuntimeEventTriggerMode, RuntimeInitialBagsFile, RuntimeContactTrackId, RuntimeHistoryEntry, RuntimePlaybackActionState, RuntimePlaybackState, RuntimeProfileCustomFile, RuntimeSchedulerAuditKind, RuntimeStandaloneEvent, RuntimeStoryDoingFile, RuntimeStoryItemsFile, RuntimeStoryContactProfile, RuntimeStoryContactConversationRuntimeState, RuntimeStoryContactConversationsFile, RuntimeStoryContactEventInvocation, RuntimeStoryContactFile, RuntimeStoryContactRelationshipTrack, RuntimeStoryPresentation, RuntimeStoryReferFile, RuntimeStorySaveState, RuntimeStorySessionSnapshot, RuntimeStoryShopFile } from "./contracts-core"
 import { getRuntimeActiveCallValues } from "./script-context"
 import { cloneValue, normalizeText } from "./state-values"
 
@@ -307,6 +307,7 @@ export interface RuntimeStoryViewModel {
   activeEventTitle: string | null
   interaction: RuntimeInteraction
   notifications: string[]
+  history: RuntimeHistoryEntry[]
   currentLocationId: string | null
   currentLocationName: string | null
   currentSceneLevel: number | null

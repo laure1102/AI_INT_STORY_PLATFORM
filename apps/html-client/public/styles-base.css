@@ -753,6 +753,13 @@ code {
   gap: 8px;
 }
 
+.history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
 .notification-item {
   border-left: 3px solid var(--cyan);
   padding: 8px 10px;

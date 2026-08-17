@@ -14,7 +14,7 @@ import type { RuntimeDialogueNodeState, RuntimeEnterEventOptions, RuntimeState, 
 import { DEFAULT_MAX_CALC_NESTING_DEPTH } from "./contracts-view"
 import { autoRegisterContactsFromEvent } from "./contact-actions"
 import { createStandaloneEvent, getBundleGraphNode, getCurrentPlayableEvent, isCompiledAction, isCompiledEvent } from "./contact-threads"
-import { buildDialogueView, buildMessageView, canEnterEvent, completeActiveScheduledEvent, completeScheduledChain, getPresentationDialogues, moveToEvent, pickFirstEnterableNextEventId, resolveEventActions, settlePassiveEvents } from "./playback-render"
+import { buildDialogueView, buildMessageView, canEnterEvent, completeActiveScheduledEvent, completeScheduledChain, getPresentationDialogues, moveToEvent, pickFirstEnterableNextEventId, renderDialogueContent, resolveEventActions, settlePassiveEvents } from "./playback-render"
 import { appendSchedulerAudit, calculateNextLoopDueGameMinute, enqueueReadyEvent, getCurrentGameMinute, getLoopSchedulerState } from "./schedule-clock"
 import { clearCurrentEventState, getBundleScheduleEvents, reconcileScheduler } from "./schedule-queue"
 import { findLocationLabel, getRuntimeActiveCallValues, getRuntimePlayableEventCallValues } from "./script-context"
@@ -168,6 +168,7 @@ export function moveToEventResolved(
       message: "后续事件触发条件不满足，跳过节点"
     })
     appendHistory(runtimeState.snapshot, {
+      category: "system",
       type: "system",
       id: "skip-event",
       title: targetNode.id,
@@ -225,6 +226,7 @@ export function enterCurrentEventResolved(
     })
     notifications.push(`事件 "${currentNode.title}" 未满足触发条件，已跳过。`)
     appendHistory(runtimeState.snapshot, {
+      category: "system",
       type: "system",
       id: "skip-event",
       title: currentNode.id,
@@ -248,10 +250,21 @@ export function enterCurrentEventResolved(
   autoRegisterContactsFromEvent(bundle, runtimeState.snapshot, currentNode, notifications)
 
   appendHistory(runtimeState.snapshot, {
+    category: "story",
     type: "event",
     id: currentNode.id,
     title: currentNode.title
   })
+
+  if (currentNode.presentation.type === "message") {
+    appendHistory(runtimeState.snapshot, {
+      category: "story",
+      type: "system",
+      id: `${currentNode.id}:message`,
+      title: currentNode.title,
+      content: renderDialogueContent(bundle, runtimeState.snapshot, currentNode.presentation.message.content, nextBranchValues, callValues)
+    })
+  }
 
   runtimeState.currentEventEntered = true
   runtimeState.currentDialogueIndex = 0
@@ -337,13 +350,29 @@ export function executeAction(
   const sourceEvent = getCurrentPlayableEvent(bundle, runtimeState)
   const targetActionState = runtimeState.pendingActions.find((item) => item.nodeId === optionId)
   if (!targetActionState) {
-    notifications.push(`未找到操作分支：${optionId}`)
+    const message = `未找到操作分支：${optionId}`
+    notifications.push(message)
+    appendHistory(runtimeState.snapshot, {
+      category: "operation",
+      type: "action",
+      id: `action-failed:${optionId}`,
+      title: "分支选择失败",
+      content: message
+    })
     return
   }
 
   const actionNode = getBundleGraphNode(bundle, targetActionState.nodeId)
   if (!isCompiledAction(actionNode)) {
-    notifications.push(`节点 "${optionId}" 不是操作节点。`)
+    const message = `节点 "${optionId}" 不是操作节点。`
+    notifications.push(message)
+    appendHistory(runtimeState.snapshot, {
+      category: "operation",
+      type: "action",
+      id: `action-failed:${optionId}`,
+      title: "分支选择失败",
+      content: message
+    })
     return
   }
 
@@ -376,6 +405,7 @@ export function executeAction(
   }
 
   appendHistory(runtimeState.snapshot, {
+    category: "operation",
     type: "action",
     id: actionNode.id,
     title: actionNode.title

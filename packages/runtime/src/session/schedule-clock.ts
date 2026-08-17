@@ -165,7 +165,7 @@ export function appendSchedulerAudit(
 ) {
   normalizeSchedulerState(snapshot)
 
-  snapshot.scheduler.audit_logs.push({
+  const normalizedEntry = {
     kind: normalizeSchedulerAuditKind(entry.kind),
     game_minute: getCurrentGameMinute(snapshot),
     source_type: normalizeSchedulerSourceType(entry.source_type),
@@ -175,7 +175,25 @@ export function appendSchedulerAudit(
       ? null
       : Math.max(0, clampInteger(entry.due_game_minute, 0)),
     message: normalizeText(entry.message)
-  })
+  }
+
+  snapshot.scheduler.audit_logs.push(normalizedEntry)
+
+  // 调度审计同时进入持久化历史，便于 L 消息面板呈现自动调度和运行结果；同一存档恢复时去重。
+  const historyId = `scheduler:${snapshot.scheduler.audit_logs.length - 1}`
+  if (!snapshot.history.some((item) => item.id === historyId)) {
+    const baseDate = parseStoryDate(snapshot.clock.base_date) ?? { year: 1990, month: 1, day: 1 }
+    const timestamp = new Date(Date.UTC(baseDate.year, baseDate.month - 1, baseDate.day) + normalizedEntry.game_minute * 60000).toISOString()
+    snapshot.history.push({
+      category: "system",
+      type: "system",
+      id: historyId,
+      game_minute: normalizedEntry.game_minute,
+      title: "系统调度",
+      content: normalizedEntry.message,
+      timestamp
+    })
+  }
 
   if (snapshot.scheduler.audit_logs.length > MAX_SCHEDULER_AUDIT_LOGS) {
     snapshot.scheduler.audit_logs = snapshot.scheduler.audit_logs.slice(-MAX_SCHEDULER_AUDIT_LOGS)

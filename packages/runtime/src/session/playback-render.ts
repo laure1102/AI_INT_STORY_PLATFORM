@@ -309,6 +309,7 @@ export function moveToEvent(
       message: "后续事件触发条件不满足，跳过节点"
     })
     appendHistory(runtimeState.snapshot, {
+      category: "system",
       type: "system",
       id: "skip-event",
       title: targetNode.id,

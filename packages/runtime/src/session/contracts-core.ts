@@ -558,14 +558,14 @@ export interface RuntimePlayerProfileSetup {
 }
 
 /**
- * Runtime v3 存档的持久化顶层结构。
+ * Runtime v4 存档的持久化顶层结构。
  *
  * `session_state` 保存变量、背包、联系人、商城、时钟和 scheduler 等长期状态；`playback` 单独保存
  * 当前事件进行到哪一句、等待哪些选项等瞬时游标。两者必须来自同一次会话快照，加载后才能从
  * “下一步”继续，而不是只恢复变量却从事件开头重复执行脚本。
  */
 export interface RuntimeStorySaveState {
-  schema_version: 3
+  schema_version: 4
   slot_id: string
   story_id: string
   profile_id: string
@@ -610,8 +610,10 @@ export interface RuntimeLoopEventState {
 }
 
 export interface RuntimeHistoryEntry {
+  category: "operation" | "story" | "system"
   type: "event" | "action" | "dialogue" | "system"
   id: string
+  game_minute: number
   title?: string
   content?: string
   timestamp: string

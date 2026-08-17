@@ -101,7 +101,7 @@ Notes:
 - `contact.json5` stores the default contact channel, selectable channel presets/labels, relationship tracks, personality library, talk/action/reply libraries, contact profiles, quick messages, and proactive messages. A profile may override `channel_id`; an empty override inherits `default_channel_id`.
 - `contact_conversations.json5` stores plot-specific continuous contact dialogues. Use it when a contact exchange must proceed node by node, lock ordinary chat/actions, and optionally invoke a follow-up event when the conversation ends.
 - New stories use a `generic` channel. Existing modern stories may use the `phone` preset; channel presets affect labels and presentation only, not scheduling or delivery semantics.
-- Runtime saves use schema version 3. Versions 1 and 2 are rejected explicitly and are not migrated.
+- Runtime saves use schema version 4. Versions 3 and earlier are rejected explicitly and are not migrated.
 - `refer.json5` is the story-level称谓库. It defines gender-aware text terms exposed as `${term.xxx}` in dialogue/message/contact text templates.
 - `doing.json5` is the story-level player-initiated action config. It contains menu tree data plus doings that reuse flat-event presentation/script semantics.
 - `shop.json5` is the story-level shop shelf config. It must only reference existing `items.json5` item ids; it owns price, display/purchase conditions, gift favor delta, and cooldowns.
