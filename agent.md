@@ -1,5 +1,6 @@
 # Story Manager Agent Guide
 
+
 Last updated: `2026-08-04`
 
 This file is the current high-signal project map for future agents and developers.
@@ -1104,3 +1105,6 @@ The intended rule is:
 - use `apply_patch` for manual file edits
 - do not revert unrelated user changes
 
+
+## 开发和测试注意：
+- 本项目使用node 22版本开发和运行，本机可以使用fnm use 22来切换22 版本。
