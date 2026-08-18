@@ -88,7 +88,8 @@ export function createApiConfig(): ApiConfig {
     stateDir: process.env.STORY_MGR_STATE_DIR
       ? path.resolve(process.env.STORY_MGR_STATE_DIR)
       : path.join(workspaceRoot, ".story-manager"),
-    evolutionModel: process.env.STORY_EVOLUTION_MODEL?.trim() || "gpt-5.6-sol",
+    // Evolution 的模型配置还可以来自编辑器设置；仅在显式提供环境变量时覆盖它。
+    evolutionModel: process.env.STORY_EVOLUTION_MODEL?.trim() || undefined,
     evolutionAgentApiKey: process.env.STORY_AI_AGENT_API_KEY?.trim() || undefined,
     evolutionAgentBaseUrl: process.env.STORY_AI_AGENT_BASE_URL?.trim() || undefined,
     embeddingModel: process.env.STORY_EMBEDDING_MODEL?.trim() || "Xenova/bge-small-zh-v1.5",

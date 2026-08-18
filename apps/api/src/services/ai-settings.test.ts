@@ -23,10 +23,12 @@ afterEach(() => {
 function settings(): AppSettingsFile {
   return {
     ai: {
-      text: { baseUrl: "https://text.example/v1", model: "text-model" },
-      image: { baseUrl: "https://image.example/v1", model: "image-model" },
+      text: { apiKey: "stored-text-secret", baseUrl: "https://text.example/v1", model: "text-model" },
+      image: { apiKey: "stored-image-secret", baseUrl: "https://image.example/v1", model: "image-model" },
       agent: {
+        apiKey: "stored-agent-secret",
         baseUrl: "https://stored-agent.example/v1",
+        evolutionModel: "stored-evolution-model",
         chiefEditorModel: "agent-model",
         plotPlannerModel: "agent-model",
         assetDesignerModel: "agent-model",
@@ -40,16 +42,25 @@ function settings(): AppSettingsFile {
 }
 
 describe("AI runtime secrets", () => {
-  it("requires text and image API keys from environment variables", () => {
+  it("uses stored text and image keys, with environment overrides", () => {
     delete process.env.STORY_AI_TEXT_API_KEY
     delete process.env.STORY_AI_IMAGE_API_KEY
-    expect(() => requireTextProvider(settings())).toThrow("STORY_AI_TEXT_API_KEY")
-    expect(() => requireImageProvider(settings())).toThrow("STORY_AI_IMAGE_API_KEY")
+    expect(requireTextProvider(settings()).apiKey).toBe("stored-text-secret")
+    expect(requireImageProvider(settings()).apiKey).toBe("stored-image-secret")
 
     process.env.STORY_AI_TEXT_API_KEY = "text-runtime-secret"
     process.env.STORY_AI_IMAGE_API_KEY = "image-runtime-secret"
     expect(requireTextProvider(settings()).apiKey).toBe("text-runtime-secret")
     expect(requireImageProvider(settings()).apiKey).toBe("image-runtime-secret")
+  })
+
+  it("uses stored Agent credentials when environment overrides are absent", () => {
+    delete process.env.STORY_AI_AGENT_API_KEY
+    delete process.env.STORY_AI_AGENT_BASE_URL
+    const agent = requireAgentSettings(settings())
+
+    expect(agent.apiKey).toBe("stored-agent-secret")
+    expect(agent.baseUrl).toBe("https://stored-agent.example/v1")
   })
 
   it("uses the Agent environment secret and base URL override", () => {

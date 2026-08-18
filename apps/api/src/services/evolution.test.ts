@@ -108,6 +108,43 @@ function event(sequence: number, overrides: Partial<StoryTelemetryEvent> = {}): 
 }
 
 describe("EvolutionService", () => {
+  it("reads the latest editor Evolution model settings when a job starts", async () => {
+    let receivedModel: EvolutionWorkflowInput["model"]
+    const { service, store } = await createContext({
+      workflowRunner: async (input) => {
+        receivedModel = input.model
+        return makePackage(input)
+      }
+    })
+    await store.writeAppSettings({
+      ai: {
+        text: { apiKey: "", baseUrl: "", model: "" },
+        image: { apiKey: "", baseUrl: "", model: "" },
+        agent: {
+          apiKey: "stored-agent-key",
+          baseUrl: "https://stored-agent.example/v1",
+          evolutionModel: "stored-evolution-model",
+          chiefEditorModel: "",
+          plotPlannerModel: "",
+          assetDesignerModel: "",
+          eventWriterModel: "",
+          scriptDoctorModel: "",
+          consistencyCheckerModel: "",
+          temperature: 0.7
+        }
+      }
+    })
+
+    const created = await service.createJob("story", "advance", { type: "global", id: "global" })
+    await waitForJob(service, created.id, "completed")
+
+    expect(receivedModel).toEqual({
+      apiKey: "stored-agent-key",
+      baseUrl: "https://stored-agent.example/v1",
+      model: "stored-evolution-model"
+    })
+  })
+
   it("publishes completed jobs and exposes their immutable package", async () => {
     const { service } = await createContext({ workflowRunner: async (input) => makePackage(input) })
     const created = await service.createJob("story", "advance", { type: "global", id: "global" })

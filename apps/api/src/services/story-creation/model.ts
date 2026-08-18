@@ -105,20 +105,20 @@ export function normalizeBaseUrl(baseUrl: string) {
 /**
  * 读取并验证六 Agent 共用配置。
  * @param settings File Store 读取的应用设置。
- * @returns 清理后的 baseUrl、环境密钥，并把 temperature 限制在 0 到 2。
- * @throws baseUrl 或 STORY_AI_AGENT_API_KEY 缺失/非法时抛 400；角色模型名由使用时再检查。
+ * @returns 清理后的 baseUrl、API 密钥，并把 temperature 限制在 0 到 2。
+ * @throws baseUrl 或 API 密钥缺失/非法时抛 400；角色模型名由使用时再检查。
  */
 export function requireAgentSettings(settings: AppSettingsFile): RequiredAgentSettings {
   const agent = settings.ai.agent
-  const apiKey = process.env.STORY_AI_AGENT_API_KEY?.trim() ?? ""
-  const configuredBaseUrl = process.env.STORY_AI_AGENT_BASE_URL?.trim() || agent.baseUrl
+  const apiKey = process.env.STORY_AI_AGENT_API_KEY?.trim() || (agent.apiKey ?? "").trim()
+  const configuredBaseUrl = process.env.STORY_AI_AGENT_BASE_URL?.trim() || (agent.baseUrl ?? "")
 
   if (!configuredBaseUrl.trim()) {
     throw new FileStoreError("Agent model baseUrl is required.", 400, "ai.agent-base-url-required")
   }
 
   if (!apiKey) {
-    throw new FileStoreError("STORY_AI_AGENT_API_KEY is required.", 400, "ai.agent-api-key-required")
+    throw new FileStoreError("Agent API key is required (configure it in editor settings or STORY_AI_AGENT_API_KEY).", 400, "ai.agent-api-key-required")
   }
 
   return {

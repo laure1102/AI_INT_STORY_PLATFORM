@@ -2,11 +2,15 @@
 import type { AppSettingsFile } from "@story-mgr/core"
 
 interface AppSettingsDraft {
+  imageApiKey: string
   imageBaseUrl: string
   imageModel: string
+  textApiKey: string
   textBaseUrl: string
   textModel: string
+  agentApiKey: string
   agentBaseUrl: string
+  evolutionModel: string
   chiefEditorModel: string
   plotPlannerModel: string
   assetDesignerModel: string
@@ -27,11 +31,15 @@ const emit = defineEmits<{
 }>()
 
 const draft = reactive<AppSettingsDraft>({
+  imageApiKey: "",
   imageBaseUrl: "",
   imageModel: "",
+  textApiKey: "",
   textBaseUrl: "",
   textModel: "",
+  agentApiKey: "",
   agentBaseUrl: "",
+  evolutionModel: "",
   chiefEditorModel: "",
   plotPlannerModel: "",
   assetDesignerModel: "",
@@ -64,11 +72,15 @@ function parseTemperature(value: string) {
 
 /** 把外部设置同步到本地响应式草稿。 @param settings 当前应用设置。 @returns 无返回值；原地更新 draft。 */
 function syncDraft(settings: AppSettingsFile) {
+  draft.imageApiKey = normalizeText(settings.ai.image.apiKey)
   draft.imageBaseUrl = normalizeText(settings.ai.image.baseUrl)
   draft.imageModel = normalizeText(settings.ai.image.model)
+  draft.textApiKey = normalizeText(settings.ai.text.apiKey)
   draft.textBaseUrl = normalizeText(settings.ai.text.baseUrl)
   draft.textModel = normalizeText(settings.ai.text.model)
+  draft.agentApiKey = normalizeText(settings.ai.agent.apiKey)
   draft.agentBaseUrl = normalizeText(settings.ai.agent.baseUrl)
+  draft.evolutionModel = normalizeText(settings.ai.agent.evolutionModel)
   draft.chiefEditorModel = normalizeText(settings.ai.agent.chiefEditorModel)
   draft.plotPlannerModel = normalizeText(settings.ai.agent.plotPlannerModel)
   draft.assetDesignerModel = normalizeText(settings.ai.agent.assetDesignerModel)
@@ -83,15 +95,19 @@ function submitDraft() {
   emit("save", {
     ai: {
       image: {
+        apiKey: draft.imageApiKey.trim(),
         baseUrl: draft.imageBaseUrl.trim(),
         model: draft.imageModel.trim()
       },
       text: {
+        apiKey: draft.textApiKey.trim(),
         baseUrl: draft.textBaseUrl.trim(),
         model: draft.textModel.trim()
       },
       agent: {
+        apiKey: draft.agentApiKey.trim(),
         baseUrl: draft.agentBaseUrl.trim(),
+        evolutionModel: draft.evolutionModel.trim(),
         chiefEditorModel: draft.chiefEditorModel.trim(),
         plotPlannerModel: draft.plotPlannerModel.trim(),
         assetDesignerModel: draft.assetDesignerModel.trim(),
@@ -135,6 +151,16 @@ watch(
           <div class="settings-dialog__group">
             <h3 class="settings-dialog__group-title">文生</h3>
             <label class="settings-dialog__field">
+              <span class="settings-dialog__label">STORY_AI_TEXT_API_KEY</span>
+              <input
+                v-model="draft.textApiKey"
+                class="text-input"
+                type="password"
+                autocomplete="off"
+                placeholder="输入文本模型 API Key"
+              />
+            </label>
+            <label class="settings-dialog__field">
               <span class="settings-dialog__label">baseUrl</span>
               <input
                 v-model="draft.textBaseUrl"
@@ -152,6 +178,16 @@ watch(
 
           <div class="settings-dialog__group">
             <h3 class="settings-dialog__group-title">图生</h3>
+            <label class="settings-dialog__field">
+              <span class="settings-dialog__label">STORY_AI_IMAGE_API_KEY</span>
+              <input
+                v-model="draft.imageApiKey"
+                class="text-input"
+                type="password"
+                autocomplete="off"
+                placeholder="输入图片模型 API Key"
+              />
+            </label>
             <label class="settings-dialog__field">
               <span class="settings-dialog__label">baseUrl</span>
               <input
@@ -171,13 +207,28 @@ watch(
           <div class="settings-dialog__group">
             <h3 class="settings-dialog__group-title">创作 Agent</h3>
             <label class="settings-dialog__field">
-              <span class="settings-dialog__label">baseUrl</span>
+              <span class="settings-dialog__label">STORY_AI_AGENT_API_KEY</span>
+              <input
+                v-model="draft.agentApiKey"
+                class="text-input"
+                type="password"
+                autocomplete="off"
+                placeholder="输入 Agent API Key"
+              />
+            </label>
+            <label class="settings-dialog__field">
+              <span class="settings-dialog__label">STORY_AI_AGENT_BASE_URL</span>
               <input
                 v-model="draft.agentBaseUrl"
                 class="text-input"
                 type="text"
                 placeholder="https://api.example.com/v1"
               />
+            </label>
+
+            <label class="settings-dialog__field">
+              <span class="settings-dialog__label">STORY_EVOLUTION_MODEL</span>
+              <input v-model="draft.evolutionModel" class="text-input" type="text" placeholder="gpt-5.6-sol" />
             </label>
 
             <div class="settings-dialog__grid settings-dialog__grid--agents">

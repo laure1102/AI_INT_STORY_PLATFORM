@@ -243,9 +243,9 @@ export function isDoubaoSeedreamModel(model: string): boolean {
  */
 export function requireTextProvider(settings: AppSettingsFile): AppSettingsFile["ai"]["text"] & { apiKey: string } {
   const ai = requireAiConfig(settings).text
-  const apiKey = process.env.STORY_AI_TEXT_API_KEY?.trim() ?? ""
+  const apiKey = process.env.STORY_AI_TEXT_API_KEY?.trim() || (ai.apiKey ?? "").trim()
   if (!ai.baseUrl.trim()) throw new FileStoreError("Text model baseUrl is required.", 400, "ai.text-base-url-required")
-  if (!apiKey) throw new FileStoreError("STORY_AI_TEXT_API_KEY is required.", 400, "ai.text-api-key-required")
+  if (!apiKey) throw new FileStoreError("Text model API key is required (configure it in editor settings or STORY_AI_TEXT_API_KEY).", 400, "ai.text-api-key-required")
   if (!ai.model.trim()) throw new FileStoreError("Text model name is required.", 400, "ai.text-model-required")
   return { ...ai, apiKey }
 }
@@ -259,9 +259,9 @@ export function requireTextProvider(settings: AppSettingsFile): AppSettingsFile[
  */
 export function requireImageProvider(settings: AppSettingsFile): AppSettingsFile["ai"]["image"] & { apiKey: string } {
   const ai = requireAiConfig(settings).image
-  const apiKey = process.env.STORY_AI_IMAGE_API_KEY?.trim() ?? ""
+  const apiKey = process.env.STORY_AI_IMAGE_API_KEY?.trim() || (ai.apiKey ?? "").trim()
   if (!ai.baseUrl.trim()) throw new FileStoreError("Image model baseUrl is required.", 400, "ai.image-base-url-required")
-  if (!apiKey) throw new FileStoreError("STORY_AI_IMAGE_API_KEY is required.", 400, "ai.image-api-key-required")
+  if (!apiKey) throw new FileStoreError("Image model API key is required (configure it in editor settings or STORY_AI_IMAGE_API_KEY).", 400, "ai.image-api-key-required")
   if (!ai.model.trim()) throw new FileStoreError("Image model name is required.", 400, "ai.image-model-required")
   return { ...ai, apiKey }
 }

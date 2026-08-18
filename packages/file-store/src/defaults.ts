@@ -107,16 +107,18 @@ export function createDefaultStoryEventLocations(): StoryEventLocationFile {
 }
 
 /**
- * 创建不含密钥的应用设置。
- * @returns 文本、图片与六个 Agent 配置均为空，temperature 为 0.7 的设置。
+ * 创建应用级 AI 设置。
+ * @returns 文本、图片与 Agent 连接信息均为空，temperature 为 0.7 的设置。
  */
 export function createDefaultAppSettings(): AppSettingsFile {
   return {
     ai: {
-      image: { baseUrl: "", model: "" },
-      text: { baseUrl: "", model: "" },
+      image: { apiKey: "", baseUrl: "", model: "" },
+      text: { apiKey: "", baseUrl: "", model: "" },
       agent: {
+        apiKey: "",
         baseUrl: "",
+        evolutionModel: "",
         chiefEditorModel: "",
         plotPlannerModel: "",
         assetDesignerModel: "",

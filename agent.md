@@ -1100,7 +1100,7 @@ POST /api/stories/:storyId/evolution/evaluate
 POST /api/stories/:storyId/evolution/rollback
 ```
 
-Runtime environment:
+Runtime environment overrides:
 
 ```txt
 STORY_AI_AGENT_API_KEY
@@ -1113,7 +1113,7 @@ STORY_EVOLUTION_API_URL
 STORY_EVOLUTION_POLL_INTERVAL_MS
 ```
 
-API keys are never persisted in `data/setting.json5`; the editor stores only non-sensitive base URLs, model names and Agent temperature.
+The editor persists text, image and Agent API keys in `data/setting.json5`, together with the Agent base URL and Evolution model. Environment variables remain optional deployment overrides and take precedence over persisted editor settings.
 
 ## 11. Cocos client status
 

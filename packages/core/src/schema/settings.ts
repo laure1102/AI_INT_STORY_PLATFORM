@@ -1,7 +1,7 @@
 /**
  * 故事圣经和应用 AI 设置的持久化 Schema。
  *
- * 设置文件只保存非敏感模型配置；API 密钥必须由服务端环境变量提供。
+ * 设置文件保存编辑器可配置的模型连接信息，包括 API 密钥。部署环境变量仍可在服务端覆盖这些值。
  */
 import { z } from "zod"
 
@@ -18,12 +18,15 @@ export const storyBibleSchema = z.object({
 })
 
 export const appAiProviderSettingsSchema = z.object({
+  apiKey: z.string().default(""),
   baseUrl: z.string().default(""),
   model: z.string().default("")
 })
 
 export const appAiAgentSettingsSchema = z.object({
+  apiKey: z.string().default(""),
   baseUrl: z.string().default(""),
+  evolutionModel: z.string().default(""),
   chiefEditorModel: z.string().default(""),
   plotPlannerModel: z.string().default(""),
   assetDesignerModel: z.string().default(""),
@@ -35,15 +38,19 @@ export const appAiAgentSettingsSchema = z.object({
 
 export const appAiSettingsSchema = z.object({
   image: appAiProviderSettingsSchema.default({
+    apiKey: "",
     baseUrl: "",
     model: ""
   }),
   text: appAiProviderSettingsSchema.default({
+    apiKey: "",
     baseUrl: "",
     model: ""
   }),
   agent: appAiAgentSettingsSchema.default({
+    apiKey: "",
     baseUrl: "",
+    evolutionModel: "",
     chiefEditorModel: "",
     plotPlannerModel: "",
     assetDesignerModel: "",
@@ -57,15 +64,19 @@ export const appAiSettingsSchema = z.object({
 export const appSettingsSchema = z.object({
   ai: appAiSettingsSchema.default({
     image: {
+      apiKey: "",
       baseUrl: "",
       model: ""
     },
     text: {
+      apiKey: "",
       baseUrl: "",
       model: ""
     },
     agent: {
+      apiKey: "",
       baseUrl: "",
+      evolutionModel: "",
       chiefEditorModel: "",
       plotPlannerModel: "",
       assetDesignerModel: "",

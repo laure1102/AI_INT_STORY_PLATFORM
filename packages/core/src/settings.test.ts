@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { appSettingsSchema } from "./schema/settings"
 
-describe("app settings security", () => {
-  it("does not retain API keys in parsed or serialized settings", () => {
+describe("app settings persistence", () => {
+  it("retains API keys and Evolution model configuration", () => {
     const settings = appSettingsSchema.parse({
       ai: {
         text: { apiKey: "text-secret", baseUrl: "https://text.example/v1", model: "text-model" },
@@ -11,9 +11,8 @@ describe("app settings security", () => {
       }
     })
 
-    expect(JSON.stringify(settings)).not.toContain("secret")
-    expect(settings.ai.text).toEqual({ baseUrl: "https://text.example/v1", model: "text-model" })
-    expect(settings.ai.image).toEqual({ baseUrl: "https://image.example/v1", model: "image-model" })
-    expect(settings.ai.agent).not.toHaveProperty("apiKey")
+    expect(settings.ai.text).toMatchObject({ apiKey: "text-secret", baseUrl: "https://text.example/v1", model: "text-model" })
+    expect(settings.ai.image).toMatchObject({ apiKey: "image-secret", baseUrl: "https://image.example/v1", model: "image-model" })
+    expect(settings.ai.agent).toMatchObject({ apiKey: "agent-secret", evolutionModel: "" })
   })
 })

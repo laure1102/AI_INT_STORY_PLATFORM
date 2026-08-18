@@ -396,7 +396,10 @@ export class EvolutionService {
 
   /** 准备父链、世界状态和聚合上下文并执行 Evolution LangGraph。 */
   private async createEmptyPackage(storyId: string, scope: StoryEvolutionScope, context: EvolutionJobContext, instruction: string, jobId: string, resume: boolean, signal: AbortSignal): Promise<StoryEvolutionPackage> {
-    const document = await this.store.readStoryDocument(storyId)
+    const [document, settings] = await Promise.all([
+      this.store.readStoryDocument(storyId),
+      this.store.readAppSettings()
+    ])
     const baseContentHash = compileStory(document).compiled.contentHash
     const allRows = this.db.prepare("SELECT package_id, sequence, scope_json FROM evolution_packages WHERE story_id=? ORDER BY sequence DESC").all(storyId) as Array<{ package_id: string; sequence: number; scope_json: string }>
     const sameScope = allRows.filter((row) => { const value = JSON.parse(row.scope_json) as StoryEvolutionScope; return value.type === scope.type && value.id === scope.id })
@@ -409,15 +412,21 @@ export class EvolutionService {
     const sequence = (sameScope[0]?.sequence ?? 0) + 1
     const threadId = `evolution:${storyId}:${jobId}`
     const checkpoint = resume ? await this.checkpointer.get({ configurable: { thread_id: threadId } }) : null
-    if (this.workflowRunner === runEvolutionWorkflow && (!this.options.model?.apiKey || !this.options.model.baseUrl || !this.options.model.model)) {
-      throw new Error("Evolution model requires STORY_AI_AGENT_API_KEY, STORY_AI_AGENT_BASE_URL and STORY_EVOLUTION_MODEL.")
+    const storedAgent = settings.ai.agent
+    const model = {
+      apiKey: this.options.model?.apiKey?.trim() || (storedAgent.apiKey ?? "").trim() || undefined,
+      baseUrl: this.options.model?.baseUrl?.trim() || (storedAgent.baseUrl ?? "").trim() || undefined,
+      model: this.options.model?.model?.trim() || (storedAgent.evolutionModel ?? "").trim() || undefined
+    }
+    if (this.workflowRunner === runEvolutionWorkflow && (!model.apiKey || !model.baseUrl || !model.model)) {
+      throw new Error("Evolution model requires an Agent API key, Agent base URL and Evolution model in editor settings or environment variables.")
     }
     return this.workflowRunner({
       storyId, instruction, scope, document, baseContentHash, parentPackageIds: parents,
       parentPackages: this.readPackageClosure(storyId, parents), sequence,
       context: { worldState: this.readEffectiveWorldState(storyId, relevantScopes), aggregates: this.readAggregateContext(storyId, relevantScopes) },
       checkpointer: this.checkpointer, threadId, resume: resume && Boolean(checkpoint), signal,
-      model: this.options.model, embeddingProvider: this.embeddingProvider
+      model, embeddingProvider: this.embeddingProvider
     })
   }
 
