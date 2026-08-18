@@ -2,13 +2,10 @@
 import type { AppSettingsFile } from "@story-mgr/core"
 
 interface AppSettingsDraft {
-  imageApiKey: string
   imageBaseUrl: string
   imageModel: string
-  textApiKey: string
   textBaseUrl: string
   textModel: string
-  agentApiKey: string
   agentBaseUrl: string
   chiefEditorModel: string
   plotPlannerModel: string
@@ -30,13 +27,10 @@ const emit = defineEmits<{
 }>()
 
 const draft = reactive<AppSettingsDraft>({
-  imageApiKey: "",
   imageBaseUrl: "",
   imageModel: "",
-  textApiKey: "",
   textBaseUrl: "",
   textModel: "",
-  agentApiKey: "",
   agentBaseUrl: "",
   chiefEditorModel: "",
   plotPlannerModel: "",
@@ -70,13 +64,10 @@ function parseTemperature(value: string) {
 
 /** 把外部设置同步到本地响应式草稿。 @param settings 当前应用设置。 @returns 无返回值；原地更新 draft。 */
 function syncDraft(settings: AppSettingsFile) {
-  draft.imageApiKey = normalizeText(settings.ai.image.apiKey)
   draft.imageBaseUrl = normalizeText(settings.ai.image.baseUrl)
   draft.imageModel = normalizeText(settings.ai.image.model)
-  draft.textApiKey = normalizeText(settings.ai.text.apiKey)
   draft.textBaseUrl = normalizeText(settings.ai.text.baseUrl)
   draft.textModel = normalizeText(settings.ai.text.model)
-  draft.agentApiKey = normalizeText(settings.ai.agent.apiKey)
   draft.agentBaseUrl = normalizeText(settings.ai.agent.baseUrl)
   draft.chiefEditorModel = normalizeText(settings.ai.agent.chiefEditorModel)
   draft.plotPlannerModel = normalizeText(settings.ai.agent.plotPlannerModel)
@@ -92,17 +83,14 @@ function submitDraft() {
   emit("save", {
     ai: {
       image: {
-        apiKey: draft.imageApiKey.trim(),
         baseUrl: draft.imageBaseUrl.trim(),
         model: draft.imageModel.trim()
       },
       text: {
-        apiKey: draft.textApiKey.trim(),
         baseUrl: draft.textBaseUrl.trim(),
         model: draft.textModel.trim()
       },
       agent: {
-        apiKey: draft.agentApiKey.trim(),
         baseUrl: draft.agentBaseUrl.trim(),
         chiefEditorModel: draft.chiefEditorModel.trim(),
         plotPlannerModel: draft.plotPlannerModel.trim(),
@@ -157,11 +145,6 @@ watch(
             </label>
 
             <label class="settings-dialog__field">
-              <span class="settings-dialog__label">apiKey</span>
-              <input v-model="draft.textApiKey" class="text-input" type="password" placeholder="sk-..." />
-            </label>
-
-            <label class="settings-dialog__field">
               <span class="settings-dialog__label">模型</span>
               <input v-model="draft.textModel" class="text-input" type="text" placeholder="gpt-4.1-mini" />
             </label>
@@ -180,11 +163,6 @@ watch(
             </label>
 
             <label class="settings-dialog__field">
-              <span class="settings-dialog__label">apiKey</span>
-              <input v-model="draft.imageApiKey" class="text-input" type="password" placeholder="sk-..." />
-            </label>
-
-            <label class="settings-dialog__field">
               <span class="settings-dialog__label">模型</span>
               <input v-model="draft.imageModel" class="text-input" type="text" placeholder="gpt-image-1" />
             </label>
@@ -192,22 +170,15 @@ watch(
 
           <div class="settings-dialog__group">
             <h3 class="settings-dialog__group-title">创作 Agent</h3>
-            <div class="settings-dialog__grid">
-              <label class="settings-dialog__field">
-                <span class="settings-dialog__label">baseUrl</span>
-                <input
-                  v-model="draft.agentBaseUrl"
-                  class="text-input"
-                  type="text"
-                  placeholder="https://api.example.com/v1"
-                />
-              </label>
-
-              <label class="settings-dialog__field">
-                <span class="settings-dialog__label">apiKey</span>
-                <input v-model="draft.agentApiKey" class="text-input" type="password" placeholder="sk-..." />
-              </label>
-            </div>
+            <label class="settings-dialog__field">
+              <span class="settings-dialog__label">baseUrl</span>
+              <input
+                v-model="draft.agentBaseUrl"
+                class="text-input"
+                type="text"
+                placeholder="https://api.example.com/v1"
+              />
+            </label>
 
             <div class="settings-dialog__grid settings-dialog__grid--agents">
               <label class="settings-dialog__field">

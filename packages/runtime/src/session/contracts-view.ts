@@ -52,6 +52,8 @@ import type {
 import type { CompiledAction, CompiledEvent, RuntimeContactChannelLabels, RuntimeContactChannelPreset, RuntimeEventTriggerMode, RuntimeInitialBagsFile, RuntimeContactTrackId, RuntimeHistoryEntry, RuntimePlaybackActionState, RuntimePlaybackState, RuntimeProfileCustomFile, RuntimeSchedulerAuditKind, RuntimeStandaloneEvent, RuntimeStoryDoingFile, RuntimeStoryItemsFile, RuntimeStoryContactProfile, RuntimeStoryContactConversationRuntimeState, RuntimeStoryContactConversationsFile, RuntimeStoryContactEventInvocation, RuntimeStoryContactFile, RuntimeStoryContactRelationshipTrack, RuntimeStoryPresentation, RuntimeStoryReferFile, RuntimeStorySaveState, RuntimeStorySessionSnapshot, RuntimeStoryShopFile } from "./contracts-core"
 import { getRuntimeActiveCallValues } from "./script-context"
 import { cloneValue, normalizeText } from "./state-values"
+import type { StoryEvolutionPackage, StorySemanticContactIntent } from "@story-mgr/evolution"
+import type { RuntimeContentRegistry } from "../content-registry"
 
 export interface RuntimeStoryBundle {
   schemaVersion?: 1 | 2
@@ -84,6 +86,11 @@ export interface RuntimeStoryBundle {
   onceEvents?: unknown[]
   /** @deprecated 请改用 scheduleEvents */
   loopEvents?: unknown[]
+  baseContentHash?: string
+  activePackageIds?: string[]
+  effectiveContentHash?: string
+  semanticEntries?: StorySemanticContactIntent[]
+  worldState?: Record<string, string | number | boolean | null>
 }
 
 export type RuntimeInteraction =
@@ -360,6 +367,8 @@ export type RuntimeStorySessionAction =
   | { type: "contact-send-talk"; roleKey: string; talkId: string }
   | { type: "contact-send-action"; roleKey: string; actionId: string }
   | { type: "contact-send-quick-message"; roleKey: string; quickMessageId: string }
+  | { type: "contact-semantic-input"; roleKey: string; intentId: string; score: number }
+  | { type: "contact-semantic-fallback"; roleKey: string }
   | { type: "contact-mark-read"; roleKey: string }
   | { type: "start-doing"; doingId: string }
   | { type: "bag-gift"; itemId: string; roleKey: string; quantity: number }
@@ -376,11 +385,19 @@ export type RuntimeStorySessionAction =
  */
 export interface CreateStorySessionOptions {
   bundle: RuntimeStoryBundle
+  contentRegistry?: RuntimeContentRegistry
   customOverrides?: RuntimeProfileCustomFile | null
   saveState?: RuntimeStorySaveState | null
   now?: Date
   wallClock?: () => Date
   storyDirector?: RuntimeStoryDirector | null
+}
+
+export interface RuntimePackageInstallResult {
+  installed: boolean
+  queued: boolean
+  packageIds: string[]
+  reason?: string
 }
 
 /**
@@ -396,8 +413,15 @@ export interface RuntimeStorySession {
   setTimePause(paused: boolean): void
   setTimeSpeed(speed: number): void
   getViewModel(): RuntimeStoryViewModel
+  getEffectiveBundle(): RuntimeStoryBundle
+  getAvailableSemanticContactIntents(roleKey?: string): StorySemanticContactIntent[]
   getSnapshot(): RuntimeStorySessionSnapshot
   getPlaybackState(): RuntimePlaybackState
+  queueEvolutionPackage(pkg: StoryEvolutionPackage): RuntimePackageInstallResult
+  reconcileEvolutionPackages(packages: readonly StoryEvolutionPackage[]): RuntimePackageInstallResult
+  applyPendingEvolutionPackages(): RuntimePackageInstallResult
+  submitSemanticContactInput(roleKey: string, intentId: string, score: number): boolean
+  isSafeContentSwitchPoint(): boolean
 }
 
 /** 运行时内部的行动节点状态；使用 camelCase，不直接作为 JSON 存档格式。 */

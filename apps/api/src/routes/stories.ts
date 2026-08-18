@@ -16,6 +16,8 @@ import { registerStoryDocumentRoutes } from "./story-document-routes"
 import { registerStoryDomainRoutes } from "./story-domain-routes"
 import { registerStoryEventRoutes } from "./story-event-routes"
 import { registerStoryValidationRoutes } from "./story-validation-routes"
+import { registerStoryEvolutionRoutes } from "./story-evolution-routes"
+import { EvolutionService, type EvolutionServiceOptions } from "../services/evolution"
 
 /**
  * 创建 Stories API Router，并安装全部故事相关端点。
@@ -31,9 +33,16 @@ import { registerStoryValidationRoutes } from "./story-validation-routes"
 export function createStoriesRouter(
   store: StoryFileStore,
   config: ApiConfig,
-  creationJobs: StoryCreationJobService
+  creationJobs: StoryCreationJobService,
+  evolutionOptions: EvolutionServiceOptions = {}
 ) {
   const router = new Router({ prefix: "/api" })
+  const evolution = new EvolutionService(store, config.stateDir, {
+    model: { apiKey: config.evolutionAgentApiKey, baseUrl: config.evolutionAgentBaseUrl, model: config.evolutionModel },
+    embeddingModel: config.embeddingModel,
+    ...evolutionOptions
+  })
+  ;(router as Router & { evolutionService?: EvolutionService }).evolutionService = evolution
 
   registerStoryDocumentRoutes(router, store)
   registerStoryCreationRoutes(router, store, config, creationJobs)
@@ -42,6 +51,7 @@ export function createStoriesRouter(
   registerStoryAiAssetRoutes(router, store)
   registerStoryAssetRoutes(router, store)
   registerStoryValidationRoutes(router, store, config)
+  registerStoryEvolutionRoutes(router, store, config, evolution)
 
   return router
 }

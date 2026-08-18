@@ -12,6 +12,7 @@
     "@story-mgr/core": "workspace:*",
     "@story-mgr/file-store": "workspace:*",
     "@story-mgr/runtime": "workspace:*",
+    "@story-mgr/evolution": "workspace:*",
     "json5": "^2.2.3"
   },
   "devDependencies": {

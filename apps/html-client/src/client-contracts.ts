@@ -31,6 +31,7 @@ export interface HtmlClientPaths {
   storyDir: string
   bundleFile: string
   profilesDir: string
+  evolutionDir: string
 }
 
 export interface HtmlProfileSummary {
@@ -88,6 +89,10 @@ export interface CreateHtmlClientAppOptions {
   profileId?: string
   slotId?: string
   autoStartNewGame?: boolean
+  evolutionApiUrl?: string
+  playerId?: string
+  shardId?: string
+  evolutionPollIntervalMs?: number
 }
 
 export interface HtmlClientApp {
@@ -106,4 +111,5 @@ export interface HtmlClientApp {
   tick(deltaMs: number): void
   setTimePause(paused: boolean): void
   setTimeSpeed(speed: number): void
+  dispose(): void
 }

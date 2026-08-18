@@ -7,11 +7,12 @@ import {
   type RuntimeStorySession,
   type RuntimeStorySessionSnapshot
 } from "./session"
+import { hashEvolutionPackage, type StoryEvolutionPackage } from "@story-mgr/evolution"
 
 function createBundle(options: Partial<RuntimeStoryBundle> = {}): RuntimeStoryBundle {
   return {
     schemaVersion: 2,
-    contentHash: "test-content-hash",
+    contentHash: "a".repeat(64),
     storyId: "runtime_test",
     title: "Runtime Test",
     generatedAt: "2026-01-01T00:00:00.000Z",
@@ -26,6 +27,24 @@ function createBundle(options: Partial<RuntimeStoryBundle> = {}): RuntimeStoryBu
     scheduleEvents: [],
     ...options
   }
+}
+
+function makeEvolutionPackage(bundle: RuntimeStoryBundle, id: string, sequence: number, parents: string[] = [], worldState: Record<string, string | number | boolean | null> = { [id]: sequence }): StoryEvolutionPackage {
+  const unsigned = {
+    schema_version: 1 as const,
+    package_id: id,
+    story_id: bundle.storyId,
+    scope: { type: "global" as const, id: "global" },
+    sequence,
+    base_content_hash: bundle.baseContentHash ?? bundle.contentHash!,
+    parent_package_ids: parents,
+    created_at: "2026-01-01T00:00:00.000Z",
+    patch: { world_state_patch: worldState },
+    semantic_model: { model_id: "Xenova/bge-small-zh-v1.5" as const, dimension: 512 as const, normalized: true as const },
+    semantic_entries: [],
+    world_state_patch: worldState
+  }
+  return { ...unsigned, package_hash: hashEvolutionPackage(unsigned) }
 }
 
 function createShopBundle(money: number): RuntimeStoryBundle {
@@ -185,7 +204,7 @@ function createSave(
   slotId = "slot-1"
 ): RuntimeStorySaveState {
   return {
-    schema_version: 4,
+    schema_version: 5,
     slot_id: slotId,
     story_id: bundle.storyId,
     profile_id: "profile-1",
@@ -201,7 +220,7 @@ function withoutHistory(snapshot: RuntimeStorySessionSnapshot) {
   return rest
 }
 
-describe("RuntimeStorySession v4 saves", () => {
+describe("RuntimeStorySession v5 saves", () => {
   it("restores the exact dialogue cursor without replaying init", () => {
     const bundle = createBundle({
       chainEvents: {
@@ -276,9 +295,9 @@ describe("RuntimeStorySession v4 saves", () => {
     } as unknown as RuntimeStorySaveState
 
     expect(() => createStorySession({ bundle, saveState: v1Save }))
-      .toThrow("Save schema v1 is incompatible with the contact runtime; only v4 saves are supported.")
+      .toThrow("Save schema v1 is incompatible with the evolution runtime; only v5 saves are supported.")
     expect(() => createStorySession({ bundle, saveState: v2Save }))
-      .toThrow("Save schema v3 is incompatible with the contact runtime; only v4 saves are supported.")
+      .toThrow("Save schema v3 is incompatible with the evolution runtime; only v5 saves are supported.")
   })
 
   it("persists deterministic RNG state across a save", () => {
@@ -333,7 +352,6 @@ describe("RuntimeStorySession v4 saves", () => {
     expect(restored.getSnapshot().rng).toEqual(uninterrupted.getSnapshot().rng)
   })
 })
-
 describe("Runtime shop direct gifting", () => {
   it("charges the shop price and gifts without using the player bag", () => {
     const bundle = createShopBundle(500)
@@ -692,6 +710,128 @@ describe("Runtime player bag gifting", () => {
   })
 })
 
+describe("Runtime semantic contact input", () => {
+  function semanticBundle(): RuntimeStoryBundle {
+    return createBundle({
+      roles: { normal: { roles: [{ id: "friend", name: "好友", descr: "", zhiye: "", contact_enabled: true }] }, important: { roles: [] } },
+      contact: {
+        default_channel_id: "generic",
+        channels: [{ id: "generic", name: "联系", preset: "generic", labels: {} }],
+        relationship_tracks: [], personality_library: [],
+        talk_library: [{ id: "hello", text: "你好", tags: ["greeting"], scope: { role_keys: ["normal:friend"], contact_tracks: [], personality_ids: [], min_favor: 0, max_favor: 100 }, base_favor_delta: 0, cooldown_hours: 0 }],
+        action_library: [], reply_library: [], player_quick_messages: [],
+        contact_profiles: [{ role_key: "normal:friend", channel_id: "generic", enabled: true, auto_add: true, initial_favor: 20, preferred_tags: [], reply_by_tag: {}, proactive_messages: [] }],
+        fallback_replies: { default: ["我没听懂。"] }
+      },
+      worldState: { open: true },
+      semanticEntries: [{ id: "greet", role_key: "normal:friend", utterances: ["你好"], response_kind: "talk", response_id: "hello", condition_expr: "${world.open} === true", min_score: 0.7, priority: 1, vector: [1, ...Array(511).fill(0)] }]
+    })
+  }
+
+  it("filters current intents, enforces threshold and forwards a valid talk", () => {
+    const session = createStorySession({ bundle: semanticBundle() })
+    expect(session.getAvailableSemanticContactIntents("normal:friend").map((entry) => entry.id)).toEqual(["greet"])
+    expect(session.dispatch({ type: "contact-semantic-input", roleKey: "normal:friend", intentId: "greet", score: 0.69 })).toBe(false)
+    expect(session.dispatch({ type: "contact-semantic-input", roleKey: "normal:friend", intentId: "greet", score: 0.9 })).toBe(true)
+    expect(session.getSnapshot().contact.threads[0]?.messages[0]).toMatchObject({ sender: "player", content: "你好", option_id: "hello" })
+  })
+
+  it("writes a deterministic NPC fallback into the contact thread", () => {
+    const session = createStorySession({ bundle: semanticBundle() })
+    expect(session.dispatch({ type: "contact-semantic-fallback", roleKey: "normal:friend" })).toBe(true)
+    expect(session.getSnapshot().contact.threads[0]?.messages[0]).toMatchObject({ sender: "contact", content: "我没听懂。", read: false })
+  })
+
+  it("reconciles a manifest package set and removes rolled-back world state", () => {
+    const bundle = semanticBundle()
+    const parent = makeEvolutionPackage(bundle, "parent", 1)
+    const child = makeEvolutionPackage(bundle, "child", 2, ["parent"])
+    const session = createStorySession({ bundle })
+    expect(session.reconcileEvolutionPackages([parent, child]).packageIds).toEqual(["parent", "child"])
+    expect(session.getSnapshot().world_state).toMatchObject({ parent: 1, child: 2 })
+    expect(session.reconcileEvolutionPackages([parent]).packageIds).toEqual(["parent"])
+    expect(session.getSnapshot().world_state).toEqual({ open: true, parent: 1 })
+  })
+
+  it("queues content during an active event and installs it immediately after the event ends", () => {
+    const bundle = createBundle({
+      vals: { variables: [{ name: "player", vals: [{ name: "init_count", value_type: "value", value: 0, calc_rule: "" }] }] },
+      chainEvents: {
+        opening: {
+          node_type: "event",
+          id: "opening",
+          title: "Opening",
+          init_script: "${player.init_count} += 1;",
+          end_script: "",
+          object_keys: ["player"],
+          presentation: { type: "dialogue", dialogues: [{ speaker_type: "player", speaker_key: "player", content: "finish" }] },
+          location: "",
+          next: []
+        }
+      }
+    })
+    const session = createStorySession({ bundle })
+    const pkg = makeEvolutionPackage(bundle, "after-event", 1, [], { phase: "next" })
+
+    expect(session.reconcileEvolutionPackages([pkg])).toMatchObject({ installed: false, queued: true })
+    expect(session.getSnapshot().content_package_ids).toEqual([])
+    session.dispatch({ type: "continue" })
+    expect(session.getSnapshot().content_package_ids).toEqual(["after-event"])
+    expect(session.getSnapshot().world_state).toEqual({ phase: "next" })
+    expect(session.getSnapshot().vals.variables[0]?.vals[0]?.value).toBe(1)
+  })
+
+  it("keeps content pending through a contact conversation and installs it after the final reply", () => {
+    const bundle = semanticBundle()
+    bundle.contactConversations = {
+      conversations: [{
+        id: "contact-plot",
+        title: "Contact Plot",
+        role_key: "normal:friend",
+        enabled: true,
+        once: false,
+        lock_normal_chat: true,
+        trigger_expr: "",
+        entry_node_id: "start",
+        nodes: [{
+          id: "start",
+          contact_messages: [],
+          player_options: [{ id: "finish", text: "finish", next_node_id: "", script: "", visible_expr: "" }],
+          end: false,
+          end_script: ""
+        }]
+      }]
+    }
+    const seed = createStorySession({ bundle })
+    const save = createSave(seed, bundle, "contact-pending")
+    save.session_state.contact_conversation = {
+      conversation_id: "contact-plot",
+      role_key: "normal:friend",
+      node_id: "start",
+      finished: false
+    }
+    const session = createStorySession({ bundle, saveState: save })
+    const pkg = makeEvolutionPackage(bundle, "after-contact", 1, [], { contact_phase: "done" })
+
+    expect(session.reconcileEvolutionPackages([pkg])).toMatchObject({ installed: false, queued: true })
+    session.dispatch({ type: "contact-select-conversation-reply", optionId: "finish" })
+    expect(session.getSnapshot().contact_conversation).toBeNull()
+    expect(session.getSnapshot().content_package_ids).toEqual(["after-contact"])
+    expect(session.getSnapshot().world_state).toMatchObject({ open: true, contact_phase: "done" })
+  })
+
+  it("rejects an invalid package without mutating the active session", () => {
+    const bundle = semanticBundle()
+    const session = createStorySession({ bundle })
+    const before = session.getSnapshot()
+    const invalid = { ...makeEvolutionPackage(bundle, "invalid", 1), package_hash: "0".repeat(64) }
+
+    expect(session.queueEvolutionPackage(invalid).reason).toContain("内容包 hash 无效")
+    expect(session.getSnapshot()).toEqual(before)
+    expect(session.getAvailableSemanticContactIntents("normal:friend").map((entry) => entry.id)).toEqual(["greet"])
+  })
+})
+
 describe("Runtime schedule dependency ordering", () => {
   it("topologically orders same-minute events before priority and sequence", () => {
     const scheduleEvents = [
@@ -735,11 +875,11 @@ describe("Runtime schedule dependency ordering", () => {
     snapshot.scheduler.scheduled = scheduled
     snapshot.scheduler.next_seq = 4
     const session = createStorySession({ bundle, saveState: {
-      schema_version: 4,
+      schema_version: 5,
       slot_id: "seed",
       story_id: "runtime_test",
       profile_id: "profile-1",
-      bundle_content_hash: "test-content-hash",
+      bundle_content_hash: "a".repeat(64),
       saved_at: "2026-01-01T00:00:00.000Z",
       playback: emptySession.getPlaybackState(),
       session_state: snapshot

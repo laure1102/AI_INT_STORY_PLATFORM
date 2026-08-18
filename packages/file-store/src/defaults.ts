@@ -113,10 +113,9 @@ export function createDefaultStoryEventLocations(): StoryEventLocationFile {
 export function createDefaultAppSettings(): AppSettingsFile {
   return {
     ai: {
-      image: { apiKey: "", baseUrl: "", model: "" },
-      text: { apiKey: "", baseUrl: "", model: "" },
+      image: { baseUrl: "", model: "" },
+      text: { baseUrl: "", model: "" },
       agent: {
-        apiKey: "",
         baseUrl: "",
         chiefEditorModel: "",
         plotPlannerModel: "",

@@ -9,6 +9,41 @@ import { renderGame, renderProfiles, renderSaves } from "./browser-render.js"
 import { filterShopGiftTargetOptions } from "./browser-shop.js"
 import { bindGiftEvents } from "./browser-gifts.js"
 
+let semanticWorker = null
+let semanticRequestId = 0
+const semanticRequests = new Map()
+
+/** @returns 会话复用的语义 Worker；首次调用时懒创建并安装统一响应处理器。 */
+function getSemanticWorker() {
+  if (semanticWorker) return semanticWorker
+  semanticWorker = new Worker(new URL("semantic-worker.js", document.baseURI))
+  semanticWorker.addEventListener("message", (event) => {
+    const request = semanticRequests.get(event.data.id)
+    if (!request) return
+    semanticRequests.delete(event.data.id)
+    if (event.data.error) request.reject(new Error(event.data.error))
+    else request.resolve(event.data.vector ?? [])
+  })
+  semanticWorker.addEventListener("error", () => {
+    for (const request of semanticRequests.values()) request.reject(new Error("语义模型不可用"))
+    semanticRequests.clear()
+    semanticWorker?.terminate()
+    semanticWorker = null
+  })
+  return semanticWorker
+}
+
+/** @param text 要编码的本地文本。 @returns 归一化的 512 维向量。 */
+function embedSemanticText(text) {
+  const id = ++semanticRequestId
+  return new Promise((resolve, reject) => {
+    semanticRequests.set(id, { resolve, reject })
+    getSemanticWorker().postMessage({ id, text, modelId: "Xenova/bge-small-zh-v1.5" })
+  })
+}
+
+window.addEventListener("beforeunload", () => semanticWorker?.terminate(), { once: true })
+
 /** @param message 提示文本。 @param variant info 或 error 样式。 @returns 无返回值；显示 2.6 秒后自动隐藏的 toast。 */
 function showToast(message, variant = "info") {
   clearTimeout(ui.toastTimer)
@@ -715,6 +750,57 @@ function bindEvents() {
       if (!ui.selectedRoleKey) return
       await dispatchRuntimeAction({ type: "contact-send-action", roleKey: ui.selectedRoleKey, actionId: button.dataset.contactAction })
       await dispatchRuntimeAction({ type: "contact-mark-read", roleKey: ui.selectedRoleKey })
+    })
+  })
+
+  dom.app.querySelectorAll("[data-semantic-contact-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault()
+      const roleKey = form.dataset.semanticContactForm
+      const text = String(new FormData(form).get("semanticText") ?? "").trim()
+      if (!roleKey || !text) return
+      ui.contactSemanticText = text
+      ui.contactSemanticBusy = true
+      render()
+      let shouldFallback = false
+      try {
+        const entries = (ui.data?.bundle?.semanticEntries ?? []).filter((entry) => entry.role_key === roleKey)
+        if (entries.length === 0) {
+          shouldFallback = true
+          throw new Error("当前联系人没有可用语义意图。")
+        }
+        const vector = await embedSemanticText(text)
+        const entriesWithVectors = await Promise.all(entries.map(async (entry) => ({
+          entry,
+          vector: Array.isArray(entry.vector) && entry.vector.length === vector.length
+            ? entry.vector
+            : await embedSemanticText(entry.utterances.join("\n"))
+        })))
+        ui.contactSemanticAvailable = true
+        const scored = entriesWithVectors.map(({ entry, vector: entryVector }) => ({ entry, score: entryVector.reduce((sum, value, index) => sum + value * vector[index], 0) })).sort((a, b) => b.score - a.score || b.entry.priority - a.entry.priority)
+        const best = scored[0]
+        const second = scored[1]
+        if (!best || best.score < best.entry.min_score || (second && best.score - second.score < 0.03)) {
+          shouldFallback = true
+          throw new Error("NPC 没有听懂这句话。")
+        }
+        const result = await dispatchRuntimeAction({ type: "contact-semantic-input", roleKey, intentId: best.entry.id, score: best.score })
+        if (result.actionSucceeded === false) {
+          shouldFallback = true
+          throw new Error("当前语义意图不可用。")
+        }
+        ui.contactSemanticText = ""
+      } catch (error) {
+        if (shouldFallback) {
+          await dispatchRuntimeAction({ type: "contact-semantic-fallback", roleKey })
+        } else {
+          ui.contactSemanticAvailable = false
+          showToast("语义模型不可用", "error")
+        }
+      } finally {
+        ui.contactSemanticBusy = false
+        render()
+      }
     })
   })
 

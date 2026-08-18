@@ -5,3 +5,4 @@ patchedDependencies:
   '@nuxt/vite-builder@3.21.6': patches/@nuxt__vite-builder@3.21.6.patch
 onlyBuiltDependencies:
   - better-sqlite3
+  - sharp

@@ -1015,6 +1015,10 @@ Current HTML local layout:
   stories/
     <storyId>/
       bundle.json
+      evolution/
+        manifest.json
+        packages/
+        telemetry/
       profiles/
         <profileId>/
           custom.json5
@@ -1064,6 +1068,52 @@ Current HTML game-screen behavior:
 - `l`, `b`, `i`, `o`, `t`, and `s` open footer popups
 - `Esc` closes an open popup or contact; when no popup is open it returns to the main profile screen
 - `1` to `9` select current interaction options
+
+## 10.1 Runtime Evolution and semantic contacts
+
+Implemented end-to-end:
+
+- immutable `StoryEvolutionPackage` chains in `packages/evolution`
+- deterministic `global -> shard -> player` merge ordering and effective content hashes
+- Core validation for structured patches, semantic contact intents, references, scripts, model metadata and readonly `world.*`
+- Compiler `compileEffectiveStory({ document, evolutionPackages })`
+- Runtime content registry with pending queues, manifest reconciliation and rollback replacement
+- safe switching only after foreground events, branches, dialogue/message playback and contact plot conversations finish
+- Runtime save schema v5 with `content_package_ids`, `effective_content_hash` and `world_state`; v4 and older saves are rejected
+- local contact input matching with `Xenova/bge-small-zh-v1.5`, 512-dimensional normalized vectors and Runtime revalidation before talk/action dispatch
+- SQLite telemetry, player/shard/global aggregates, world state, job locks, package heads and quarantine
+- Evolution Agent LangGraph nodes: context collector, world-state analyzer, plot planner, event writer, contact writer, script doctor, consistency checker, runtime simulator and package publisher
+- atomic filesystem publication and manifest polling; package files remain immutable and editor JSON5 is not rewritten
+- local offline telemetry queue; raw player contact text is not uploaded
+
+Evolution API routes:
+
+```txt
+POST /api/stories/:storyId/evolution/jobs
+GET  /api/stories/:storyId/evolution/jobs
+GET  /api/stories/:storyId/evolution/jobs/:jobId
+POST /api/stories/:storyId/evolution/jobs/:jobId/cancel
+GET  /api/stories/:storyId/evolution/manifest
+GET  /api/stories/:storyId/evolution/packages/:packageId
+POST /api/stories/:storyId/evolution/telemetry
+POST /api/stories/:storyId/evolution/evaluate
+POST /api/stories/:storyId/evolution/rollback
+```
+
+Runtime environment:
+
+```txt
+STORY_AI_AGENT_API_KEY
+STORY_AI_AGENT_BASE_URL
+STORY_AI_TEXT_API_KEY
+STORY_AI_IMAGE_API_KEY
+STORY_EVOLUTION_MODEL
+STORY_EMBEDDING_MODEL
+STORY_EVOLUTION_API_URL
+STORY_EVOLUTION_POLL_INTERVAL_MS
+```
+
+API keys are never persisted in `data/setting.json5`; the editor stores only non-sensitive base URLs, model names and Agent temperature.
 
 ## 11. Cocos client status
 

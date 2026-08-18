@@ -29,7 +29,7 @@ import {
 /**
  * 根据地点资料生成英文绘图提示词。
  *
- * @param settings 应用设置，函数从中读取文本模型 baseUrl、apiKey 和 model。
+ * @param settings 应用设置，函数从中读取文本模型 baseUrl 和 model；密钥只从服务端环境变量读取。
  * @param input 地点名称、中文描述和可选故事标题。
  * @returns 模型返回并去除首尾空白的英文提示词。
  * @throws 描述为空时抛 400；模型配置缺失时抛 400；上游请求失败或返回空文本时抛 502。

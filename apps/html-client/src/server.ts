@@ -72,11 +72,14 @@ function findWorkspaceRoot(startDirectory: string) {
  */
 function parseArgs(argv: string[]): HtmlClientOptions {
   const workspaceRoot = findWorkspaceRoot(process.cwd())
+  const configuredPollInterval = Number(process.env.STORY_EVOLUTION_POLL_INTERVAL_MS ?? 30000)
   const options: HtmlClientOptions = {
     storyId: "demo",
     runtimeDir: path.join(workspaceRoot, ".html-client"),
     port: 5174,
-    host: "127.0.0.1"
+    host: "127.0.0.1",
+    evolutionPollIntervalMs: Number.isFinite(configuredPollInterval) && configuredPollInterval > 0 ? configuredPollInterval : 30000,
+    evolutionApiUrl: process.env.STORY_EVOLUTION_API_URL?.trim() || undefined
   }
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -109,6 +112,31 @@ function parseArgs(argv: string[]): HtmlClientOptions {
 
     if (current === "--slot" && next) {
       options.slotId = next
+      index += 1
+      continue
+    }
+
+    if (current === "--player-id" && next) {
+      options.playerId = next
+      index += 1
+      continue
+    }
+
+    if (current === "--shard-id" && next) {
+      options.shardId = next
+      index += 1
+      continue
+    }
+
+    if (current === "--evolution-api-url" && next) {
+      options.evolutionApiUrl = next
+      index += 1
+      continue
+    }
+
+    if (current === "--evolution-poll-ms" && next) {
+      const interval = Number.parseInt(next, 10)
+      if (Number.isFinite(interval) && interval > 0) options.evolutionPollIntervalMs = interval
       index += 1
       continue
     }
@@ -567,6 +595,24 @@ async function main() {
     } catch (error) {
       sendError(response, error)
     }
+  })
+
+  let appsDisposed = false
+  /** 释放所有故事应用持有的轮询器和 Worker。 */
+  const disposeApps = () => {
+    if (appsDisposed) return
+    appsDisposed = true
+    for (const app of apps.values()) app.dispose()
+    apps.clear()
+  }
+  /** 处理进程信号并触发 HTTP server 的正常关闭。 */
+  const closeServer = () => server.close()
+  process.once("SIGINT", closeServer)
+  process.once("SIGTERM", closeServer)
+  server.once("close", () => {
+    process.off("SIGINT", closeServer)
+    process.off("SIGTERM", closeServer)
+    disposeApps()
   })
 
   server.listen(options.port, options.host, () => {

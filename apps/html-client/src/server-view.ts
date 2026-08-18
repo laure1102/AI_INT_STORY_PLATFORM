@@ -379,7 +379,8 @@ function buildSummary(state: HtmlClientAppState, snapshot: RuntimeStorySessionSn
 export function buildClientState(app: HtmlClientApp) {
   const state = app.getState()
   const snapshot = state.session?.getSnapshot() ?? null
-  const contacts = state.bundle && snapshot ? buildRuntimeContacts(state.bundle, snapshot) : []
+  const effectiveBundle = state.session?.getEffectiveBundle() ?? state.bundle
+  const contacts = effectiveBundle && snapshot ? buildRuntimeContacts(effectiveBundle, snapshot) : []
   const runtimeNotifications = state.view?.notifications ?? []
   const notifications = [
     ...state.notifications,
@@ -390,7 +391,7 @@ export function buildClientState(app: HtmlClientApp) {
     ok: true,
     stage: state.stage,
     storyId: state.storyId,
-    storyTitle: state.bundle?.title ?? state.storyId,
+    storyTitle: effectiveBundle?.title ?? state.storyId,
     paths: state.paths,
     profiles: state.profiles,
     profile: state.profile
@@ -404,6 +405,14 @@ export function buildClientState(app: HtmlClientApp) {
       : null,
     saveSlots: state.saveSlots,
     hasBundle: Boolean(state.bundle),
+    bundle: effectiveBundle ? {
+      baseContentHash: effectiveBundle.baseContentHash,
+      activePackageIds: effectiveBundle.activePackageIds,
+      effectiveContentHash: effectiveBundle.effectiveContentHash,
+      semanticEntries: state.session?.getAvailableSemanticContactIntents() ?? effectiveBundle.semanticEntries,
+      worldState: effectiveBundle.worldState,
+      contact: effectiveBundle.contact
+    } : null,
     hasSession: Boolean(state.session),
     view: state.view,
     summary: buildSummary(state, snapshot),

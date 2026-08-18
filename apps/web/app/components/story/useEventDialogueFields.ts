@@ -352,11 +352,13 @@ export function useEventDialogueFields(options: UseEventDialogueFieldsOptions) {
     dialogueEditorState.draft.speaker_key = objectKeyOptions.value[0] ?? ""
   }
 
+  /** 返回当前事件对象中可用于动态称谓的重要角色。 */
   function getDialogueEditorRoleNameOptions() {
     const objectKeys = new Set(objectKeyOptions.value)
     return importantRoleOptions.value.filter((option) => objectKeys.has(option.key))
   }
 
+  /** 启用或关闭对白动态称谓，并规范当前角色选择。 */
   function handleDialogueEditorRoleNameToggle(enabled: boolean) {
     if (!enabled || dialogueEditorState.draft.speaker_type === "player") {
       dialogueEditorState.draft.role_name_input = undefined

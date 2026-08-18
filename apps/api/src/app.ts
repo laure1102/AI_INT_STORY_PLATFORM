@@ -15,6 +15,7 @@ import type { ApiConfig } from "./config"
 import { createStoriesRouter } from "./routes/stories"
 import type { runStoryCreationAgents } from "./services/story-creation"
 import { StoryCreationJobService } from "./services/story-creation-jobs"
+import { EvolutionService, type EvolutionServiceOptions } from "./services/evolution"
 
 export type StoryManagerApp = Koa & {
   closeServices(): Promise<void>
@@ -24,6 +25,7 @@ export type StoryManagerApp = Koa & {
 export interface StoryManagerAppDependencies {
   /** 测试用工作流执行器；省略时使用真实的六 Agent 工作流。 */
   creationJobRunner?: typeof runStoryCreationAgents
+  evolution?: Pick<EvolutionServiceOptions, "workflowRunner" | "embeddingProvider">
 }
 
 /**
@@ -264,7 +266,8 @@ export function createApp(
     config.stateDir,
     dependencies.creationJobRunner
   )
-  const storiesRouter = createStoriesRouter(store, config, creationJobs)
+  const storiesRouter = createStoriesRouter(store, config, creationJobs, dependencies.evolution)
+  const evolution = (storiesRouter as typeof storiesRouter & { evolutionService?: EvolutionService }).evolutionService
 
   // 服务重启后，SQLite 中 queued/running 的任务会从 LangGraph checkpoint 继续执行。
   creationJobs.resumePendingJobs()
@@ -276,6 +279,7 @@ export function createApp(
    */
   async function closeServices(): Promise<void> {
     await creationJobs.close()
+    await evolution?.close()
   }
 
   app.closeServices = closeServices

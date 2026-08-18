@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import type { CompiledStory, StoryDocument } from "@story-mgr/core"
-import { validateStoryDocument } from "@story-mgr/core"
+import { validateSemanticContactIntents, validateStoryDocument } from "@story-mgr/core"
+import { applyEvolutionPackages, type StoryEvolutionPackage } from "@story-mgr/evolution"
 
 /**
  * 递归按对象键排序，使同一故事内容拥有稳定 JSON 表示。
@@ -107,5 +108,38 @@ export function compileStory(document: StoryDocument): {
   return {
     compiled,
     result: validateStoryDocument(document)
+  }
+}
+
+/** 将基础故事与已发布内容包合并后编译为有效运行时 bundle。 */
+export function compileEffectiveStory(options: {
+  document: StoryDocument
+  evolutionPackages: readonly StoryEvolutionPackage[]
+}) {
+  const base = compileStory(options.document)
+  const applied = applyEvolutionPackages(options.document, options.evolutionPackages)
+  const effective = compileStory(applied.document)
+  const semanticResult = validateSemanticContactIntents(applied.document, applied.semanticEntries)
+  const result = {
+    ok: effective.result.ok && semanticResult.ok,
+    issues: [...effective.result.issues, ...semanticResult.issues]
+  }
+  const effectiveContentHash = createContentHash({
+    baseContentHash: base.compiled.contentHash,
+    packageIds: applied.packageIds,
+    content: Object.fromEntries(Object.entries(effective.compiled).filter(([key]) => key !== "generatedAt")),
+    semanticEntries: applied.semanticEntries,
+    worldState: applied.worldState
+  })
+  return {
+    compiled: {
+      ...effective.compiled,
+      baseContentHash: base.compiled.contentHash,
+      activePackageIds: applied.packageIds,
+      effectiveContentHash,
+      semanticEntries: applied.semanticEntries,
+      worldState: applied.worldState
+    },
+    result
   }
 }

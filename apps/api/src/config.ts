@@ -15,6 +15,11 @@ export interface ApiConfig {
   dataDir: string
   buildDir: string
   stateDir: string
+  evolutionModel?: string
+  evolutionAgentApiKey?: string
+  evolutionAgentBaseUrl?: string
+  embeddingModel?: string
+  evolutionPollIntervalMs?: number
 }
 
 /**
@@ -82,6 +87,11 @@ export function createApiConfig(): ApiConfig {
       : path.join(workspaceRoot, "build"),
     stateDir: process.env.STORY_MGR_STATE_DIR
       ? path.resolve(process.env.STORY_MGR_STATE_DIR)
-      : path.join(workspaceRoot, ".story-manager")
+      : path.join(workspaceRoot, ".story-manager"),
+    evolutionModel: process.env.STORY_EVOLUTION_MODEL?.trim() || "gpt-5.6-sol",
+    evolutionAgentApiKey: process.env.STORY_AI_AGENT_API_KEY?.trim() || undefined,
+    evolutionAgentBaseUrl: process.env.STORY_AI_AGENT_BASE_URL?.trim() || undefined,
+    embeddingModel: process.env.STORY_EMBEDDING_MODEL?.trim() || "Xenova/bge-small-zh-v1.5",
+    evolutionPollIntervalMs: Number(process.env.STORY_EVOLUTION_POLL_INTERVAL_MS ?? 30000)
   }
 }

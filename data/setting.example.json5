@@ -1,17 +1,14 @@
 {
   ai: {
     image: {
-      apiKey: "",
       baseUrl: "",
       model: ""
     },
     text: {
-      apiKey: "",
       baseUrl: "",
       model: ""
     },
     agent: {
-      apiKey: "",
       baseUrl: "",
       chiefEditorModel: "",
       plotPlannerModel: "",

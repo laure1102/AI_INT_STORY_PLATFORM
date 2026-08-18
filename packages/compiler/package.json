@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@story-mgr/core": "workspace:*"
+    "@story-mgr/core": "workspace:*",
+    "@story-mgr/evolution": "workspace:*"
   }
 }

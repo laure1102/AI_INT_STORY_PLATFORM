@@ -241,12 +241,13 @@ export function isDoubaoSeedreamModel(model: string): boolean {
  * @returns 完整的 text provider 配置。
  * @throws baseUrl、apiKey 或 model 任一为空时抛 400，提示具体缺失字段。
  */
-export function requireTextProvider(settings: AppSettingsFile): AppSettingsFile["ai"]["text"] {
+export function requireTextProvider(settings: AppSettingsFile): AppSettingsFile["ai"]["text"] & { apiKey: string } {
   const ai = requireAiConfig(settings).text
+  const apiKey = process.env.STORY_AI_TEXT_API_KEY?.trim() ?? ""
   if (!ai.baseUrl.trim()) throw new FileStoreError("Text model baseUrl is required.", 400, "ai.text-base-url-required")
-  if (!ai.apiKey.trim()) throw new FileStoreError("Text model apiKey is required.", 400, "ai.text-api-key-required")
+  if (!apiKey) throw new FileStoreError("STORY_AI_TEXT_API_KEY is required.", 400, "ai.text-api-key-required")
   if (!ai.model.trim()) throw new FileStoreError("Text model name is required.", 400, "ai.text-model-required")
-  return ai
+  return { ...ai, apiKey }
 }
 
 /**
@@ -256,10 +257,11 @@ export function requireTextProvider(settings: AppSettingsFile): AppSettingsFile[
  * @returns 完整的 image provider 配置。
  * @throws baseUrl、apiKey 或 model 任一为空时抛 400。
  */
-export function requireImageProvider(settings: AppSettingsFile): AppSettingsFile["ai"]["image"] {
+export function requireImageProvider(settings: AppSettingsFile): AppSettingsFile["ai"]["image"] & { apiKey: string } {
   const ai = requireAiConfig(settings).image
+  const apiKey = process.env.STORY_AI_IMAGE_API_KEY?.trim() ?? ""
   if (!ai.baseUrl.trim()) throw new FileStoreError("Image model baseUrl is required.", 400, "ai.image-base-url-required")
-  if (!ai.apiKey.trim()) throw new FileStoreError("Image model apiKey is required.", 400, "ai.image-api-key-required")
+  if (!apiKey) throw new FileStoreError("STORY_AI_IMAGE_API_KEY is required.", 400, "ai.image-api-key-required")
   if (!ai.model.trim()) throw new FileStoreError("Image model name is required.", 400, "ai.image-model-required")
-  return ai
+  return { ...ai, apiKey }
 }

@@ -308,13 +308,11 @@ export interface StoryBibleFile {
 }
 
 export interface AppAiProviderSettings {
-  apiKey: string
   baseUrl: string
   model: string
 }
 
 export interface AppAiAgentSettings {
-  apiKey: string
   baseUrl: string
   chiefEditorModel: string
   plotPlannerModel: string

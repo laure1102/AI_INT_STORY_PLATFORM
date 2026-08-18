@@ -548,6 +548,7 @@ function renderMenuPanelBody(panelId) {
   return body
 }
 
+/** 将绝对游戏分钟格式化为天数和时刻。 */
 function formatHistoryMinute(gameMinute) {
   if (typeof gameMinute !== "number" || !Number.isFinite(gameMinute) || gameMinute < 0) return "未定"
   const minute = Math.trunc(gameMinute)
@@ -556,6 +557,7 @@ function formatHistoryMinute(gameMinute) {
   return `第${day}天 ${String(Math.floor(time / 60)).padStart(2, "0")}:${String(time % 60).padStart(2, "0")}`
 }
 
+/** 将历史类别映射为界面标签。 */
 function formatHistoryCategory(category) {
   return category === "operation" ? "操作" : category === "story" ? "剧情" : "系统"
 }
@@ -787,6 +789,10 @@ function renderContactDrawer() {
                   <button class="${ui.contactMode === "gift" ? "active" : ""}" data-contact-mode="gift">${h(channelLabels.gift)}</button>
                 </div>
                 ${ui.contactMode === "gift" ? renderContactGiftPanel(selected) : `<div class="quick-grid" data-contact-options-scroll="${h(`${selected.roleKey}:${ui.contactMode}`)}">
+                  <form class="semantic-contact-form" data-semantic-contact-form="${h(selected.roleKey)}">
+                    <input name="semanticText" value="${h(ui.contactSemanticText ?? "")}" placeholder="${ui.contactSemanticAvailable ? "用自然语言和对方说话…" : "语义模型不可用"}" ${ui.contactSemanticAvailable ? "" : "disabled"}>
+                    <button class="option-button" type="submit" ${ui.contactSemanticBusy || !ui.contactSemanticAvailable ? "disabled" : ""}>发送</button>
+                  </form>
                   ${thread?.canContact === false ? `<div class="empty">${h(thread.lockMessage ?? "对方现在不想理我。")}</div>` : ""}
                   ${options.length === 0 ? `<div class="empty">当前没有可用${ui.contactMode === "talk" ? "短句" : "动作"}。</div>` : options.map((option) => {
                     const disabled = ui.contactMode === "action" && option.disabled

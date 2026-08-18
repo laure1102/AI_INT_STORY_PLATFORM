@@ -247,6 +247,12 @@ export function buildRuntimeContextValues(
     combinedValues[`call.${key}`] = cloneValue(value)
   }
 
+  // Evolution world state is a server-owned, read-only namespace. It is exposed only as
+  // flattened context values; no script helper is provided to mutate it.
+  for (const [key, value] of Object.entries(snapshot.world_state ?? {})) {
+    combinedValues[`world.${key}`] = cloneValue(value)
+  }
+
   return {
     values: combinedValues,
     random: () => nextRuntimeRandom(snapshot.rng),

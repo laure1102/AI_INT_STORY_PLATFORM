@@ -11,46 +11,57 @@
  */
 import { createRuleBasedRuntimeDirector } from "../director"
 import { normalizeRuntimeRngState } from "../rng"
+import { evaluateStoryBooleanExpression } from "../vals"
 import type { StoryInvokeTargetType } from "../types"
 import type { CreateStorySessionOptions, RuntimeState, RuntimeStorySession, RuntimeStoryViewModel } from "./contracts-view"
 import { createRuntimePlaybackState, toRuntimeActionState } from "./contracts-view"
 import { giftBagItem } from "./bag-gifts"
 import { buyShopProduct, giftShopProduct } from "./doing-shop"
-import { sendContactAction, sendContactQuickMessage, sendContactTalk } from "./contact-actions"
-import { advanceContactConversationReply } from "./contact-conversations"
-import { assertRuntimeContactRoleKey, findRoleLabel, markContactThreadRead, restoreActiveStandaloneEvent } from "./contact-threads"
+import { sendContactAction, sendContactMessageFromContact, sendContactQuickMessage, sendContactTalk } from "./contact-actions"
+import { advanceContactConversationReply, chooseContactReply } from "./contact-conversations"
+import { assertRuntimeContactRoleKey, findContactTalkOption, findRoleLabel, markContactThreadRead, resolveContactActionOptionsForContact, restoreActiveStandaloneEvent } from "./contact-threads"
 import { executeAction, finishCurrentEvent, getCurrentEventState } from "./playback-entry"
 import { advanceCurrentMessagePresentation, renderDialogueContent } from "./playback-render"
 import { advanceClockBySingleStep, createBaseSnapshot, isRuntimeTimePaused, queueClockProgress, setSystemNumber } from "./schedule-clock"
 import { queueDoingEvent, reconcileScheduler } from "./schedule-queue"
 import { appendHistory, findBundleInvokeTargetEvent, getInvokeTargetLabel, queueInvokeEvent, validateInvokeArgs } from "./script-execution"
 import { createDefaultClockState, normalizeInvokeTargetType, normalizeSchedulerState, syncSystemTimeFieldsFromClock } from "./state-scheduler"
-import { applyCustomValuesToValsFile, clampInteger, clampNumber, cloneValue, createDefaultSchedulerState, normalizeBagsState, normalizeDoingState, normalizeContactConversationHistoryState, normalizeContactConversationState, normalizeContactState, normalizeHistoryState, normalizeRoleNameOverrides, normalizeShopState, normalizeText } from "./state-values"
+import { applyCustomValuesToValsFile, clampInteger, clampNumber, cloneValue, createCombinedValsFile, createDefaultSchedulerState, normalizeBagsState, normalizeDoingState, normalizeContactConversationHistoryState, normalizeContactConversationState, normalizeContactState, normalizeHistoryState, normalizeRoleNameOverrides, normalizeShopState, normalizeText } from "./state-values"
 import { buildViewModel } from "./view-model"
+import { orderEvolutionPackages, validateEvolutionPackage, type StoryEvolutionPackage, type StorySemanticContactIntent } from "@story-mgr/evolution"
+import type { RuntimePackageInstallResult } from "./contracts-view"
+import { createRuntimeContentRegistry, type RuntimeContentRegistry } from "../content-registry"
 
 /**
  * 创建一个独立、可推进、可存档的故事运行时会话。
  *
- * 恢复层次按“bundle 默认值 → v4 save snapshot → playback 游标”组装。v3 及更早存档在读取任何领域
+ * 恢复层次按“bundle 默认值 → v5 save snapshot → playback 游标”组装。v4 及更早存档在读取任何领域
  * 状态前直接拒绝，避免把旧存档中的手机状态静默解释为联系人状态。
  * 返回对象保持稳定 API：客户端通过 `dispatch` 交互、`tick` 推进时间、getter 读取只读副本。
  */
 export function createStorySession(options: CreateStorySessionOptions): RuntimeStorySession {
-  if (options.saveState && options.saveState.schema_version !== 4) {
+  if (options.saveState && options.saveState.schema_version !== 5) {
     const rawVersion = (options.saveState as { schema_version?: unknown }).schema_version
     const versionLabel = rawVersion === undefined ? "v1" : `v${String(rawVersion)}`
-    throw new Error(`Save schema ${versionLabel} is incompatible with the contact runtime; only v4 saves are supported.`)
+    throw new Error(`Save schema ${versionLabel} is incompatible with the evolution runtime; only v5 saves are supported.`)
   }
 
   // 第 1 步：确定基础快照。读取存档时先克隆，避免会话运行过程反向修改调用方持有的 saveState；
   // 新游戏则从 bundle 的初始变量、背包、联系人、行动和商城配置创建快照。
   const now = options.now ?? options.wallClock?.() ?? new Date()
+  const contentRegistry: RuntimeContentRegistry = options.contentRegistry ?? createRuntimeContentRegistry({ baseBundle: options.bundle })
+  options.bundle = contentRegistry.getEffectiveBundle()
   const baseSnapshot = options.saveState
     ? cloneValue(options.saveState.session_state)
     : createBaseSnapshot(options.bundle)
   const notifications: string[] = []
   let screen: RuntimeStoryViewModel["screen"] = "game"
   const storyDirector = options.storyDirector ?? createRuleBasedRuntimeDirector()
+  const pendingPackages: StoryEvolutionPackage[] = []
+  let pendingPackageSet: StoryEvolutionPackage[] | null = null
+  const activePackages = new Map<string, StoryEvolutionPackage>()
+  // bundle 中的内容已经物化；存档中的 package ids 只是索引，实际包仍由客户端同步后重新排队安装。
+  const installedPackageIds = new Set(options.bundle.activePackageIds ?? [])
   const savedPlayback = options.saveState?.playback
   const runtimeState: RuntimeState = {
     snapshot: baseSnapshot,
@@ -64,6 +75,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     storyDirector
   }
 
+  /** 向运行历史写入一次系统或行动记录。 */
   function recordOperation(id: string, title: string, content: string, type: "system" | "action" = "system") {
     appendHistory(runtimeState.snapshot, {
       category: "operation",
@@ -106,6 +118,154 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     runtimeState.snapshot
   )
 
+  /** 判断当前播放、分支、调度和联系人会话是否均已结束。 */
+  function isSafeContentSwitchPoint(): boolean {
+    return !runtimeState.snapshot.scheduler.active && runtimeState.pendingActions.length === 0 && !runtimeState.activeContactConversation && !getCurrentEventState(options.bundle, runtimeState)
+  }
+
+  /** 安装单包并同步 bundle、快照和活动包索引。 */
+  function applyPackageToRuntime(pkg: StoryEvolutionPackage) {
+    const registryResult = contentRegistry.queuePackage(pkg)
+    if (!registryResult.queued && !registryResult.installed) throw new Error(registryResult.reason ?? "内容包无法排队。")
+    const registryInstall = contentRegistry.applyPendingPackages()
+    const effective = contentRegistry.getEffectiveBundle()
+    Object.assign(options.bundle, effective)
+    activePackages.set(pkg.package_id, pkg)
+    for (const packageId of registryInstall.packageIds) installedPackageIds.add(packageId)
+    runtimeState.snapshot.content_package_ids = [...installedPackageIds]
+    runtimeState.snapshot.world_state = { ...(options.bundle.worldState ?? {}) }
+    options.bundle.activePackageIds = [...runtimeState.snapshot.content_package_ids]
+    runtimeState.snapshot.effective_content_hash = options.bundle.effectiveContentHash ?? options.bundle.contentHash ?? ""
+    return registryInstall.packageIds.includes(pkg.package_id)
+  }
+
+  /** 把注册表完整替换结果同步到当前会话。 */
+  function applyEffectiveRegistryResult(result: RuntimePackageInstallResult, packages: readonly StoryEvolutionPackage[]) {
+    if (!result.installed && result.reason) return result
+    const effective = contentRegistry.getEffectiveBundle()
+    Object.assign(options.bundle, effective)
+    installedPackageIds.clear()
+    activePackages.clear()
+    for (const packageId of result.packageIds) installedPackageIds.add(packageId)
+    for (const pkg of packages) activePackages.set(pkg.package_id, structuredClone(pkg))
+    runtimeState.snapshot.content_package_ids = [...installedPackageIds]
+    runtimeState.snapshot.world_state = { ...(effective.worldState ?? {}) }
+    runtimeState.snapshot.effective_content_hash = effective.effectiveContentHash ?? effective.contentHash ?? ""
+    options.bundle.activePackageIds = [...installedPackageIds]
+    return result
+  }
+
+  /** 将客户端 manifest 的完整包链与当前会话对齐。 */
+  function reconcileEvolutionPackages(packages: readonly StoryEvolutionPackage[]): RuntimePackageInstallResult {
+    const next = packages.map((pkg) => structuredClone(pkg))
+    if (!isSafeContentSwitchPoint()) {
+      pendingPackageSet = next
+      return { installed: false, queued: true, packageIds: [...installedPackageIds] }
+    }
+    const result = contentRegistry.replacePackages(next)
+    if (result.reason) return result
+    pendingPackageSet = null
+    pendingPackages.length = 0
+    return applyEffectiveRegistryResult(result, next)
+  }
+
+  /** 校验单包，并在安全边界立即安装或进入等待队列。 */
+  function queueEvolutionPackage(pkg: StoryEvolutionPackage): RuntimePackageInstallResult {
+    const validation = validateEvolutionPackage(pkg, options.bundle.baseContentHash ?? options.bundle.contentHash)
+    if (!validation.ok) return { installed: false, queued: false, packageIds: [...installedPackageIds], reason: validation.errors.join("；") }
+    for (const parentId of pkg.parent_package_ids) if (!installedPackageIds.has(parentId) && !activePackages.has(parentId) && !pendingPackages.some((item) => item.package_id === parentId)) return { installed: false, queued: false, packageIds: [...installedPackageIds], reason: `父包未安装：${parentId}` }
+    if (installedPackageIds.has(pkg.package_id) || pendingPackages.some((item) => item.package_id === pkg.package_id)) return { installed: false, queued: false, packageIds: [...installedPackageIds], reason: "内容包已经安装或排队。" }
+    const parentsReady = pkg.parent_package_ids.every((parentId) => installedPackageIds.has(parentId) || activePackages.has(parentId))
+    if (!isSafeContentSwitchPoint() || !parentsReady) {
+      pendingPackages.push(pkg)
+      return { installed: false, queued: true, packageIds: [...installedPackageIds] }
+    }
+    const installed = applyPackageToRuntime(pkg)
+    if (!installed) {
+      pendingPackages.push(pkg)
+      return { installed: false, queued: true, packageIds: [...installedPackageIds], reason: "内容包等待父包安装。" }
+    }
+    return { installed: true, queued: false, packageIds: [...installedPackageIds] }
+  }
+
+  /** 在安全边界按父依赖应用所有待安装内容。 */
+  function applyPendingEvolutionPackages(): RuntimePackageInstallResult {
+    if (!isSafeContentSwitchPoint()) return { installed: false, queued: pendingPackages.length > 0 || pendingPackageSet !== null, packageIds: [...installedPackageIds] }
+    if (pendingPackageSet) return reconcileEvolutionPackages(pendingPackageSet)
+    let installed = false
+    const pending = [...pendingPackages]
+    pendingPackages.length = 0
+    let orderedPending: StoryEvolutionPackage[]
+    try { orderedPending = orderEvolutionPackages(pending) } catch { orderedPending = pending }
+    for (const pendingPackage of orderedPending) {
+      const result = contentRegistry.queuePackage(pendingPackage)
+      if (!result.queued && !result.installed) {
+        pendingPackages.push(pendingPackage)
+        continue
+      }
+    }
+    const registryResult = contentRegistry.applyPendingPackages()
+    if (registryResult.installed) {
+      const effective = contentRegistry.getEffectiveBundle()
+      Object.assign(options.bundle, effective)
+      for (const packageId of registryResult.packageIds) installedPackageIds.add(packageId)
+      runtimeState.snapshot.content_package_ids = [...installedPackageIds]
+      runtimeState.snapshot.world_state = { ...(effective.worldState ?? {}) }
+      runtimeState.snapshot.effective_content_hash = effective.effectiveContentHash ?? effective.contentHash ?? ""
+      options.bundle.activePackageIds = [...installedPackageIds]
+      installed = true
+    }
+    return { installed, queued: pendingPackages.length > 0 || registryResult.queued, packageIds: [...installedPackageIds], reason: registryResult.reason }
+  }
+
+  /** 验证语义意图在当前联系人与变量状态下是否可用。 */
+  function isSemanticContactIntentAvailable(entry: StorySemanticContactIntent, roleKey: string): boolean {
+    if (entry.role_key !== roleKey || !Number.isFinite(entry.priority) || runtimeState.activeContactConversation) return false
+    try { assertRuntimeContactRoleKey(options.bundle, roleKey) } catch { return false }
+    const vals = createCombinedValsFile(runtimeState.snapshot)
+    const world = runtimeState.snapshot.world_state ?? {}
+    if (Object.keys(world).length > 0) vals.variables.push({ name: "world", vals: Object.entries(world).map(([name, value]) => ({ name, value_type: "value", value, calc_rule: "" })) })
+    try {
+      if (entry.condition_expr && !evaluateStoryBooleanExpression(vals, entry.condition_expr).result) return false
+    } catch {
+      return false
+    }
+    if (entry.response_kind === "talk") return Boolean(findContactTalkOption(options.bundle, roleKey, entry.response_id, runtimeState.snapshot))
+    return Boolean(resolveContactActionOptionsForContact(options.bundle, roleKey, runtimeState.snapshot).find((action) => action.id === entry.response_id && !action.disabled))
+  }
+
+  /** 返回当前可供浏览器本地匹配的只读语义意图。 */
+  function getAvailableSemanticContactIntents(roleKey?: string): StorySemanticContactIntent[] {
+    return (options.bundle.semanticEntries ?? [])
+      .filter((entry) => (!roleKey || entry.role_key === roleKey) && isSemanticContactIntentAvailable(entry, entry.role_key))
+      .map((entry) => cloneValue(entry))
+  }
+
+  /** 二次校验浏览器匹配结果，并转发为现有 talk/action。 */
+  function submitSemanticContactInput(roleKey: string, intentId: string, score: number): boolean {
+    const entry = (options.bundle.semanticEntries ?? []).find((item) => item.id === intentId && item.role_key === roleKey)
+    if (!entry || !Number.isFinite(score) || score < entry.min_score || score > 1 || !isSemanticContactIntentAvailable(entry, roleKey)) return false
+    try {
+      if (entry.response_kind === "talk") sendContactTalk(options.bundle, runtimeState, notifications, roleKey, entry.response_id)
+      else sendContactAction(options.bundle, runtimeState, notifications, roleKey, entry.response_id)
+    } catch { return false }
+    reconcileScheduler(options.bundle, runtimeState, notifications)
+    return true
+  }
+
+  /** 在未可靠匹配时发送联系人配置的本地兜底回复。 */
+  function submitSemanticContactFallback(roleKey: string): boolean {
+    if (runtimeState.activeContactConversation) return false
+    try {
+      const normalizedRoleKey = assertRuntimeContactRoleKey(options.bundle, roleKey)
+      const reply = chooseContactReply(options.bundle, runtimeState.snapshot, normalizedRoleKey, ["semantic-fallback"])
+        || "我暂时没听懂你的意思，可以换一种说法吗？"
+      return Boolean(sendContactMessageFromContact(options.bundle, runtimeState.snapshot, notifications, normalizedRoleKey, reply))
+    } catch {
+      return false
+    }
+  }
+
   // 第 3 步：玩家自定义值只应用于“新游戏”。
   // 存档已经包含当时实际使用的变量，再叠加当前 profile 会篡改历史进度，所以 saveState 优先。
   if (!options.saveState && options.customOverrides) {
@@ -121,7 +281,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
   // 第 4 步：处理存档内容版本提示。
   // contentHash 不一致并不立即拒绝存档，因为单机编辑器常需要带旧档预览新 bundle；客户端会收到
-  // 明确提示。存档 Schema 已在函数入口严格限定为 v4。
+  // 明确提示。存档 Schema 已在函数入口严格限定为 v5。
   if (options.saveState) {
     notifications.push(`已加载存档：${options.saveState.slot_id}`)
     const bundleHash = options.bundle.contentHash ?? options.bundle.generatedAt
@@ -223,6 +383,14 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
       if (action.type === "invoke-once") {
         invokeOnceEventResolved(action.targetType, action.eventId, action.args, true)
         return
+      }
+
+      if (action.type === "contact-semantic-input") {
+        return submitSemanticContactInput(action.roleKey, action.intentId, action.score)
+      }
+
+      if (action.type === "contact-semantic-fallback") {
+        return submitSemanticContactFallback(action.roleKey)
       }
 
       // Doing、商城和联系人属于独立领域，但最终的事件调用都进入同一个 scheduler，
@@ -362,6 +530,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         runtimeState.currentDialogueIndex += 1
         if (runtimeState.currentDialogueIndex >= currentDialogue.total) {
           finishCurrentEvent(options.bundle, runtimeState, notifications)
+          applyPendingEvolutionPackages()
         }
         return true
       }
@@ -382,6 +551,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         try {
           advanceContactConversationReply(options.bundle, runtimeState, notifications, action.optionId)
           reconcileScheduler(options.bundle, runtimeState, notifications)
+          applyPendingEvolutionPackages()
         } catch (error) {
           const message = error instanceof Error ? error.message : "发送联系人剧情回复失败。"
           notifications.push(message)
@@ -400,6 +570,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
             action.quickMessageId
           )
           reconcileScheduler(options.bundle, runtimeState, notifications)
+          applyPendingEvolutionPackages()
         } catch (error) {
           const message = error instanceof Error ? error.message : "发送联系人消息失败。"
           notifications.push(message)
@@ -418,6 +589,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
             action.talkId
           )
           reconcileScheduler(options.bundle, runtimeState, notifications)
+          applyPendingEvolutionPackages()
         } catch (error) {
           const message = error instanceof Error ? error.message : "发送联系人闲聊失败。"
           notifications.push(message)
@@ -436,6 +608,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
             action.actionId
           )
           reconcileScheduler(options.bundle, runtimeState, notifications)
+          applyPendingEvolutionPackages()
         } catch (error) {
           const message = error instanceof Error ? error.message : "执行联系人动作失败。"
           notifications.push(message)
@@ -471,6 +644,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
 
           if (runtimeState.currentDialogueIndex >= currentEventState.currentDialogue.total) {
             finishCurrentEvent(options.bundle, runtimeState, notifications)
+            applyPendingEvolutionPackages()
           }
           return
         }
@@ -483,6 +657,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         }
 
         finishCurrentEvent(options.bundle, runtimeState, notifications)
+        applyPendingEvolutionPackages()
         return
       }
 
@@ -493,6 +668,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
         }
 
         executeAction(options.bundle, runtimeState, action.optionId, notifications)
+        applyPendingEvolutionPackages()
       }
     },
     /**
@@ -515,6 +691,7 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
       const queued = queueClockProgress(runtimeState.snapshot, deltaMs)
       if (!queued) {
         syncSystemTimeFieldsFromClock(runtimeState.snapshot)
+        applyPendingEvolutionPackages()
         return
       }
 
@@ -531,10 +708,12 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
       }
 
       if (advanced) {
+        applyPendingEvolutionPackages()
         return
       }
 
       syncSystemTimeFieldsFromClock(runtimeState.snapshot)
+      applyPendingEvolutionPackages()
     },
     /** @param paused 是否手动暂停。 @returns 无返回值；只修改 manual_pause，并同步系统时间镜像变量。 */
     setTimePause(paused: boolean) {
@@ -551,6 +730,11 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     getViewModel() {
       return buildViewModel(options.bundle, runtimeState, screen, [...notifications])
     },
+    /** @returns 当前基础 bundle 与活动演化包合并后的只读副本。 */
+    getEffectiveBundle() {
+      return contentRegistry.getEffectiveBundle()
+    },
+    getAvailableSemanticContactIntents,
     /** @returns 可安全保存或检查的快照深拷贝；调用方修改返回值不会影响正在运行的会话。 */
     getSnapshot() {
       // 对外返回深拷贝，防止客户端绕过 dispatch 直接修改运行时内部状态。
@@ -561,6 +745,11 @@ export function createStorySession(options: CreateStorySessionOptions): RuntimeS
     getPlaybackState() {
       // playback 只保存“如何继续当前事件”的瞬时游标，与 snapshot 中的持久领域状态分开。
       return createRuntimePlaybackState(runtimeState)
-    }
+    },
+    queueEvolutionPackage,
+    reconcileEvolutionPackages,
+    applyPendingEvolutionPackages,
+    submitSemanticContactInput,
+    isSafeContentSwitchPoint
   }
 }

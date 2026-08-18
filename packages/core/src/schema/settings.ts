@@ -1,7 +1,7 @@
 /**
  * 故事圣经和应用 AI 设置的持久化 Schema。
  *
- * API 密钥等设置只描述文件形状，实际安全边界由 API 配置层负责。
+ * 设置文件只保存非敏感模型配置；API 密钥必须由服务端环境变量提供。
  */
 import { z } from "zod"
 
@@ -18,13 +18,11 @@ export const storyBibleSchema = z.object({
 })
 
 export const appAiProviderSettingsSchema = z.object({
-  apiKey: z.string().default(""),
   baseUrl: z.string().default(""),
   model: z.string().default("")
 })
 
 export const appAiAgentSettingsSchema = z.object({
-  apiKey: z.string().default(""),
   baseUrl: z.string().default(""),
   chiefEditorModel: z.string().default(""),
   plotPlannerModel: z.string().default(""),
@@ -37,17 +35,14 @@ export const appAiAgentSettingsSchema = z.object({
 
 export const appAiSettingsSchema = z.object({
   image: appAiProviderSettingsSchema.default({
-    apiKey: "",
     baseUrl: "",
     model: ""
   }),
   text: appAiProviderSettingsSchema.default({
-    apiKey: "",
     baseUrl: "",
     model: ""
   }),
   agent: appAiAgentSettingsSchema.default({
-    apiKey: "",
     baseUrl: "",
     chiefEditorModel: "",
     plotPlannerModel: "",
@@ -62,17 +57,14 @@ export const appAiSettingsSchema = z.object({
 export const appSettingsSchema = z.object({
   ai: appAiSettingsSchema.default({
     image: {
-      apiKey: "",
       baseUrl: "",
       model: ""
     },
     text: {
-      apiKey: "",
       baseUrl: "",
       model: ""
     },
     agent: {
-      apiKey: "",
       baseUrl: "",
       chiefEditorModel: "",
       plotPlannerModel: "",
@@ -84,4 +76,3 @@ export const appSettingsSchema = z.object({
     }
   })
 })
-

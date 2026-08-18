@@ -79,7 +79,10 @@ export function createBaseSnapshot(bundle: RuntimeStoryBundle): RuntimeStorySess
     triggered_once_events: [],
     loop_event_states: [],
     history: [],
-    role_name_overrides: {}
+    role_name_overrides: {},
+    content_package_ids: [...(bundle.activePackageIds ?? [])],
+    effective_content_hash: bundle.effectiveContentHash ?? bundle.contentHash ?? "",
+    world_state: { ...(bundle.worldState ?? {}) }
   }
 
   syncSystemTimeFieldsFromClock(snapshot)

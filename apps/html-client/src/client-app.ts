@@ -1,6 +1,7 @@
 ﻿import { existsSync } from "node:fs"
 import type { Dirent } from "node:fs"
 import { readdir } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { compileStory } from "@story-mgr/compiler"
 import { createStoryFileStore } from "@story-mgr/file-store"
@@ -11,6 +12,7 @@ import {
   type RuntimeStorySaveState,
   type RuntimeStorySession,
   type RuntimeStorySessionAction,
+  type RuntimeStorySessionSnapshot,
   type RuntimeStoryViewModel
 } from "@story-mgr/runtime"
 
@@ -63,6 +65,8 @@ import {
   writeJson5File,
   writeJsonFile
 } from "./client-storage"
+import { HtmlEvolutionClient } from "./evolution-client"
+import type { StoryEvolutionManifest, StoryEvolutionPackage, StoryTelemetryEvent } from "@story-mgr/evolution"
 
 export { buildHtmlPlayerOverridePrompts } from "./client-profile"
 
@@ -119,6 +123,11 @@ function cloneState(state: HtmlClientAppState): HtmlClientAppState {
 export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlClientApp {
   const paths = resolveHtmlPaths(options.storyId, options.dataDir, options.runtimeDir)
   const getNow = createNowFactory(options.now)
+  let evolution: HtmlEvolutionClient
+  let evolutionSyncPromise: Promise<StoryEvolutionManifest | null> | null = null
+  let telemetrySequence = Date.now() * 1000
+  const queuedPackageIds = new Set<string>()
+  const reportedMilestones = new Set<string>()
   const state: HtmlClientAppState = {
     stage: "boot",
     storyId: options.storyId,
@@ -131,6 +140,116 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     view: null,
     notifications: []
   }
+
+  /** 生成带会话 sequence 的结构化遥测事件。 */
+  function recordTelemetry(type: StoryTelemetryEvent["type"], payload: StoryTelemetryEvent["payload"]): void {
+    telemetrySequence += 1
+    evolution.record({
+      eventId: randomUUID(),
+      storyId: options.storyId,
+      playerId: options.playerId ?? state.profile?.profile_id ?? "local",
+      shardId: options.shardId ?? "default",
+      sessionId: state.profile?.profile_id ?? "local",
+      sequence: telemetrySequence,
+      occurredAt: new Date().toISOString(),
+      type,
+      payload
+    })
+  }
+
+  /** 上报本次 Runtime 边界中新安装的包。 */
+  function recordInstalledPackages(before: ReadonlySet<string>): void {
+    if (!state.session) return
+    for (const packageId of state.session.getSnapshot().content_package_ids ?? []) {
+      if (before.has(packageId)) continue
+      recordTelemetry("package.installed", { packageId, queued: queuedPackageIds.delete(packageId) })
+    }
+  }
+
+  /** 请求 Runtime 在当前安全边界应用待安装包。 */
+  function applyPendingEvolutionPackages(): void {
+    if (!state.session) return
+    const result = state.session.applyPendingEvolutionPackages()
+    if (result.reason) return
+  }
+
+  /** 从有效 bundle 的三类事件中读取 meta。 */
+  function findEventMeta(eventId: string): Record<string, unknown> | null {
+    const bundle = state.session?.getEffectiveBundle() ?? state.bundle
+    if (!bundle) return null
+    type EventWithMeta = { id: string; meta?: Record<string, unknown> }
+    const chainEvents = bundle.chainEvents as Record<string, EventWithMeta> | undefined
+    const poolEvents = bundle.poolEvents as EventWithMeta[] | undefined
+    const scheduleEvents = bundle.scheduleEvents as EventWithMeta[] | undefined
+    const event = chainEvents?.[eventId]
+      ?? poolEvents?.find((item) => item.id === eventId)
+      ?? scheduleEvents?.find((item) => item.id === eventId)
+    return event?.meta ?? null
+  }
+
+  /** 上报事件完成及其首次里程碑。 */
+  function recordCompletedEvent(eventId: string): void {
+    if (!eventId) return
+    recordTelemetry("event.completed", { eventId })
+    const meta = findEventMeta(eventId)
+    const milestoneId = [meta?.milestoneId, meta?.milestone_id, meta?.milestone]
+      .find((value): value is string => typeof value === "string" && value.trim().length > 0)
+      ?.trim()
+    if (milestoneId && !reportedMilestones.has(milestoneId)) {
+      reportedMilestones.add(milestoneId)
+      recordTelemetry("milestone.reached", { milestoneId })
+    }
+  }
+
+  /** 比较动作前后快照并识别刚完成的事件。 */
+  function recordRuntimeTransitions(before: RuntimeStorySessionSnapshot, after: RuntimeStorySessionSnapshot): void {
+    const completed = new Set<string>()
+    if (before.current_event_id && before.current_event_id !== after.current_event_id) completed.add(before.current_event_id)
+    for (const entry of after.scheduler.audit_logs.slice(before.scheduler.audit_logs.length)) {
+      if (entry.kind !== "complete-event") continue
+      const eventId = entry.entry_event_id ?? entry.source_id
+      if (eventId) completed.add(eventId)
+    }
+    for (const eventId of completed) recordCompletedEvent(eventId)
+  }
+
+  /** 拉取 manifest 和缺失包，并与当前 Runtime 包链对齐。 */
+  async function syncEvolutionPackages(): Promise<StoryEvolutionManifest | null> {
+    if (evolutionSyncPromise) return evolutionSyncPromise
+    evolutionSyncPromise = (async () => {
+      try {
+        const manifest = await evolution.fetchManifest()
+        const manifestPackageIds = new Set(manifest.packageIds)
+        const packages: StoryEvolutionPackage[] = []
+        for (const packageId of manifest.packageIds) {
+          const pkg = await evolution.fetchPackage(packageId, manifest.baseContentHash)
+          if (pkg.parent_package_ids.some((parentId) => !manifestPackageIds.has(parentId))) {
+            throw new Error(`演化内容包 ${packageId} 缺少 manifest 中声明的父包。`)
+          }
+          packages.push(pkg)
+        }
+        if (state.session) {
+          const before = new Set(state.session.getSnapshot().content_package_ids ?? [])
+          const result = state.session.reconcileEvolutionPackages(packages)
+          if (result.reason) {
+            for (const pkg of packages) recordTelemetry("package.rejected", { packageId: pkg.package_id, reason: result.reason })
+          } else {
+            if (result.queued) for (const pkg of packages) if (!before.has(pkg.package_id)) queuedPackageIds.add(pkg.package_id)
+            recordInstalledPackages(before)
+          }
+        }
+        void evolution.flushTelemetry().catch(() => undefined)
+        return manifest
+      } catch (error) {
+        pushNotification(error instanceof Error ? error.message : "演化内容同步失败。")
+        return null
+      }
+    })()
+    try { return await evolutionSyncPromise } finally { evolutionSyncPromise = null }
+  }
+
+  evolution = new HtmlEvolutionClient({ storyId: options.storyId, apiUrl: options.evolutionApiUrl, playerId: options.playerId, shardId: options.shardId, pollIntervalMs: options.evolutionPollIntervalMs ?? 30000, evolutionDir: paths.evolutionDir, onManifest: () => { void syncEvolutionPackages() } })
+  void evolution.initialize().catch(() => undefined)
 
   /** @param stage 新启动阶段。 @returns 无返回值；同步更新内部状态，供浏览器显示进度。 */
   function transition(stage: HtmlClientStage): void {
@@ -252,6 +371,8 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
       saveState: saveState ?? null,
       now: getNow()
     })
+    await syncEvolutionPackages()
+    applyPendingEvolutionPackages()
     state.view = state.session.getViewModel()
     transition("enter-game")
 
@@ -432,7 +553,7 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     },
     /**
      * 保存当前会话到指定槽位。
-     * @param slotId 用户输入槽名。 @returns 写入的 v4 存档对象。 @throws 没有档案/会话时抛错。
+     * @param slotId 用户输入槽名。 @returns 写入的 v5 存档对象。 @throws 没有档案/会话时抛错。
      * 同时保存领域快照、播放游标和 bundle contentHash，随后刷新存档列表。
      */
     async saveToSlot(slotId) {
@@ -442,7 +563,7 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
       // 存档记录 bundle 版本，后面做兼容或迁移时可以据此判断。
       const normalizedSlotId = sanitizeSegment(slotId) || "slot-1"
       const saveState: RuntimeStorySaveState = {
-        schema_version: 4,
+        schema_version: 5,
         slot_id: normalizedSlotId,
         story_id: options.storyId,
         profile_id: profile.profile_id,
@@ -465,7 +586,26 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     /** @param action Runtime 交互动作。 @returns 领域动作的可选成功状态；派发后立即重新构建 view。 */
     dispatch(action) {
       const session = assertSession(state.session)
+      const before = session.getSnapshot()
+      const beforePackageIds = new Set(before.content_package_ids ?? [])
+      const interaction = state.view?.interaction
+      const choiceAvailable = action.type === "select-option"
+        && interaction?.kind === "select"
+        && interaction.options.some((option) => option.id === action.optionId)
       const actionSucceeded = session.dispatch(action)
+      if (action.type === "contact-semantic-input") {
+        if (actionSucceeded !== false) recordTelemetry("contact.intent_matched", { roleKey: action.roleKey, intentId: action.intentId, score: action.score })
+      }
+      if (action.type === "contact-semantic-fallback") {
+        recordTelemetry("contact.intent_fallback", { roleKey: action.roleKey })
+      }
+      applyPendingEvolutionPackages()
+      const after = session.getSnapshot()
+      if (choiceAvailable && action.type === "select-option") recordTelemetry("choice.selected", { eventId: before.current_event_id ?? "runtime", choiceId: action.optionId })
+      if (action.type === "start-doing" && after.history.slice(before.history.length).some((entry) => entry.id === `doing:${action.doingId}`)) recordTelemetry("doing.used", { doingId: action.doingId })
+      recordRuntimeTransitions(before, after)
+      recordInstalledPackages(beforePackageIds)
+      void evolution.flushTelemetry().catch(() => undefined)
       // 每次动作派发后立即刷新视图模型，保持 UI 壳层尽量薄。
       state.view = session.getViewModel()
       return actionSucceeded
@@ -473,7 +613,13 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
     /** @param deltaMs 本帧真实毫秒数。 @returns 无返回值；推进确定性运行时并刷新 view。 */
     tick(deltaMs) {
       const session = assertSession(state.session)
+      const before = session.getSnapshot()
+      const beforePackageIds = new Set(before.content_package_ids ?? [])
       session.tick(deltaMs)
+      const after = session.getSnapshot()
+      recordRuntimeTransitions(before, after)
+      recordInstalledPackages(beforePackageIds)
+      void evolution.flushTelemetry().catch(() => undefined)
       state.view = session.getViewModel()
     },
     /** @param paused 是否手动暂停游戏时钟。 @returns 无返回值；设置后刷新 view。 */
@@ -487,6 +633,10 @@ export function createHtmlClientApp(options: CreateHtmlClientAppOptions): HtmlCl
       const session = assertSession(state.session)
       session.setTimeSpeed(speed)
       state.view = session.getViewModel()
+    },
+    /** 停止演化轮询和语义 Worker。 */
+    dispose() {
+      evolution.dispose()
     }
   }
 }

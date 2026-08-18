@@ -44,7 +44,8 @@ export function resolveHtmlPaths(storyId: string, dataDir?: string, runtimeDir?:
     runtimeDir: resolvedRuntimeDir,
     storyDir,
     bundleFile: path.join(storyDir, "bundle.json"),
-    profilesDir: path.join(storyDir, "profiles")
+    profilesDir: path.join(storyDir, "profiles"),
+    evolutionDir: path.join(storyDir, "evolution")
   }
 }
 
