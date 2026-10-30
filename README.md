@@ -1,6 +1,6 @@
 # Story Manager
 
-一个基于 `Node.js + Nuxt + Koa2` 的游戏网状剧情事件编辑器。
+一个开放的互动小说游戏平台MVP。
 
 ## 结构
 
